@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
+import re
 import sqlite3
 from dataclasses import dataclass, field
 
@@ -165,9 +167,16 @@ def sil_hepsi() -> int:
 
 # ------------------------------------------------------------------ §4 değişim tespiti (raporlama)
 
+# Her istekte/oturumda değişen, giriş jetonu OLMAYAN çerezler: bunların değişmesi asıl tarayıcının oturumunu etkilemez
+# (ör. GitHub _gh_sess her sayfada değişir; ilk sürüm bunu "oturum yenilendi" diye yanlış uyarıyordu).
+GECICI_CEREZ = re.compile(r"(csrf|xsrf|_gh_sess|__cf_bm|cf_clearance|^_ga|^_gid|^_gat|^__utm|awsalb|ak_bmsc|bm_sv|_dd_s)",
+                          re.I)
+UZUN_OMUR_SN = 86400  # bundan kısa ömürlü (ya da yalnız oturumluk) çerez giriş jetonu sayılmaz
+
+
 def cerez_parmak(kopya_yolu: str) -> dict:
-    """Kopya cookies.sqlite'ındaki her alan için çerez DEĞERLERİNİN özetini (sha1) döndür. Değer yazdırılmaz;
-    yalnız alan adı → özet. Kopya kapanınca başlangıçla karşılaştırmak için (jeton döndürme uyarısı)."""
+    """Kopyadaki UZUN ÖMÜRLÜ çerezlerin parmak izi: {"alan\tisim": sha1(değer)}. Değer yazdırılmaz. Kopya
+    kapanınca başlangıçla karşılaştırmak için (jeton döndürme / sunucu tarafında oturum sonlandırma uyarısı)."""
     db = _cookies_yolu(kopya_yolu)
     sonuc: dict[str, str] = {}
     if not db or not os.path.isfile(db):
@@ -176,12 +185,16 @@ def cerez_parmak(kopya_yolu: str) -> dict:
         con = sqlite3.connect(f"file:{os.path.abspath(db)}?mode=ro", uri=True)
     except sqlite3.Error:
         return sonuc
+    simdi = time.time()
     try:
-        h: dict[str, hashlib._Hash] = {}
-        for host, name, value in con.execute("SELECT host, name, value FROM moz_cookies ORDER BY host, name"):
+        for host, name, value, expiry in con.execute("SELECT host, name, value, expiry FROM moz_cookies"):
+            e = float(expiry or 0)
+            if e > 1e11:  # yeni Firefox sürümleri milisaniye yazıyor
+                e /= 1000
+            if e - simdi < UZUN_OMUR_SN or GECICI_CEREZ.search(name or ""):
+                continue
             alan = (host or "").lstrip(".").lower()
-            h.setdefault(alan, hashlib.sha1()).update(f"{name}={value};".encode(errors="replace"))
-        sonuc = {a: d.hexdigest() for a, d in h.items()}
+            sonuc[f"{alan}\t{name}"] = hashlib.sha1(f"{value}".encode(errors="replace")).hexdigest()
     except sqlite3.Error:
         pass
     finally:
@@ -190,13 +203,10 @@ def cerez_parmak(kopya_yolu: str) -> dict:
 
 
 def degisim_bildir(once: dict, sonra: dict) -> list[str]:
-    """Başlangıç ve kapanış parmaklarını karşılaştır; çerezi değişen alanları döndür (jeton döndürmüş olabilir).
-    Değerler yazılmaz; yalnız alan adları. Çağıran bunu günlüğe/kullanıcıya uyarı olarak yazar."""
-    degisen = []
-    for alan in set(once) | set(sonra):
-        if once.get(alan) != sonra.get(alan):
-            degisen.append(alan)
-    return sorted(degisen)
+    """ÖNCEDEN VAR OLAN uzun ömürlü bir çerezin değeri değiştiyse ya da silindiyse o alanı döndür: site jetonu
+    döndürmüş ya da oturumu sunucuda kapatmış olabilir → asıl tarayıcıda yeniden giriş gerekebilir. Kopyada yeni
+    eklenen çerezler sayılmaz (asıl tarayıcıyı etkilemez). Değerler yazılmaz; yalnız alan adları."""
+    return sorted({k.split("\t", 1)[0] for k, d in once.items() if sonra.get(k) != d})
 
 
 def _cookies_yolu(kopya_yolu: str) -> str | None:

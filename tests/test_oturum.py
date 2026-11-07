@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import time
 import struct
 import sys
 import tempfile
@@ -48,9 +49,11 @@ _COOKIES_SEMA = (
 def sahte_cookies(yol, cerezler):
     con = sqlite3.connect(yol)
     con.execute(_COOKIES_SEMA)
-    for host, name, value in cerezler:
-        con.execute("INSERT INTO moz_cookies (originAttributes,name,value,host,path,expiry) VALUES ('',?,?,?,'/',0)",
-                    (name, value, host))
+    for c in cerezler:
+        host, name, value = c[:3]
+        expiry = c[3] if len(c) > 3 else 0
+        con.execute("INSERT INTO moz_cookies (originAttributes,name,value,host,path,expiry) VALUES ('',?,?,?,'/',?)",
+                    (name, value, host, expiry))
     con.commit()
     con.close()
 
@@ -820,15 +823,22 @@ def test_flatpak_ornek():
 def test_degisim():
     tdir = tempfile.mkdtemp(prefix="deskhand-deg-")
     hedef = os.path.join(tdir, "k"); os.makedirs(hedef)
-    sahte_cookies(os.path.join(hedef, "cookies.sqlite"), [("a.com", "s", "1"), ("b.com", "s", "2")])
+    uzun = int(time.time()) + 30 * 86400
+    sahte_cookies(os.path.join(hedef, "cookies.sqlite"), [
+        ("a.com", "s", "1", uzun), ("b.com", "s", "2", uzun), (".github.com", "_gh_sess", "x", uzun),
+        ("c.com", "oturumluk", "z", 0), ("d.com", "giris", "4", uzun * 1000)])  # d.com: milisaniyeli expiry
     once = oturum.cerez_parmak(hedef)
-    # b.com değerini değiştir (jeton döndürme benzetimi)
     con = sqlite3.connect(os.path.join(hedef, "cookies.sqlite"))
-    con.execute("UPDATE moz_cookies SET value='YENI' WHERE host='b.com'")
+    con.execute("UPDATE moz_cookies SET value='YENI' WHERE host='b.com'")          # jeton döndü
+    con.execute("UPDATE moz_cookies SET value='y' WHERE name='_gh_sess'")         # her istekte değişen
+    con.execute("UPDATE moz_cookies SET value='w' WHERE host='c.com'")            # oturumluk
+    con.execute("DELETE FROM moz_cookies WHERE host='d.com'")                     # sunucu oturumu kapattı
+    con.execute("INSERT INTO moz_cookies (originAttributes,name,value,host,path,expiry) VALUES ('','yeni','n','a.com','/',?)",
+                (uzun,))                                                            # yeni eklenen çerez
     con.commit(); con.close()
-    sonra = oturum.cerez_parmak(hedef)
-    degisen = oturum.degisim_bildir(once, sonra)
-    kontrol("değişim yalnız b.com", degisen == ["b.com"], str(degisen))
+    degisen = oturum.degisim_bildir(once, oturum.cerez_parmak(hedef))
+    kontrol("değişim: döndürülen (b.com) ve silinen (d.com) giriş çerezi; _gh_sess/oturumluk/yeni çerez YOK",
+            degisen == ["b.com", "d.com"], str(degisen))
     import shutil
     shutil.rmtree(tdir, ignore_errors=True)
 
