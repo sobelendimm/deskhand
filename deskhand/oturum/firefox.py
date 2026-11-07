@@ -61,6 +61,9 @@ user_pref("app.update.auto", false);
 user_pref("app.update.enabled", false);
 user_pref("browser.profiles.enabled", false);
 user_pref("toolkit.profiles.storeID", "");
+user_pref("browser.backup.enabled", false);
+user_pref("browser.backup.scheduled.enabled", false);
+user_pref("browser.backup.archive.enabled", false);
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.startup.firstrunSkipsHomepage", true);
 user_pref("datareporting.policy.firstRunURL", "");
@@ -384,8 +387,10 @@ def _origin_boyut_siniri() -> int | None:
 
 # Profil grubu (Firefox "selectable profiles") tercihleri: kopyada KALIRSA Firefox kopyayı kullanıcının asıl profili
 # sanıp onun profiles.ini/installs.ini varsayılan yolunu ve "Profile Groups/<id>.sqlite" listesini KOPYAYA çeviriyordu
-# (gerçek olay: üç hayalet profil + silinmiş kopyayı gösteren varsayılan yol). Bu satırlar kopyaya ALINMAZ.
-_PROFIL_GRUBU_PREF = re.compile(r'user_pref\("(toolkit\.profiles\.|browser\.profiles\.)')
+# (gerçek olay: üç hayalet profil + silinmiş kopyayı gösteren varsayılan yol). Firefox yedekleme ayarları da
+# (browser.backup.*): kopya, kullanıcının yedek klasörüne (~/Belgeler/Restore Firefox) KENDİ yedeğini yazıyordu
+# (gerçek olay, 15 MB). Bu satırlar kopyaya ALINMAZ; user.js yedeklemeyi ayrıca kapatır.
+_PROFIL_GRUBU_PREF = re.compile(r'user_pref\("(toolkit\.profiles\.|browser\.profiles\.|browser\.backup\.)')
 
 
 def _user_js_yaz(hedef: str, kaynak: str) -> None:

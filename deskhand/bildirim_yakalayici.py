@@ -109,7 +109,7 @@ def calistir(adres: str, gunluk: str) -> int:
             elif uye == "GetCapabilities":
                 c.send(new_method_return(m, "as", (YETENEKLER,)))
             elif uye == "GetServerInformation":
-                c.send(new_method_return(m, "ssss", ("deskhand", "deskhand", "0.5.1", "1.2")))
+                c.send(new_method_return(m, "ssss", ("deskhand", "deskhand", "0.5.2", "1.2")))
             elif uye == "Introspect":
                 c.send(new_method_return(m, "s", (INTROSPECT,)))
             elif uye == "Ping":

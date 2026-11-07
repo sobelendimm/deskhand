@@ -854,7 +854,9 @@ def test_profil_grubu_yalitimi():
     os.makedirs(kaynak); os.makedirs(hedef)
     with open(os.path.join(kaynak, "prefs.js"), "w") as f:
         f.write('user_pref("toolkit.profiles.storeID", "a1b2c3d4");\nuser_pref("browser.profiles.enabled", true);\n'
-                'user_pref("browser.profiles.profile-name.updated", true);\nuser_pref("intl.locale.requested", "tr");\n')
+                'user_pref("browser.profiles.profile-name.updated", true);\nuser_pref("intl.locale.requested", "tr");\n'
+                'user_pref("browser.backup.scheduled.enabled", true);\n'
+                'user_pref("browser.backup.location", "/home/kisi/Belgeler/Restore Firefox");\n')
     ff._user_js_yaz(hedef, kaynak)
     prefs = open(os.path.join(hedef, "prefs.js")).read()
     kontrol("profil grubu: storeID ve browser.profiles.* kopyaya ALINMAZ, diğer ayarlar kalır",
@@ -862,6 +864,9 @@ def test_profil_grubu_yalitimi():
     uj = open(os.path.join(hedef, "user.js")).read()
     kontrol("profil grubu: user.js profilleri kapatır", 'browser.profiles.enabled", false' in uj and
             'toolkit.profiles.storeID", ""' in uj)
+    kontrol("yedekleme: kopya kullanıcının yedek klasörüne yazamaz (browser.backup.* alınmaz, user.js kapatır)",
+            "browser.backup" not in prefs and 'browser.backup.scheduled.enabled", false' in uj and
+            'browser.backup.enabled", false' in uj)
     import shutil
     shutil.rmtree(tdir, ignore_errors=True)
 
