@@ -11,10 +11,10 @@ DATA_DIR ?= $(or $(DESKHAND_DATA_DIR),$(HOME)/.local/share/deskhand)
 PROTOKOL_XML ?= $(shell pkg-config --variable=pkgdatadir wayland-protocols 2>/dev/null)/staging/ext-idle-notify/ext-idle-notify-v1.xml
 
 deskhand-etkinlik: deskhand-etkinlik.c ext-idle-notify-v1-protocol.c ext-idle-notify-v1-client-protocol.h
-	$(CC) $(CFLAGS) -o $@ deskhand-etkinlik.c ext-idle-notify-v1-protocol.c $$(pkg-config --cflags --libs wayland-client)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ deskhand-etkinlik.c ext-idle-notify-v1-protocol.c $$(pkg-config --cflags --libs wayland-client)
 
 deskhand-goruntu: deskhand-goruntu.c
-	$(CC) $(CFLAGS) -o $@ deskhand-goruntu.c $$(pkg-config --cflags --libs libsystemd)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ deskhand-goruntu.c $$(pkg-config --cflags --libs libsystemd)
 
 protokol:
 	wayland-scanner client-header $(PROTOKOL_XML) ext-idle-notify-v1-client-protocol.h
