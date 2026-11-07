@@ -97,6 +97,7 @@
  "; açılan başka pencereler: {pencereler}": "; other windows that opened: {pencereler}",
  "; en yakın aday benzerliği {benzerlik}": "; closest candidate similarity {benzerlik}",
  "; {sayi} gürültü satırı gizli (--hepsi)": "; {sayi} noise lines hidden (--all)",
+ "; {sayi} satırı yalnız ekran kartı okudu": "; {sayi} lines read only by the GPU reader",
  "; çıktı: {log}": "; output: {log}",
  "AT-SPI kullanılamıyor (python-gobject + at-spi2-core): {hata}": "AT-SPI unavailable (python-gobject + at-spi2-core): {hata}",
  "Ajanın tüm girdilerini hemen durdurur (basılı tuşlar bırakılır).": "Immediately stops all agent input (held keys are released).",

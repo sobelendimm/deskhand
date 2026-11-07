@@ -273,6 +273,8 @@ def kaydirarak_ara(g, a, bolge, geo, ilk_im):
                 ms_ = ara(satirla(oku(im)), metin)
                 if not ms_:  # web düğmesi yazısı varsayılan okumada görünmeyebilir: düğme odaklı yedek okuma
                     ms_ = ara(satirla(oku(im, **YEDEK_OKUMALAR[1])), metin)
+                if not ms_:  # ekran kartı sıcaksa (~0,2 sn; açık değilse beklenmez)
+                    ms_ = ara(satirla(oku(im, motor="gpu")), metin)
                 sonuc["ms"] = ms_
             except Exception as e:  # ana iş parçacığında yeniden fırlatılır
                 sonuc["hata"] = e

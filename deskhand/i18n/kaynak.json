@@ -150,13 +150,13 @@
   "erisim.py:227"
  ],
  "# '{desen}': {sayi} eşleşme ({sn} sn)": [
-  "ocr.py:516"
+  "ocr.py:587"
  ],
  "# '{desen}': {sayi} öge ({kademe} eşleşme, {sn} sn)": [
   "erisim.py:199"
  ],
  "# '{metin}' için {sayi} eşleşme:": [
-  "eylem.py:683"
+  "eylem.py:685"
  ],
  "# '{renk}': {sayi} alan (en az {en_az} piksel)": [
   "gorsel.py:268"
@@ -171,10 +171,10 @@
   "gorsel.py:255"
  ],
  "# {adim} kez kaydırıldı ({sn} sn)": [
-  "eylem.py:678"
+  "eylem.py:680"
  ],
  "# {sayi} satır, pencere {genislik}x{yukseklik} ({sn} sn); (merkez x,y) [güven] metin": [
-  "ocr.py:523"
+  "ocr.py:595"
  ],
  "# {sayi} öge ({gorunen} görünen, {sn} sn); (merkez x,y) rol: ad": [
   "erisim.py:208"
@@ -202,7 +202,7 @@
   "uygulama.py:84"
  ],
  "'{akor}' geçersiz: '+' yalnız ctrl/alt/shift/super/altgr ile kullanılır; aynı anda basılı tutmak için: ekran bas <k> {akor} <sn>": [
-  "eylem.py:394"
+  "eylem.py:396"
  ],
  "'{ekran}' ekranı üst üste {sayi} kez işlendi, ekran değişmedi; adımlar: {adimlar}": [
   "akis.py:211"
@@ -211,25 +211,25 @@
   "akis.py:256"
  ],
  "'{metin}' artık ({x},{y}) noktasında değil (ekran değişti); tıklanmadı": [
-  "eylem.py:701"
+  "eylem.py:703"
  ],
  "'{metin}' artık yok": [
   "akis.py:199"
  ],
  "'{metin}' bulunamadı ({sn} sn). İpucu: `ekran metin {kimlik}` ile satırlara bak": [
-  "eylem.py:680"
+  "eylem.py:682"
  ],
  "'{metin}' {sure} sn içinde görünmedi": [
-  "ocr.py:537"
+  "ocr.py:610"
  ],
  "'{metin}' {sure} sn içinde kaybolmadı": [
-  "ocr.py:533"
+  "ocr.py:606"
  ],
  "'{pencere}' görünmez masaüstünün penceresi; desktop='background' ile kullan": [
   "api.py:172"
  ],
  "'{renk}' renkli alan yok (en az {en_az} piksel)": [
-  "eylem.py:651"
+  "eylem.py:653"
  ],
  "'{uygulama}' bulunamadı (.desktop girdisi ya da çalıştırılabilir dosya değil)": [
   "api.py:437"
@@ -250,7 +250,7 @@
   "eylem.py:132"
  ],
  ", benzerlik {benzerlik}": [
-  "eylem.py:703"
+  "eylem.py:705"
  ],
  ", son insan girdisi {sn} sn önce": [
   "mesgul.py:653"
@@ -265,21 +265,21 @@
   "gorsel.py:244"
  ],
  "--foto: pencere fotoğraftan sonra taşındı/boyut değişti; yeniden foto al": [
-  "eylem.py:348"
+  "eylem.py:350"
  ],
  "--foto: son foto başka pencereye ait ({kimlik})": [
-  "eylem.py:345"
+  "eylem.py:347"
  ],
  "--foto: önce `ekran foto` alınmalı": [
-  "eylem.py:343"
+  "eylem.py:345"
  ],
  "--sira 1..{en_cok}": [
-  "eylem.py:654"
+  "eylem.py:656"
  ],
  "--sira 1..{en_cok} olmalı": [
   "erisim.py:233",
-  "eylem.py:631",
-  "eylem.py:688"
+  "eylem.py:633",
+  "eylem.py:690"
  ],
  "11 akış hata ekranı / 'dur' adımı, 12 kullanıcı bilgisayarı kullanıyor (insan önceliği),\n13 kullanıcı DUR dedi (ekran resume), 14 sanal masaüstü kullanılamıyor,\n15 kullanıcı oyunda/film izliyor (ekranına müdahale yok; --background),\n16 uygulama arka planda açılamaz (kullanıcının ekranında açık ya da yalnız ön plan);\nkarar: 0 on, 20 arka, 21 sonra": [
   "cli.py:120"
@@ -291,10 +291,13 @@
   "uygulama.py:187"
  ],
  "; en yakın aday benzerliği {benzerlik}": [
-  "eylem.py:620"
+  "eylem.py:622"
  ],
  "; {sayi} gürültü satırı gizli (--hepsi)": [
-  "ocr.py:525"
+  "ocr.py:597"
+ ],
+ "; {sayi} satırı yalnız ekran kartı okudu": [
+  "ocr.py:598"
  ],
  "; çıktı: {log}": [
   "uygulama.py:188"
@@ -532,8 +535,8 @@
   "gui/metinler.py:20"
  ],
  "Enter/boşluk": [
-  "eylem.py:415",
-  "eylem.py:462"
+  "eylem.py:417",
+  "eylem.py:464"
  ],
  "Etkinlik": [
   "gui/metinler.py:47"
@@ -898,7 +901,7 @@
   "eylem.py:157"
  ],
  "basılı tutuldu: {kombinasyon} {sn} sn": [
-  "eylem.py:475"
+  "eylem.py:477"
  ],
  "basılıyken aktif pencere değişti → {baslik}; bırakıldı": [
   "eylem.py:112"
@@ -944,13 +947,13 @@
   "guvenlik.py:170"
  ],
  "başlık uymadı: {baslik} (beklenen /{desen}/); kapatılmadı": [
-  "eylem.py:600"
+  "eylem.py:602"
  ],
  "başlık/sınıf kilidi uymadı (pencere değişti)": [
   "mcp_sunucu.py:118"
  ],
  "beklendi: {sn} sn": [
-  "eylem.py:535"
+  "eylem.py:537"
  ],
  "bekleniyor: kullanıcı fareyi kullanıyor…": [
   "insan.py:158"
@@ -1015,16 +1018,16 @@
   "arka_uc/sanal.py:741"
  ],
  "bilinmeyen tuş: {tus} (dotool --list-keys)": [
-  "eylem.py:390"
+  "eylem.py:392"
  ],
  "birden çok (ya da eşiğe yakın) eşleşme; --sira N ile seç ya da --bolge ile daralt": [
-  "eylem.py:628"
+  "eylem.py:630"
  ],
  "birden çok eşleşme (nth ile seç)": [
   "mcp_sunucu.py:118"
  ],
  "birden çok eşleşme; --sira N ile seç": [
-  "eylem.py:685"
+  "eylem.py:687"
  ],
  "birden çok öge; --sira N ile seç": [
   "erisim.py:230"
@@ -1061,16 +1064,16 @@
   "gorsel.py:262",
   "gorsel.py:272",
   "mcp_sunucu.py:119",
-  "ocr.py:519"
+  "ocr.py:590"
  ],
  "bulunamazsa sayfayı aşağı kaydırıp ara (en çok N kez, varsayılan 10)": [
   "cli.py:320"
  ],
  "bulundu: '{metin}' ({x},{y}) güven {guven}{benzerlik}, {sn} sn": [
-  "eylem.py:704"
+  "eylem.py:706"
  ],
  "bulundu: simge '{ad}' ({x},{y}) benzerlik {benzerlik}": [
-  "eylem.py:635"
+  "eylem.py:637"
  ],
  "bulundu: {rol} '{ad}' ({x},{y}) {kademe} eşleşme, {sn} sn": [
   "erisim.py:241"
@@ -1091,10 +1094,10 @@
   "arka_uc/kde_goruntu.py:74"
  ],
  "dizi boş": [
-  "eylem.py:545"
+  "eylem.py:547"
  ],
  "dizi tamam: {adim} adım, {sn} sn": [
-  "eylem.py:548"
+  "eylem.py:550"
  ],
  "dosyadaki süreyi geçersiz kıl": [
   "cli.py:347"
@@ -1198,11 +1201,11 @@
   "guvenlik.py:156"
  ],
  "etkin pencere belirlenemedi; tuş gönderilmedi": [
-  "eylem.py:409",
-  "eylem.py:455"
+  "eylem.py:411",
+  "eylem.py:457"
  ],
  "etkin pencere belirlenemedi; yazı gönderilmedi": [
-  "eylem.py:429"
+  "eylem.py:431"
  ],
  "evet": [
   "mesgul.py:632"
@@ -1211,7 +1214,7 @@
   "gui/saglik.py:14"
  ],
  "fare: pencere ({x},{y}) = ekran ({ex},{ey})": [
-  "eylem.py:491"
+  "eylem.py:493"
  ],
  "geçersiz girdi satırı": [
   "girdi_merkezi.py:471"
@@ -1267,7 +1270,7 @@
   "oturum/cli.py:68"
  ],
  "göründü: '{metin}' ({sn} sn)": [
-  "ocr.py:538"
+  "ocr.py:611"
  ],
  "görünmez ikinci masaüstü (arka plan kipi)": [
   "masaustu.py:974"
@@ -1301,7 +1304,7 @@
   "cli.py:313"
  ],
  "ham komut (bilinen bir uygulamaya uymuyor)": [
-  "oturum/__init__.py:82"
+  "oturum/__init__.py:84"
  ],
  "hata": [
   "cli.py:236",
@@ -1354,10 +1357,10 @@
   "masaustu.py:882"
  ],
  "kapat için -b <başlık deseni> zorunlu (yanlış pencere kapanmasın)": [
-  "eylem.py:597"
+  "eylem.py:599"
  ],
  "kapatıldı: {baslik}": [
-  "eylem.py:607"
+  "eylem.py:609"
  ],
  "karar alınamadı ({hata}); görünmez masaüstü seçildi": [
   "mcp_sunucu.py:174"
@@ -1372,13 +1375,13 @@
   "oturum/cli.py:66"
  ],
  "kayboldu: '{metin}' ({sn} sn)": [
-  "ocr.py:534"
+  "ocr.py:607"
  ],
  "kaydırma: {pencere}": [
   "mcp_sunucu.py:771"
  ],
  "kaydırıldı: {yon} {adim}": [
-  "eylem.py:446"
+  "eylem.py:448"
  ],
  "keysym 0x{keysym} için boş tuş kodu yok": [
   "arka_uc/sanal.py:700"
@@ -1498,7 +1501,7 @@
   "gui/metinler.py:78"
  ],
  "masaüstü kapatılamaz; pencere kimliği/adı ver": [
-  "eylem.py:595"
+  "eylem.py:597"
  ],
  "masaüstü kipi kapatılamaz": [
   "arka_uc/sanal.py:497"
@@ -1541,8 +1544,8 @@
   "mcp_sunucu.py:116"
  ],
  "noktadaki yazı: {yazi}": [
-  "eylem.py:356",
-  "eylem.py:659"
+  "eylem.py:358",
+  "eylem.py:661"
  ],
  "not: zaten açık uygulamaların bir kısmı ağaca ancak yeniden başlatılınca girer": [
   "erisim.py:88"
@@ -1594,16 +1597,16 @@
   "mesgul.py:473"
  ],
  "oturum: Flatpak örnekleri kapatılırken uyarı (ayrıntı günlükte)": [
-  "oturum/__init__.py:249"
+  "oturum/__init__.py:259"
  ],
  "oturum: {ad} kopyasında şu sitelerin oturum çerezleri yenilendi; asıl tarayıcıda yeniden giriş gerekebilir: {siteler}": [
-  "oturum/__init__.py:263"
+  "oturum/__init__.py:273"
  ],
  "oturum: {karar}": [
   "uygulama.py:119"
  ],
  "oturum: {sayi} Flatpak örneği kapatılamadı ({uygulamalar}); kopyaları silinmedi": [
-  "oturum/__init__.py:246"
+  "oturum/__init__.py:256"
  ],
  "oyun sınıfı ({sinif})": [
   "mesgul.py:220"
@@ -1646,7 +1649,7 @@
   "erisim.py:126"
  ],
  "pencere kapanmadı (kaydedilmemiş iş sorusu açık olabilir): {baslik}": [
-  "eylem.py:610"
+  "eylem.py:612"
  ],
  "pencere kapatma": [
   "arka_uc/kde.py:590"
@@ -1685,7 +1688,7 @@
   "gui/metinler.py:100"
  ],
  "renk alanı: {renk} ({x},{y}) {alan} piksel": [
-  "eylem.py:661"
+  "eylem.py:663"
  ],
  "run için name gerekli (action=list ile adlar)": [
   "mcp_sunucu.py:872"
@@ -1750,7 +1753,7 @@
   "mcp_sunucu.py:371"
  ],
  "simge '{ad}' bulunamadı (eşik {esik}{ipucu})": [
-  "eylem.py:621"
+  "eylem.py:623"
  ],
  "simge adı yalnız harf/rakam/._- içermeli: {ad}": [
   "gorsel.py:120"
@@ -1783,7 +1786,7 @@
   "masaustu.py:689"
  ],
  "süre 0-30 sn olmalı": [
-  "eylem.py:458"
+  "eylem.py:460"
  ],
  "süre doldu": [
   "gui/metinler.py:100"
@@ -1792,16 +1795,16 @@
   "masaustu.py:314"
  ],
  "sürükleme": [
-  "eylem.py:502"
+  "eylem.py:504"
  ],
  "sürükleme sonunda imleç hedefte değil ({imlec} ≠ {hedef}): kullanıcı fareyi oynattı; bırakıldı": [
-  "eylem.py:522"
+  "eylem.py:524"
  ],
  "sürüklendi ({dugme}): ({x1},{y1}) → ({x2},{y2}) {sn} sn": [
-  "eylem.py:529"
+  "eylem.py:531"
  ],
  "sürüklerken aktif pencere değişti → {baslik}; bırakıldı": [
-  "eylem.py:517"
+  "eylem.py:519"
  ],
  "sınırsız": [
   "masaustu.py:963"
@@ -1816,7 +1819,7 @@
   "mcp_sunucu.py:670"
  ],
  "tesseract hata verdi: {hata}": [
-  "ocr.py:237"
+  "ocr.py:268"
  ],
  "tuş verilmedi": [
   "arka_uc/sanal.py:800"
@@ -1825,9 +1828,9 @@
   "mcp_sunucu.py:746"
  ],
  "tuş: {kombinasyon}": [
-  "eylem.py:415",
-  "eylem.py:421",
-  "eylem.py:462",
+  "eylem.py:417",
+  "eylem.py:423",
+  "eylem.py:464",
   "mcp_sunucu.py:756"
  ],
  "tüm ekran": [
@@ -1841,10 +1844,10 @@
  ],
  "tıklama": [
   "erisim.py:239",
-  "eylem.py:357",
-  "eylem.py:634",
-  "eylem.py:660",
-  "eylem.py:696"
+  "eylem.py:359",
+  "eylem.py:636",
+  "eylem.py:662",
+  "eylem.py:698"
  ],
  "tıklama: {hedef} @ {pencere}": [
   "mcp_sunucu.py:671"
@@ -1948,34 +1951,34 @@
   "uygulama.py:183"
  ],
  "{ad} arka planda çalıştırılmaz (ikinci örnek asıl veriyi/oturumu bozar).": [
-  "oturum/__init__.py:39"
- ],
- "{ad} ekranında açık; aynı anda iki istemci oturumunu düşürür. Kapatınca arka planda yapabilirim ya da Ekranımda yap.": [
-  "oturum/__init__.py:37"
- ],
- "{ad} kasası doğrudan gerçek dosyalara yazar; arka planda açılmaz, Ekranınızda yapılabilir.": [
   "oturum/__init__.py:41"
  ],
+ "{ad} ekranında açık; aynı anda iki istemci oturumunu düşürür. Kapatınca arka planda yapabilirim ya da Ekranımda yap.": [
+  "oturum/__init__.py:39"
+ ],
+ "{ad} kasası doğrudan gerçek dosyalara yazar; arka planda açılmaz, Ekranınızda yapılabilir.": [
+  "oturum/__init__.py:43"
+ ],
  "{ad} kopyası hazır": [
-  "oturum/__init__.py:145"
+  "oturum/__init__.py:147"
  ],
  "{ad} · {g}×{y}": [
   "gui/metinler.py:161"
  ],
  "{ad} şifre deposu gerektiriyor; arka planda açılamaz (kaydınızı bozma riski), Ekranınızda yapılabilir.": [
-  "oturum/__init__.py:40"
+  "oturum/__init__.py:42"
  ],
  "{ad}: birden çok Flatpak uygulamasına uyuyor; tam adını verin": [
-  "oturum/__init__.py:121"
+  "oturum/__init__.py:123"
  ],
  "{ad}: ham komutla oturum kopyası kullanılamaz; uygulama adıyla açın (ac {ad})": [
-  "oturum/__init__.py:109"
+  "oturum/__init__.py:111"
  ],
  "{ad}: kopya yöntemi tanımlı değil": [
-  "oturum/__init__.py:137"
+  "oturum/__init__.py:139"
  ],
  "{ad}: kullanıcının ekranında açık olup olmadığı bilinemiyor; tek örnek kilidi pencereyi kullanıcının ekranına devredebilir. Kapalı olduğu kesinleşince arka planda yapabilirim ya da Ekranımda yap.": [
-  "oturum/__init__.py:111"
+  "oturum/__init__.py:113"
  ],
  "{arac} yok (Xvfb: xorg-server-xvfb paketi)": [
   "masaustu.py:684"
@@ -2003,13 +2006,13 @@
   "mesgul.py:544"
  ],
  "{etiket} içinde '{komut}' kullanılamaz": [
-  "eylem.py:571"
+  "eylem.py:573"
  ],
  "{etiket} {no}. satır hatalı: {satir}": [
-  "eylem.py:569"
+  "eylem.py:571"
  ],
  "{etiket} {no}. satır önceden onaylı (--onayli) ama kullanıcı onayı alınmadı: {satir}": [
-  "eylem.py:574"
+  "eylem.py:576"
  ],
  "{hata}; varsayılan ({deger}) kullanılıyor": [
   "ayarlar.py:106"

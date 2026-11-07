@@ -295,7 +295,9 @@ def metin_oku(k: str, sorgu: str | None = None, bolge=None, derin: bool = False,
               bekle: float = 0.0, en_cok: int = 80) -> dict:
     """OCR (Türkçe). → {items: [{text, box (pencere pikseli), center, conf}], truncated, window, redacted}.
     sorgu: yalnız eşleşen parçalar; bekle: sorgu görünene dek en çok bu kadar sn."""
-    from .ocr import KUCUK_BOLGE, KUCUK_OKUMALAR, YEDEK_OKUMALAR, ara, derin_oku, gurultu_mu, kok_ekle, oku, satirla
+    from .ocr import (KUCUK_BOLGE, KUCUK_OKUMALAR, ara, derin_oku, gpu_ekle, gurultu_mu, kok_ekle, oku, satirla,
+                      yedek_ara)
+    from .ocr_gpu import SOGUK_SN
     t0 = time.monotonic()
     bitis = t0 + max(0.0, bekle)
     with okuma(k):
@@ -304,16 +306,14 @@ def metin_oku(k: str, sorgu: str | None = None, bolge=None, derin: bool = False,
             if derin:
                 satirlar = derin_oku(im)
             elif im.size[0] <= KUCUK_BOLGE[0] and im.size[1] <= KUCUK_BOLGE[1]:
-                satirlar = derin_oku(im, KUCUK_OKUMALAR)
+                satirlar = derin_oku(im, KUCUK_OKUMALAR, gpu_bekle=0.0)
+            elif sorgu:
+                satirlar = satirla(oku(im))  # arama: bulunamazsa yedek_ara (ekran kartı + tesseract yedekleri)
             else:
-                satirlar = satirla(oku(im))
+                # liste: tesseract + ekran kartı satırları (yalnız eklenir; tesseract satırı değişmez)
+                satirlar = gpu_ekle(satirla(oku(im)), satirla(oku(im, motor="gpu", bekle=SOGUK_SN)))
             if sorgu:
-                ms = ara(satirlar, sorgu)
-                for secenek in YEDEK_OKUMALAR:
-                    if ms:
-                        break
-                    ms = ara(satirla(oku(im, **secenek)), sorgu)
-                bulunan = ms
+                bulunan = ara(satirlar, sorgu) or yedek_ara(im, sorgu)
             else:
                 bulunan = satirlar if hepsi else [s for s in satirlar if not gurultu_mu(s)]
             if bulunan or not sorgu or time.monotonic() >= bitis:

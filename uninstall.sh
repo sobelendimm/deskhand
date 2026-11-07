@@ -112,6 +112,17 @@ if [[ -r "$RUN_DIR/panel.pid" ]]; then
     fi
 fi
 
+# the GPU text-recognition server: by its PID file, checked against /proc (it may be frozen: SIGCONT delivers TERM)
+if [[ -r "$RUN_DIR/ocr-gpu.pid" ]]; then
+    pid="$(tr -cd '0-9' <"$RUN_DIR/ocr-gpu.pid")"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && [[ -r "/proc/$pid/cmdline" ]] && \
+       tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q 'ocr_gpu.sunucu'; then
+        say "$(L "Ekran kartı OCR sunucusu kapatılıyor (PID $pid)" "Stopping the GPU OCR server (PID $pid)")"
+        run kill -TERM "$pid" || true
+        run kill -CONT "$pid" || true
+    fi
+fi
+
 # ---------------------------------------------------------------- files
 say "$(L 'Komut kaldırılıyor' 'Removing the command')"
 rm_marked "$WRAPPER" "$MARK"

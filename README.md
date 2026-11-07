@@ -99,7 +99,11 @@ at all and goes straight to the background. All of this is configurable in the p
 ### Clicking by text (OCR first)
 
 Agents click on **what they can read**, not on guessed coordinates: `click-text <window> "Save"`.
-Tesseract reads Turkish and English. Turkish letters are matched loosely (ş/s, ı/i…) and an
+Tesseract reads Turkish and English. With a graphics card, a second reader (EasyOCR on the GPU)
+joins in by itself: it finds coloured web buttons and faint or small text that tesseract misses
+(measured: 55/55 test phrases instead of 49/55, ~0.15 s per read). It only adds lines; tesseract's
+reading is kept. It is never started while you play a game or watch something full screen, and it
+frees the graphics memory after 5 idle minutes. Turkish letters are matched loosely (ş/s, ı/i…) and an
 ambiguous match stops instead of guessing. Also available: the accessibility tree (AT-SPI,
 click by button name), saved icon templates, colour areas, and screen-recognition *flows*
 for repetitive tasks.
@@ -159,6 +163,10 @@ It is also smaller in scope: KDE Plasma only, one background desktop, no GPU the
 - Python modules: PyQt6, python-xlib, numpy, scipy, pillow, jeepney, mcp ≥ 2.3
 - To build the small keyboard-activity helper: a C compiler, `make`, `pkg-config`, `wayland`
   (without it, human priority watches only the mouse)
+- With an AMD or NVIDIA graphics card, for text recognition on the GPU: PyTorch for your card,
+  torchvision, OpenCV, scikit-image, shapely, pyclipper, and EasyOCR in a small venv with its
+  models (~100 MB). Without a GPU nothing extra is needed. `install.sh` checks all of it and prints
+  the commands
 - To build the screenshot helper (KWin's screenshot interface, about 8 ms a shot): the same
   tools and `libsystemd` (part of systemd). `install.sh` builds it and registers its desktop entry
 
@@ -169,6 +177,13 @@ sudo pacman -S --needed spectacle tesseract tesseract-data-tur tesseract-data-en
     xorg-server-xvfb openbox xdotool libpulse python-pyqt6 python-xlib python-numpy \
     python-scipy python-pillow python-jeepney python-mcp base-devel wayland
 paru -S kdotool-bin dotool        # AUR (or yay, or by hand)
+
+# with a graphics card (NVIDIA: python-pytorch-opt-cuda instead of -rocm)
+sudo pacman -S --needed python-pytorch-opt-rocm python-torchvision python-opencv \
+    python-scikit-image python-shapely python-pyclipper
+python3 -m venv --system-site-packages ~/.local/share/deskhand/ocr-venv
+~/.local/share/deskhand/ocr-venv/bin/python -m pip install --no-deps easyocr python-bidi
+cd ~/.local/src/deskhand && ~/.local/share/deskhand/ocr-venv/bin/python -m deskhand.ocr_gpu indir   # models
 ```
 
 `dotool` needs to write to `/dev/uinput`. Its package installs a udev rule for the `input`
@@ -377,8 +392,9 @@ drive the desktop without Deskhand. Keep shell access behind your client's permi
 for t in tests/test_*.py; do python3 "$t" || break; done
 ```
 
-`test_mantik`, `test_ocr`, `test_onay`, `test_oturum`, `test_entegrasyon`, `test_mesgul`, `test_guvenlik`,
-`test_i18n` and `test_gui` (offscreen Qt) need no screen. `test_sanal` and `test_mcp` start their own
+`test_mantik`, `test_ocr`, `test_ocr_gpu`, `test_onay`, `test_oturum`, `test_entegrasyon`, `test_mesgul`, `test_guvenlik`,
+`test_i18n` and `test_gui` (offscreen Qt) need no screen (`test_ocr_gpu` also runs the real GPU reader
+when it is installed and you are not in a game). `test_sanal` and `test_mcp` start their own
 background desktop; nothing goes to your screen.
 
 Tests redirect every Deskhand directory to a temporary folder and never touch your real

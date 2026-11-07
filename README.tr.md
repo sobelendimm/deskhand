@@ -101,7 +101,11 @@ arka plana gider. Hepsi panelden ayarlanır.
 ### Yazıya tıklama (önce OCR)
 
 Ajanlar tahmin edilen koordinatlara değil, **okuyabildikleri şeye** tıklar:
-`click-text <pencere> "Kaydet"`. Tesseract Türkçe ve İngilizce okur. Türkçe harfler esnek
+`click-text <pencere> "Kaydet"`. Tesseract Türkçe ve İngilizce okur. Ekran kartı varsa ikinci bir
+okuyucu (ekran kartında EasyOCR) kendiliğinden devreye girer: tesseract'ın kaçırdığı renkli web
+düğmelerini, soluk ve küçük yazıları bulur (ölçüm: 49/55 yerine 55/55 test ifadesi, okuma başına
+~0,15 sn). Yalnız satır ekler; tesseract'ın okuması korunur. Oyun oynarken ya da tam ekran bir şey
+izlerken hiç başlatılmaz, 5 dakika boşta kalınca ekran kartı belleğini bırakır. Türkçe harfler esnek
 eşleşir (ş/s, ı/i…); birden çok eşleşme varsa tahmin etmez, durur. Ayrıca: erişilebilirlik
 ağacı (AT-SPI, düğmeye adıyla tıklama), kayıtlı simgeler, renk alanları ve tekrarlı işler
 için ekran tanıma *akışları*.
@@ -161,6 +165,9 @@ Kapsamı da daha dar: yalnız KDE Plasma, tek arka plan masaüstü, orada GPU yo
 - Python modülleri: PyQt6, python-xlib, numpy, scipy, pillow, jeepney, mcp ≥ 2.3
 - Küçük klavye etkinliği yardımcısını derlemek için: C derleyicisi, `make`, `pkg-config`,
   `wayland` (yoksa insan önceliği yalnız fareye bakar)
+- AMD ya da NVIDIA ekran kartı varsa, ekran kartında metin okuma için: kartınıza uygun PyTorch,
+  torchvision, OpenCV, scikit-image, shapely, pyclipper ve küçük bir venv'de EasyOCR ile modelleri
+  (~100 MB). Ekran kartı yoksa ek bir şey gerekmez. `install.sh` hepsini denetler, komutları yazar
 - Ekran görüntüsü yardımcısını derlemek için (KWin'in ekran görüntüsü arayüzü, görüntü başına
   ~8 ms): aynı araçlar ve `libsystemd` (systemd'nin parçası). `install.sh` derler ve masaüstü
   girdisini kaydeder
@@ -172,6 +179,13 @@ sudo pacman -S --needed spectacle tesseract tesseract-data-tur tesseract-data-en
     xorg-server-xvfb openbox xdotool libpulse python-pyqt6 python-xlib python-numpy \
     python-scipy python-pillow python-jeepney python-mcp base-devel wayland
 paru -S kdotool-bin dotool        # AUR (ya da yay, ya da elle)
+
+# ekran kartı varsa (NVIDIA: -rocm yerine python-pytorch-opt-cuda)
+sudo pacman -S --needed python-pytorch-opt-rocm python-torchvision python-opencv \
+    python-scikit-image python-shapely python-pyclipper
+python3 -m venv --system-site-packages ~/.local/share/deskhand/ocr-venv
+~/.local/share/deskhand/ocr-venv/bin/python -m pip install --no-deps easyocr python-bidi
+cd ~/.local/src/deskhand && ~/.local/share/deskhand/ocr-venv/bin/python -m deskhand.ocr_gpu indir   # modeller
 ```
 
 `dotool`'un `/dev/uinput`'a yazabilmesi gerekir. Paketi `input` grubu için bir udev kuralı
@@ -382,8 +396,9 @@ Kabuk erişimini istemcinizin izin istemlerinin arkasında tutun.
 for t in tests/test_*.py; do python3 "$t" || break; done
 ```
 
-`test_mantik`, `test_ocr`, `test_onay`, `test_oturum`, `test_entegrasyon`, `test_mesgul`, `test_guvenlik`,
-`test_i18n` ve `test_gui` (görünmez Qt) ekran istemez. `test_sanal` ve `test_mcp` kendi arka plan
+`test_mantik`, `test_ocr`, `test_ocr_gpu`, `test_onay`, `test_oturum`, `test_entegrasyon`, `test_mesgul`, `test_guvenlik`,
+`test_i18n` ve `test_gui` (görünmez Qt) ekran istemez (`test_ocr_gpu`, kuruluysa ve oyunda değilseniz
+gerçek ekran kartı okuyucusunu da çalıştırır). `test_sanal` ve `test_mcp` kendi arka plan
 masaüstlerini açar; ekranınıza hiçbir şey gitmez.
 
 Testler tüm Deskhand klasörlerini geçici bir klasöre yönlendirir, gerçek ayarlarınıza

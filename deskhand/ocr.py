@@ -1,5 +1,9 @@
-"""OCR (tesseract, Türkçe): ön işleme, okuma, önbellek, satırlama, arama; ekrandan metin bulma döngüleri.
-Komutlar: metin, bekle."""
+"""OCR (tesseract, Türkçe; ekran kartı varsa EasyOCR ile desteklenir, bkz. ocr_gpu): ön işleme, okuma, önbellek,
+satırlama, arama; ekrandan metin bulma döngüleri. Komutlar: metin, bekle.
+
+Ekran kartı okuması tesseract'ın YERİNE geçmez (Türkçe harfte tesseract daha isabetli): arama zincirinde tesseract
+bulamayınca ilk yedektir, liste/derin okumada ve güvenlik denetiminde tesseract satırlarına yalnız EKLENİR (aynı
+yerdeki tesseract satırını değiştirmez). Kullanıcı oyundaysa ya da kurulum yoksa hat yalnız tesseract'tır."""
 from __future__ import annotations
 
 import difflib
@@ -16,7 +20,7 @@ import unicodedata
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-from . import yollar
+from . import ocr_gpu, yollar
 from .gorsel import bolge_coz, pencere_goruntusu
 from .hata import Dur
 from .i18n import _
@@ -52,11 +56,17 @@ def _imlec_farki(eski, yeni):
 
 
 
-def oku(im, hassas=False, cizgisiz=False, varyant="gri", psm="11"):
+def oku(im, hassas=False, cizgisiz=False, varyant="gri", psm="11", motor="tesseract", bekle=0.0):
     """Önbellekli OCR. (1) Birebir aynı görüntü → tesseract yok. (2) YAKIN eşleşme: son 8 kaydın yarı çözünürlüklü
     gri kopyasından yalnız ince bir çizgi kadar farklıysa (_imlec_farki) aynı sayılır — yanıp sönen yazı imleci her
-    okumada özeti değiştirip önbelleği boşa çıkarıyordu (ölçüm: 3 okumada 3 kayıt)."""
-    on = hashlib.blake2b(f"{OCR_SURUM}|{im.size}|{hassas}|{cizgisiz}|{varyant}|{psm}".encode(), digest_size=6).hexdigest()
+    okumada özeti değiştirip önbelleği boşa çıkarıyordu (ölçüm: 3 okumada 3 kayıt).
+    motor="gpu": ekran kartı okuması (ön işlem seçenekleri yok sayılır); kullanılamıyorsa [] (önbelleğe yazılmaz).
+    bekle: GPU sunucusu açılıyorsa en çok bu kadar sn beklenir."""
+    if motor == "gpu":
+        anahtar = f"{OCR_SURUM}|{im.size}|gpu{ocr_gpu.SURUM}"
+    else:
+        anahtar = f"{OCR_SURUM}|{im.size}|{hassas}|{cizgisiz}|{varyant}|{psm}|{motor}"
+    on = hashlib.blake2b(anahtar.encode(), digest_size=6).hexdigest()
     h = hashlib.blake2b(digest_size=12)
     h.update(im.tobytes())
     OCR_ONBELLEK = yollar.ocr_onbellek()
@@ -86,7 +96,12 @@ def oku(im, hassas=False, cizgisiz=False, varyant="gri", psm="11"):
                 return yukle(y[:-4] + ".json")
         except (OSError, ValueError):
             continue
-    kelimeler = oku_tesseract(im, hassas, cizgisiz, varyant, psm)
+    if motor == "gpu":
+        kelimeler = oku_gpu(im, bekle)
+        if kelimeler is None:
+            return []
+    else:
+        kelimeler = oku_tesseract(im, hassas, cizgisiz, varyant, psm)
     try:
         os.makedirs(OCR_ONBELLEK, exist_ok=True)
         gecici = f"{yol}.{os.getpid()}.{threading.get_ident()}"
@@ -191,6 +206,22 @@ def oku_tesseract(im, hassas=False, cizgisiz=False, varyant="gri", psm="11"):
         return _oku_tesseract(im, hassas, cizgisiz, varyant, psm)
     x0, y0, x1, y1 = kutu_
     kelimeler = _oku_tesseract(im.crop(kutu_), hassas, cizgisiz, varyant, psm)
+    for w in kelimeler:
+        w["x"] += x0
+        w["x2"] += x0
+        w["y"] += y0
+        w["y2"] += y0
+    return kelimeler
+
+
+def oku_gpu(im, bekle=0.0):
+    """Ekran kartı okuması (ocr_gpu sunucusu); büyük boş zemin kırpılır (icerik_kutusu: VRAM ve süre düşer).
+    → kelimeler ya da None (kullanılamıyor: kurulum yok, kullanıcı oyunda, sunucu açılmadı/hata)."""
+    kutu_ = icerik_kutusu(im)
+    kelimeler = ocr_gpu.oku(im if kutu_ is None else im.crop(kutu_), bekle)
+    if kelimeler is None or kutu_ is None:
+        return kelimeler
+    x0, y0 = kutu_[:2]
     for w in kelimeler:
         w["x"] += x0
         w["x2"] += x0
@@ -358,6 +389,22 @@ def tara(k, metin, bolge, hassas=False):
     return [kok_ekle(m, kok) for m in ms], geo, kok, ozet, im
 
 
+def yedek_ara(im, metin):
+    """Varsayılan okuma bulamayınca: (1) ekran kartı okuması (sıcak sunucu ~0,2 sn; açık değilse arka planda açılır,
+    beklenmez), (2) tesseract yedek okumaları sırayla, (3) sunucu o arada açılıyorsa onu bekle (ilk açılış ~2,5 sn).
+    Ölçüm (38 düğme/soluk/küçük yazı): tesseract zinciri 32, ekran kartı 38. → eşleşmeler (görüntü koordinatı)."""
+    ms = ara(satirla(oku(im, motor="gpu")), metin)
+    if ms:
+        return ms
+    for secenek in YEDEK_OKUMALAR:
+        ms = ara(satirla(oku(im, **secenek)), metin)
+        if ms:
+            return ms
+    if ocr_gpu.calisiyor():
+        return ara(satirla(oku(im, motor="gpu", bekle=ocr_gpu.SOGUK_SN)), metin)
+    return []
+
+
 def bul_dongu(k, metin, bolge, sure, yok=False, son_care=True):
     """Metin görünene (yok=True: kaybolana) kadar görüntü al + oku.
     → (eşleşmeler, geo, kök, süre, görüntü özeti, görüntü). Aynı görüntü yeniden okunmaz (önbellek)."""
@@ -368,11 +415,8 @@ def bul_dongu(k, metin, bolge, sure, yok=False, son_care=True):
         ms, geo, kok, ozet, im = tara(k, metin, bolge)
         son = time.monotonic() >= bitis
         if not ms and not yok and son and son_care and not hassas_denendi:
-            hassas_denendi = True  # son çare: önce bir kademe büyüt, olmazsa kutu çerçevelerini silip oku
-            for secenek in YEDEK_OKUMALAR:
-                ms = [kok_ekle(m, kok) for m in ara(satirla(oku(im, **secenek)), metin)]
-                if ms:
-                    break
+            hassas_denendi = True  # son çare: ekran kartı, bir kademe büyütme, kutu çerçevesiz okumalar (yedek_ara)
+            ms = [kok_ekle(m, kok) for m in yedek_ara(im, metin)]
         if bool(ms) != yok or son:
             return ms, geo, kok, time.monotonic() - t0, ozet, im
         time.sleep(0.2)
@@ -423,7 +467,7 @@ def dogrula(im, kok, metin, cx, cy):
     parca = im.crop((x0, y0, min(im.width, x0 + 520), min(im.height, y0 + 80)))
     if parca.width < 20 or parca.height < 10:
         return []
-    for secenek in ({},) + YEDEK_OKUMALAR[1:]:
+    for secenek in ({},) + YEDEK_OKUMALAR[1:] + ({"motor": "gpu"},):
         ms = ara(satirla(oku(parca, **secenek)), metin)
         if ms:
             return [kok_ekle(m, (bx + x0, by + y0)) for m in ms]
@@ -442,8 +486,10 @@ def nokta_metni(k, x, y):
         except Dur:
             sonuc[ad] = []
 
-    # güvenlik denetimi okuyamazsa kilit çalışmaz: birkaç yöntem BİRLİKTE (paralel), birleşim
-    ipler = [threading.Thread(target=is_, args=(i,), kwargs=sec) for i, sec in enumerate(DENETIM_OKUMALARI)]
+    # güvenlik denetimi okuyamazsa kilit çalışmaz: birkaç yöntem BİRLİKTE (paralel), birleşim; ekran kartı sıcaksa
+    # o da (açık değilse beklenmez, sonraki denetimler için açılır)
+    ipler = [threading.Thread(target=is_, args=(i,), kwargs=sec)
+             for i, sec in enumerate(DENETIM_OKUMALARI + ({"motor": "gpu"},))]
     for t in ipler:
         t.start()
     for t in ipler:
@@ -464,9 +510,34 @@ KUCUK_OKUMALAR = ({}, {"psm": "6"})
 LISTE_OKUMALARI = ({}, {"varyant": "uyarli", "cizgisiz": True, "psm": "6"})
 
 
-def derin_oku(im, okumalar=DENETIM_OKUMALARI):
+def _ayni_satir(a, b):
+    return (abs(a["cx"] - b["cx"]) < 25 and abs(a["cy"] - b["cy"]) < 12 and
+            difflib.SequenceMatcher(None, norm(a["t"]), norm(b["t"])).ratio() > 0.6)
+
+
+def gpu_ekle(satirlar, gpu_satirlari):
+    """Ekran kartı satırlarını tesseract satırlarına EKLER; tesseract satırı hiç değişmez (Türkçe harfte tesseract
+    daha isabetli). Bir ekran kartı satırı yalnız YENİ bilgi taşımıyorsa eklenmez: aynı yerde üst üste binen
+    tesseract satırlarının (birleşik) katlanmış metni onu birebir içeriyorsa. Benzer ama farklı okuma eklenir: ölçümde
+    tesseract 'Satın al' düğmesini 'sazmal', 'Ana menüye dön'ü '(önamenüyedn' okumuştu. Eklenenler s["gpu"]=True."""
+    def var_mi(g):
+        gn = norm(g["t"])
+        if not gn:
+            return True
+        ortak = "".join(norm(s_["t"]) for s_ in sorted(satirlar, key=lambda s_: s_["x"])
+                        if abs(g["cy"] - s_["cy"]) < 12 and s_["x"] < g["x2"] and g["x"] < s_["x2"])
+        return gn in ortak
+    eklenen = [{**g, "gpu": True} for g in gpu_satirlari if not var_mi(g)]
+    if not eklenen:
+        return satirlar
+    return sorted(satirlar + eklenen, key=lambda s_: (round(s_["cy"] / 8), s_["x"]))
+
+
+def derin_oku(im, okumalar=DENETIM_OKUMALARI, gpu_bekle=ocr_gpu.SOGUK_SN):
     """Birkaç ön işlem PARALEL okunur, satırlar birleştirilir (aynı yerdeki tekrarlar elenir): renkli düğmeler
-    (yeşil 'Yeniden bağlan', kırmızı 'Oyundan çık') varsayılan okumada görünmüyordu (bir oyun menüsünde)."""
+    (yeşil 'Yeniden bağlan', kırmızı 'Oyundan çık') varsayılan okumada görünmüyordu (bir oyun menüsünde).
+    Ekran kartı okuması da paralel çalışır ve gpu_ekle ile yalnız eklenir (gpu_bekle: sunucu açılıyorsa beklenecek
+    en çok süre; None = ekran kartı yok)."""
     sonuc = {}
 
     def is_(i, sec):
@@ -474,22 +545,24 @@ def derin_oku(im, okumalar=DENETIM_OKUMALARI):
             sonuc[i] = satirla(oku(im, **sec))
         except Dur:
             sonuc[i] = []
-    ipler = [threading.Thread(target=is_, args=(i, sec)) for i, sec in enumerate(okumalar)]
+    isler = list(enumerate(okumalar))
+    if gpu_bekle is not None:
+        isler.append(("gpu", {"motor": "gpu", "bekle": gpu_bekle}))
+    ipler = [threading.Thread(target=is_, args=(i, sec)) for i, sec in isler]
     for t in ipler:
         t.start()
     for t in ipler:
         t.join()
     birlesik = []
-    for i in sorted(sonuc):
+    for i in sorted(k for k in sonuc if k != "gpu"):
         for s_ in sonuc[i]:
-            es = next((j for j, b in enumerate(birlesik) if abs(s_["cx"] - b["cx"]) < 25 and abs(s_["cy"] - b["cy"]) < 12 and
-                       difflib.SequenceMatcher(None, norm(s_["t"]), norm(b["t"])).ratio() > 0.6), None)
+            es = next((j for j, b in enumerate(birlesik) if _ayni_satir(s_, b)), None)
             if es is None:
                 birlesik.append(s_)
             elif s_["conf"] > birlesik[es]["conf"]:  # aynı satırın daha güvenli okuması kalır (ör. tarih: 'N 31102026 Nez' [31] → '31.10.2026')
                 birlesik[es] = s_
     birlesik.sort(key=lambda s_: (round(s_["cy"] / 8), s_["x"]))
-    return birlesik
+    return gpu_ekle(birlesik, sonuc.get("gpu", []))
 
 
 def k_metin(a):
@@ -498,7 +571,7 @@ def k_metin(a):
     if a.derin:
         satirlar = derin_oku(im)
     elif not a.hassas and im.size[0] <= KUCUK_BOLGE[0] and im.size[1] <= KUCUK_BOLGE[1]:
-        satirlar = derin_oku(im, KUCUK_OKUMALAR)
+        satirlar = derin_oku(im, KUCUK_OKUMALAR, gpu_bekle=0.0)
     elif a.desen or a.hassas:
         satirlar = satirla(oku(im, a.hassas))  # arama: bulunamazsa aşağıda yedek okumalar
     else:
@@ -508,10 +581,8 @@ def k_metin(a):
     sure = time.monotonic() - t0
     if a.desen:
         ms = [kok_ekle(m, kok) for m in ara(satirlar, a.desen)]
-        for secenek in YEDEK_OKUMALAR:  # bulunamazsa yedek okumalar
-            if ms or a.hassas:
-                break
-            ms = [kok_ekle(m, kok) for m in ara(satirla(oku(im, **secenek)), a.desen)]
+        if not ms and not a.hassas:  # bulunamazsa yedek okumalar (ekran kartı + tesseract yedekleri)
+            ms = [kok_ekle(m, kok) for m in yedek_ara(im, a.desen)]
         sure = time.monotonic() - t0
         print(_("# '{desen}': {sayi} eşleşme ({sn} sn)").format(desen=a.desen, sayi=len(ms), sn=f"{sure:.2f}"))
         yazdir_eslesme(ms)
@@ -520,9 +591,11 @@ def k_metin(a):
     else:
         temiz = satirlar if a.hepsi else [s for s in satirlar if not gurultu_mu(s)]
         gizli = len(satirlar) - len(temiz)
+        gpu_sayi = sum(1 for s in temiz if s.get("gpu"))
         print(_("# {sayi} satır, pencere {genislik}x{yukseklik} ({sn} sn); (merkez x,y) [güven] metin").format(
             sayi=len(temiz), genislik=geo[2], yukseklik=geo[3], sn=f"{sure:.2f}")
-              + (_("; {sayi} gürültü satırı gizli (--hepsi)").format(sayi=gizli) if gizli else ""))
+              + (_("; {sayi} gürültü satırı gizli (--hepsi)").format(sayi=gizli) if gizli else "")
+              + (_("; {sayi} satırı yalnız ekran kartı okudu").format(sayi=gpu_sayi) if gpu_sayi else ""))
         yazdir_eslesme([kok_ekle(s, kok) for s in temiz], numarali=False)
 
 

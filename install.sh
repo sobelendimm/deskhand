@@ -207,6 +207,32 @@ for pair in "PyQt6:python-pyqt6:panel, tepsi ve onay diyaloğu:panel, tray and a
 done
 has_module scipy || dep_miss rec python-scipy pac "Python modülü scipy (python-scipy): simge eşleme" \
                                                   "Python module scipy (python-scipy): icon matching"
+# GPU text recognition (EasyOCR on the graphics card): used automatically when a GPU is present (better on
+# coloured web buttons and faint/small text; tesseract stays the base). No GPU: nothing to install.
+OCR_VENV="$DATA_HOME/deskhand/ocr-venv"
+OCR_MODEL="$DATA_HOME/deskhand/easyocr"
+OCR_CMDS=()
+GPU_TORCH=""
+if [[ -e /dev/kfd ]]; then GPU_TORCH=python-pytorch-opt-rocm
+elif compgen -G '/dev/nvidia[0-9]*' >/dev/null; then GPU_TORCH=python-pytorch-opt-cuda; fi
+if [[ -n "$GPU_TORCH" ]]; then
+    for pair in "torch:$GPU_TORCH" "torchvision:python-torchvision" "cv2:python-opencv" "skimage:python-scikit-image" \
+                "shapely:python-shapely" "pyclipper:python-pyclipper" "scipy:python-scipy"; do
+        IFS=: read -r mod pkg <<<"$pair"
+        has_module "$mod" || dep_miss rec "$pkg" pac "Python modülü $mod ($pkg): ekran kartında metin okuma" \
+                                                       "Python module $mod ($pkg): text recognition on the GPU"
+    done
+    if ! quiet "$OCR_VENV/bin/python" -c 'import easyocr'; then
+        dep_miss rec easyocr "" "EasyOCR ($OCR_VENV): ekran kartında metin okuma (renkli düğmeler, soluk/küçük yazı)" \
+                                "EasyOCR ($OCR_VENV): text recognition on the GPU (coloured buttons, faint/small text)"
+        OCR_CMDS+=("$(printf '%q -m venv --system-site-packages %q' "$PY" "$OCR_VENV")"
+                   "$(printf '%q -m pip install --no-deps easyocr python-bidi' "$OCR_VENV/bin/python")")
+    fi
+    if [[ ! -f "$OCR_MODEL/craft_mlt_25k.pth" || ! -f "$OCR_MODEL/latin_g2.pth" ]]; then
+        dep_miss rec easyocr-model "" "EasyOCR modelleri (~100 MB, $OCR_MODEL)" "EasyOCR models (~100 MB, $OCR_MODEL)"
+        OCR_CMDS+=("$(printf 'cd %q && DESKHAND_DATA_DIR=%q %q -m deskhand.ocr_gpu indir' "$SRC_DIR" "$DATA_HOME/deskhand" "$OCR_VENV/bin/python")")
+    fi
+fi
 # build tools for the activity helper
 HELPER_OK=1
 for t in cc make pkg-config; do
@@ -248,6 +274,11 @@ if (( ${#PAC[@]} || ${#AUR[@]} )); then
     fi
 elif (( ! DEP_ANY )); then
     say "$(L 'Bağımlılıklar tamam' 'Dependencies OK')"
+fi
+if (( ${#OCR_CMDS[@]} )); then
+    say "$(L 'Ekran kartında metin okuma için (paketlerden sonra, kendin çalıştır):' \
+             'For text recognition on the GPU (after the packages; run it yourself):')"
+    printf '    %s\n' "${OCR_CMDS[@]}"
 fi
 
 # dotool writes to /dev/uinput (foreground input)
