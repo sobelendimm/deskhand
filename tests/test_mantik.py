@@ -138,7 +138,7 @@ except E.Dur:
     ok = False
 kontrol("yasak: başka oyun serbest", ok)
 
-# ================================================================ paket (deskhand 0.4.0) testleri
+# ================================================================ paket (deskhand) testleri
 import io, re, subprocess
 from deskhand import arka_uc, eylem, yollar
 from deskhand.arka_uc import EKRAN, kde
