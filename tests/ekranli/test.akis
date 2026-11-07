@@ -1,0 +1,11 @@
+# ekran akis testi (akis_pencere.py)
+sure 60
+tekrar 3
+basari metin "Kurulum tamamlandı"
+hata "Kurulum başarısız"
+ekran "Lisans sözleşmesi"
+  renge-tikla yesil --altinda
+ekran "Hoş geldiniz"
+  metne-tikla "İleri"
+ekran "Kuruluyor"
+  bekle 1

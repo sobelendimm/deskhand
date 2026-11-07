@@ -1,0 +1,261 @@
+# Oturum köprüsü varsayılan politikası (docs/SESSIONS.md §8).
+# Kullanıcı CONFIG_DIR/oturum.toml ile geçersiz kılar (yalnız verdiği anahtarlar birleştirilir).
+#
+# Uygulama EŞLEMESİ: politika ajanın yazdığı ham addan değil, ÇÖZÜLMÜŞ uygulamadan hesaplanır: .desktop kimliği
+# (org.telegram.desktop), Exec'teki ikili adı (telegram-desktop, gerçek yolu da), Flatpak kimliği, ajanın yazdığı ad.
+# Her uygulama bölümünde:
+#   adlar  = ["telegram-desktop", ...]   tam eşleşen adlar/takma adlar (küçük harf; .desktop/.exe eki atılır)
+#   kimlik = ["org.telegram.desktop*"]   .desktop/Flatpak kimliği ya da ad için fnmatch kalıpları (küçük harf)
+# Bölüm adının kendisi her zaman bir addır. -beta/-nightly/-stable/-browser/-bin/-native/-dev/-git/-desktop ekleri
+# atılmış hâli de denenir (google-chrome-beta → google-chrome). Birden çok bölüme uyarsa EN KISITLAYICI karar
+# kazanır: kapali > on > bekle > kopya > paylas.
+#
+# Karar değerleri (bir uygulamayı arka planda nasıl açacağımız):
+#   kopya  = tutarlı, tek yönlü anlık kopya ile arka planda aç (kaynağa asla yazılmaz)
+#   paylas = kullanıcının dosyalarıyla doğrudan (yalnız kullanıcı oturumunda KAPALIYKEN)
+#   bekle  = aynı anda iki istemci oturumu bozar; kullanıcı kapatana dek bekle
+#   kapali = hiç çalıştırma
+#   on     = yalnız kullanıcının ekranında (ön planda); arka planda açılamaz
+#            (şifre deposu gerektiren tarayıcılar; kasası gerçek dosyaya yazan Obsidian)
+
+[genel]
+kopya_dizini = "$XDG_RUNTIME_DIR/deskhand/oturum"   # 0700, tmpfs
+origin_boyut_siniri_mb = 50                      # storage/default/<origin> başına üst sınır
+
+[site]
+# Bu alan adlarının çerezi/deposu kopyaya ALINMAZ (banka/ödeme/devlet + merkezi kimlik).
+# Düz alan adı alt alanlarını da kapsar (isbank.com.tr → www.isbank.com.tr). Alan çerezi (".google.com") ret
+# listesindeki bir alt alana (accounts.google.com) da gönderildiği için o da kopyalanmaz. Kayıtlı parolalar
+# (logins.json / logins.db) da aynı listeyle süzülür.
+reddet = [
+    # genel desenler
+    "*bank*", "*banka*", "*odeme*", "*payment*", "*checkout*", "*paypal*", "*stripe*",
+    "*e-devlet*", "*edevlet*",
+    # Türk bankaları / ödeme kuruluşları
+    "isbank.com.tr", "garantibbva.com.tr", "yapikredi.com.tr", "akbank.com", "ziraatbank.com.tr",
+    "halkbank.com.tr", "vakifbank.com.tr", "qnb.com.tr", "denizbank.com", "ing.com.tr", "teb.com.tr",
+    "kuveytturk.com.tr", "enpara.com", "papara.com", "ininal.com", "param.com.tr", "iyzico.com", "paytr.com",
+    # uluslararası ödeme
+    "paypal.com", "stripe.com", "wise.com", "transferwise.com", "revolut.com",
+    # devlet
+    "turkiye.gov.tr", "gib.gov.tr", "sgk.gov.tr", "*.gov.tr", "*.gov",
+    # merkezi kimlik
+    "accounts.google.com", "login.microsoftonline.com", "login.live.com", "securetoken.googleapis.com",
+]
+# Görev bazında doldurulur (yalnız bu origin'ler kopyalanır; boşsa: kopyalanan çerezlerin alanları).
+izin = []
+
+# ---- varsayılan ----
+[uygulama._varsayilan]
+# Bilinmeyen uygulama kullanıcının oturumunda KESİNLİKLE çalışmıyorsa (Exec ikilisi /proc'ta yok, Flatpak örneği yok):
+# normal açılış (kendi verisiyle, kullanıcı açmış gibi). Açıksa YA DA BİLİNEMİYORSA (ikili bulunamadı, başlatıcı
+# kabuk betiği, AppImage, /proc okunamadı): tek örnek kilidi pencereyi kullanıcının ekranına devredebilir → bekle.
+kapali_iken = "paylas"
+acik_iken   = "bekle"
+keyring     = false
+
+# ---- Firefox: köprü gerekmez (çerez/oturum dosyada, anahtarlıkta değil) ----
+[uygulama.firefox]
+kapali_iken = "kopya"
+acik_iken   = "kopya"
+keyring     = false
+senkron     = false
+adlar  = ["firefox", "firefox-esr", "firefox-bin", "firefox-wayland"]
+kimlik = ["org.mozilla.firefox", "org.mozilla.firefox.*"]
+disla = ["signedInUser.json", "weave", "lock", ".parentlock", "parent.lock",
+         "places.sqlite", "places.sqlite-wal", "places.sqlite-shm",
+         "sessionstore.jsonlz4", "formhistory.sqlite", "synced-tabs.db"]
+
+# ---- Flatpak Electron, şifre deposu izni OLMAYAN (köprüsüz kopya) ----
+[uygulama.discord]
+kapali_iken = "kopya"
+acik_iken   = "kopya"
+keyring     = false
+flatpak     = "com.discordapp.Discord"
+adlar  = ["discord", "discord-canary", "discord-ptb", "discordcanary", "discordptb"]
+kimlik = ["com.discordapp.discord*"]
+
+[uygulama.spotify]
+kapali_iken = "kopya"
+acik_iken   = "kopya"
+keyring     = false
+flatpak     = "com.spotify.Client"
+adlar  = ["spotify", "spotify-launcher"]
+kimlik = ["com.spotify.client"]
+not         = "çalma yasak (aynı hesapta ikinci cihaz çalınca kullanıcının çaldığı duraklar)"
+
+# ---- Obsidian: kasa gerçek dosya; arka plan kaçınılmaz olarak gerçek kasaya yazar → yalnız ön plan ----
+[uygulama.obsidian]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = false
+flatpak     = "md.obsidian.Obsidian"
+adlar  = ["obsidian"]
+kimlik = ["md.obsidian.obsidian"]
+
+# ---- Şifre deposu gerektiren tarayıcılar/uygulamalar: röle yok → arka planda açılmaz ----
+[uygulama.chromium]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = true
+adlar  = ["chromium", "chromium-browser", "ungoogled-chromium", "chromium-freeworld"]
+kimlik = ["org.chromium.chromium", "io.github.ungoogled_software.ungoogled_chromium", "*chromium*"]
+
+[uygulama.vivaldi]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = true
+adlar  = ["vivaldi", "vivaldi-stable", "vivaldi-snapshot", "vivaldi-bin"]
+kimlik = ["com.vivaldi.vivaldi", "vivaldi*"]
+
+[uygulama.chrome]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = true
+adlar  = ["chrome", "google-chrome", "google-chrome-stable", "google-chrome-beta", "google-chrome-unstable",
+          "google-chrome-canary"]
+kimlik = ["com.google.chrome*", "google-chrome*"]
+
+[uygulama.brave]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = true
+adlar  = ["brave", "brave-browser", "brave-browser-beta", "brave-browser-nightly", "brave-bin"]
+kimlik = ["com.brave.browser*", "brave-browser*"]
+
+[uygulama.edge]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = true
+adlar  = ["microsoft-edge", "microsoft-edge-stable", "microsoft-edge-beta", "microsoft-edge-dev", "msedge"]
+kimlik = ["com.microsoft.edge*", "microsoft-edge*"]
+
+[uygulama.opera]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = true
+adlar  = ["opera", "opera-beta", "opera-developer"]
+kimlik = ["com.opera.opera*"]
+
+[uygulama.vscode]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = true
+flatpak     = "com.visualstudio.code"
+adlar  = ["vscode", "code", "code-oss", "visual-studio-code", "visualstudio", "codium", "vscodium", "code-insiders"]
+kimlik = ["com.visualstudio.code*", "com.vscodium.codium*", "visual-studio-code*"]
+
+[uygulama.slack]
+kapali_iken = "on"
+acik_iken   = "on"
+keyring     = true
+adlar  = ["slack", "slack-desktop", "slack-electron"]
+kimlik = ["com.slack.slack"]
+
+# ---- Parola yöneticileri: hiç çalıştırma (tek örnek kilidi kasayı kullanıcının ekranına getirir) ----
+[uygulama.keepassxc]
+kapali_iken = "kapali"
+acik_iken   = "kapali"
+keyring     = false
+adlar  = ["keepassxc", "keepass", "keepass2"]
+kimlik = ["org.keepassxc.keepassxc*", "*keepass*"]
+
+[uygulama.bitwarden]
+kapali_iken = "kapali"
+acik_iken   = "kapali"
+keyring     = true
+adlar  = ["bitwarden", "bitwarden-desktop"]
+kimlik = ["com.bitwarden.desktop*", "*bitwarden*"]
+
+# ---- Eşzamanlı ASLA: ikinci istemci kullanıcının asıl oturumunu düşürür ----
+[uygulama.telegram]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+adlar  = ["telegram", "telegram-desktop", "telegramdesktop", "telegram-desktop-bin", "tdesktop", "64gram",
+          "ayugram", "ayugram-desktop", "kotatogram", "kotatogram-desktop"]
+kimlik = ["org.telegram.desktop*", "*telegram*", "*tdesktop*", "*kotatogram*", "*ayugram*"]
+
+[uygulama.signal]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+adlar  = ["signal", "signal-desktop", "signal-desktop-beta"]
+kimlik = ["org.signal.signal*", "signal-desktop*"]
+
+[uygulama.element]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+adlar  = ["element", "element-desktop", "element-desktop-nightly", "riot", "riot-desktop"]
+kimlik = ["io.element.element*", "im.riot.riot*", "element-desktop*"]
+
+[uygulama.whatsapp]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+adlar  = ["whatsapp", "whatsapp-for-linux", "whatsapp-desktop", "whatsapp-nativefier", "wasistlos", "zapzap",
+          "whatsie", "karere"]
+kimlik = ["*whatsapp*", "com.github.eneshecan.whatsappforlinux*", "com.rtosta.zapzap*", "*wasistlos*",
+          "com.ktechpit.whatsie*", "io.github.tobagin.karere*"]
+
+[uygulama.steam]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+adlar  = ["steam", "steam-native", "steam-runtime", "steamwebhelper"]
+kimlik = ["com.valvesoftware.steam*"]
+
+[uygulama.thunderbird]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+adlar  = ["thunderbird", "thunderbird-esr", "thunderbird-beta", "betterbird"]
+kimlik = ["org.mozilla.thunderbird*", "net.thunderbird.thunderbird*", "eu.betterbird.betterbird*"]
+
+[uygulama.heroic]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+adlar  = ["heroic", "heroic-games-launcher"]
+kimlik = ["com.heroicgameslauncher.hgl*", "heroic*"]
+
+[uygulama.lutris]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+adlar  = ["lutris"]
+kimlik = ["net.lutris.lutris*"]
+
+[uygulama.ferdium]
+kapali_iken = "bekle"
+acik_iken   = "bekle"
+keyring     = false
+flatpak     = "org.ferdium.Ferdium"
+adlar  = ["ferdium", "ferdi", "franz", "rambox"]
+kimlik = ["org.ferdium.ferdium*", "*ferdium*", "*rambox*", "*franz*"]
+not         = "içinde WhatsApp/Telegram vb. hizmetler var; en risklisi kadar riskli"
+
+# ---- Hiç çalıştırma ----
+[uygulama.kmail]
+kapali_iken = "kapali"
+acik_iken   = "kapali"
+keyring     = true
+adlar  = ["kmail", "kmail2", "kontact"]
+kimlik = ["org.kde.kmail*", "org.kde.kontact*"]
+
+[uygulama.akonadi]
+kapali_iken = "kapali"
+acik_iken   = "kapali"
+keyring     = true
+adlar  = ["akonadi", "akonadictl", "akonadiserver", "akonadi_control", "korganizer", "kaddressbook",
+         "kalendar", "merkuro", "merkuro-calendar", "merkuro-contact"]
+kimlik = ["org.kde.akonadi*", "org.kde.korganizer*", "org.kde.kaddressbook*", "org.kde.kalendar*",
+          "org.kde.merkuro*", "akonadi*"]
+
+[uygulama.nextcloud]
+kapali_iken = "kapali"
+acik_iken   = "kapali"
+keyring     = true
+adlar  = ["nextcloud", "nextcloud-client", "nextcloud-desktop"]
+kimlik = ["com.nextcloud.desktopclient.nextcloud*", "*nextcloud*"]

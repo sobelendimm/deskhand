@@ -1,0 +1,18 @@
+# TASLAK: kurulumda ~/.local/share/applications/deskhand.desktop (ve oturum açılışı için ~/.config/autostart/,
+# Exec satırına --tepsi eklenerek). Dosya adı = Qt desktopFileName = Wayland app_id ("deskhand").
+[Desktop Entry]
+Type=Application
+Name=Deskhand
+GenericName=AI desktop agent monitor
+GenericName[tr]=Yapay zekâ masaüstü ajanı paneli
+Comment=Watch, stop and approve what an AI agent does on your desktop
+Comment[tr]=Yapay zekâ ajanının masaüstünde yaptıklarını izleyin, durdurun, onaylayın
+Exec=python3 -m deskhand.gui
+Icon=deskhand
+Terminal=false
+Categories=Utility;System;Monitor;
+Keywords=claude;agent;ai;automation;stop;
+Keywords[tr]=claude;ajan;yapay zeka;otomasyon;dur;
+StartupNotify=false
+StartupWMClass=deskhand
+X-KDE-StartupNotify=false

@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=77"]  # SPDX license expression (PEP 639)
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deskhand"
+dynamic = ["version"]
+description = "Lets AI agents (Claude Code and other MCP clients) use your KDE Plasma desktop safely, on your screen or on an invisible second desktop"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "sobelendimm" }]
+requires-python = ">=3.11"
+keywords = ["mcp", "claude", "ai-agent", "computer-use", "kde", "plasma", "wayland", "xvfb", "ocr", "automation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: English",
+    "Natural Language :: Turkish",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Desktop Environment :: K Desktop Environment (KDE)",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# System tools are NOT Python packages and must come from the distribution
+# (see README "Requirements"): kdotool, dotool, spectacle, tesseract (+ tur/eng data),
+# Xvfb, openbox, xdotool; optional: pactl, systemd-run, a C compiler + wayland-client.
+dependencies = [
+    "PyQt6",
+    "python-xlib",
+    "numpy",
+    "scipy",
+    "pillow",
+    "jeepney",
+    "mcp>=2.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/sobelendimm/deskhand"
+Issues = "https://github.com/sobelendimm/deskhand/issues"
+
+[project.scripts]
+deskhand = "deskhand.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "deskhand.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["deskhand", "deskhand.*"]
+
+[tool.setuptools.package-data]
+# the Wayland activity helper is C: shipped as source, built by install.sh (make -C deskhand/yardimci)
+deskhand = ["yardimci/*.c", "yardimci/*.h", "yardimci/Makefile", "data/*", "i18n/*.json"]
