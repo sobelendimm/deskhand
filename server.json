@@ -3,7 +3,7 @@
   "name": "io.github.sobelendimm/deskhand",
   "title": "Deskhand",
   "description": "Safe KDE Plasma (Wayland) desktop control for AI agents: OCR-checked input, approval panel.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "websiteUrl": "https://github.com/sobelendimm/deskhand",
   "repository": {
     "url": "https://github.com/sobelendimm/deskhand",
@@ -13,10 +13,12 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/sobelendimm/deskhand/releases/download/v0.5.0/deskhand-mcp.mcpb",
-      "version": "0.5.0",
+      "identifier": "https://github.com/sobelendimm/deskhand/releases/download/v0.5.1/deskhand-mcp.mcpb",
+      "version": "0.5.1",
       "fileSha256": "8299a463df0e2761c12707b4e4faab5a28717eef1a2a922ea13949f01a074c09",
-      "transport": { "type": "stdio" }
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }
