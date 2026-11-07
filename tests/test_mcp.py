@@ -341,9 +341,8 @@ def sunucu_pidleri():
 
 def x_tasi(kimlik, dx):
     """Testin kendisi: pencereyi görünmez masaüstünde taşı (girdi değil; bayat shot_id sınaması)."""
-    from Xlib import display
     d = masaustu.durum()
-    dp = display.Display(masaustu.guvenli_ekran(d["ekran"]))
+    dp = masaustu.x_ac(d["ekran"])
     try:
         w = dp.create_resource_object("window", int(kimlik.split(":", 1)[1], 16))
         g = w.get_geometry()

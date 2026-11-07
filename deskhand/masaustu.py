@@ -1,7 +1,8 @@
 """Görünmez ikinci masaüstü (sanal arka uç) yaşam döngüsü: `deskhand masaustu baslat|durdur|durum`.
 
 Bileşenler (hepsi TEK bellek kafesinde: systemd-run --user --scope -p MemoryMax=… + nice 10 + ionice idle):
-  Xvfb :N          görünmez X ekranı (-nolisten tcp, -noreset), kök zemin düz gri (OCR ön işlemesi siyahta bozuluyor)
+  Xvfb :N          görünmez X ekranı (-nolisten tcp, -noreset, -auth: yalnız erişim anahtarını bilen bağlanır),
+                   kök zemin düz gri (OCR ön işlemesi siyahta bozuluyor)
   openbox          küçük pencere yöneticisi (akıllı yerleşim, yeni pencere odak alır, menü yok); yoksa uyarıyla çalışır
   dbus-daemon      ÖZEL oturum veri yolu: arka plan uygulamaları kullanıcının oturumundaki tek-örnek uygulamalara
                    devredilmez; yalnız izin verilen servisler (erişilebilirlik) etkinleştirilebilir
@@ -152,6 +153,78 @@ def bildirim_yolu() -> str:
 
 def _calisma(no: int) -> str:
     return os.path.join(yollar.runtime_dir(), f"sanal-{no}")
+
+
+# ---------------------------------------------------------------- erişim anahtarı (Xauthority)
+# Xvfb -auth olmadan açılırsa aynı bilgisayardaki HER yerel istemci (ör. X11 izni olan Flatpak uygulaması) görünmez
+# masaüstüne bağlanıp girişli tarayıcının görüntüsünü alabilir/girdi gönderebilirdi. Her masaüstü kendi rastgele
+# MIT-MAGIC-COOKIE'siyle açılır; anahtar dosyası çalışma klasöründe (0700) 0600 durur. Uygulamalara XAUTHORITY ile
+# verilir; kullanıcının kendi Xauthority dosyasına hiçbir şey yazılmaz.
+XAUTH_DOSYA = "Xauthority"
+_AILE_YEREL, _AILE_HEPSI = 256, 0xFFFF
+
+
+def xauth_yolu(no: int) -> str:
+    return os.path.join(_calisma(no), XAUTH_DOSYA)
+
+
+def _xauth_yaz(yol: str, no: int, cerez: bytes) -> None:
+    """Xauthority biçimi (libXau): aile(2) + [uzunluk(2) + veri] × (adres, ekran no, ad, anahtar), büyük uçlu.
+    İki kayıt: FamilyLocal + makine adı (python-xlib yalnız bunu eşler) ve FamilyWild (makine adı değişse de)."""
+    import socket as _soket
+
+    def alan(v: bytes) -> bytes:
+        return len(v).to_bytes(2, "big") + v
+
+    ad, numara = b"MIT-MAGIC-COOKIE-1", str(no).encode()
+    veri = b"".join(aile.to_bytes(2, "big") + alan(adres) + alan(numara) + alan(ad) + alan(cerez)
+                    for aile, adres in ((_AILE_YEREL, _soket.gethostname().encode()), (_AILE_HEPSI, b"")))
+    fd = os.open(yol, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(veri)
+
+
+def _xauth_cerez(no: int) -> bytes | None:
+    """Masaüstünün anahtarı (dosya yoksa None: anahtarsız eski masaüstü ya da başka bir ekran)."""
+    try:
+        with open(xauth_yolu(no), "rb") as f:
+            b = f.read()
+    except OSError:
+        return None
+    try:  # ilk kaydın anahtar alanı
+        i = 2
+        for _alan in range(3):
+            i += 2 + int.from_bytes(b[i:i + 2], "big")
+        n = int.from_bytes(b[i:i + 2], "big")
+        cerez = b[i + 2:i + 2 + n]
+        return cerez if len(cerez) == n and n else None
+    except (IndexError, ValueError):
+        return None
+
+
+def _xlib_anahtar_kur() -> None:
+    """python-xlib bağlantıları (bu süreç) sanal masaüstünün anahtarını kullansın: Xlib'in kimlik arayıcısını
+    yalnız Deskhand anahtarı olan ekran numaralarında devralan dar bir sarmalayıcı (ortam değişkeni değişmez;
+    başka ekranlar eskisi gibi). Bir kez kurulur."""
+    from Xlib.support import connect
+    if getattr(connect.get_auth, "_deskhand", False):
+        return
+    asil = connect.get_auth
+
+    def get_auth(sock, dname, protocol, host, dno):
+        cerez = _xauth_cerez(int(dno)) if str(dno).isdigit() else None
+        if cerez:
+            return b"MIT-MAGIC-COOKIE-1", cerez
+        return asil(sock, dname, protocol, host, dno)
+    get_auth._deskhand = True
+    connect.get_auth = get_auth
+
+
+def x_ac(ekran):
+    """Sanal ekrana python-xlib bağlantısı (doğrulanmış ad + erişim anahtarı)."""
+    from Xlib import display
+    _xlib_anahtar_kur()
+    return display.Display(guvenli_ekran(ekran))
 
 
 def _kilit():
@@ -370,6 +443,8 @@ def uygulama_ortami(d: dict, env: dict | None = None) -> dict:
         "ELECTRON_OZONE_PLATFORM_HINT": "x11",
         "DESKHAND_SANAL": d["ekran"],
     })
+    if d.get("xauth"):  # erişim anahtarı (SILINECEK_ORTAM kullanıcının XAUTHORITY'sini zaten sildi)
+        e["XAUTHORITY"] = d["xauth"]
     if d.get("kimlik"):  # durdururken kafes dışındaki/kafessiz süreçler de bulunabilsin (_isaretli_surecler)
         e["DESKHAND_SANAL_KIMLIK"] = d["kimlik"]
     ses = d.get("ses") or {}
@@ -635,8 +710,7 @@ def _bekle(kosul, sure: float, aralik: float = 0.02) -> bool:
 
 
 def _x_baglan(ekran: str):
-    from Xlib import display
-    return display.Display(guvenli_ekran(ekran))
+    return x_ac(ekran)
 
 
 def _zemin_boya(ekran: str) -> None:
@@ -707,8 +781,10 @@ def masaustu_baslat(boyut: str | None = None, openbox: bool = True) -> dict:
 
 def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
     no, (g, y, derinlik) = d["no"], d["boyut"]
+    d["xauth"] = xauth_yolu(no)
+    _xauth_yaz(d["xauth"], no, secrets.token_bytes(16))
     xvfb = ["Xvfb", d["ekran"], "-screen", "0", f"{g}x{y}x{derinlik}", "-nolisten", "tcp", "-noreset",
-            "-dpi", "96"]
+            "-dpi", "96", "-auth", d["xauth"]]
     ortam_x = {k: v for k, v in os.environ.items() if k not in SILINECEK_ORTAM}
     with _gunluk_dosyasi(cdir, "xvfb") as log:
         if d["bellek"]:

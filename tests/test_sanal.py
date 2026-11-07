@@ -125,6 +125,26 @@ kontrol("masaüstü: ikinci başlatma aynı masaüstünü döndürür", masaustu
 kontrol("kanca: özel veri yolu hazır kancası adresle çağrıldı", kanca_adres == [(d["dbus_adres"], d["ekran"])],
         str(kanca_adres))
 masaustu.OZEL_VERI_YOLU_KANCALARI.clear()
+
+# erişim anahtarı: anahtarsız yerel istemci (ör. X11 izni olan bir Flatpak uygulaması) bağlanamaz
+xa = d.get("xauth") or ""
+st = os.stat(xa) if xa and os.path.exists(xa) else None
+kontrol("anahtar: Xvfb -auth ile açıldı, anahtar dosyası 0600 ve Xvfb komut satırında",
+        st is not None and (st.st_mode & 0o777) == 0o600 and xa in masaustu._komut_satiri(d["pid"]["xvfb"]))
+def _anahtarsiz(xauth_ortam):
+    kod = ("import sys\nfrom Xlib import display\ntry:\n    display.Display(sys.argv[1]).close()\n"
+           "    print('BAGLANDI')\nexcept Exception as e:\n    print('RED', type(e).__name__)")
+    r = subprocess.run([sys.executable, "-I", "-c", kod, d["ekran"]], capture_output=True, text=True, timeout=20,
+                       env={k: v for k, v in os.environ.items() if k != "XAUTHORITY"} | xauth_ortam)
+    satirlar = r.stdout.strip().splitlines()  # Xlib önce "no xauthority details" uyarısı basabilir
+    return satirlar[-1] if satirlar else r.stderr.strip()[-200:]
+kontrol("anahtar: anahtarsız bağlantı REDDEDİLİR", _anahtarsiz({"XAUTHORITY": "/dev/null"}).startswith("RED"))
+kontrol("anahtar: kullanıcının kendi XAUTHORITY'siyle de REDDEDİLİR",
+        _anahtarsiz({"XAUTHORITY": os.environ.get("XAUTHORITY", "/dev/null")}).startswith("RED"))
+kontrol("anahtar: uygulamaya verilen XAUTHORITY ile bağlanır",
+        _anahtarsiz({"XAUTHORITY": masaustu.uygulama_ortami(d).get("XAUTHORITY", "")}) == "BAGLANDI")
+kontrol("anahtar: Deskhand'in kendi bağlantısı (x_ac) çalışır", masaustu.x_ac(d["ekran"]).screen() is not None)
+
 ue = masaustu.uygulama_ortami(d, {"WAYLAND_DISPLAY": "wayland-0", "BENIM": "1"})
 wd = ue.get("WAYLAND_DISPLAY", "")
 kontrol("ortam: DISPLAY/özel D-Bus/x11 zorunlu, WAYLAND_DISPLAY = var olmayan mutlak yol, ek değişken geçer",
@@ -444,8 +464,8 @@ try:
     kontrol("Devral: kalkınca insan_var_mi() False", au.insan_var_mi() is False)
 
     # kaydırma: kendi dinleyici penceremizde XTEST düğme 4/5/6/7
-    from Xlib import X, display  # noqa: E402
-    dp = display.Display(d["ekran"])
+    from Xlib import X  # noqa: E402
+    dp = masaustu.x_ac(d["ekran"])
     kok = dp.screen().root
     dw = kok.create_window(0, 0, 300, 200, 0, dp.screen().root_depth, event_mask=X.ButtonPressMask,
                            background_pixel=0xFFFFFF)
@@ -512,7 +532,7 @@ from Xlib import X as _XX, display as _xd  # noqa: E402
 
 
 def basililar():
-    dp_ = _xd.Display(d["ekran"])
+    dp_ = masaustu.x_ac(d["ekran"])
     try:
         km = dp_.query_keymap()
         tus_ = [i * 8 + b for i, bayt in enumerate(km) for b in range(8) if bayt & (1 << b)]

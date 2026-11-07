@@ -121,9 +121,8 @@ class _X:
     """Tek X bağlantısı (python-xlib iş parçacığı güvenli değil: her iş parçacığı kendi _X'ini açar)."""
 
     def __init__(self, ekran: str):
-        from Xlib import display
         try:
-            self.d = display.Display(masaustu.guvenli_ekran(ekran))
+            self.d = masaustu.x_ac(ekran)
         except Exception as e:  # noqa: BLE001 - Xlib bağlantı hataları çeşitli
             raise Dur(SANAL_KAPALI, _("sanal ekrana ({ekran}) bağlanılamadı: {hata}").format(ekran=ekran, hata=e))
         self.ekran = ekran
