@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0  # çalışan panel öne getirildi
         print(f"panel soketi açılamadı ({yollar.runtime_dir()})", file=sys.stderr)
         return 1
-    p = Panel(app, sunucu)
+    p = Panel(app, sunucu, girdi_merkezi=True)
     _sinyal_kur(app, p.cik)
     if a.arka:
         p.arka_goster()

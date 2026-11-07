@@ -95,9 +95,10 @@ def uygulama_simgesi() -> QIcon:
 class Panel(QObject):
     def __init__(self, app: QApplication, sunucu: QLocalServer | None = None, tepsi: bool = True,
                  izleyici: Izleyici | None = None, kisayol: GenelKisayol | None = None, diyalog_kurma_ms=None,
-                 **pencere_kw):
+                 girdi_merkezi: bool = False, **pencere_kw):
         super().__init__()
         self.app = app
+        self.merkez = self._merkez_baslat() if girdi_merkezi else None  # gerçek açılışta (gui.__main__) açık
         self.izleyici = izleyici or Izleyici(self)
         self.pencere = AnaPencere(self.izleyici.ilk_satirlar, **pencere_kw)
         self.pencere.setWindowIcon(uygulama_simgesi())
@@ -142,6 +143,24 @@ class Panel(QObject):
             QTimer.singleShot(0, lambda: self.kisayol_ayarla(True, ayarlar["kisayol"]))
         if self.tepsi is not None:
             self.tepsi.goster()
+
+    # -------- girdi merkezi (panel yaşadıkça hazır bekleyen tek dotool; deskhand/girdi_merkezi.py)
+    @staticmethod
+    def _merkez_baslat():
+        from ..arka_uc import kde
+        from ..girdi_merkezi import GirdiMerkezi
+        if not kde.dotool_var():
+            return None  # dotool yok: girdi komutları zaten 9 ile durur
+        try:
+            return GirdiMerkezi().baslat()
+        except OSError as e:  # merkez açılamazsa Girdi kendi dotool'unu açar (eski yol)
+            gunluk(f"girdi merkezi başlatılamadı: {e}")
+            return None
+
+    def _merkez_durdur(self):
+        m, self.merkez = self.merkez, None
+        if m is not None:
+            m.durdur()  # dotool kapanır: aygıt yok olur, basılı her şey bırakılır
 
     # -------- DUR / devam (insanın kararı: kaynak "kullanici")
     def dur(self):
@@ -264,6 +283,7 @@ class Panel(QObject):
         self.diyaloglar.clear()
 
     def kapanis(self):
+        self._merkez_durdur()  # önce: kapanış sırasında girdi kabul edilmesin
         self._diyaloglari_kapat()
         if self.pencere.arka.b_devral.isChecked():
             self.pencere.arka.b_devral.setChecked(False)  # devral dosyası silinir, girdi kapanır

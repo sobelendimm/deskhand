@@ -93,6 +93,17 @@ def etkinlik_bin() -> str:
     return os.path.expanduser(ESKI_ETKINLIK)
 
 
+GORUNTU_AD = "deskhand-goruntu"
+
+
+def goruntu_bin() -> str | None:
+    """KWin ScreenShot2 ekran görüntüsü yardımcısı (C): paket içinde derlenmiş deskhand/yardimci/deskhand-goruntu
+    (install.sh derler; KWin < 6.8 yetkisi için ~/.local/share/applications/deskhand-goruntu.desktop bu yolu
+    gösterir, bu yüzden yol sabittir). Çalıştırılabilir değilse None (iç kurtarma: spectacle)."""
+    a = os.path.join(PAKET_DIZIN, "yardimci", GORUNTU_AD)
+    return a if os.path.isfile(a) and os.access(a, os.X_OK) else None
+
+
 # ---------------------------------------------------------------- geçiş (eski ekran → deskhand)
 
 # (ortam değişkeni, eski yol, yeni yolu veren işlev)

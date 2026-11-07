@@ -17,7 +17,7 @@ from PIL import Image
 
 from .. import yollar
 from ..gunluk import gunluk
-from ..hata import INSAN, KULLANICI_MESGUL, Dur, dur_denetle
+from ..hata import INSAN, KULLANICI_DUR, KULLANICI_MESGUL, Dur, dur_denetle
 from ..i18n import _
 from ..insan import INSAN_TAKLIDI, Etkinlik, girdi_suresi, insan_bekle, klavye_bekle
 from . import EKRAN, ArkaUc
@@ -214,6 +214,12 @@ def one_getir(k):
 
 
 def ekran_goruntusu():
+    """Tüm ekran PIL RGB: KWin ScreenShot2 yardımcısı (kde_goruntu); yalnız o çalışmazsa spectacle."""
+    from . import kde_goruntu
+    return kde_goruntu.goruntu(spectacle_goruntusu)
+
+
+def spectacle_goruntusu():
     d = yollar.cikti()
     os.makedirs(d, exist_ok=True)
     yol = os.path.join(d, f"tam-{os.getpid()}.png")
@@ -261,6 +267,11 @@ def on_plan_korumasi(ne):
 
 # ---------------------------------------------------------------- girdi (dotool)
 
+from .. import girdi_merkezi as _gm  # noqa: E402  (Qt'siz; panel açıkken hazır bekleyen dotool)
+
+MESGUL_AZAMI = 10.0  # merkezde başka komutun girdisi sürerken en çok bu kadar beklenir (sonra 7)
+
+
 def _goreli_imlec_sayisi():
     try:
         with open("/proc/bus/input/devices") as f:
@@ -269,12 +280,25 @@ def _goreli_imlec_sayisi():
         return 0
 
 
+def dotool_ac(env=None):
+    """dotool süreci (stdin'den satır okur). Girdi merkezi de bunu kullanır: ham dotool çağrısı yalnız arka uçta (§4)."""
+    return subprocess.Popen(["dotool"], stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+                            env=env if env is not None else girdi_ortami(), text=True)
+
+
+def dotool_var():
+    import shutil
+    return shutil.which("dotool") is not None
+
+
 class Girdi:
-    """dotool'u en başta arka planda açar. ~0,66 sn'lik kurulum süresi görüntü alma/OCR ile örtüşür.
+    """Satırları panelin GİRDİ MERKEZİ'ndeki hazır dotool'a gönderir (girdi_merkezi.py: kurulum beklemesi yok);
+    merkez yoksa ya da el sıkışma başarısızsa kendi dotool'unu açar (~0,66 sn kurulum görüntü alma/OCR ile örtüşür).
 
     gonder(): her gönderimden HEMEN önce hata.dur_denetle() + denetle(k, desen) (üst katmanın güvenlik denetimi)
-    + insan önceliği. zorla(): bırakma satırları, hiçbir denetim yok. ham(): yalnız DUR anahtarı + gözcü bayrağı
-    (harf harf yazı ve sürükleme için; pencere/başlık denetimini gözcü yapar)."""
+    + ön plan koruması + insan önceliği. zorla(): bırakma satırları, hiçbir denetim yok. ham(): yalnız DUR anahtarı +
+    gözcü bayrağı (harf harf yazı ve sürükleme için; pencere/başlık denetimini gözcü yapar). Bu denetimlerin HEPSİ
+    istemcide (burada) kalır; merkez DUR'u ayrıca denetler ve bağlantı koparsa basılı kalanları bırakır."""
 
     def __init__(self, au, etiket="", gizli=False, etk=None, denetle=None):
         if denetle is None:  # güvenlik denetimi ASLA atlanmasın: verilmediyse üst katmanınki
@@ -283,22 +307,29 @@ class Girdi:
         self.denetle = denetle
         self.etk_sahibi = etk is None and not INSAN_TAKLIDI
         self.etk = None if INSAN_TAKLIDI else (etk or Etkinlik())
-        self.taban = _goreli_imlec_sayisi()
         self.t0 = time.monotonic()
-        self.p = subprocess.Popen(["dotool"], stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=girdi_ortami(),
-                                  text=True)
+        self.p = None
+        self.merkez = _gm.Istemci.baglan(klavye_duzeni())
+        if self.merkez is None:
+            self._kendi_dotool()
         self.hazir = False
-        self.hazir_an = None
         self.uyarilar = []
         self.etiket, self.gizli = etiket, gizli
         self.kesildi = None
         self.son_etk = self.t0
         self.fare0 = au.fare()[:2]  # dotool kurulurken kullanıcı fareyi oynatırsa anlarız
         self.son_fare = self.fare0  # fareyi en son NEREYE biz bıraktık (dizi adımları arası insan denetimi)
+
+    def _kendi_dotool(self):
+        """İç geri düşme: panel (girdi merkezi) yokken bu sürecin kendi dotool'u."""
+        self.taban = _goreli_imlec_sayisi()
+        self.kur_t0 = time.monotonic()
+        self.hazir_an = None
+        self.p = dotool_ac()
         threading.Thread(target=self._izle, daemon=True).start()
 
     def _izle(self):  # OCR sürerken aygıtın görünme anını yakalar
-        while time.monotonic() - self.t0 < DOTOOL_AZAMI and self.p.poll() is None:
+        while time.monotonic() - self.kur_t0 < DOTOOL_AZAMI and self.p.poll() is None:
             if _goreli_imlec_sayisi() > self.taban:
                 self.hazir_an = time.monotonic() + DOTOOL_SON_UYKU
                 return
@@ -307,18 +338,48 @@ class Girdi:
     def _hazirla(self):
         if self.hazir:
             return
-        while self.hazir_an is None and self.p.poll() is None and time.monotonic() - self.t0 < DOTOOL_AZAMI:
-            time.sleep(0.01)
-        kalan = (self.hazir_an or self.t0 + 1.0) - time.monotonic()
-        if kalan > 0:
-            time.sleep(kalan)
-        if self.p.poll() is not None:
-            hata = self.p.stderr.read().strip()
-            raise Dur(9, _("dotool çalışmadı: {hata} (uinput yüklü mü? `sudo modprobe uinput`)").format(hata=hata))
+        if self.merkez is not None:
+            try:
+                self.merkez.hazir_bekle(DOTOOL_AZAMI + 2.0)
+            except _gm.MerkezHatasi as e:  # merkez kullanılamıyor: kendi dotool'umuza düş
+                gunluk(f"{self.etiket} | girdi merkezi kullanılamadı: {e.mesaj}")
+                self.merkez.kapat()
+                self.merkez = None
+                self._kendi_dotool()
+        if self.merkez is None:
+            while self.hazir_an is None and self.p.poll() is None and time.monotonic() - self.kur_t0 < DOTOOL_AZAMI:
+                time.sleep(0.01)
+            kalan = (self.hazir_an or self.kur_t0 + 1.0) - time.monotonic()
+            if kalan > 0:
+                time.sleep(kalan)
+            if self.p.poll() is not None:
+                hata = self.p.stderr.read().strip()
+                raise Dur(9, _("dotool çalışmadı: {hata} (uinput yüklü mü? `sudo modprobe uinput`)").format(hata=hata))
         insan_bekle(self.fare0, self.au.fare)
         klavye_bekle(self.etk, self.t0)  # kurulum süresince (≈0,65 sn) klavye/fare kullanıldıysa sessizliği bekle
         self.son_etk = time.monotonic()
         self.hazir = True
+
+    def _yaz(self, satirlar):
+        """Satırları TEK seferde dotool'a ver (merkez ya da kendi dotool'umuz). Merkezde başka komutun girdisi
+        sürüyorsa _gm.Mesgul: çağıran denetimlerini yeniden yapıp tekrar dener."""
+        m = getattr(self, "merkez", None)
+        if m is None:
+            self.p.stdin.write("".join(s + "\n" for s in satirlar))
+            self.p.stdin.flush()
+            return
+        try:
+            m.gonder(satirlar)
+        except _gm.MerkezHatasi as e:
+            if e.kod == KULLANICI_DUR:  # merkez yazımdan hemen önce DUR'u gördü
+                raise Dur(KULLANICI_DUR, _("kullanıcı DUR dedi (deskhand devam ile kaldırılır); girdi gönderilmedi"))
+            raise Dur(1 if e.kod == 1 else 9, _("girdi merkezi: {neden}").format(neden=e.mesaj)) from None
+
+    def _mesgul_bekle(self, m, bitis):
+        if time.monotonic() > bitis:
+            raise Dur(7, _("girdi merkezinde başka bir komutun girdisi sürüyor; {sn} sn beklendi, girdi gönderilmedi"
+                           ).format(sn=f"{MESGUL_AZAMI:.0f}"))
+        time.sleep(min(max(m.sn, 0.005), 0.1))
 
     def etk_denetle(self, ne=None):
         """Son denetimden bu yana insan klavye/fare kullandıysa DUR 12 (komut ortası: beklemeden durur).
@@ -374,14 +435,13 @@ class Girdi:
 
     def zorla(self, satir):
         """BIRAKMA (keyup/buttonup) için: hiçbir denetim yok, kesinti (DUR dahil) olsa bile gönderilir
-        (takılı tuş kalmasın)."""
+        (takılı tuş kalmasın). Merkez bırakma satırını DUR'da da geçirir ve kuyrukta bekletmez."""
         try:
             t = time.monotonic()
-            self.p.stdin.write(satir + "\n")
-            self.p.stdin.flush()
+            self._yaz([satir])
             self._kaydet(t, [satir])
             gunluk(f"{self.etiket} | bırak | {satir}")
-        except (BrokenPipeError, OSError):
+        except (BrokenPipeError, OSError, Dur, _gm.Mesgul):
             pass
 
     def insan_kontrol(self):
@@ -407,39 +467,55 @@ class Girdi:
     def ham(self, satir):
         """Pencere denetimsiz tek satır (harf harf yazı, sürükleme; denetimi gözcü yapar). DUR anahtarı yine
         denetlenir (~2 µs); ön plan koruması KORUMA_ARALIK'ta bir."""
-        if self.kesildi:
-            raise self.kesildi
-        dur_denetle()
-        self.koruma_denetle(her_zaman=False)
-        try:
-            t = time.monotonic()
-            self.p.stdin.write(satir + "\n")
-            self.p.stdin.flush()
-            self._kaydet(t, [satir])
-        except (BrokenPipeError, OSError):
-            raise Dur(9, _("dotool beklenmedik şekilde kapandı"))
+        bitis = time.monotonic() + MESGUL_AZAMI
+        while True:
+            if self.kesildi:
+                raise self.kesildi
+            dur_denetle()
+            self.koruma_denetle(her_zaman=False)
+            try:
+                t = time.monotonic()
+                self._yaz([satir])
+                self._kaydet(t, [satir])
+                return
+            except _gm.Mesgul as m:
+                self._mesgul_bekle(m, bitis)
+            except (BrokenPipeError, OSError):
+                raise Dur(9, _("dotool beklenmedik şekilde kapandı"))
 
     def gonder(self, k, desen, *satirlar):
         self._hazirla()
-        if getattr(self, "kesildi", None):
-            raise self.kesildi
-        dur_denetle()
-        self.denetle(k, desen)
-        self.koruma_denetle()  # her gönderimde: dizi/akış ortasında kullanıcı film/oyun açtıysa dur (15)
-        self.etk_denetle()
-        try:
-            t = time.monotonic()
-            self.p.stdin.write("".join(s + "\n" for s in satirlar))
-            self.p.stdin.flush()
-            self._kaydet(t, satirlar)
-        except (BrokenPipeError, OSError):
-            raise getattr(self, "kesildi", None) or Dur(9, _("dotool beklenmedik şekilde kapandı"))
+        bitis = time.monotonic() + MESGUL_AZAMI
+        while True:  # merkez 'meşgul' derse TÜM denetimler yeniden (denetim girdiden hemen önce kalsın)
+            if getattr(self, "kesildi", None):
+                raise self.kesildi
+            dur_denetle()
+            self.denetle(k, desen)
+            self.koruma_denetle()  # her gönderimde: dizi/akış ortasında kullanıcı film/oyun açtıysa dur (15)
+            self.etk_denetle()
+            try:
+                t = time.monotonic()
+                self._yaz(satirlar)
+                self._kaydet(t, satirlar)
+                break
+            except _gm.Mesgul as m:
+                self._mesgul_bekle(m, bitis)
+            except (BrokenPipeError, OSError):
+                raise getattr(self, "kesildi", None) or Dur(9, _("dotool beklenmedik şekilde kapandı"))
         kayit = [f"type ***({len(s) - 5})" if self.gizli and s.startswith("type ") else s for s in satirlar]
         gunluk(f"{self.etiket} | [{self.au.baslik(k)}] | {' ; '.join(kayit)}")
 
     def kapat(self):
         if self.etk_sahibi and self.etk is not None:
             self.etk.kapat()
+        m = getattr(self, "merkez", None)
+        if m is not None:
+            if self.hazir:  # komut girdi bitince dönsün (kendi dotool'da stdin kapatıp beklemenin karşılığı)
+                self.uyarilar = m.bekle()
+                for l in self.uyarilar:
+                    print(f"UYARI {l}", file=sys.stderr)
+            m.kapat()  # merkez bağlantı kopunca bu bağlantının basılı kalanlarını bırakır
+            return
         if not self.hazir:  # hiç girdi gönderilmedi (hata/DUR): kurulumu bekleme
             self.p.kill()
             self.p.wait()

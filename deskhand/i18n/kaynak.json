@@ -828,7 +828,7 @@
   "gui/metinler.py:24"
  ],
  "aktif pencere değişti → {baslik}": [
-  "arka_uc/kde.py:357",
+  "arka_uc/kde.py:418",
   "arka_uc/sanal.py:952"
  ],
  "aktif pencere değişti → {baslik}; girdi gönderilmedi": [
@@ -933,7 +933,7 @@
   "uygulama.py:161"
  ],
  "başlık değişti: {baslik} (beklenen /{desen}/)": [
-  "arka_uc/kde.py:359",
+  "arka_uc/kde.py:420",
   "arka_uc/sanal.py:954"
  ],
  "başlık kilidi (regex)": [
@@ -1000,6 +1000,9 @@
  ],
  "bilinmeyen girdi satırı: {satir}": [
   "arka_uc/sanal.py:890"
+ ],
+ "bilinmeyen istek": [
+  "girdi_merkezi.py:405"
  ],
  "bilinmeyen keysym: {ad}": [
   "arka_uc/sanal.py:732"
@@ -1084,6 +1087,9 @@
  "deskhand-bg: yalnız görünmez masaüstü": [
   "mcp_sunucu.py:488"
  ],
+ "desteklenmeyen görüntü biçimi (QImage {bicim})": [
+  "arka_uc/kde_goruntu.py:74"
+ ],
  "dizi boş": [
   "eylem.py:545"
  ],
@@ -1093,12 +1099,26 @@
  "dosyadaki süreyi geçersiz kıl": [
   "cli.py:347"
  ],
+ "dotool başlatılamadı: {hata}": [
+  "girdi_merkezi.py:253"
+ ],
  "dotool beklenmedik şekilde kapandı": [
-  "arka_uc/kde.py:420",
-  "arka_uc/kde.py:436"
+  "arka_uc/kde.py:484",
+  "arka_uc/kde.py:504",
+  "girdi_merkezi.py:483"
+ ],
+ "dotool hazır değil": [
+  "girdi_merkezi.py:438",
+  "girdi_merkezi.py:455"
+ ],
+ "dotool tekrar tekrar kapandı (uinput yüklü mü?)": [
+  "girdi_merkezi.py:245"
+ ],
+ "dotool yeniden başladı; girdi gönderilmedi": [
+  "girdi_merkezi.py:475"
  ],
  "dotool çalışmadı: {hata} (uinput yüklü mü? `sudo modprobe uinput`)": [
-  "arka_uc/kde.py:317"
+  "arka_uc/kde.py:357"
  ],
  "durduruldu": [
   "mcp_sunucu.py:129"
@@ -1119,7 +1139,24 @@
   "gui/saglik.py:14"
  ],
  "ekran görüntüsü alınamadı (spectacle)": [
-  "arka_uc/kde.py:236"
+  "arka_uc/kde.py:242"
+ ],
+ "ekran görüntüsü eksik geldi ({n} / {beklenen} bayt)": [
+  "arka_uc/kde_goruntu.py:62",
+  "arka_uc/kde_goruntu.py:67"
+ ],
+ "ekran görüntüsü yardımcısı başarısız (kod {kod}): {ayrinti}": [
+  "arka_uc/kde_goruntu.py:95"
+ ],
+ "ekran görüntüsü yardımcısı yok (make -C deskhand/yardimci deskhand-goruntu)": [
+  "arka_uc/kde_goruntu.py:83"
+ ],
+ "ekran görüntüsü yardımcısı çalışmadı: {hata}": [
+  "arka_uc/kde_goruntu.py:92"
+ ],
+ "ekran görüntüsü yardımcısının çıktısı anlaşılamadı": [
+  "arka_uc/kde_goruntu.py:53",
+  "arka_uc/kde_goruntu.py:59"
  ],
  "ekran görüntüsü: {pencere}": [
   "mcp_sunucu.py:552"
@@ -1132,6 +1169,9 @@
  ],
  "ekranda '{metin}'": [
   "akis.py:195"
+ ],
+ "el sıkışma geçersiz": [
+  "girdi_merkezi.py:433"
  ],
  "erişilebilirlik ağacı pencere ister (masaüstü kipi değil)": [
   "erisim.py:97"
@@ -1173,6 +1213,9 @@
  "fare: pencere ({x},{y}) = ekran ({ex},{ey})": [
   "eylem.py:491"
  ],
+ "geçersiz girdi satırı": [
+  "girdi_merkezi.py:471"
+ ],
  "geçersiz istek": [
   "mcp_sunucu.py:116"
  ],
@@ -1186,14 +1229,36 @@
   "arka_uc/sanal.py:106"
  ],
  "girdi": [
-  "arka_uc/kde.py:404",
-  "arka_uc/kde.py:542"
+  "arka_uc/kde.py:464",
+  "arka_uc/kde.py:618"
  ],
  "girdi gönderilmedi": [
-  "arka_uc/kde.py:328",
+  "arka_uc/kde.py:389",
   "arka_uc/sanal.py:908",
   "arka_uc/sanal.py:915",
   "arka_uc/sanal.py:919"
+ ],
+ "girdi merkezi anlaşılmayan yanıt verdi: {yanit}": [
+  "girdi_merkezi.py:610"
+ ],
+ "girdi merkezi bağlantısı koptu": [
+  "girdi_merkezi.py:602",
+  "girdi_merkezi.py:625"
+ ],
+ "girdi merkezi yanıt vermedi": [
+  "girdi_merkezi.py:600"
+ ],
+ "girdi merkezi zaten çalışıyor: {yol}": [
+  "girdi_merkezi.py:153"
+ ],
+ "girdi merkezi: {neden}": [
+  "arka_uc/kde.py:376"
+ ],
+ "girdi merkezi: çalışma dizini bu kullanıcının değil: {yol}": [
+  "girdi_merkezi.py:148"
+ ],
+ "girdi merkezinde başka bir komutun girdisi sürüyor; {sn} sn beklendi, girdi gönderilmedi": [
+  "arka_uc/kde.py:380"
  ],
  "görev özeti (bildirimde gösterilir)": [
   "cli.py:363"
@@ -1324,6 +1389,9 @@
  "kind=icon için name gerekli": [
   "mcp_sunucu.py:634"
  ],
+ "klavye düzeni farklı ve merkez kullanımda": [
+  "girdi_merkezi.py:446"
+ ],
  "komut: {komut}": [
   "akis.py:181"
  ],
@@ -1340,6 +1408,7 @@
   "arka_uc/sanal.py:946"
  ],
  "kullanıcı DUR dedi (deskhand devam ile kaldırılır); girdi gönderilmedi": [
+  "arka_uc/kde.py:375",
   "hata.py:49"
  ],
  "kullanıcı DUR dedi → red": [
@@ -1364,10 +1433,10 @@
   "cli.py:357"
  ],
  "kullanıcı fareyi oynattı (insan önceliği)": [
-  "arka_uc/kde.py:361"
+  "arka_uc/kde.py:422"
  ],
  "kullanıcı klavye/fare kullandı (insan önceliği); {ne}": [
-  "arka_uc/kde.py:327"
+  "arka_uc/kde.py:388"
  ],
  "kullanıcı meşgul değil": [
   "mesgul.py:534"
@@ -1411,7 +1480,7 @@
   "mesgul.py:533"
  ],
  "kullanıcı {neden}: ekranına müdahale edilmez ({ne}). Görünmez masaüstünde yap (--arka) ya da sonra dene; kullanıcı açıkça izin verdiyse --ekranimda": [
-  "arka_uc/kde.py:257"
+  "arka_uc/kde.py:263"
  ],
  "kullanıcı {sn} sn boyunca fareyi kullandı (insan önceliği); girdi gönderilmedi": [
   "insan.py:169"
@@ -1420,7 +1489,7 @@
   "insan.py:148"
  ],
  "kullanıcıya nerede yapılacağı soruluyor (bildirim açık): yanıtlayana dek ekranına girdi gönderilmez ({ne})": [
-  "arka_uc/kde.py:253"
+  "arka_uc/kde.py:259"
  ],
  "kurulu": [
   "oturum/cli.py:89"
@@ -1580,7 +1649,7 @@
   "eylem.py:610"
  ],
  "pencere kapatma": [
-  "arka_uc/kde.py:514"
+  "arka_uc/kde.py:590"
  ],
  "pencere kapatma isteğini desteklemiyor (WM_DELETE_WINDOW yok): {kimlik}": [
   "arka_uc/sanal.py:510"
@@ -1606,7 +1675,7 @@
   "masaustu.py:981"
  ],
  "pencere öne getirme": [
-  "arka_uc/kde.py:505"
+  "arka_uc/kde.py:581"
  ],
  "red": [
   "mcp_sunucu.py:332",
@@ -1799,7 +1868,7 @@
   "mcp_sunucu.py:798"
  ],
  "uygulama açma": [
-  "arka_uc/kde.py:565"
+  "arka_uc/kde.py:641"
  ],
  "uygulama durumları": [
   "oturum/cli.py:62"

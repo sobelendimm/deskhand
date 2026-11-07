@@ -159,6 +159,8 @@ It is also smaller in scope: KDE Plasma only, one background desktop, no GPU the
 - Python modules: PyQt6, python-xlib, numpy, scipy, pillow, jeepney, mcp ≥ 2.3
 - To build the small keyboard-activity helper: a C compiler, `make`, `pkg-config`, `wayland`
   (without it, human priority watches only the mouse)
+- To build the screenshot helper (KWin's screenshot interface, about 8 ms a shot): the same
+  tools and `libsystemd` (part of systemd). `install.sh` builds it and registers its desktop entry
 
 Arch / CachyOS:
 

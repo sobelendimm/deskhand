@@ -47,6 +47,7 @@ RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/deskhand"
 BIN_DIR="$HOME/.local/bin"
 WRAPPER="$BIN_DIR/deskhand"
 APP_FILE="$DATA_HOME/applications/deskhand.desktop"
+SHOT_FILE="$DATA_HOME/applications/deskhand-goruntu.desktop"
 AUTOSTART_FILE="$CFG_HOME/autostart/deskhand.desktop"
 ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/deskhand.svg"
 MARK="# deskhand wrapper (install.sh)"
@@ -117,6 +118,7 @@ rm_marked "$WRAPPER" "$MARK"
 
 say "$(L 'Masaüstü girdileri ve simge kaldırılıyor' 'Removing the desktop entries and the icon')"
 rm_marked "$APP_FILE" "$DESKTOP_MARK"
+rm_marked "$SHOT_FILE" "$DESKTOP_MARK"
 rm_marked "$AUTOSTART_FILE" "$DESKTOP_MARK"
 if [[ -e "$ICON_FILE" ]]; then run rm -f "$ICON_FILE"; fi
 if command -v kbuildsycoca6 >/dev/null 2>&1; then

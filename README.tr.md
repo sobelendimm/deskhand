@@ -161,6 +161,9 @@ Kapsamı da daha dar: yalnız KDE Plasma, tek arka plan masaüstü, orada GPU yo
 - Python modülleri: PyQt6, python-xlib, numpy, scipy, pillow, jeepney, mcp ≥ 2.3
 - Küçük klavye etkinliği yardımcısını derlemek için: C derleyicisi, `make`, `pkg-config`,
   `wayland` (yoksa insan önceliği yalnız fareye bakar)
+- Ekran görüntüsü yardımcısını derlemek için (KWin'in ekran görüntüsü arayüzü, görüntü başına
+  ~8 ms): aynı araçlar ve `libsystemd` (systemd'nin parçası). `install.sh` derler ve masaüstü
+  girdisini kaydeder
 
 Arch / CachyOS:
 

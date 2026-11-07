@@ -172,8 +172,8 @@ command -v kdotool >/dev/null 2>&1 || dep_miss req kdotool-bin aur \
     "kdotool (AUR: kdotool-bin): ön planda pencere bulma" "kdotool (AUR: kdotool-bin): finding windows in the foreground"
 command -v dotool >/dev/null 2>&1 || dep_miss req dotool aur \
     "dotool (AUR): ön planda fare/klavye" "dotool (AUR): mouse/keyboard in the foreground"
-command -v spectacle >/dev/null 2>&1 || dep_miss req spectacle pac \
-    "spectacle: ön planda ekran görüntüsü" "spectacle: screenshots in the foreground"
+command -v spectacle >/dev/null 2>&1 || dep_miss rec spectacle pac \
+    "spectacle: ekran görüntüsü yardımcısı çalışmazsa yedek" "spectacle: screenshot fallback when the helper cannot run"
 # OCR (both desktops)
 if ! command -v tesseract >/dev/null 2>&1; then
     dep_miss req tesseract pac "tesseract: metin okuma (OCR)" "tesseract: text recognition (OCR)"
@@ -219,6 +219,18 @@ if (( ! HELPER_OK )); then
         "no compiler/make/pkg-config or wayland-client: the keyboard-activity helper cannot be built (human priority then watches the mouse only)"
     [[ " ${PAC[*]} " == *" wayland "* ]] || PAC+=(wayland)
 fi
+# build tools for the screenshot helper (KWin ScreenShot2 over sd-bus)
+SHOT_OK=1
+for t in cc make pkg-config; do
+    command -v "$t" >/dev/null 2>&1 || SHOT_OK=0
+done
+if (( SHOT_OK )) && ! quiet pkg-config --exists libsystemd; then SHOT_OK=0; fi
+if (( ! SHOT_OK )); then
+    dep_miss req systemd-libs pac \
+        "derleyici/make/pkg-config ya da libsystemd yok: ekran görüntüsü yardımcısı derlenemez (her görüntü yavaş spectacle ile alınır)" \
+        "no compiler/make/pkg-config or libsystemd: the screenshot helper cannot be built (every screenshot falls back to slow spectacle)"
+    [[ " ${PAC[*]} " == *" base-devel "* ]] || PAC+=(base-devel)
+fi
 
 if (( ${#PAC[@]} || ${#AUR[@]} )); then
     ids=" $( [[ -r /etc/os-release ]] && . /etc/os-release; printf '%s %s' "${ID:-}" "${ID_LIKE:-}" ) "
@@ -255,6 +267,37 @@ if (( HELPER_OK )); then
     say "$(L 'Klavye/fare etkinliği yardımcısı derleniyor' 'Building the keyboard/mouse activity helper')"
     if ! run make -s -C "$PKG_DIR/yardimci"; then
         warn "$(L 'yardımcı derlenemedi; insan önceliği yalnız fareye bakacak' 'the helper could not be built; human priority will watch the mouse only')"
+    fi
+fi
+
+# ---------------------------------------------------------------- screenshot helper (C) + its KWin permission
+SHOT_BIN="$PKG_DIR/yardimci/deskhand-goruntu"
+SHOT_FILE="$DATA_HOME/applications/deskhand-goruntu.desktop"
+SHOT_BUILT=0
+if (( SHOT_OK )); then
+    say "$(L 'Ekran görüntüsü yardımcısı derleniyor (KWin ScreenShot2)' 'Building the screenshot helper (KWin ScreenShot2)')"
+    if run make -s -C "$PKG_DIR/yardimci" deskhand-goruntu; then SHOT_BUILT=1
+    else warn "$(L 'ekran görüntüsü yardımcısı derlenemedi; görüntüler yavaş spectacle ile alınacak' \
+                   'the screenshot helper could not be built; screenshots will fall back to slow spectacle')"; fi
+fi
+# KWin before 6.8 serves ScreenShot2 only to a program whose desktop entry (matched by the Exec= path)
+# lists it in X-KDE-DBUS-Restricted-Interfaces; newer KWin ignores the entry.
+if (( SHOT_BUILT )); then
+    say "$(L "Ekran görüntüsü izni: $SHOT_FILE" "Screenshot permission: $SHOT_FILE")"
+    if [[ -e "$SHOT_FILE" ]] && ! is_ours "$SHOT_FILE" "$DESKTOP_MARK"; then
+        warn "$(L "$SHOT_FILE bizim değil, dokunulmadı" "$SHOT_FILE is not ours, left untouched")"
+    else
+        write_file "$SHOT_FILE" 0644 <<EOF
+[Desktop Entry]
+Type=Application
+Name=Deskhand screenshot helper
+Comment=Takes screenshots for Deskhand through KWin
+Exec=$(desktop_exec "$SHOT_BIN")
+NoDisplay=true
+Terminal=false
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
+$DESKTOP_MARK
+EOF
     fi
 fi
 

@@ -3,6 +3,8 @@
 #           → deskhand/yardimci/deskhand-etkinlik (yollar.etkinlik_bin() burada da arar)
 # Protokol dosyalarını yeniden üret:  make -C deskhand/yardimci protokol   (wayland-scanner + wayland-protocols)
 # Kurulum (isteğe bağlı): make -C deskhand/yardimci kur  → $(DATA_DIR)/etkinlik/deskhand-etkinlik
+# deskhand-goruntu: KWin ScreenShot2 ile ekran görüntüsü (spectacle'sız, hızlı). Ayrı hedef, çünkü libsystemd
+# (sd-bus) ister:  make -C deskhand/yardimci deskhand-goruntu
 CC ?= gcc
 CFLAGS ?= -O2 -Wall
 DATA_DIR ?= $(or $(DESKHAND_DATA_DIR),$(HOME)/.local/share/deskhand)
@@ -10,6 +12,9 @@ PROTOKOL_XML ?= $(shell pkg-config --variable=pkgdatadir wayland-protocols 2>/de
 
 deskhand-etkinlik: deskhand-etkinlik.c ext-idle-notify-v1-protocol.c ext-idle-notify-v1-client-protocol.h
 	$(CC) $(CFLAGS) -o $@ deskhand-etkinlik.c ext-idle-notify-v1-protocol.c $$(pkg-config --cflags --libs wayland-client)
+
+deskhand-goruntu: deskhand-goruntu.c
+	$(CC) $(CFLAGS) -o $@ deskhand-goruntu.c $$(pkg-config --cflags --libs libsystemd)
 
 protokol:
 	wayland-scanner client-header $(PROTOKOL_XML) ext-idle-notify-v1-client-protocol.h
@@ -19,6 +24,6 @@ kur: deskhand-etkinlik
 	install -Dm755 deskhand-etkinlik $(DATA_DIR)/etkinlik/deskhand-etkinlik
 
 temizle:
-	$(RM) deskhand-etkinlik
+	$(RM) deskhand-etkinlik deskhand-goruntu
 
 .PHONY: protokol kur temizle
