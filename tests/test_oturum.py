@@ -843,6 +843,28 @@ def test_degisim():
     shutil.rmtree(tdir, ignore_errors=True)
 
 
+
+def test_profil_grubu_yalitimi():
+    """Gerçek olay: kopyaya taşınan toolkit.profiles.storeID, Firefox'un kullanıcının profiles.ini varsayılan yolunu
+    ve Profile Groups listesini KOPYAYA çevirmesine yol açtı. Kopyada bu satırlar olmamalı ve kopya Firefox kendi
+    yapılandırma köküyle (XDG_CONFIG_HOME) başlamalı."""
+    from deskhand.oturum import firefox as ff
+    tdir = tempfile.mkdtemp(prefix="deskhand-pg-")
+    kaynak, hedef = os.path.join(tdir, "k"), os.path.join(tdir, "h")
+    os.makedirs(kaynak); os.makedirs(hedef)
+    with open(os.path.join(kaynak, "prefs.js"), "w") as f:
+        f.write('user_pref("toolkit.profiles.storeID", "a1b2c3d4");\nuser_pref("browser.profiles.enabled", true);\n'
+                'user_pref("browser.profiles.profile-name.updated", true);\nuser_pref("intl.locale.requested", "tr");\n')
+    ff._user_js_yaz(hedef, kaynak)
+    prefs = open(os.path.join(hedef, "prefs.js")).read()
+    kontrol("profil grubu: storeID ve browser.profiles.* kopyaya ALINMAZ, diğer ayarlar kalır",
+            "storeID" not in prefs and "browser.profiles" not in prefs and "intl.locale.requested" in prefs, prefs)
+    uj = open(os.path.join(hedef, "user.js")).read()
+    kontrol("profil grubu: user.js profilleri kapatır", 'browser.profiles.enabled", false' in uj and
+            'toolkit.profiles.storeID", ""' in uj)
+    import shutil
+    shutil.rmtree(tdir, ignore_errors=True)
+
 def test_cli():
     from deskhand.oturum import cli
     kontrol("cli politika 0", cli.main(["politika", "firefox", "--json"]) == 0)
@@ -871,6 +893,7 @@ def main():
     test_sqlite_kaynak_yazilmaz()
     test_flatpak_ornek()
     test_degisim()
+    test_profil_grubu_yalitimi()
     test_cli()
     print(f"\n{gecen}/{toplam} geçti")
     return 0 if gecen == toplam else 1

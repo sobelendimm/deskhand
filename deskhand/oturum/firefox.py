@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import struct
 
@@ -58,6 +59,8 @@ user_pref("media.autoplay.default", 5);
 user_pref("media.autoplay.blocking_policy", 2);
 user_pref("app.update.auto", false);
 user_pref("app.update.enabled", false);
+user_pref("browser.profiles.enabled", false);
+user_pref("toolkit.profiles.storeID", "");
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.startup.firstrunSkipsHomepage", true);
 user_pref("datareporting.policy.firstRunURL", "");
@@ -158,6 +161,11 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
     _user_js_yaz(hedef, kaynak)
 
     bilgi["argv"] = ["firefox", "--profile", hedef, "--no-remote", "--new-instance"]
+    # Kopya Firefox kullanıcının profil kökünü (~/.config/mozilla/firefox: profiles.ini, installs.ini, Profile Groups)
+    # HİÇ görmesin: kendi boş yapılandırma kökü + eski tip profil yönetimi (kuruluma özel varsayılan yazmaz).
+    xdg = os.path.join(hedef, ".xdg-config")
+    os.makedirs(xdg, mode=0o700, exist_ok=True)
+    bilgi["env_ek"] = {"XDG_CONFIG_HOME": xdg, "MOZ_LEGACY_PROFILES": "1"}
     return bilgi
 
 
@@ -374,8 +382,21 @@ def _origin_boyut_siniri() -> int | None:
         return 50 * 1024 * 1024
 
 
+# Profil grubu (Firefox "selectable profiles") tercihleri: kopyada KALIRSA Firefox kopyayı kullanıcının asıl profili
+# sanıp onun profiles.ini/installs.ini varsayılan yolunu ve "Profile Groups/<id>.sqlite" listesini KOPYAYA çeviriyordu
+# (gerçek olay: üç hayalet profil + silinmiş kopyayı gösteren varsayılan yol). Bu satırlar kopyaya ALINMAZ.
+_PROFIL_GRUBU_PREF = re.compile(r'user_pref\("(toolkit\.profiles\.|browser\.profiles\.)')
+
+
 def _user_js_yaz(hedef: str, kaynak: str) -> None:
-    """Kopyaya user.js yaz. Kaynaktaki prefs.js'i de alırız (ayarlar korunur), üstüne user.js gelir."""
-    kopya_mod.dosya_kopyala(os.path.join(kaynak, "prefs.js"), os.path.join(hedef, "prefs.js"))
+    """Kopyaya user.js yaz. Kaynaktaki prefs.js'i de alırız (ayarlar korunur) — profil grubu satırları HARİÇ —, üstüne
+    user.js gelir."""
+    try:
+        with open(os.path.join(kaynak, "prefs.js"), encoding="utf-8", errors="replace") as f:
+            satirlar = [s for s in f if not _PROFIL_GRUBU_PREF.match(s.strip())]
+        with open(os.path.join(hedef, "prefs.js"), "w", encoding="utf-8") as f:
+            f.writelines(satirlar)
+    except OSError:
+        pass
     with open(os.path.join(hedef, "user.js"), "w") as f:
         f.write(_USER_JS)
