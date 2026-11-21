@@ -28,7 +28,7 @@ import sys
 import threading
 import time
 import uuid
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from contextlib import contextmanager
 from typing import Annotated, Any, Literal
 
@@ -707,8 +707,10 @@ def click(
 @mcp.tool(title="Type text", annotations=EYLEM)
 def type_text(
     window: PencereZorunlu,
-    text: Annotated[str, Field(max_length=2000, description="Text to type (Turkish letters OK; \\n = Enter; on a "
-                                                             "payment page Enter/Tab/space need the user's approval)")],
+    text: Annotated[str, Field(max_length=20000, description="Text to type (Turkish letters OK; \\n = Enter; emoji and "
+                                                             "long text are pasted via the clipboard, which is "
+                                                             "restored afterwards; on a payment page Enter/Tab/space "
+                                                             "need the user's approval)")],
     submit: Annotated[bool, Field(description="Press Enter afterwards")] = False,
     clear_first: Annotated[bool, Field(description="Select all (ctrl+a) first so the text replaces it")] = False,
     secret: Annotated[bool, Field(description="Do not write the text to the log")] = False,
@@ -731,6 +733,54 @@ def type_text(
         # ödeme sayfasında Enter/Tab/boşluklu yazı kullanıcı onayı ister (sunucu sorar)
         mesaj, onaylandi = onayla_ve_yap("type_text", k, yap)
         return {**bilgi, "status": "typed", "message": mesaj, "approved_by_user": onaylandi}
+
+
+_KENDI_PANO: "deque[str]" = deque(maxlen=32)  # bu oturumda clipboard(write) ile yazılan metinlerin özeti (içerik tutulmaz)
+PANO_OKUMA_SINIRI = 20000  # clipboard(read) en çok bu kadar karakter döndürür
+
+
+def _pano_ozeti(metin: str) -> str:
+    import hashlib
+    return hashlib.sha256(metin.encode()).hexdigest()
+
+
+@mcp.tool(title="Clipboard", annotations=EYLEM)
+def clipboard(
+    action: Literal["read", "write"],
+    text: Annotated[str | None, Field(max_length=20000, description="Text to put on the clipboard (action=write; "
+                                                                     "empty string clears it)")] = None,
+    desktop: Masaustu = "auto",
+) -> dict[str, Any]:
+    """Read or replace the clipboard text of a desktop. Reading the USER's clipboard (foreground) needs their approval
+    in the Deskhand panel unless it is text you wrote in this session; the background desktop has its own clipboard.
+    Writing never reaches the clipboard-manager history. Not allowed while the user is gaming/watching (15)."""
+    with baglam(desktop, _("pano: {islem}").format(islem=action)) as bilgi:
+        hata.dur_denetle()
+        if action == "write":
+            if text is None:
+                raise ToolError("[1] " + _("write için text gerekli ('' panoyu temizler)"))
+            with kilitli():
+                api.pano_yaz(text)
+            if text:
+                _KENDI_PANO.append(_pano_ozeti(text))
+            return {**bilgi, "status": "written" if text else "cleared", "length": len(text)}
+        with kilitli():
+            icerik = api.pano_oku()
+        if icerik is None:
+            return {**bilgi, "status": "empty", "text": None, "length": 0}
+        onaylandi = False
+        if api.arka().ad == "kde" and _pano_ozeti(icerik) not in _KENDI_PANO:
+            # kullanıcının gerçek panosu parola/özel veri taşıyabilir: içerik ajana yalnız insan onayıyla gider
+            izin, neden = _onay_iste("clipboard", _("kullanıcının panosu"),
+                                     _("Ajan panonun metnini okumak istiyor ({n} karakter)").format(n=len(icerik)),
+                                     "ekran")
+            if not izin:
+                raise ToolError("[10] " + _("kullanıcı onayı alınamadı: {neden}. Pano okunmadı; kullanıcıya bildir, "
+                                            "kendi kendine yeniden deneme.").format(neden=neden or _("red")))
+            onaylandi = True
+        kesik = len(icerik) > PANO_OKUMA_SINIRI
+        return {**bilgi, "status": "read", "text": icerik[:PANO_OKUMA_SINIRI], "length": len(icerik),
+                "truncated": kesik, "approved_by_user": onaylandi}
 
 
 @mcp.tool(title="Press key", annotations=EYLEM)

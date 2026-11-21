@@ -533,6 +533,140 @@ class Girdi:
             print(f"UYARI {l}", file=sys.stderr)
 
 
+# ---------------------------------------------------------------- pano (wl-clipboard)
+
+PANO_ZAMAN = 5.0  # wl-copy / wl-paste çağrısı en çok bu kadar sürer (sonra Dur 7)
+PANO_AZAMI = 32 * 1024 * 1024  # geri yüklenmek üzere okunacak pano en çok bu kadar bayt
+PANO_METIN_TURLERI = ("text/plain;charset=utf-8", "UTF8_STRING", "text/plain", "TEXT", "STRING")
+PANO_SAHTE_TURLER = {"TARGETS", "TIMESTAMP", "MULTIPLE", "SAVE_TARGETS", "x-kde-passwordManagerHint"}
+
+
+def pano_ortami():
+    """wl-copy/wl-paste ortamı: KULLANICININ Wayland oturumu. Görünmez masaüstünün ortamında (WAYLAND_DISPLAY sahte,
+    masaustu.WAYLAND_YOK) çalışıyorsak ön plan panosu yoktur: sahte yola bağlanmaya çalışmak yerine açık hata."""
+    from ..masaustu import WAYLAND_YOK
+    env = dict(os.environ)
+    wd = env.get("WAYLAND_DISPLAY", "")
+    if os.path.basename(wd) == WAYLAND_YOK or env.get("DESKHAND_SANAL"):
+        raise Dur(9, _("kullanıcının panosuna görünmez masaüstü ortamından erişilemez (WAYLAND_DISPLAY sahte)"))
+    return env
+
+
+def _wl(argv, girdi=None, zaman=None):
+    """wl-copy/wl-paste çalıştır → (çıkış kodu, stdout bayt, stderr metin). wl-copy arka planda çatallanıp sunmaya
+    devam eder: stdout/stderr BORU olursa çocuk onları açık tutar ve bekleme asılır → ikisi de geçici dosyaya gider,
+    yalnız üst süreç beklenir."""
+    import tempfile
+    zaman = zaman or PANO_ZAMAN
+    env = pano_ortami()
+    with tempfile.TemporaryFile() as cikti, tempfile.TemporaryFile() as hata_:
+        try:
+            p = subprocess.Popen(argv, stdin=subprocess.PIPE if girdi is not None else subprocess.DEVNULL,
+                                 stdout=cikti, stderr=hata_, env=env)
+        except FileNotFoundError:
+            raise Dur(9, _("{arac} yok (wl-clipboard paketi)").format(arac=argv[0])) from None
+        try:
+            if girdi is not None:
+                try:
+                    p.stdin.write(girdi)
+                    p.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
+            p.wait(timeout=zaman)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.wait()
+            raise Dur(7, _("{arac} {sn} sn içinde bitmedi").format(arac=argv[0], sn=f"{zaman:.0f}")) from None
+        cikti.seek(0)
+        veri = cikti.read(PANO_AZAMI + 1)
+        hata_.seek(0)
+        return p.returncode, veri, hata_.read(400).decode(errors="replace").strip()
+
+
+def pano_turleri():
+    """Panonun sunduğu MIME türleri; pano boşsa []."""
+    kod, veri, _err = _wl(["wl-paste", "--list-types"])
+    if kod != 0:
+        return []  # "Nothing is copied"
+    return [t.strip() for t in veri.decode(errors="replace").splitlines() if t.strip()]
+
+
+def _metin_turu(turler):
+    for t in PANO_METIN_TURLERI:
+        if t in turler:
+            return t
+    return next((t for t in turler if t.startswith("text/")), None)
+
+
+def pano_oku():
+    """Panonun metni (wl-paste --no-newline); boş ya da metin dışıysa None."""
+    tur = _metin_turu(pano_turleri())
+    if tur is None:
+        return None
+    kod, veri, hata_ = _wl(["wl-paste", "--no-newline", "--type", tur])
+    if kod != 0:
+        return None
+    return veri.decode(errors="replace")
+
+
+def pano_yaz(metin, hassas=True):
+    """Panoyu `metin` yap (wl-copy; "" → --clear). hassas: --sensitive (Klipper geçmişine yazılmaz). DUR + ön plan
+    koruması (kullanıcı oyunda/film izliyorsa 15): pano da kullanıcının ekranına/oturumuna müdahaledir."""
+    dur_denetle()
+    on_plan_korumasi(_("pano yazma"))
+    _pano_yaz_ham(metin, hassas)
+
+
+def _pano_yaz_ham(metin, hassas=True, tur="text/plain;charset=utf-8"):
+    if isinstance(metin, str) and not metin:
+        argv, girdi = ["wl-copy", "--clear"], None
+    else:
+        argv = ["wl-copy", "--type", tur, *(["--sensitive"] if hassas else [])]
+        girdi = metin.encode() if isinstance(metin, str) else metin
+    kod, _out, hata_ = _wl(argv, girdi)
+    if kod != 0:
+        raise Dur(9, _("wl-copy başarısız ({kod}): {hata}").format(kod=kod, hata=hata_ or _("ayrıntı yok")))
+
+
+def pano_yedekle():
+    """Pano anlık görüntüsü: {"bos": True} | {"tur": MIME, "veri": bayt, "metin": bool}. Metin varsa metin türü
+    (zengin biçimler yalnız metin olarak geri gelir); yoksa birincil MIME türü. Çok büyükse (PANO_AZAMI) geri
+    yüklenemez: {"buyuk": True}."""
+    turler = pano_turleri()
+    if not turler:
+        return {"bos": True}
+    tur = _metin_turu(turler)
+    metin = tur is not None
+    if tur is None:
+        tur = next((t for t in turler if t not in PANO_SAHTE_TURLER), None)
+        if tur is None:
+            return {"bos": True}
+    kod, veri, _err = _wl(["wl-paste", "--no-newline", "--type", tur])
+    if kod != 0:
+        return {"bos": True}
+    if len(veri) > PANO_AZAMI:
+        return {"buyuk": True, "tur": tur}
+    return {"tur": tur, "veri": veri, "metin": metin}
+
+
+def pano_geri_yukle(yedek):
+    """pano_yedekle() görüntüsünü geri yükle (denetimsiz). → uyarı metni | None. Geçmişe yazılmasın diye
+    --sensitive: yeniden yükleme panonun geçmişine ikinci bir kopya eklemesin."""
+    if yedek.get("buyuk"):
+        return _("eski pano içeriği ({tur}) çok büyük olduğu için geri yüklenemedi").format(tur=yedek.get("tur"))
+    try:
+        if yedek.get("bos"):
+            _pano_yaz_ham("")
+        else:
+            _pano_yaz_ham(yedek["veri"], True, yedek["tur"])
+    except Dur as e:
+        return _("eski pano içeriği geri yüklenemedi: {hata}").format(hata=e.mesaj)
+    if not yedek.get("bos") and not yedek.get("metin"):
+        return _("eski pano içeriği metin değildi; birincil türü ({tur}) geri yüklendi, diğer biçimler kaybolmuş "
+                 "olabilir").format(tur=yedek["tur"])
+    return None
+
+
 # ---------------------------------------------------------------- arka uç
 
 class KdeArkaUc(ArkaUc):
@@ -621,6 +755,19 @@ class KdeArkaUc(ArkaUc):
     def etkinlik(self):
         """İnsan önceliği izleyicisi (Wayland boşta bildirimi); testlerde insan taklidinde None."""
         return None if INSAN_TAKLIDI else Etkinlik()
+
+    # -------- pano (wl-clipboard; docs/ARCHITECTURE.md §2)
+    def pano_oku(self):
+        return pano_oku()
+
+    def pano_yaz(self, metin, hassas=True):
+        pano_yaz(metin, hassas)
+
+    def pano_yedekle(self):
+        return pano_yedekle()
+
+    def pano_geri_yukle(self, yedek):
+        return pano_geri_yukle(yedek)
 
     def insan_var_mi(self):
         """Şu an klavye/fare kullanılıyor mu? (~0,3 sn: yardımcı açılır, kısa süre dinlenir)"""

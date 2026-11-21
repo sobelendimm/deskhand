@@ -12,6 +12,9 @@ import threading
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
+from ..hata import ARAC_EKSIK, Dur
+from ..i18n import _
+
 EKRAN = "EKRAN"  # masaüstü kipi: tüm ekran
 ARKA_ONEK = "arka:"  # sanal arka ucun pencere kimlikleri her zaman bu önekle başlar
 
@@ -109,6 +112,28 @@ class ArkaUc(ABC):
 
     def etkinlik(self):
         """İnsan etkinliği izleyicisi (akis için) ya da None."""
+        return None
+
+    # -------- Faz 9a: pano (isteğe bağlı; varsayılan "desteklenmiyor"). Üst katman (eylem.yaz_ic, MCP/CLI pano)
+    # yalnız bu yöntemleri kullanır; ham wl-copy/wl-paste/X seçimi YALNIZ arka uç içinde.
+    def pano_oku(self) -> str | None:
+        """Panonun METİN içeriği; boşsa ya da metin dışıysa None."""
+        raise Dur(ARAC_EKSIK, _("bu arka uç panoyu desteklemiyor"))
+
+    def pano_yaz(self, metin: str, hassas: bool = True) -> None:
+        """Panoyu `metin` yapar ("" = panoyu temizle). hassas: pano yöneticisi geçmişine yazılmasın.
+        Güvenlik denetimleri (DUR, ön plan koruması) burada yapılır."""
+        raise Dur(ARAC_EKSIK, _("bu arka uç panoyu desteklemiyor"))
+
+    def pano_yedekle(self):
+        """Yapıştırarak yazmadan ÖNCE panonun geri yüklenebilir anlık görüntüsü (üst katman için opak nesne).
+        Varsayılan: yalnız metin. Pano okunamıyorsa Dur(9) (üst katman harf harf yazmaya döner)."""
+        return {"metin": self.pano_oku()}
+
+    def pano_geri_yukle(self, yedek) -> str | None:
+        """pano_yedekle() görüntüsünü geri yükle. Denetimsizdir (temizlik: DUR ya da kesintide de çalışmalı).
+        → tam geri yüklenemediyse kullanıcıya gösterilecek uyarı metni, yoksa None."""
+        self.pano_yaz((yedek or {}).get("metin") or "", hassas=True)
         return None
 
 
