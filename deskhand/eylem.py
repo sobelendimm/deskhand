@@ -137,7 +137,34 @@ def ekran_noktasi(k, x, y, geo=None):
     return (px + 0.5 - sx0) / (sx1 - sx0), (py + 0.5 - sy0) / (sy1 - sy0), px, py
 
 
-def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1):
+# tıklama değiştirici tuşları: dotool Linux adları (tek başına 'shift' dotool'da geçersiz: sol tuş adı kullanılır)
+TIKLA_DEGISTIRICI = {"ctrl": "leftctrl", "control": "leftctrl", "shift": "leftshift", "alt": "leftalt",
+                     "meta": "leftmeta", "super": "leftmeta", "win": "leftmeta"}
+TIKLA_TUS = {"sol": "left", "sag": "right", "orta": "middle", "cift": "left", "uclu": "left"}
+TIKLA_SAYI = {"cift": 2, "uclu": 3}  # tek `gonder` çağrısındaki click sayısı (bölünmez: atomik)
+
+
+def mod_coz(mod):
+    """Değiştirici tuşlar ('ctrl+shift' ya da ['ctrl', 'shift'] ya da boş) → dotool tuş adları (yinelenmeden,
+    sırayla). Bilinmeyen ad Dur(1); hiçbir girdi gönderilmeden ÖNCE çağrılmalı."""
+    if not mod:
+        return []
+    adlar = re.split(r"[+\s,]+", mod.strip()) if isinstance(mod, str) else list(mod)
+    sonuc = []
+    for ad in adlar:
+        if not ad:
+            continue
+        t = TIKLA_DEGISTIRICI.get(str(ad).lower())
+        if t is None:
+            raise Dur(1, _("bilinmeyen değiştirici tuş: {tus} (ctrl, shift, alt, meta)").format(tus=repr(ad)))
+        if t not in sonuc:
+            sonuc.append(t)
+    return sonuc
+
+
+def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod=()):
+    """mod: mod_coz çıktısı (dotool tuş adları). Değiştirici: keydown → tıklama → keyup; bırakma HER durumda
+    (hata, kesinti, DUR) `zorla` ile yapılır (basili_bekle/k_bas ile aynı güvence)."""
     geo = geo or _au().geometri(k)
     fx, fy, px, py = ekran_noktasi(k, x, y, geo)
     _au().one_getir(k)
@@ -147,23 +174,36 @@ def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1):
     time.sleep(0.04)  # imleç üzerine gelme (hover) olayı işlensin
     imlec_alti_denetle(k, px, py)
     g.son_fare = (px, py)
-    tus = {"sol": "left", "sag": "right", "orta": "middle", "cift": "left"}[dugme]
-    if basili > 0:  # fare düğmesini BASILI tut (ör. oyunda kazma): ne olursa olsun bırak
-        g.gonder(k, desen, f"buttondown {tus}")
-        try:
-            basili_bekle(g, k, desen, basili, (px, py))
-        finally:
-            g.zorla(f"buttonup {tus}")
-        print(_("basılı tutuldu ({dugme}, {sn} sn): pencere ({x},{y}) = ekran ({ex},{ey})").format(
-            dugme=dugme, sn=basili, x=round(x), y=round(y), ex=px, ey=py))
-        return
-    for i in range(max(1, tekrar)):
-        if i:
-            time.sleep(0.06)
-            imlec_alti_denetle(k, px, py)  # tekrarlar arasında da insan/pencere denetimi
-        g.gonder(k, desen, *([f"click {tus}"] * (2 if dugme == "cift" else 1)))
+    tus = TIKLA_TUS[dugme]
+    mod = list(mod or ())
+    bastik = []
+    try:
+        for m in mod:
+            bastik.append(m)  # keydown denemesinden ÖNCE kaydedilir: yarım kalsa bile bırakılır
+            g.gonder(k, desen, f"keydown {m}")
+        if mod:
+            time.sleep(0.03)  # uygulama değiştiriciyi görsün
+        if basili > 0:  # fare düğmesini BASILI tut (ör. oyunda kazma): ne olursa olsun bırak
+            g.gonder(k, desen, f"buttondown {tus}")
+            try:
+                basili_bekle(g, k, desen, basili, (px, py))
+            finally:
+                g.zorla(f"buttonup {tus}")
+            print(_("basılı tutuldu ({dugme}, {sn} sn): pencere ({x},{y}) = ekran ({ex},{ey})").format(
+                dugme=dugme, sn=basili, x=round(x), y=round(y), ex=px, ey=py))
+            return
+        for i in range(max(1, tekrar)):
+            if i:
+                time.sleep(0.06)
+                imlec_alti_denetle(k, px, py)  # tekrarlar arasında da insan/pencere denetimi
+            g.gonder(k, desen, *([f"click {tus}"] * TIKLA_SAYI.get(dugme, 1)))
+    finally:
+        for m in reversed(bastik):
+            g.zorla(f"keyup {m}")
     print(_("tıklandı ({dugme}{tekrar}): pencere ({x},{y}) = ekran ({ex},{ey})").format(
         dugme=dugme, tekrar=f" x{tekrar}" if tekrar > 1 else "", x=round(x), y=round(y), ex=px, ey=py))
+    if mod:
+        print(_("değiştirici tuşlar: {mod}").format(mod="+".join(mod)))
 
 
 # dotool: wheel artı = yukarı, hwheel artı = sağ (test sayfasında scrollY ile ölçüldü)
@@ -350,6 +390,7 @@ def k_tikla(a):
             raise Dur(8, _("--foto: pencere fotoğraftan sonra taşındı/boyut değişti; yeniden foto al"))
         kx, ky = s.get("kenar", (0, 0))
         x, y = s["kok"][0] + (a.x - kx) / s["olcek"], s["kok"][1] + (a.y - ky) / s["olcek"]
+    mod = mod_coz(getattr(a, "mod", None))
     g = girdi_al(f"tikla ({round(x)},{round(y)}) {a.dugme}")
     try:
         ekran_noktasi(a.kimlik, x, y, geo)  # dışarıdaysa OCR'a hiç girme
@@ -357,7 +398,7 @@ def k_tikla(a):
         if yakin:
             print(_("noktadaki yazı: {yazi}").format(yazi=" | ".join(yakin)))
         hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), x, y, yakin)
-        tikla_ic(g, a.kimlik, a.baslik, x, y, a.dugme, geo, a.basili, a.tekrar)
+        tikla_ic(g, a.kimlik, a.baslik, x, y, a.dugme, geo, a.basili, a.tekrar, mod)
     finally:
         girdi_birak(g)
 
@@ -613,6 +654,7 @@ def k_kapat(a):
 
 
 def k_simgeye_tikla(a):
+    mod = mod_coz(getattr(a, "mod", None))
     g = girdi_al(f"simgeye-tikla '{a.ad}' {a.dugme}")
     try:
         _au().one_getir(a.kimlik)
@@ -636,13 +678,14 @@ def k_simgeye_tikla(a):
         hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), cx, cy, nokta_metni(a.kimlik, cx, cy))
         print(_("bulundu: simge '{ad}' ({x},{y}) benzerlik {benzerlik}").format(
             ad=a.ad, x=f"{cx:.0f}", y=f"{cy:.0f}", benzerlik=f"{sk:.3f}"))
-        tikla_ic(g, a.kimlik, a.baslik, cx, cy, a.dugme, geo)
+        tikla_ic(g, a.kimlik, a.baslik, cx, cy, a.dugme, geo, mod=mod)
     finally:
         girdi_birak(g)
 
 
 def k_renge_tikla(a):
     """Bölgedeki en büyük (ya da --sira N.) renk alanının ortasına tıkla: yazısı okunamayan yeşil/kırmızı düğmeler."""
+    mod = mod_coz(getattr(a, "mod", None))
     g = girdi_al(f"renge-tikla {a.renk} {a.dugme}")
     try:
         _au().one_getir(a.kimlik)
@@ -661,12 +704,13 @@ def k_renge_tikla(a):
             print(_("noktadaki yazı: {yazi}").format(yazi=" | ".join(yakin)))
         hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), x, y, yakin)
         print(_("renk alanı: {renk} ({x},{y}) {alan} piksel").format(renk=a.renk, x=f"{x:.0f}", y=f"{y:.0f}", alan=alan))
-        tikla_ic(g, a.kimlik, a.baslik, x, y, a.dugme, geo)
+        tikla_ic(g, a.kimlik, a.baslik, x, y, a.dugme, geo, mod=mod)
     finally:
         girdi_birak(g)
 
 
 def k_metne_tikla(a):
+    mod = mod_coz(getattr(a, "mod", None))
     g = girdi_al(f"metne-tikla '{a.metin}' {a.dugme}")  # dotool kurulumu OCR ile aynı anda
     bolge = bolge_coz(a.bolge)
     try:
@@ -706,6 +750,6 @@ def k_metne_tikla(a):
         print(_("bulundu: '{metin}' ({x},{y}) güven {guven}{benzerlik}, {sn} sn").format(
             metin=m["t"], x=f"{m['cx']:.0f}", y=f"{m['cy']:.0f}", guven=f"{m['conf']:.0f}", benzerlik=benz,
             sn=f"{sure:.2f}"))
-        tikla_ic(g, a.kimlik, a.baslik, m["cx"] + dx, m["cy"] + dy, a.dugme, geo)
+        tikla_ic(g, a.kimlik, a.baslik, m["cx"] + dx, m["cy"] + dy, a.dugme, geo, mod=mod)
     finally:
         girdi_birak(g)

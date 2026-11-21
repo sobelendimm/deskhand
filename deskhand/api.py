@@ -99,7 +99,7 @@ def calistir(f, a) -> str:
 
 def ns(**kw) -> argparse.Namespace:
     """Komutların beklediği argparse ad alanı (ortak varsayılanlar + verilenler)."""
-    a = argparse.Namespace(baslik=None, sinif=None, onayli=False, bolge=None, sira=None, dugme="sol", kal=True)
+    a = argparse.Namespace(baslik=None, sinif=None, onayli=False, bolge=None, sira=None, dugme="sol", kal=True, mod=None)
     for k, v in kw.items():
         setattr(a, k, v)
     if hasattr(a, "kimlik") and not hasattr(a, "kimlik_ham"):
@@ -367,35 +367,40 @@ def renk_bul(k: str, renk: str, en_az: int = 250, bolge=None) -> dict:
 
 # ---------------------------------------------------------------- eylemler (CLI komutları, argparse'sız)
 
-DUGME = {"left": "sol", "right": "sag", "middle": "orta", "double": "cift"}
+DUGME = {"left": "sol", "right": "sag", "middle": "orta", "double": "cift", "triple": "uclu"}
 YON = {"up": "yukari", "down": "asagi", "left": "sol", "right": "sag"}
 
 
+def _mod(mod) -> str | None:
+    """Değiştirici tuş listesi ['ctrl', 'shift'] → komutların beklediği 'ctrl+shift' (boş = None)."""
+    return "+".join(mod) if mod else None
+
+
 def metne_tikla(k, metin, dugme="left", sira=None, bekle=0.0, kaydirarak=0, baslik=None, onayli=False, bolge=None,
-                kay=None) -> str:
+                kay=None, mod=None) -> str:
     from .eylem import k_metne_tikla
     return calistir(k_metne_tikla, ns(kimlik=k, metin=metin, dugme=DUGME[dugme], sira=sira, bekle=bekle,
                                       kaydirarak=kaydirarak, baslik=baslik, onayli=onayli,
                                       bolge=",".join(map(str, bolge)) if bolge else None,
-                                      kay=f"{int(kay[0])},{int(kay[1])}" if kay else None))
+                                      kay=f"{int(kay[0])},{int(kay[1])}" if kay else None, mod=_mod(mod)))
 
 
-def tikla(k, x, y, dugme="left", baslik=None, onayli=False, tekrar=1) -> str:
+def tikla(k, x, y, dugme="left", baslik=None, onayli=False, tekrar=1, mod=None) -> str:
     from .eylem import k_tikla
     return calistir(k_tikla, ns(kimlik=k, x=float(x), y=float(y), dugme=DUGME[dugme], foto=False, onayli=onayli,
-                                basili=0.0, tekrar=tekrar, baslik=baslik))
+                                basili=0.0, tekrar=tekrar, baslik=baslik, mod=_mod(mod)))
 
 
-def simgeye_tikla(k, ad, dugme="left", sira=None, esik=0.9, baslik=None, onayli=False) -> str:
+def simgeye_tikla(k, ad, dugme="left", sira=None, esik=0.9, baslik=None, onayli=False, mod=None) -> str:
     from .eylem import k_simgeye_tikla
     return calistir(k_simgeye_tikla, ns(kimlik=k, ad=ad, dugme=DUGME[dugme], sira=sira, esik=esik, baslik=baslik,
-                                        onayli=onayli))
+                                        onayli=onayli, mod=_mod(mod)))
 
 
-def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False) -> str:
+def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False, mod=None) -> str:
     from .erisim import k_ogeye_tikla
     return calistir(k_ogeye_tikla, ns(kimlik=k, ad=ad, dugme=DUGME[dugme], rol=None, sira=sira, baslik=baslik,
-                                      onayli=onayli))
+                                      onayli=onayli, mod=_mod(mod)))
 
 
 def yaz(k, metin, baslik=None, gizli=False, onayli=False) -> str:
@@ -417,6 +422,13 @@ def kaydir(k, yon="down", adim=3, nokta=None, baslik=None) -> str:
     from .eylem import k_kaydir
     return calistir(k_kaydir, ns(kimlik=k, yon=YON[yon], adim=int(adim), baslik=baslik,
                                  nokta=f"{int(nokta[0])},{int(nokta[1])}" if nokta else None))
+
+
+def surukle(k, x1, y1, x2, y2, dugme="left", sure=0.4, baslik=None, onayli=False) -> str:
+    """(x1,y1)'de bas → `sure` sn'de (x2,y2)'ye götür → bırak. Koordinatlar PENCERE pikseli."""
+    from .eylem import k_surukle
+    return calistir(k_surukle, ns(kimlik=k, x1=float(x1), y1=float(y1), x2=float(x2), y2=float(y2),
+                                  dugme=DUGME[dugme], sure=float(sure), baslik=baslik, onayli=onayli))
 
 
 # ---------------------------------------------------------------- uygulama
