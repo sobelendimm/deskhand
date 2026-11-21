@@ -27,7 +27,7 @@ from .ocr import KAYDIR_BEKLE, YEDEK_OKUMALAR, ara, ayni_konum, bul_dongu, dogru
     yazdir_eslesme
 
 GIRDI_KOMUTLARI = {"tikla", "tus", "yaz", "kaydir", "metne-tikla", "kapat", "simgeye-tikla", "bas", "fare",
-                   "surukle", "dizi", "renge-tikla", "akis", "ogeye-tikla"}
+                   "surukle", "dizi", "renge-tikla", "akis", "ogeye-tikla", "ogeye-yaz"}
 OKUMA_KOMUTLARI = {"foto", "metin", "bekle", "simge-bul", "simge-kaydet", "renk-bul"}
 
 
@@ -183,12 +183,12 @@ def kaydir_ic(g, k, desen, yon, adim, nokta=None):
     g.gonder(k, desen, f"{eksen} {isaret * adim}")
 
 
-def _yazi_hassas(g, k, onayli, metin):
+def _yazi_hassas(g, k, onayli, metin, goruntu_al=True):
     """Enter/Tab/boşluklu yazı hassas sayfada onay ister (\\n = formu gönder; Tab + boşluk = odaktaki düğmeye bas).
-    → sayfa hassas ve onaylandı mı."""
+    goruntu_al=False: onay isteğine görüntü eklenmez (odak almayan erişilebilirlik yolu). → sayfa hassas ve onaylandı mı."""
     goster = f"***({len(metin)})" if g.gizli else repr(metin if len(metin) <= 120 else metin[:117] + "…")
     return hassas_sayfa_engel(k, onayli, _("yazı (Enter/Tab/boşluk içeriyor)"),
-                              ek=_("yazılacak: {metin}").format(metin=goster))
+                              ek=_("yazılacak: {metin}").format(metin=goster), goruntu_al=goruntu_al)
 
 
 def yaz_ic(g, k, desen, metin, onayli=False):

@@ -576,6 +576,9 @@ class KdeArkaUc(ArkaUc):
         """Kullanıcı oyunda/film izliyorsa (15) ya da karar bildirimi açıksa (12) ekranına müdahale YOK."""
         on_plan_korumasi(ne)
 
+    def ekran_korumasi(self, ne):
+        on_plan_korumasi(ne)
+
     def one_getir(self, k):
         if k != EKRAN and aktif() != k:
             self._ekran_korumasi(_("pencere öne getirme"))

@@ -392,10 +392,18 @@ def simgeye_tikla(k, ad, dugme="left", sira=None, esik=0.9, baslik=None, onayli=
                                         onayli=onayli))
 
 
-def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False) -> str:
+def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False, eylem=None) -> str:
+    """eylem None = gerçek fare tıklaması; "" = AT-SPI birincil eylemi (fare/odak yok); başka = o AT-SPI eylemi."""
     from .erisim import k_ogeye_tikla
     return calistir(k_ogeye_tikla, ns(kimlik=k, ad=ad, dugme=DUGME[dugme], rol=None, sira=sira, baslik=baslik,
-                                      onayli=onayli))
+                                      onayli=onayli, eylem=eylem))
+
+
+def ogeye_yaz(k, ad, metin, sira=None, baslik=None, gizli=False, onayli=False) -> str:
+    """Ögenin değerini AT-SPI ile yaz (fare/klavye/odak yok)."""
+    from .erisim import k_ogeye_yaz
+    return calistir(k_ogeye_yaz, ns(kimlik=k, ad=ad, metin=metin, rol=None, sira=sira, baslik=baslik, gizli=gizli,
+                                    onayli=onayli))
 
 
 def yaz(k, metin, baslik=None, gizli=False, onayli=False) -> str:
@@ -449,6 +457,9 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     from .uygulama import tum_pencereler
     baslatma_yasak_denetle(*yasak_metinleri, *argv)
     au = arka()
+    if au.ad == "sanal":  # Chromium/Electron ağaca yalnız --force-renderer-accessibility ile girer
+        from .uygulama import erisim_bayragi_ekle
+        argv = erisim_bayragi_ekle(argv)
     once = tum_pencereler()
     os.makedirs(yollar.cikti(), exist_ok=True)
     log = os.path.join(yollar.cikti(), f"ac-{time.strftime('%H%M%S')}-{os.getpid()}.log")

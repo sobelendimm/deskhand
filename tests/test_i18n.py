@@ -132,7 +132,8 @@ ORNEK = {  # komut → kimliksiz argümanlar
     "metin": [K], "metne-tikla": [K, "a"], "bekle": [K, "a"], "kapat": [K], "bas": [K, "w", "1"],
     "surukle": [K, "1", "2", "3", "4"], "fare": [K, "1", "2"], "dizi": [K], "uyu": ["0"], "renk-bul": [K, "yesil"],
     "renge-tikla": [K, "yesil"], "simge-kaydet": [K, "ad"], "simge-bul": [K, "ad"], "simgeye-tikla": [K, "ad"],
-    "ac": ["x"], "akis": [K, "ad"], "erisim": [], "agac": [K], "ogeye-tikla": [K, "ad"], "dur": [], "devam": [],
+    "ac": ["x"], "akis": [K, "ad"], "erisim": [], "agac": [K], "ogeye-tikla": [K, "ad"], "ogeye-yaz": [K, "ad", "metin"],
+    "dur": [], "devam": [],
     "durum": [], "mesgul": [], "karar": ["görev"], "panel": [], "masaustu": ["durum"], "oturum": ["durum"],
     "mcp": [], "yardım": [],
 }

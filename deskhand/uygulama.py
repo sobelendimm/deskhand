@@ -87,6 +87,82 @@ def uygulama_bul(ad):
                    ).format(ad=ad))
 
 
+# ---------------------------------------------------------------- Chromium/Electron: erişilebilirlik bayrağı
+
+# Chromium tabanlı uygulamalar erişilebilirlik ağacını yalnız bu bayrakla (ya da bir ekran okuyucu algılarsa) kurar;
+# Qt/GTK'nin aksine veri yolundaki IsEnabled'a bakmazlar. Görünmez masaüstünde başlatılanlara eklenir (agac/ogeye-tikla).
+ERISIM_BAYRAGI = "--force-renderer-accessibility"
+CHROMIUM_IKILILERI = {
+    "chromium", "chromium-browser", "ungoogled-chromium", "google-chrome", "google-chrome-stable", "google-chrome-beta",
+    "google-chrome-unstable", "chrome", "brave", "brave-browser", "brave-browser-stable", "vivaldi", "vivaldi-stable",
+    "vivaldi-snapshot", "microsoft-edge", "microsoft-edge-stable", "opera", "thorium-browser",
+    "code", "code-oss", "codium", "vscodium", "cursor", "discord", "vesktop", "slack", "signal-desktop", "obsidian",
+    "spotify", "teams-for-linux", "ferdium", "element-desktop", "bitwarden", "postman", "insomnia", "typora",
+    "mattermost-desktop", "joplin-desktop", "figma-linux", "notion-app",
+}
+CHROMIUM_FLATPAKLARI = {
+    "com.discordapp.Discord", "com.spotify.Client", "com.visualstudio.code", "com.visualstudio.code-oss",
+    "md.obsidian.Obsidian", "org.ferdium.Ferdium", "com.google.Chrome", "org.chromium.Chromium", "com.brave.Browser",
+    "com.vivaldi.Vivaldi", "com.microsoft.Edge", "com.slack.Slack", "org.signal.Signal", "io.element.Element",
+    "com.github.IsmaelMartinez.teams_for_linux", "com.bitwarden.desktop", "com.getpostman.Postman",
+    "dev.vencord.Vesktop", "com.vscodium.codium", "com.opera.Opera",
+}
+
+
+def _asil_komut(argv):
+    """Sarmalayıcıları at: Deskhand'in Flatpak sarmalayıcısı (`python flatpak_ornek.py … -- komut`), env/nice/…"""
+    from .oturum.cozum import _sarmalayicilari_at
+    argv = list(argv)
+    if "--" in argv[:16] and any(os.path.basename(x) == "flatpak_ornek.py" for x in argv[:4]):
+        argv = argv[argv.index("--") + 1:]
+    return _sarmalayicilari_at(argv)
+
+
+def chromium_ailesi_mi(argv):
+    """Komut Chromium/Electron ailesinden mi? Küçük bilinen liste (ikili adı, Flatpak kimliği) + yolunda "electron"
+    geçenler. Yalnız ilk program ve Flatpak kimliğine bakılır (argümanlar değil)."""
+    from .oturum.cozum import _flatpak_kimligi
+    asil = _asil_komut(argv)
+    if not asil:
+        return False
+    kimlik = _flatpak_kimligi(asil)[0]
+    if kimlik:
+        return kimlik in CHROMIUM_FLATPAKLARI
+    yol = asil[0].lower()
+    ad = os.path.basename(yol)
+    return ad in CHROMIUM_IKILILERI or "electron" in yol
+
+
+def _desktop_exec(yol):
+    """.desktop dosyasının alan kodsuz Exec'i (argv); okunamazsa []."""
+    from .oturum.cozum import exec_argv
+    bolum = None
+    try:
+        with open(yol, errors="replace") as fp:
+            for satir in fp:
+                satir = satir.strip()
+                if satir.startswith("["):
+                    bolum = satir
+                elif bolum == "[Desktop Entry]" and satir.startswith("Exec="):
+                    return exec_argv(satir[5:])
+    except OSError:
+        pass
+    return []
+
+
+def erisim_bayragi_ekle(argv):
+    """Chromium/Electron ailesi uygulamanın komutuna --force-renderer-accessibility ekle (aksi halde aynen döner).
+    `gio launch X.desktop` bayrak alamaz: aileden ise .desktop'un Exec'i doğrudan çalıştırılır. Flatpak'ta bayrak
+    uygulama kimliğinden SONRA gelir (flatpak run bunu uygulamaya iletir) ve Deskhand'in Flatpak sarmalayıcısının sonunda."""
+    argv = list(argv)
+    if ERISIM_BAYRAGI in argv:
+        return argv
+    if len(argv) == 3 and os.path.basename(argv[0]) == "gio" and argv[1] == "launch" and argv[2].endswith(".desktop"):
+        komut = _desktop_exec(argv[2])
+        return [*komut, ERISIM_BAYRAGI] if komut and chromium_ailesi_mi(komut) else argv
+    return [*argv, ERISIM_BAYRAGI] if chromium_ailesi_mi(argv) else argv
+
+
 def tum_pencereler():
     au = sec()
     kimlikler = getattr(au, "kimlikler", None)  # ucuz liste (kde); yoksa tam liste
@@ -152,6 +228,8 @@ def k_ac(a):
             from . import oturum
             komut = oturum._flatpak_sarmala(komut, fk, None)
         print(notu, file=sys.stderr)
+    if au.ad == "sanal":  # Chromium/Electron ağaca yalnız bu bayrakla girer (agac / ogeye-tikla arka planda çalışsın)
+        komut = erisim_bayragi_ekle(komut)
     once, onceki_aktif = tum_pencereler(), au.aktif()
     os.makedirs(yollar.cikti(), exist_ok=True)
     log = os.path.join(yollar.cikti(), f"ac-{time.strftime('%H%M%S')}-{os.getpid()}.log")

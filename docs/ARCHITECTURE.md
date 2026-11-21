@@ -79,7 +79,8 @@ bir kimlik yanlış arka uca gidemez). Özel kimlik `EKRAN` = masaüstü kipi (t
 | `atspi_adresi()` | str \| None | erişilebilirlik veri yolu |
 
 İsteğe bağlı (varsayılanlı) yöntemler: `kimlikler()`, `klavye_duzeni()`, `yazilabilir_mi(c)`, `gecerli_tuslar()`,
-`pid(k)`, `etkinlestir(k)`, `etkinlik()`.
+`pid(k)`, `etkinlestir(k)`, `etkinlik()`, `oturum_veri_yolu()` (org.a11y.Bus'ın oturum veri yolu; None = kullanıcının
+oturumu), `ekran_korumasi(ne)` (kde: oyun/film → 15; girdi göndermeyen ama uygulamayı etkileyen yollar çağırır).
 
 `baslat(argv, env, cikti)`: `env`, her iki arka uçta da `os.environ`'a EKLENECEK/değişecek değişkenlerdir (tam ortam
 değil). Sanalda masaüstü değerleri (DISPLAY, özel D-Bus, ses...) her zaman üstün gelir.
@@ -137,6 +138,13 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   `mesgul.ekran_korumasi()` çağırır. Etkin pencere tam ekran / oyun biçimli ya da MPRIS'te video çalıyorsa
   Dur(15). İstisna yalnız kullanıcının açık izni (`--ekranimda`, `DESKHAND_EKRANIMDA=1` ya da bildirimdeki
   "Ekranımda yap" düğmesi → 10 dk). Sanal masaüstü etkilenmez.
+- Erişilebilirlik eylem yolu (`ogeye-tikla --eylem`, `ogeye-yaz`; `erisim.py`): gerçek fare/klavye girdisi ve odak yoktur,
+  bu yüzden fare yolundaki denetimler (imleç altı hariç) AÇIKÇA uygulanır: DUR (13), yasak pencere (10), başlık/sınıf
+  kilidi (4), hassas düğme adı / ödeme sayfası (10 ya da panelden onay; onay isteği görüntüsüzdür), kde'de oyun/film
+  koruması (15), günlük. Eylemden hemen önce (onay beklenmiş olabilir) DUR/yasak/kilit/koruma yeniden denetlenir. İnsan
+  önceliği (12) uygulanmaz: girdi aygıtı kullanılmaz. libatspi süreçte tek veri yoluna bağlanır; başka masaüstü için iş
+  yardımcı süreçte yürür. Sanal masaüstü açılırken `masaustu._erisim_hazirla_ic` özel veri yolunda IsEnabled=true yapar ve
+  kayıt defterini (at-spi2-registryd) kendi kafesinde başlatır.
 - Ham `dotool`/`xdotool` çağrısı YALNIZ arka uç içinde. Testler dahil başka yerde ASLA.
 - Sanal X bağlantısı yalnız `masaustu.guvenli_ekran()` ile açılır: boş ad Xlib'de `$DISPLAY`'e (kullanıcının gerçek
   XWayland'i) düşer ve XTEST girdisi gerçek masaüstüne gidebilirdi. Yalnız `:N` biçiminde ve gerçek `DISPLAY`'den

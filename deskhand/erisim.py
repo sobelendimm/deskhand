@@ -1,34 +1,114 @@
-"""Erişilebilirlik ağacı (AT-SPI): Qt/GTK düğmeleri AD ve KONUMLA. Komutlar: erisim, agac, ogeye-tikla."""
+"""Erişilebilirlik ağacı (AT-SPI): Qt/GTK düğmeleri AD ve KONUMLA; ögeye FARESİZ eylem ve değer yazma.
+Komutlar: erisim, agac, ogeye-tikla (fare ya da --eylem), ogeye-yaz.
+
+İki arka uçta da çalışır: kde → kullanıcının erişilebilirlik veri yolu; sanal → görünmez masaüstünün ÖZEL
+erişilebilirlik veri yolu (masaustu.erisim_hazirla). libatspi bir süreçte TEK veri yoluna bağlanabilir (yeniden
+bağlanma güvenilir değil): süreç başka veri yoluna bağlıysa iş küçük bir yardımcı süreçte (aynı kod) yürütülür.
+
+Güvenlik: odak çalmayan eylem yolunda (ogeye-tikla --eylem, ogeye-yaz) gerçek fare/klavye girdisi yoktur; fare yolundaki
+denetimlerin imleç altı hariç HEPSİ burada AÇIKÇA uygulanır (DUR 13, yasak pencere 10, başlık/sınıf kilidi 4, hassas
+düğme/ödeme sayfası 10 ya da panelden onay, kde'de oyun/film koruması 15, günlük kaydı)."""
 from __future__ import annotations
 
 import difflib
+import json
+import os
 import re
 import subprocess
+import sys
 import time
+import types
 
 from .arka_uc import EKRAN, sec
-from .eylem import girdi_al, girdi_birak, tikla_ic
+from .eylem import _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, tikla_ic
 from .gunluk import gunluk
-from .guvenlik import denetle
-from .hata import Dur
+from .guvenlik import denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, yazi_onay_ister_mi
+from .hata import Dur, dur_denetle
 from .i18n import _
 from .ocr import katla, nokta_metni, norm
 
 
 def calis(*a):
-    return subprocess.run(a, capture_output=True, text=True).stdout.strip()
+    try:
+        return subprocess.run(a, capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
 
 
 ETKILESIMLI = {"push button", "toggle button", "check box", "radio button", "menu item", "check menu item",
                "radio menu item", "link", "page tab", "combo box", "entry", "text", "password text", "spin button",
                "list item", "tree item", "table cell", "slider", "menu", "button", "switch", "toggle switch"}
 
+# Birincil eylem: ögenin Action arayüzündeki ilk bulunan (büyük/küçük harf duyarsız). Odağı alan / menü açan / kaydıran
+# eylemler (SetFocus, ShowMenu, Increase…) birincil sayılmaz: istenirse --eylem ADI ile seçilir.
+BIRINCIL_EYLEMLER = ("click", "press", "activate", "toggle")
+# Bu adlar mutlak değil: Qt "Press"/"Toggle", GTK "click"/"activate"/"toggle", Electron "click" bildirir.
 
-def _atspi_veri_yolu_saglam():
+# ---------------------------------------------------------------- veri yolu (kde: kullanıcınınki; sanal: özel)
+
+A11Y_NESNE = ("org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status", "IsEnabled")
+
+
+def _busctl_taban():
+    """busctl'in bağlanacağı OTURUM veri yolu: kde → kullanıcının oturumu; sanal → görünmez masaüstünün özel veri yolu."""
+    adres = sec().oturum_veri_yolu()
+    return ["busctl", f"--address={adres}"] if adres else ["busctl", "--user"]
+
+
+def erisim_acik():
+    return calis(*_busctl_taban(), "get-property", *A11Y_NESNE) == "b true"
+
+
+def _erisim_yaz(deger: bool):
+    try:
+        subprocess.run([*_busctl_taban(), "set-property", *A11Y_NESNE, "b", "true" if deger else "false"],
+                       capture_output=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def erisim_ac_garanti():
+    """Erişilebilirlik kapalıysa KULLANICIDAN KOMUT BEKLEMEDEN aç (kde: veri yolunda IsEnabled=true; sanal: masaüstünün
+    özel veri yolu + kayıt defteri). Açıkken hiçbir şey yapmaz. → bu çağrıda açıldı mı (uygulamaların ağaca girmesi
+    için kısa bekleme gerekir)."""
+    if erisim_acik():
+        return False
+    au = sec()
+    if au.ad == "sanal":
+        from . import masaustu
+        masaustu.erisim_hazirla()
+    else:
+        _erisim_yaz(True)
+    gunluk("erisim | otomatik ac" + (" | arka" if au.ad == "sanal" else ""))
+    for _i in range(15):  # özellik değişikliği yansıyana dek (uygulamalar PropertiesChanged ile haberdar olur)
+        if erisim_acik():
+            break
+        time.sleep(0.1)
+    time.sleep(0.3)
+    return erisim_acik()
+
+
+def _a11y_adresi():
+    """libatspi'nin bağlanacağı ERİŞİLEBİLİRLİK veri yolu: '' = kullanıcının oturumu (kde); sanal → özel adres."""
+    if sec().ad != "sanal":
+        return ""
+    from . import masaustu
+    d = masaustu.durum_oku() or {}
+    adres, p = d.get("a11y_adres"), (d.get("pid") or {}).get("a11y")
+    yol = (re.search(r"unix:path=([^,]+)", adres or "") or [None, ""])[1]
+    if adres and p and masaustu._canli(p) and os.path.exists(yol):
+        return adres
+    adres = masaustu.erisim_hazirla()  # eski sürümle açılmış masaüstü ya da kayıt defteri ölmüş: hazırla
+    if not adres:
+        raise Dur(9, _("görünmez masaüstünde erişilebilirlik hazırlanamadı (at-spi2-core kurulu mu?)"))
+    return adres
+
+
+def _atspi_veri_yolu_saglam(a11y=""):
     """Erişilebilirlik veri yolunun soketine gerçekten bağlanılabiliyor mu? libatspi bağlanamayınca süreci
     abort() ile ÖLDÜRÜYOR (kod -6) — önce biz denetleyip anlaşılır bir hata verelim. → (tamam, ayrıntı)."""
     import socket
-    adres = calis("busctl", "--user", "call", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress")
+    adres = a11y or calis("busctl", "--user", "call", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress")
     m = re.search(r'unix:path=([^,"]+)', adres or "")
     if not m:
         return False, adres or "org.a11y.Bus yanıt vermedi"
@@ -43,8 +123,21 @@ def _atspi_veri_yolu_saglam():
         s.close()
 
 
-def _atspi():
-    tamam, ayrinti = _atspi_veri_yolu_saglam()
+class _BaskaVeriYolu(Exception):
+    """Bu süreçte libatspi başka bir erişilebilirlik veri yoluna bağlı (iş yardımcı süreçte yapılır)."""
+
+
+_BAGLI = [None]  # libatspi'nin bu süreçte bağlandığı veri yolu: None = henüz yok, '' = kullanıcının oturumu, adres = özel
+
+
+def _atspi(a11y=None):
+    """Atspi modülü, bu süreçte `a11y` veri yoluna bağlı (ilk çağrıda bağlanır). Süreç başka veri yoluna bağlıysa
+    _BaskaVeriYolu. a11y None = geçerli arka ucun veri yolu."""
+    if a11y is None:
+        a11y = _a11y_adresi()
+    if _BAGLI[0] is not None and _BAGLI[0] != a11y:
+        raise _BaskaVeriYolu(a11y)
+    tamam, ayrinti = _atspi_veri_yolu_saglam(a11y)
     if not tamam:
         raise Dur(9, _("erişilebilirlik veri yoluna bağlanılamıyor ({ayrinti}); oturumu yeniden açmak ya da "
                        "at-spi-bus-launcher'ı yeniden başlatmak gerekir").format(ayrinti=ayrinti))
@@ -52,52 +145,64 @@ def _atspi():
         import gi
         gi.require_version("Atspi", "2.0")
         from gi.repository import Atspi
-        return Atspi
     except (ImportError, ValueError) as e:
         raise Dur(9, _("AT-SPI kullanılamıyor (python-gobject + at-spi2-core): {hata}").format(hata=e))
+    if _BAGLI[0] is None:
+        # libatspi adresi yalnız ilk bağlanmada okur: ortam değişkenini yalnız o an koy (başlatılan uygulamalara sızmasın)
+        onceki = os.environ.get("AT_SPI_BUS_ADDRESS")
+        try:
+            if a11y:
+                os.environ["AT_SPI_BUS_ADDRESS"] = a11y
+            Atspi.get_desktop(0).get_child_count()
+        finally:
+            if onceki is None:
+                os.environ.pop("AT_SPI_BUS_ADDRESS", None)
+            else:
+                os.environ["AT_SPI_BUS_ADDRESS"] = onceki
+        _BAGLI[0] = a11y
+    return Atspi
 
 
-def erisim_acik():
-    return calis("busctl", "--user", "get-property", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status",
-                 "IsEnabled") == "b true"
+# ---------------------------------------------------------------- uygulama türü (yalnız ipucu için)
+
+def uygulama_turu(pid):
+    """Süreç → "firefox" | "chromium" (Chromium/Electron) | "qt" | "gtk" | "diger". Yalnız /proc okunur."""
+    try:
+        pid = int(pid)
+        exe = os.path.basename(os.readlink(f"/proc/{pid}/exe"))
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            kom = f.read().replace(b"\0", b" ").decode(errors="replace")
+        with open(f"/proc/{pid}/maps") as f:
+            maps = f.read()
+    except (OSError, ValueError, TypeError):
+        return "diger"
+    ad = f"{exe} {kom}".lower()
+    if "firefox" in ad:
+        return "firefox"
+    if any(x in ad for x in ("electron", "chrom", "vivaldi", "app.asar", "--type=renderer", "--no-sandbox")):
+        return "chromium"
+    if "libQt6Core" in maps or "libQt5Core" in maps:
+        return "qt"
+    if "libgtk-4" in maps or "libgtk-3" in maps:
+        return "gtk"
+    return "diger"
 
 
-def k_erisim(a):
-    """Erişilebilirlik veri yolunu aç/kapat (oturum boyunca; çıkışta sıfırlanır). Açıkken Qt/GTK uygulamaları
-    düğmelerini AD ve KONUMLA bildirir → ekran agac / ogeye-tikla. Chromium tabanlı tarayıcılar ayrıca
-    --force-renderer-accessibility ister."""
-    if a.islem in ("ac", "kapat"):
-        subprocess.run(["busctl", "--user", "set-property", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status",
-                        "IsEnabled", "b", "true" if a.islem == "ac" else "false"], capture_output=True)
-        gunluk(f"erisim | {a.islem}")
-        time.sleep(0.3)
-    acik = erisim_acik()
-    print(_("erişilebilirlik: AÇIK") if acik else _("erişilebilirlik: KAPALI"))
-    if acik:
-        Atspi = _atspi()
-        masa = Atspi.get_desktop(0)
-        for i in range(masa.get_child_count()):
-            app = masa.get_child_at_index(i)
-            if app is not None:
-                try:
-                    print(_("  {ad} (pid {pid}, {sayi} pencere)").format(
-                        ad=app.get_name() or "?", pid=app.get_process_id(), sayi=app.get_child_count()))
-                except Exception:
-                    pass
-        if a.islem == "ac":
-            print(_("not: zaten açık uygulamaların bir kısmı ağaca ancak yeniden başlatılınca girer"))
+def _girmeyen_ipucu(pid):
+    """Çalışan uygulama ağaçta yoksa ne yapılacağı (uygulama türüne göre)."""
+    tur = uygulama_turu(pid)
+    if tur == "firefox":
+        return _("Firefox çalışırken açılan erişilebilirliği algılamıyor: Firefox'u kapatıp yeniden başlat")
+    if tur == "chromium":
+        return _("Chromium/Electron --force-renderer-accessibility ile başlatılmalı (görünmez masaüstünde `ac` bunu "
+                 "kendiliğinden ekler; çalışan uygulamayı bu bayrakla yeniden başlat)")
+    return _("uygulama erişilebilirlik açılmadan önce başladıysa yeniden başlat")
 
 
-def erisim_penceresi(k):
-    """kdotool penceresi → AT-SPI çerçevesi (önce aynı PID'nin pencereleri, başlık benzerliğiyle)."""
-    Atspi = _atspi()
-    if not erisim_acik():
-        raise Dur(1, _("erişilebilirlik kapalı: önce `ekran erisim ac`, sonra uygulamayı yeniden başlat"))
-    if k == EKRAN:
-        raise Dur(1, _("erişilebilirlik ağacı pencere ister (masaüstü kipi değil)"))
-    au = sec()
-    pid = au.pid(k) if hasattr(au, "pid") else ""
-    b = au.baslik(k)
+# ---------------------------------------------------------------- pencere / ağaç (libatspi'nin bağlı olduğu yerde)
+
+def _cerceve_bul(Atspi, pid, baslik):
+    """Pencere → AT-SPI çerçevesi (önce aynı PID'nin pencereleri, başlık benzerliğiyle)."""
     adaylar = []
     masa = Atspi.get_desktop(0)
     for i in range(masa.get_child_count()):
@@ -105,7 +210,7 @@ def erisim_penceresi(k):
         if app is None:
             continue
         try:
-            ayni = bool(pid) and str(app.get_process_id()) == pid
+            ayni = bool(pid) and str(app.get_process_id()) == str(pid)
             cerceveler = [app.get_child_at_index(j) for j in range(app.get_child_count())]
         except Exception:
             continue
@@ -116,34 +221,32 @@ def erisim_penceresi(k):
                 ad = f.get_name() or ""
             except Exception:
                 continue
-            benz = 1.0 if ad and (ad == b or ad in b or b in ad) else difflib.SequenceMatcher(None, katla(ad), katla(b)).ratio()
+            benz = 1.0 if ad and (ad == baslik or ad in baslik or baslik in ad) else \
+                difflib.SequenceMatcher(None, katla(ad), katla(baslik)).ratio()
             adaylar.append((ayni, benz, f))
     ayni_pid = [x for x in adaylar if x[0]]
     if len(ayni_pid) == 1:
         return ayni_pid[0][2]
     secim = sorted(ayni_pid or [x for x in adaylar if x[1] >= 0.9], key=lambda x: -x[1])
     if not secim:
-        raise Dur(6, _("pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): uygulama erişilebilirlik "
-                       "açılmadan önce başladıysa yeniden başlat; tarayıcılar --force-renderer-accessibility ister"
-                       ).format(baslik=repr(b), pid=pid))
+        raise Dur(6, _("pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): {ipucu}").format(
+            baslik=repr(baslik), pid=pid, ipucu=_girmeyen_ipucu(pid)), tur="agacta_yok")
     return secim[0][2]
 
 
-def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400):
-    """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi. Wayland'de ekran koordinatı yok →
-    çerçeveye göre (WINDOW) konum + pencere dekorasyonu payı (kdotool çerçeve boyutu − AT-SPI çerçeve boyutu)."""
-    Atspi = _atspi()
-    cerceve = erisim_penceresi(k)
-    X, Y, W, H = sec().geometri(k)
+def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri):
+    """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi, çerçeveden çocuk-sıra yolu. Wayland'de
+    ekran koordinatı yok → çerçeveye göre (WINDOW) konum + pencere dekorasyonu payı (pencere boyutu − AT-SPI boyutu)."""
+    X, Y, W, H = geo
     WIN = Atspi.CoordType.WINDOW
     fe = cerceve.get_extents(WIN)
     ox = max(0, round((W - fe.width) / 2)) if W > fe.width else 0
     oy = max(0, H - fe.height - ox) if H > fe.height else 0
     S = Atspi.StateType
     t0 = time.monotonic()
-    sonuc, yigin, sayi = [], [(cerceve, 0)], 0
+    sonuc, yigin, sayi = [], [(cerceve, 0, [])], 0
     while yigin and sayi < en_cok and time.monotonic() - t0 < sure:
-        o, d = yigin.pop()
+        o, d, yol = yigin.pop()
         sayi += 1
         try:
             ss = o.get_state_set()
@@ -161,15 +264,230 @@ def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400):
         if d > 0 and kutu_ and kutu_[2] > 0 and kutu_[3] > 0:
             sonuc.append({"rol": rol, "ad": ad, "x": kutu_[0], "y": kutu_[1], "w": kutu_[2], "h": kutu_[3],
                           "cx": kutu_[0] + kutu_[2] / 2, "cy": kutu_[1] + kutu_[3] / 2,
-                          "etkin": ss.contains(S.ENABLED) and ss.contains(S.SENSITIVE), "derinlik": d})
+                          "etkin": ss.contains(S.ENABLED) and ss.contains(S.SENSITIVE), "derinlik": d, "yol": yol})
         for i in range(n - 1, -1, -1):
             try:
                 c = o.get_child_at_index(i)
             except Exception:
                 c = None
             if c is not None:
-                yigin.append((c, d + 1))
-    return [o for o in sonuc if 0 <= o["cx"] < W and 0 <= o["cy"] < H], time.monotonic() - t0
+                yigin.append((c, d + 1, yol + [i]))
+    return {"ogeler": [o for o in sonuc if 0 <= o["cx"] < W and 0 <= o["cy"] < H], "sure": time.monotonic() - t0}
+
+
+def _yoldan_bul(Atspi, cerceve, yol, rol, ad):
+    """Ağaç taramasının verdiği çocuk-sıra yolundaki öge; rol/ad hâlâ aynı mı (arayüz arada değiştiyse Dur 8)."""
+    o = cerceve
+    for i in yol:
+        try:
+            o = o.get_child_at_index(i)
+        except Exception:
+            o = None
+        if o is None:
+            break
+    try:
+        ayni = o is not None and o.get_role_name() == rol and (o.get_name() or "").strip() == ad
+    except Exception:
+        ayni = False
+    if not ayni:
+        raise Dur(8, _("öge artık yok ya da değişti (arayüz güncellendi): yeniden ara"))
+    return o
+
+
+def _modul():
+    import gi
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
+    return Atspi
+
+
+def _ad_norm(ad):
+    """Eylem adı karşılaştırması: büyük/küçük harf, boşluk, '_' ve '-' yok sayılır (Qt "Set Focus", GTK "set-focus")."""
+    return re.sub(r"[\s_-]+", "", ad or "").lower()
+
+
+def eylem_listesi(oge):
+    """→ (Action arayüzü | None, [eylem adları])."""
+    ai = oge.get_action_iface()
+    if ai is None:
+        return None, []
+    return ai, [ai.get_action_name(i) or "" for i in range(ai.get_n_actions())]
+
+
+def birincil_eylem(liste):
+    """Eylem adları → birincil eylemin sırası (BIRINCIL_EYLEMLER'den ilk bulunan) | None."""
+    norm_ = [_ad_norm(x) for x in liste]
+    for ad in BIRINCIL_EYLEMLER:
+        if ad in norm_:
+            return norm_.index(ad)
+    return None
+
+
+def eylem_sirasi(liste, ad):
+    """İstenen eylem adının sırası (ad_norm eşitliği) | None."""
+    n = _ad_norm(ad)
+    return next((i for i, x in enumerate(liste) if _ad_norm(x) == n), None)
+
+
+def oge_eylem(oge, ad=None):
+    """Ögenin Action arayüzündeki eylemi çalıştırır (gerçek fare/klavye girdisi YOK, odak alınmaz). ad verilmezse
+    birincil eylem (click/press/activate/toggle hangisi varsa). → {"eylem": çalışan, "eylemler": tümü, "tamam": bool}.
+    Güvenlik denetimleri ÇAĞIRANDA (k_ogeye_tikla): bu işlev yalnız uygular."""
+    ai, liste = eylem_listesi(oge)
+    if not liste:
+        raise Dur(6, _("öge eylem arayüzü sunmuyor (Action yok)"))
+    if ad:
+        sira = eylem_sirasi(liste, ad)
+        if sira is None:
+            raise Dur(6, _("'{eylem}' eylemi yok; ögenin eylemleri: {liste}").format(eylem=ad, liste=", ".join(liste)))
+    else:
+        sira = birincil_eylem(liste)
+        if sira is None:
+            raise Dur(6, _("birincil eylem yok (click/press/activate/toggle); ögenin eylemleri: {liste}; "
+                           "--eylem ADI ile seç").format(liste=", ".join(liste)))
+    tamam = bool(ai.do_action(sira))
+    return {"eylem": liste[sira], "eylemler": liste, "tamam": tamam}
+
+
+def oge_deger_yaz(oge, metin):
+    """Ögenin değerini yazar: EditableText (metin alanı) ya da yoksa Value (kaydırgaç, sayı kutusu; metin sayı olmalı).
+    Gerçek klavye girdisi YOK. → {"yontem", "dogrulandi": okunan değer yazılana eşit mi | None}.
+    Güvenlik denetimleri ÇAĞIRANDA (k_ogeye_yaz): bu işlev yalnız uygular."""
+    et = oge.get_editable_text_iface()
+    if et is not None:
+        if not et.set_text_contents(metin):
+            raise Dur(6, _("metin yazılamadı (alan salt okunur ya da devre dışı)"))
+        ti = oge.get_text_iface()
+        okunan = _modul().Text.get_text(ti, 0, -1) if ti is not None else None
+        return {"yontem": "EditableText", "dogrulandi": None if okunan is None else okunan == metin}
+    vi = oge.get_value_iface()
+    if vi is not None:
+        try:
+            deger = float(metin.strip().replace(",", "."))
+        except ValueError:
+            raise Dur(1, _("bu öge sayısal değer ister: {metin}").format(metin=repr(metin)))
+        en_az, en_cok = vi.get_minimum_value(), vi.get_maximum_value()
+        if not en_az <= deger <= en_cok:
+            raise Dur(1, _("değer aralık dışı ({en_az}..{en_cok}): {deger}").format(
+                en_az=en_az, en_cok=en_cok, deger=deger))
+        if not vi.set_current_value(deger):
+            raise Dur(6, _("değer yazılamadı (öge salt okunur ya da devre dışı)"))
+        return {"yontem": "Value", "dogrulandi": abs(vi.get_current_value() - deger) < 1e-6}
+    raise Dur(6, _("öge yazılabilir değil (EditableText ya da Value arayüzü yok)"))
+
+
+def oge_incele(oge):
+    """Güvenlik denetimi için ögenin okunabilir bilgisi: ad, rol, açıklama, çocukların adları, eylemler."""
+    cocuklar = []
+    try:
+        for i in range(min(oge.get_child_count(), 6)):
+            c = oge.get_child_at_index(i)
+            ad = (c.get_name() or "").strip() if c is not None else ""
+            if ad:
+                cocuklar.append(ad)
+    except Exception:
+        pass
+    try:
+        aciklama = (oge.get_description() or "").strip()
+    except Exception:
+        aciklama = ""
+    return {"ad": (oge.get_name() or "").strip(), "rol": oge.get_role_name(), "aciklama": aciklama,
+            "cocuklar": cocuklar, "eylemler": eylem_listesi(oge)[1],
+            "yazilabilir": oge.get_editable_text_iface() is not None or oge.get_value_iface() is not None}
+
+
+# ---------------------------------------------------------------- yürütme: bu süreçte ya da yardımcı süreçte
+
+def _atspi_is(istek):
+    """libatspi'nin bu süreçte bağlı olduğu yerde iş yürüt. istek: {a11y, pid, baslik, islem, ...}; JSON uyumlu."""
+    Atspi = _atspi(istek["a11y"])
+    cerceve = _cerceve_bul(Atspi, istek["pid"], istek["baslik"])
+    islem = istek["islem"]
+    if islem == "tara":
+        return _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"])
+    oge = _yoldan_bul(Atspi, cerceve, istek["yol"], istek["rol"], istek["ad"])
+    if islem == "incele":
+        return oge_incele(oge)
+    if islem == "eylem":
+        return oge_eylem(oge, istek.get("eylem") or None)
+    if islem == "yaz":
+        return oge_deger_yaz(oge, istek["metin"])
+    raise Dur(1, f"bilinmeyen erişilebilirlik işlemi: {islem}")
+
+
+def _yardimci_ana():
+    """Yardımcı süreç girişi (`-I -c`): stdin'den JSON istek, stdout'a tek satır JSON yanıt."""
+    istek = json.load(sys.stdin)
+    try:
+        yanit = {"sonuc": _atspi_is(istek)}
+    except Dur as e:
+        yanit = {"dur": [e.kod, e.mesaj, e.tur]}
+    except _BaskaVeriYolu:
+        yanit = {"dur": [9, "yardımcı süreç beklenmedik veri yolu", None]}
+    except Exception as e:  # noqa: BLE001
+        yanit = {"dur": [9, f"{type(e).__name__}: {e}", None]}
+    sys.stdout.write("\n" + json.dumps(yanit) + "\n")
+
+
+def _yardimci_calistir(istek):
+    kok = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    kod = "import sys; sys.path.insert(0, sys.argv[1]); from deskhand import erisim; erisim._yardimci_ana()"
+    try:
+        r = subprocess.run([sys.executable, "-I", "-c", kod, kok], input=json.dumps(istek), capture_output=True,
+                           text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        raise Dur(7, _("erişilebilirlik yardımcı süreci zaman aşımına uğradı"))
+    yanit = None
+    for satir in reversed(r.stdout.strip().splitlines()):
+        try:
+            yanit = json.loads(satir)
+            break
+        except ValueError:
+            continue
+    if yanit is None:
+        raise Dur(9, _("erişilebilirlik yardımcı süreci yanıt vermedi (çıkış {kod}): {hata}").format(
+            kod=r.returncode, hata=r.stderr.strip()[-200:]))
+    if "dur" in yanit:
+        kod_, mesaj, tur = yanit["dur"]
+        raise Dur(kod_, mesaj, tur=tur)
+    return yanit["sonuc"]
+
+
+def _atspi_calistir(istek):
+    """İşi bu süreçte yürüt; libatspi başka veri yoluna bağlıysa (MCP: iki masaüstü) yardımcı süreçte."""
+    try:
+        return _atspi_is(istek)
+    except _BaskaVeriYolu:
+        return _yardimci_calistir(istek)
+
+
+def _pencere_istegi(k, islem, **ek):
+    """kdotool/X penceresi → AT-SPI isteği (pencere eşleme verisi: pid, başlık)."""
+    if k == EKRAN:
+        raise Dur(1, _("erişilebilirlik ağacı pencere ister (masaüstü kipi değil)"))
+    au = sec()
+    pid = au.pid(k) if hasattr(au, "pid") else ""
+    return {"a11y": _a11y_adresi(), "pid": str(pid or ""), "baslik": au.baslik(k), "islem": islem, **ek}
+
+
+def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400):
+    """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi (+ `yol`). Erişilebilirlik kapalıysa
+    kendiliğinden açılır (kullanıcıdan komut beklenmez). → (ögeler, süre)."""
+    yeni = erisim_ac_garanti()
+    istek = _pencere_istegi(k, "tara", geo=list(sec().geometri(k)), en_cok=en_cok, sure=sure, cocuk_siniri=cocuk_siniri)
+    bitis = time.monotonic() + (4.0 if yeni else 0.0)  # az önce açıldı: çalışan uygulamalar ağaca kısa sürede girer
+    while True:
+        try:
+            r = _atspi_calistir(istek)
+            return r["ogeler"], r["sure"]
+        except Dur as e:
+            if getattr(e, "tur", None) != "agacta_yok" or time.monotonic() >= bitis:
+                raise
+            time.sleep(0.4)
+
+
+def _oge_istegi(k, o, islem, **ek):
+    return _pencere_istegi(k, islem, yol=o["yol"], rol=o["rol"], ad=o["ad"], **ek)
 
 
 def erisim_ara(ogeler, ad, rol=None):
@@ -192,6 +510,39 @@ def oge_yaz(o, no=None):
     print(f"  {on}({o['cx']:.0f},{o['cy']:.0f}) {o['rol']}: {o['ad'] or '(adsız)'}{durum}  {o['w']}x{o['h']}")
 
 
+# ---------------------------------------------------------------- komutlar
+
+def k_erisim(a):
+    """Erişilebilirlik veri yolunu aç/kapat. Açıkken Qt/GTK uygulamaları düğmelerini AD ve KONUMLA bildirir → ekran
+    agac / ogeye-tikla. `agac`/`ogeye-tikla`/`ogeye-yaz` kapalıyken bunu KENDİLİĞİNDEN açar. Qt/GTK çalışırken de
+    ağaca girer; Firefox ve Chromium/Electron girmez (yeniden başlat; Chromium --force-renderer-accessibility ister).
+    Not: kde'de at-spi-bus-launcher ayarı kullanıcı ayarlarına (dconf toolkit-accessibility) yazar: oturumla sınırlı
+    kalmayabilir; görünmez masaüstünde yalnız o masaüstü için açılır."""
+    if a.islem in ("ac", "kapat"):
+        if sec().ad == "sanal" and a.islem == "ac":
+            from . import masaustu
+            masaustu.erisim_hazirla()
+        else:
+            _erisim_yaz(a.islem == "ac")
+        gunluk(f"erisim | {a.islem}")
+        time.sleep(0.3)
+    acik = erisim_acik()
+    print(_("erişilebilirlik: AÇIK") if acik else _("erişilebilirlik: KAPALI"))
+    if acik:
+        Atspi = _atspi()
+        masa = Atspi.get_desktop(0)
+        for i in range(masa.get_child_count()):
+            app = masa.get_child_at_index(i)
+            if app is not None:
+                try:
+                    print(_("  {ad} (pid {pid}, {sayi} pencere)").format(
+                        ad=app.get_name() or "?", pid=app.get_process_id(), sayi=app.get_child_count()))
+                except Exception:
+                    pass
+        if a.islem == "ac":
+            print(_("not: Firefox ve Chromium/Electron çalışırken ağaca girmez; yeniden başlat"))
+
+
 def k_agac(a):
     ogeler, sure = erisim_ogeleri(a.kimlik)
     if a.desen:
@@ -211,31 +562,42 @@ def k_agac(a):
         oge_yaz(o)
 
 
+def _oge_secimi(a, ogeler, sure):
+    """Ada göre ögeyi seç (fare ve eylem yolu AYNI): bulunamadı 6, birden çok 5, --sira, devre dışı 6. → (öge, kademe)."""
+    bulunan, kademe = erisim_ara(ogeler, a.ad, a.rol)
+    if not bulunan:
+        raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `ekran agac {kimlik}`"
+                       ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", kimlik=a.kimlik))
+    if a.sira is None and len(bulunan) > 1:
+        print(_("# '{ad}' için {sayi} öge:").format(ad=a.ad, sayi=len(bulunan)))
+        for i, o in enumerate(bulunan, 1):
+            oge_yaz(o, i)
+        raise Dur(5, _("birden çok öge; --sira N ile seç"))
+    sira = a.sira or 1
+    if not 1 <= sira <= len(bulunan):
+        raise Dur(1, _("--sira 1..{en_cok} olmalı").format(en_cok=len(bulunan)))
+    o = bulunan[sira - 1]
+    if not o["etkin"]:
+        raise Dur(6, _("'{ad}' devre dışı (tıklanamaz)").format(ad=o["ad"]))
+    return o, kademe
+
+
 def k_ogeye_tikla(a):
     """Erişilebilirlik ağacındaki ögeye ADIYLA tıkla: OCR'ın okuyamadığı düğmeler (renkli/orta ton zemin) dahil.
-    Tıklama gerçek fare girdisidir; tüm denetimler (pencere, başlık, yasak, hassas düğme, insan önceliği) aynen."""
+    Varsayılan: gerçek fare tıklaması (tüm denetimler: pencere, başlık, yasak, hassas düğme, insan önceliği).
+    --eylem [AD]: fare/klavye YOK, odak alınmaz; ögenin Action arayüzündeki eylem çalıştırılır (denetimler aynen,
+    imleç altı hariç)."""
+    if getattr(a, "eylem", None) is not None:
+        if a.dugme not in ("sol", None):
+            raise Dur(1, _("--eylem ile fare düğmesi (sağ/çift/orta) birlikte kullanılamaz"))
+        return _ogeye_eylem(a)
     g = girdi_al(f"ogeye-tikla '{a.ad}' {a.dugme}")
     try:
         sec().one_getir(a.kimlik)
         denetle(a.kimlik, a.baslik)
         ogeler, sure = erisim_ogeleri(a.kimlik)
-        bulunan, kademe = erisim_ara(ogeler, a.ad, a.rol)
-        if not bulunan:
-            raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `ekran agac {kimlik}`"
-                           ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", kimlik=a.kimlik))
-        if a.sira is None and len(bulunan) > 1:
-            print(_("# '{ad}' için {sayi} öge:").format(ad=a.ad, sayi=len(bulunan)))
-            for i, o in enumerate(bulunan, 1):
-                oge_yaz(o, i)
-            raise Dur(5, _("birden çok öge; --sira N ile seç"))
-        sira = a.sira or 1
-        if not 1 <= sira <= len(bulunan):
-            raise Dur(1, _("--sira 1..{en_cok} olmalı").format(en_cok=len(bulunan)))
-        o = bulunan[sira - 1]
-        if not o["etkin"]:
-            raise Dur(6, _("'{ad}' devre dışı (tıklanamaz)").format(ad=o["ad"]))
+        o, kademe = _oge_secimi(a, ogeler, sure)
         # öge bulunduktan SONRA tek onay: istek ögenin adını, noktadaki yazıyı ve çevresinin görüntüsünü taşır
-        from .eylem import hassas_nokta
         hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), o["cx"], o["cy"],
                      nokta_metni(a.kimlik, o["cx"], o["cy"]), ek_metinler=(a.ad, o["ad"]))
         print(_("bulundu: {rol} '{ad}' ({x},{y}) {kademe} eşleşme, {sn} sn").format(
@@ -243,3 +605,103 @@ def k_ogeye_tikla(a):
         tikla_ic(g, a.kimlik, a.baslik, o["cx"], o["cy"], a.dugme, sec().geometri(a.kimlik))
     finally:
         girdi_birak(g)
+
+
+# ---------------------------------------------------------------- faresiz yol: güvenlik + günlük
+
+def _atspi_korumalari(k, desen):
+    """Fare yolundaki Girdi.gonder'in denetimleri, odak şartı olmadan: DUR 13 → yasak pencere 10 / başlık 4 / sınıf 4
+    → (kde) oyun/film ya da karar bildirimi 15/12. Eylemden HEMEN önce ve her bekleyen adımdan (onay) sonra çağrılır."""
+    dur_denetle()
+    pencere_denetle(k, desen)
+    sec().ekran_korumasi(_("erişilebilirlik eylemi"))
+
+
+def _atspi_gunluk(k, etiket, ne):
+    """Girdi günlüğü satırı (Girdi.gonder ile aynı biçim; sanalda `arka :N` öneki)."""
+    au = sec()
+    yer = f"arka {au.ekran_adi()} [{au.baslik(k)}]" if au.ad == "sanal" else f"[{au.baslik(k)}]"
+    gunluk(f"{etiket} | {yer} | {ne}")
+
+
+def _hassas_oge(k, onayli, ne, o, bilgi, ek_metinler=()):
+    """Hassas düğme / ödeme sayfası denetimi (fare yolundaki hassas_nokta ile aynı kurallar, OCR yerine AT-SPI
+    yazıları: ad, açıklama, çocuk adları). Görüntü eklenmez (pencereyi öne getirirdi). → onay alındı mı."""
+    metinler = [*ek_metinler, o["ad"], bilgi.get("aciklama", ""), *bilgi.get("cocuklar", [])]
+    metinler = [m for m in metinler if m]
+    nokta = (o["cx"], o["cy"])
+    onayli_oldu = False
+    if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=nokta, goruntu_al=False):
+        onayli, onayli_oldu = True, True
+    if hassas_engel(onayli, *metinler, hedef=sec().baslik(k), k=None, nokta=nokta):
+        onayli_oldu = True
+    return onayli_oldu
+
+
+def _eylem_baglami(a):
+    """Her iki faresiz komutun ortak girişi: eylem kimliği sıfırla, ilk denetimler, ağaçtan ögeyi seç.
+    → (öge, kademe, süre)."""
+    from .guvenlik import eylem_basladi
+    eylem_basladi()
+    if a.kimlik == EKRAN:
+        raise Dur(1, _("erişilebilirlik eylemi pencere ister (masaüstü kipi değil)"))
+    _atspi_korumalari(a.kimlik, a.baslik)  # ağaca bile bakmadan: yasak/kilitli pencerede hiçbir şey
+    ogeler, sure = erisim_ogeleri(a.kimlik)
+    o, kademe = _oge_secimi(a, ogeler, sure)
+    return o, kademe, sure
+
+
+def _ogeye_eylem(a):
+    o, kademe, sure = _eylem_baglami(a)
+    k = a.kimlik
+    bilgi = _atspi_calistir(_oge_istegi(k, o, "incele"))
+    if not bilgi["eylemler"]:
+        raise Dur(6, _("öge eylem arayüzü sunmuyor (Action yok): fare ile tıkla (--eylem olmadan)"))
+    sira = None
+    if a.eylem:
+        sira = eylem_sirasi(bilgi["eylemler"], a.eylem)
+        if sira is None:
+            raise Dur(6, _("'{eylem}' eylemi yok; ögenin eylemleri: {liste}").format(
+                eylem=a.eylem, liste=", ".join(bilgi["eylemler"])))
+    else:
+        sira = birincil_eylem(bilgi["eylemler"])
+        if sira is None:
+            raise Dur(6, _("birincil eylem yok (click/press/activate/toggle); ögenin eylemleri: {liste}; "
+                           "--eylem ADI ile seç").format(liste=", ".join(bilgi["eylemler"])))
+    eylem_adi = bilgi["eylemler"][sira]
+    etiket = f"ogeye-tikla '{a.ad}' --eylem {eylem_adi}"
+    onayli = _hassas_oge(k, a.onayli, _("tıklama (erişilebilirlik eylemi)"), o, bilgi, ek_metinler=(a.ad,))
+    if onayli:
+        etiket += " --onayli"
+    _atspi_korumalari(k, a.baslik)  # onay beklenmiş olabilir: pencere/başlık/DUR/ekran korumasını yeniden doğrula
+    r = _atspi_calistir(_oge_istegi(k, o, "eylem", eylem=eylem_adi))
+    _atspi_gunluk(k, etiket, f"atspi action {r['eylem']}" + ("" if r["tamam"] else " (reddedildi)"))
+    if not r["tamam"]:
+        raise Dur(6, _("eylem çalışmadı: '{eylem}' (öge reddetti)").format(eylem=r["eylem"]))
+    print(_("eylem yapıldı: {rol} '{ad}' → {eylem} (eylemler: {liste}), {kademe} eşleşme, {sn} sn").format(
+        rol=o["rol"], ad=o["ad"], eylem=r["eylem"], liste=", ".join(r["eylemler"]), kademe=kademe, sn=f"{sure:.2f}"))
+
+
+def k_ogeye_yaz(a):
+    """Ögenin değerini AT-SPI ile yaz (EditableText; yoksa Value): fare/klavye YOK, odak alınmaz. Denetimler: DUR,
+    yasak pencere, başlık/sınıf kilidi, kde'de oyun/film koruması; ödeme sayfasında Enter/Tab/boşluklu yazı onay
+    ister (yaz ile aynı kural)."""
+    metin = a.metin.replace("\r\n", "\n").replace("\r", "\n")
+    o, kademe, sure = _eylem_baglami(a)
+    k = a.kimlik
+    bilgi = _atspi_calistir(_oge_istegi(k, o, "incele"))
+    if not bilgi["yazilabilir"]:
+        raise Dur(6, _("öge yazılabilir değil (EditableText ya da Value arayüzü yok): '{ad}'").format(ad=o["ad"]))
+    gizli = bool(getattr(a, "gizli", False)) or bilgi["rol"] == "password text"
+    etiket = f"ogeye-yaz '{a.ad}' {len(metin)} karakter"
+    if yazi_onay_ister_mi(metin):  # yazmadan ÖNCE (bir eylem = bir onay); Enter/Tab/boşluk = formu gönderme riski
+        g = types.SimpleNamespace(gizli=gizli)
+        if _yazi_hassas(g, k, a.onayli, metin, goruntu_al=False):
+            etiket += " --onayli"
+    _atspi_korumalari(k, a.baslik)  # onay beklenmiş olabilir
+    r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
+    goster = f"***({len(metin)})" if gizli else repr(metin if len(metin) <= 200 else metin[:197] + "…")
+    _atspi_gunluk(k, etiket, f"atspi set-text {goster}")
+    print(_("yazıldı: {rol} '{ad}' ← {karakter} karakter ({yontem}){dogrulandi}, {kademe} eşleşme").format(
+        rol=o["rol"], ad=o["ad"], karakter=len(metin), yontem=r["yontem"],
+        dogrulandi=_(", doğrulandı") if r["dogrulandi"] else "", kademe=kademe))

@@ -873,6 +873,9 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
             d["uyarilar"].append(_("özel veri yolu kancası {kanca} başarısız: {hata}").format(
                 kanca=getattr(kanca, "__name__", kanca), hata=e))
 
+    # erişilebilirlik: uygulamalar başlamadan ÖNCE açık olmalı (Qt/GTK açılışta org.a11y.Status IsEnabled'a bakar)
+    _erisim_hazirla_ic(d)
+
     # bildirim yakalayıcı
     from . import bildirim_yakalayici
     os.makedirs(os.path.dirname(bildirim_yolu()), exist_ok=True)
@@ -902,6 +905,73 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
             d["uyarilar"].append(_("openbox başlamadı: pencereler 0,0'da üst üste açılır"))
     elif openbox:
         d["uyarilar"].append(_("openbox yok (sudo pacman -S openbox): pencereler 0,0'da üst üste açılır"))
+
+
+def _busctl(adres: str, *a, timeout: float = 15) -> str:
+    """busctl --address=ADRES …: çıktı (hata → boş). Yalnız verilen özel veri yoluna bağlanır."""
+    try:
+        r = subprocess.run(["busctl", f"--address={adres}", *a], capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+A11Y_NESNE = ("org.a11y.Bus", "/org/a11y/bus")
+A11Y_KAYIT = "org.a11y.atspi.Registry"
+
+
+def erisim_adresi(adres: str) -> str:
+    """Özel veri yolundaki erişilebilirlik veri yolunun adresi (org.a11y.Bus.GetAddress; at-spi-bus-launcher
+    etkinleşir). Alınamazsa boş."""
+    m = re.search(r'"([^"]+)"', _busctl(adres, "call", *A11Y_NESNE, "org.a11y.Bus", "GetAddress"))
+    return m.group(1) if m else ""
+
+
+def _erisim_hazirla_ic(d: dict) -> str:
+    """Özel veri yolunda erişilebilirliği HAZIRLAR: IsEnabled=true (uygulamalar başlamadan önce; Qt/GTK açılışta
+    org.a11y.Status'a bakar, kapalıyken ağaca girmez) ve erişilebilirlik veri yolunun kayıt defteri (at-spi2-registryd).
+    Kayıt defterini veri yolunun kendisi etkinleştiremez: dbus-broker kullanan sistemlerde etkinleştirme kullanıcının
+    systemd birimine gider (başkasının veri yoluna bağlı, 'unit failed') → kendimiz, bu masaüstünün kafesinde başlatırız.
+    Yalnız bu masaüstüne dokunur. → erişilebilirlik veri yolu adresi ('' = hazırlanamadı; d["uyarilar"]'a yazılır)."""
+    adres = d["dbus_adres"]
+    nesne = (*A11Y_NESNE, "org.a11y.Status", "IsEnabled")
+    if _busctl(adres, "get-property", *nesne) != "b true":
+        _busctl(adres, "set-property", *nesne, "b", "true")
+    a11y = erisim_adresi(adres)
+    acik = _busctl(adres, "get-property", *nesne) == "b true"
+    kayit_exe = "/usr/lib/at-spi2-registryd"
+    kayit = False
+    if a11y and acik:
+        sor = ("call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", "s", A11Y_KAYIT)
+        kayit = _busctl(a11y, *sor) == "b true"
+        if not kayit and os.path.exists(kayit_exe):
+            p = kafeste_baslat(d, [kayit_exe], uygulama_ortami(d, {"AT_SPI_BUS_ADDRESS": a11y}),
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            d.setdefault("pid", {})["a11y"] = p.pid
+            kayit = _bekle(lambda: _busctl(a11y, *sor) == "b true" or p.poll() is not None, 5, 0.1) \
+                and _busctl(a11y, *sor) == "b true"
+    if not (a11y and acik and kayit):
+        d["uyarilar"].append(_("erişilebilirlik görünmez masaüstünde hazırlanamadı (at-spi2-core): `agac` / "
+                               "`ogeye-tikla` / `--eylem` arka planda çalışmaz"))
+        return ""
+    d["a11y_adres"] = a11y
+    return a11y
+
+
+def erisim_hazirla() -> str:
+    """Çalışan sanal masaüstünde erişilebilirlik hazır mı (IsEnabled + kayıt defteri); değilse hazırla (eski sürümle
+    açılmış masaüstleri için). → erişilebilirlik veri yolu adresi; Dur(14) masaüstü kapalıysa; '' hazırlanamadıysa."""
+    with _kilit():
+        d = durum()
+        if d is None:
+            raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+        bas = (d.get("a11y_adres"), (d.get("pid") or {}).get("a11y"))
+        d.pop("saglik", None)
+        d["uyarilar"] = [u for u in d.get("uyarilar", []) if "erişilebilirlik" not in u]
+        a11y = _erisim_hazirla_ic(d)
+        if (d.get("a11y_adres"), (d.get("pid") or {}).get("a11y")) != bas:
+            _durum_yaz(d)
+        return a11y
 
 
 def _satir_bekle(p: subprocess.Popen, sure: float) -> str:

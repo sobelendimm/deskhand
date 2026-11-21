@@ -14,6 +14,7 @@ KOMUTLAR = (
     ("renk-bul", "find-color"), ("renge-tikla", "click-color"), ("simge-kaydet", "save-icon"),
     ("simge-bul", "find-icon"), ("simgeye-tikla", "click-icon"), ("ac", "open"), ("akis", "flow"),
     ("erisim", "a11y"), ("agac", "tree"), ("ogeye-tikla", "click-element"), ("dur", "stop"), ("devam", "resume"),
+    ("ogeye-yaz", "set-element"),
     ("durum", "status"), ("mesgul", "busy"), ("karar", "decide"), ("panel", "panel"), ("masaustu", "desktop"),
     ("oturum", "sessions"), ("mcp", "mcp"), ("yardım", "help"),
 )
@@ -43,6 +44,7 @@ SECENEKLER = {
     "--tekrar": "--repeat", "--komut": "--command", "--gizli": "--secret", "--yok": "--gone",
     "--esik": "--threshold", "--dosya": "--file", "--kal": "--stay", "--nokta": "--point", "--rol": "--role",
     "--en-az": "--min-pixels", "--foto": "--shot", "--boyut": "--size", "--openbox-yok": "--no-openbox",
+    "--eylem": "--action",
 }
 
 # konumsal değerler: İngilizce → Türkçe (içeride Türkçe)

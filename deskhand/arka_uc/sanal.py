@@ -572,6 +572,9 @@ class SanalArkaUc(ArkaUc):
     def etkinlik(self):
         return _DevralEtkinlik()
 
+    def oturum_veri_yolu(self) -> str | None:
+        return self._durum().get("dbus_adres") or None
+
     def atspi_adresi(self) -> str | None:
         """Özel veri yolundaki erişilebilirlik veri yolunun adresi (org.a11y.Bus; gerekirse etkinleşir)."""
         try:
