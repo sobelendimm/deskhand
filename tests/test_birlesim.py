@@ -332,5 +332,70 @@ finally:
     if masaustu.durum_oku() is not None:
         masaustu.masaustu_durdur()
 
+# ================================================================ E. uyarlamalı eylem sonrası bekleme (mcp_sunucu._sonra)
+from deskhand import fark, mcp_sunucu  # noqa: E402
+
+
+class SahneAU:
+    def baslik(self, k): return "pencere"
+    def geometri(self, k): return (0, 0, 400, 300)
+
+
+def sahne(zamanlar):
+    """zamanlar: [(eşik sn, görüntü)] — _sonra başladığından itibaren geçen süreye göre görüntü döndüren sahte goruntu_al."""
+    t0 = [time.monotonic()]
+
+    def goruntu_al(k):
+        gecen = time.monotonic() - t0[0]
+        return ([im for esik, im in zamanlar if gecen >= esik][-1], None, None, None)
+    return goruntu_al
+
+
+def imge(kutu=None):
+    from PIL import ImageDraw
+    im = Image.new("RGB", (400, 300), (240, 240, 240))
+    if kutu:
+        ImageDraw.Draw(im).rectangle(kutu, fill=(10, 10, 10))
+    return im
+
+
+tara = imge()
+yarim = imge((20, 20, 60, 40))     # animasyonun ortası
+son = imge((20, 20, 200, 120))     # oturmuş hâl
+once_ = fark.once_al(tara)
+orj_arka, orj_goruntu, orj_yeni = mcp_sunucu.api.arka, mcp_sunucu.api.goruntu_al, mcp_sunucu._yeni_metin
+mcp_sunucu.api.arka = lambda: SahneAU()
+mcp_sunucu._yeni_metin = lambda im, b: None
+try:
+    # değişiklik ilk probta görünür (0,05 sn), oturmuş hâl 0,16 sn'de gelir: son ölçüm durulmadan sonra alınmalı
+    mcp_sunucu.api.goruntu_al = sahne([(0, tara), (0.04, yarim), (0.12, son)])
+    t = time.monotonic()
+    r = mcp_sunucu._sonra("{w}", once_)
+    gecen = time.monotonic() - t
+    kontrol("E: değişince erken döner (<0,33 sn; eski sabit bekleme ≥0,35)", gecen < 0.33, f"{gecen:.3f}")
+    kontrol("E: changed_region OTURMUŞ hâli yansıtır (yarım animasyon değil)",
+            r.get("changed") is True and r.get("changed_region") == [20, 20, 182, 102], str(r))
+    # hiç değişmez: üst sınırda changed=false
+    mcp_sunucu.api.goruntu_al = sahne([(0, tara)])
+    t = time.monotonic()
+    r = mcp_sunucu._sonra("{w}", once_)
+    gecen = time.monotonic() - t
+    kontrol("E: değişmezse üst sınırda (≥0,35 sn) changed=false", r.get("changed") is False and 0.34 <= gecen < 0.6 and
+            "changed_region" not in r, f"{gecen:.3f} {r}")
+    # kısa üst sınır (scroll 0,3)
+    t = time.monotonic()
+    mcp_sunucu._sonra("{w}", once_, 0.3)
+    gecen = time.monotonic() - t
+    kontrol("E: bekle=0,3 üst sınırı aşılmaz", 0.29 <= gecen < 0.5, f"{gecen:.3f}")
+    # değişiklik GEÇ gelir (0,3 sn): son probda (0,35) yakalanır
+    mcp_sunucu.api.goruntu_al = sahne([(0, tara), (0.30, son)])
+    r = mcp_sunucu._sonra("{w}", once_)
+    kontrol("E: geç değişiklik (0,3 sn) üst sınırdaki ölçümde yakalanır", r.get("changed") is True, str(r))
+    # ön ölçüm yoksa changed alanı yok (yalnız başlık)
+    r = mcp_sunucu._sonra("{w}", None, 0.05)
+    kontrol("E: ön ölçüm yoksa changed verilmez, başlık döner", "changed" not in r and r.get("title") == "pencere", str(r))
+finally:
+    mcp_sunucu.api.arka, mcp_sunucu.api.goruntu_al, mcp_sunucu._yeni_metin = orj_arka, orj_goruntu, orj_yeni
+
 print(f"\n{GECEN}/{TOPLAM} birleştirme testi geçti")
 sys.exit(0 if GECEN == TOPLAM else 1)

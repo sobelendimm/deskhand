@@ -427,30 +427,67 @@ def _yeni_metin(im, bolge) -> list[str] | None:
     return metinler[:8] or None
 
 
+# Eylem sonrası uyarlamalı doğrulama: ekran bu anlarda (eylemden itibaren, sn) ölçülür; ilk değişiklikten sonra kısa bir
+# durulma beklenip SON ölçüm alınır (yarım animasyon değil, oturmuş hâl). Hiç değişmezse üst sınırda changed=false.
+SONRA_ARALIKLAR = (0.05, 0.12, 0.22, 0.35)
+SONRA_DURULMA = 0.11
+
+
 def _sonra(k: str, once: fark.Once | None, bekle: float = 0.35) -> dict:
     """Eylem sonrası doğrulama: pencere hâlâ var mı, başlık, görüntü değişti mi (changed; değiştiyse
     changed_region = pencere pikseli [x, y, w, h], changed_ratio = sınır kutusunun pencereye oranı, küçük bölgede
-    new_text). Yanıp sönen yazı imleci değişiklik sayılmaz (fark.py)."""
-    time.sleep(bekle)
+    new_text). Yanıp sönen yazı imleci değişiklik sayılmaz (fark.py).
+
+    Uyarlamalı bekleme: ekran SONRA_ARALIKLAR anlarında (en çok `bekle` sn'ye dek) ölçülür; değişiklik ilk görüldüğünde
+    SONRA_DURULMA kadar beklenip son ölçüm alınır (changed_region animasyonun ortasını değil oturmuş hâli yansıtır).
+    Değişmezse `bekle` sonunda changed=false. Ön ölçüm (`once`) yoksa yalnız `bekle` kadar beklenip başlık/pencere
+    durumu döner."""
     au = api.arka()
+    t0 = time.monotonic()
+
+    def uyku(hedef: float) -> None:
+        kalan = hedef - (time.monotonic() - t0)
+        if kalan > 0:
+            time.sleep(kalan)
+
+    def goruntu():
+        try:
+            return api.goruntu_al(k)[0]
+        except hata.Dur:
+            return None
+
+    fark_ = None
+    im = None
+    if once is None:
+        uyku(bekle)
+    else:
+        anlar = [t for t in SONRA_ARALIKLAR if t < bekle] + [bekle]
+        for t in anlar:
+            uyku(t)
+            im = goruntu()
+            if im is None:
+                break
+            fark_ = fark.fark(once, fark.once_al(im))
+            if fark_ is not None:
+                uyku(time.monotonic() - t0 + SONRA_DURULMA)  # durulma: animasyon bitsin
+                son = goruntu()
+                if son is not None:
+                    im = son
+                    fark_ = fark.fark(once, fark.once_al(son)) or fark_
+                break
     try:
         b = au.baslik(k) if k != EKRAN else ""
         au.geometri(k)
     except hata.Dur:
         return {"window_closed": True}
     s = {"title": b}
-    if once is not None:
-        try:
-            im, *_x = api.goruntu_al(k)
-        except hata.Dur:
-            return s
-        d = fark.fark(once, fark.once_al(im))
-        s["changed"] = d is not None
-        if d is not None:
-            s["changed_region"] = d["region"]
-            s["changed_ratio"] = d["ratio"]
-            if fark.yeni_metin_uygun(d):
-                yeni = _yeni_metin(im, d["region"])
+    if once is not None and im is not None:
+        s["changed"] = fark_ is not None
+        if fark_ is not None:
+            s["changed_region"] = fark_["region"]
+            s["changed_ratio"] = fark_["ratio"]
+            if fark.yeni_metin_uygun(fark_):
+                yeni = _yeni_metin(im, fark_["region"])
                 if yeni:
                     s["new_text"] = yeni
     return s
