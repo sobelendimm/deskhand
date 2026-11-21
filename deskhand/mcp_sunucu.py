@@ -1,4 +1,4 @@
-"""Deskhand (deskhand) MCP sunucusu (stdio): yapay zekâ ajanları masaüstünü 13 araçla kullanır (README: MCP).
+"""Deskhand (deskhand) MCP sunucusu (stdio): yapay zekâ ajanları masaüstünü araçlarla kullanır (README: MCP).
 
 Çalıştırma:  python3 -m deskhand.mcp_sunucu        (Claude Code kaydı: README.md (MCP))
 Ortam:       DESKHAND_MCP_SADECE_ARKA=1  → yalnız görünmez masaüstü (foreground yasak; `deskhand-bg` kaydı)

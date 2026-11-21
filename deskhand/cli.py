@@ -95,7 +95,7 @@ YARDIM_KOMUTLAR = (
        "göster"),
     N_("  ekran desktop (masaustu) start|stop|status [--json]   görünmez arka plan masaüstü (Xvfb); --background "
        "komutları onu kullanır"),
-    N_("  ekran mcp [--desktop auto|background]  MCP sunucusu (stdio) — Claude Code vb. için 12 araç"),
+    N_("  ekran mcp [--desktop auto|background]  MCP sunucusu (stdio) — Claude Code vb. için araçlar"),
     N_("  ekran sessions (oturum) status|policy|clear   arka plan oturum aktarımı (hangi uygulama girişli açılır)"),
     N_("  ekran panel [--tepsi]                   izleme paneli + tepsi simgesi (DUR, Devral, onaylar, ayarlar)"),
     N_("  ekran busy (mesgul) [--json]            kullanıcı meşgul mü (tam ekran, çalan medya, klavye/fare, oyun, "
