@@ -141,6 +141,8 @@ def satir_erisim():
     durum = _komut_ciktisi("busctl", "--user", "get-property", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Status",
                            "IsEnabled")
     if durum == "b true":
+        if os.path.exists(yollar.erisim_isareti()):
+            return _satir(ad, "tamam", _("açık (Deskhand açtı; agac / ogeye-tikla çalışır; kapatmak: deskhand a11y off)"))
         return _satir(ad, "tamam", _("açık (agac / ogeye-tikla çalışır)"))
     return _satir(ad, "uyari", _("kapalı: uygulama düğmeleri ad ile bulunamaz (OCR yedekte)"), "deskhand a11y on")
 

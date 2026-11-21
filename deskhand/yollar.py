@@ -72,6 +72,12 @@ def seviye_dosya() -> str:
     return os.path.join(config_dir(), "uygulama-seviyeleri.txt")
 
 
+def erisim_isareti() -> str:
+    """Erişilebilirliği DESKHAND'in açtığının işareti (kde: kalıcı masaüstü ayarı toolkit-accessibility değişebilir).
+    Dosya varsa 'deskhand açtı'; `deskhand a11y off` siler."""
+    return os.path.join(state_dir(), "erisim-deskhand-acti")
+
+
 def simge_dizin() -> str:
     return os.path.join(data_dir(), "simgeler")
 

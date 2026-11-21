@@ -27,7 +27,7 @@ from .ocr import KAYDIR_BEKLE, YEDEK_OKUMALAR, ara, ayni_konum, bul_dongu, dogru
     yazdir_eslesme
 
 GIRDI_KOMUTLARI = {"tikla", "tus", "yaz", "kaydir", "metne-tikla", "kapat", "simgeye-tikla", "bas", "fare",
-                   "surukle", "dizi", "renge-tikla", "akis", "ogeye-tikla", "pencere"}
+                   "surukle", "dizi", "renge-tikla", "akis", "ogeye-tikla", "pencere", "ogeye-yaz"}
 OKUMA_KOMUTLARI = {"foto", "metin", "bekle", "simge-bul", "simge-kaydet", "renk-bul"}
 
 
@@ -225,17 +225,18 @@ def kaydir_ic(g, k, desen, yon, adim, nokta=None):
     g.gonder(k, desen, f"{eksen} {isaret * adim}")
 
 
-def _yazi_hassas(g, k, onayli, metin):
+def _yazi_hassas(g, k, onayli, metin, goruntu_al=True):
     """Yazının onay gerektiren yanları: (1) Enter/Tab/boşluklu yazı hassas sayfada onay ister (\\n = formu gönder;
     Tab + boşluk = odaktaki düğmeye bas); (2) hedef pencere bir UÇBİRİMse ve metin yıkıcı komut kalıbına uyuyorsa
     (rm -r, sudo, curl | sh…) onay ister — komut yazılmadan ÖNCE, Enter ayrı gönderilse bile. Yapıştırarak/parça
-    parça yazan her yol bu işlevden geçmeli. → onay gerektiren bir durum vardı mı (onaylandı)."""
+    parça yazan her yol bu işlevden geçmeli. goruntu_al=False: onay isteğine görüntü eklenmez
+    (odak almayan erişilebilirlik yolu). → onay gerektiren bir durum vardı mı (onaylandı)."""
     goster = guvenlik._yazilacak(metin, g.gizli)
     sayfa = False
     if any(c.isspace() for c in metin):
         sayfa = hassas_sayfa_engel(k, onayli, _("yazı (Enter/Tab/boşluk içeriyor)"),
-                                   ek=_("yazılacak: {metin}").format(metin=goster))
-    komut = guvenlik.ucbirim_komut_engel(k, onayli, metin, g.gizli)
+                                   ek=_("yazılacak: {metin}").format(metin=goster), goruntu_al=goruntu_al)
+    komut = guvenlik.ucbirim_komut_engel(k, onayli, metin, g.gizli, goruntu_al=goruntu_al)
     return sayfa or komut
 
 

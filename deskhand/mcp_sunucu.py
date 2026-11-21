@@ -745,6 +745,8 @@ def click(
     text: Annotated[str | None, Field(description="Visible text to click (preferred)")] = None,
     icon: Annotated[str | None, Field(description="Saved icon name")] = None,
     element: Annotated[str | None, Field(description="Accessibility element name")] = None,
+    via: Annotated[Literal["mouse", "action"], Field(description="With element: 'action' runs its accessibility "
+                                                                 "action (no mouse, no focus change)")] = "mouse",
     x: Annotated[float | None, Field(description="Image x of shot_id")] = None,
     y: Annotated[float | None, Field(description="Image y of shot_id")] = None,
     shot_id: str | None = None,
@@ -764,10 +766,14 @@ def click(
     """Click visible text (preferred), an icon, an accessibility element, or x,y of a screenshot (needs its shot_id;
     stale shots are refused). Give exactly ONE target. Sensitive buttons (Buy/Pay/Authorize...) or payment pages
     need the user's approval in the Deskhand panel; the server asks them. button="triple" selects a line/paragraph.
-    The result's after reports changed (+ changed_region/changed_ratio/new_text); "warning" = same click, no effect."""
+    via='action' (element only) uses the element's accessibility action instead of the mouse (no pointer, no focus
+    change). The result's after reports changed (+ changed_region/changed_ratio/new_text); "warning" = same click, no
+    effect."""
     hedefler = [t for t in (text, icon, element) if t] + (["xy"] if x is not None or y is not None else [])
     if len(hedefler) != 1:
         raise ToolError("[1] " + _("tam olarak BİR hedef ver: text, icon, element ya da x+y (+shot_id)"))
+    if via == "action" and (not element or button != "left"):
+        raise ToolError("[1] " + _("via='action' yalnız element hedefiyle ve button='left' ile kullanılır"))
     with baglam(desktop, _("tıklama: {hedef} @ {pencere}").format(hedef=text or icon or element or _("koordinat"),
                                                                  pencere=window or _("görüntü"))) as bilgi:
         hata.dur_denetle()
@@ -797,19 +803,24 @@ def click(
         dhedef = ("click", *hdf, nth, button, tuple(sorted(mod)), tuple(offset) if offset else None)
 
         def yap(onayli):
-            once["ozet"] = _once(k) if verify else None
-            _dongu_kapisi("click", k, dhedef, once["ozet"])
+            olc = verify and (via == "mouse" or api.arka().ad == "sanal")  # kde'de görüntü pencereyi öne getirir
+            once["ozet"] = _once(k) if olc else None
+            if olc:
+                _dongu_kapisi("click", k, dhedef, once["ozet"])
             if text:
                 return api.metne_tikla(k, text, button, nth, wait_s, 10 if scroll_search else 0, desen, onayli,
                                        kay=offset, mod=mod)
             if icon:
                 return api.simgeye_tikla(k, icon, button, nth, 0.9, desen, onayli, mod=mod)
             if element:
-                return api.ogeye_tikla(k, element, button, nth, desen, onayli, mod=mod)
+                return api.ogeye_tikla(k, element, button, nth, desen, onayli, mod=mod,
+                                       eylem="" if via == "action" else None)
             return api.tikla(k, wx, wy, button, desen, onayli, mod=mod)
         mesaj, onaylandi = onayla_ve_yap("click", k, yap, " | " + _("hedef: {hedef}").format(
             hedef=text or icon or element or f"({x},{y})"))
         s = {**bilgi, "status": "clicked", "message": mesaj, "approved_by_user": onaylandi}
+        if via == "action":
+            s["via"] = "action"
         if verify:
             s["after"] = _sonra(k, once.get("ozet"))
         uyari = _dongu_sonrasi("click", k, dhedef, once.get("ozet"), s.get("after") or {})
@@ -828,18 +839,25 @@ def type_text(
     submit: Annotated[bool, Field(description="Press Enter afterwards")] = False,
     clear_first: Annotated[bool, Field(description="Select all (ctrl+a) first so the text replaces it")] = False,
     secret: Annotated[bool, Field(description="Do not write the text to the log")] = False,
+    element: Annotated[str | None, Field(description="Accessibility element name: set ITS value directly (no "
+                                                     "keyboard, no focus change); text replaces the content")] = None,
     desktop: Masaustu = "auto",
 ) -> dict[str, Any]:
     """Type into the focused field of the window (click the field first). Stops if the window/title changes or the
     user starts typing. Enter on a payment page, and a destructive shell command typed into a terminal window (rm -r,
-    sudo, curl | sh, mkfs, forced pushes...), need the user's approval."""
+    sudo, curl | sh, mkfs, forced pushes...), need the user's approval. With element, the named field/slider is set
+    through the accessibility tree instead (no typing, no focus needed; submit is not available)."""
     with baglam(desktop, _("yazı: {pencere}").format(pencere=window)) as bilgi:
         hata.dur_denetle()
         k = _pencere_zorunlu(window)
         desen = baslik_kilidi(window, k)
+        if element and submit:
+            raise ToolError("[1] " + _("submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)"))
         metin_ = text + ("\n" if submit else "")  # submit = sondaki Enter: yazıyla TEK eylem, tek onay
 
         def yap(onayli):
+            if element:
+                return api.ogeye_yaz(k, element, metin_, None, desen, secret, onayli)
             parcalar = []
             if clear_first:
                 parcalar.append(api.tus(k, "ctrl+a", desen))

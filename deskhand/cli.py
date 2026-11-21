@@ -13,7 +13,7 @@ from . import __version__, guvenlik, yollar
 from .akis import k_akis
 from .arka_uc import ARKA_ONEK, hedef_ad, sec
 from .doktor import k_doktor
-from .erisim import k_agac, k_erisim, k_ogeye_tikla
+from .erisim import k_agac, k_erisim, k_ogeye_tikla, k_ogeye_yaz
 from .eylem import (GIRDI_KOMUTLARI, KAYDIR_YON, OKUMA_KOMUTLARI, k_bas, k_dizi, k_fare, k_kapat, k_kaydir,
                     k_metne_tikla, k_pencere, k_renge_tikla, k_simgeye_tikla, k_surukle, k_tikla, k_tus, k_uyu,
                     k_yaz)
@@ -96,7 +96,9 @@ YARDIM_KOMUTLAR = (
     N_("  ekran a11y (erisim) [on|off|status]     erişilebilirlik ağacını aç/kapat (Qt/GTK düğmeleri ad + konumla)"),
     N_("  ekran tree (agac) <kimlik> [desen] [--role R] [--all]   penceredeki ögeler: (merkez x,y) rol: ad"),
     N_("  ekran click-element (ogeye-tikla) <kimlik> <ad> [right|double] [--role R] [--nth N] [--approved]\n"
-       "                                          ADIYLA tıkla (OCR'sız)"),
+       "                    [--action [EYLEM]]    ADIYLA tıkla (OCR'sız); --action: fare/odak YOK, ögenin AT-SPI eylemi"),
+    N_("  ekran set-element (ogeye-yaz) <kimlik> <ad> <metin> [--role R] [--nth N] [--secret] [--approved]\n"
+       "                                          ögenin değerini AT-SPI ile yaz (metin alanı, kaydırgaç; klavye/odak YOK)"),
     N_("  ekran stop | resume | status (dur | devam | durum)   DUR anahtarı: aç (hiçbir girdi gönderilmez) / kaldır / "
        "göster"),
     N_("  ekran desktop (masaustu) start|stop|status [--json]   görünmez arka plan masaüstü (Xvfb); --background "
@@ -436,6 +438,15 @@ def ayristirici(prog=None, sessiz=False):
     dugme(s); degistirici(s); secenek(s, "--rol")
     secenek(s, "--sira", type=int)
     secenek(s, "--onayli", action="store_true", help=h_("kullanıcı bu hassas tıklamayı AÇIKÇA onayladı"))
+    secenek(s, "--eylem", nargs="?", const="", default=None, metavar="EYLEM",
+            help=h_("fare/odak yerine ögenin AT-SPI eylemini çalıştır (EYLEM verilmezse birincil: click/press/"
+                    "activate/toggle)"))
+    s = komut("ogeye-yaz", k_ogeye_yaz, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("ad")
+    s.add_argument("metin", type=kacis_coz)
+    secenek(s, "--rol"); secenek(s, "--sira", type=int)
+    secenek(s, "--gizli", action="store_true", help=h_("günlüğe metni yazma"))
+    secenek(s, "--onayli", action="store_true",
+            help=h_("ödeme sayfasında Enter/Tab/boşluk içeren yazı: kullanıcı AÇIKÇA onayladı"))
     s = komut("mesgul", k_mesgul); s.add_argument("--json", action="store_true")
     s = komut("panel", k_panel, add_help=False); s.add_argument("arg", nargs=argparse.REMAINDER)
     s = komut("oturum", k_oturum, add_help=False); s.add_argument("arg", nargs=argparse.REMAINDER)

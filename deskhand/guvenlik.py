@@ -476,6 +476,13 @@ def denetle(k, desen):
     a = au.aktif()  # boşsa doğrulanamadı → a != k → durur (güvenli taraf)
     if a != k:
         raise Dur(3, _("aktif pencere değişti → {baslik}; girdi gönderilmedi").format(baslik=repr(au.baslik(a))))
+    pencere_denetle(k, desen)
+
+
+def pencere_denetle(k, desen):
+    """denetle'nin pencere kilitleri, ETKİN pencere şartı OLMADAN: yasak pencere (10), başlık (4) ve sınıf (4) kilidi.
+    Odağı almayan yollar (erişilebilirlik eylemi: erisim.py) için; fare/klavye yolunun denetle()'siyle aynı sonuç."""
+    au = sec()
     yasak_denetle(k)
     if desen:
         b = au.baslik(k)
@@ -566,9 +573,10 @@ def _nokta_ayrintisi(nokta, yakin):
     return "\n" + _("{x},{y} noktasındaki yazı: {yazi}").format(x=round(nokta[0]), y=round(nokta[1]), yazi=yazi)
 
 
-def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek=""):
+def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=True):
     """Başlığı ödeme/onay sayfası olan pencerede eylem (tıklama, Enter/boşluk, Enter/boşluklu yazı) onay ister.
-    yakin: tıklanacak noktadaki yazılar, nokta: (x, y) pencere pikseli, ek: ayrıntıya eklenecek satır (tuş, yazı).
+    yakin: tıklanacak noktadaki yazılar, nokta: (x, y) pencere pikseli, ek: ayrıntıya eklenecek satır (tuş, yazı),
+    goruntu_al: onay isteğine hedefin küçük görüntüsü eklensin mi (pencereyi öne getirir).
     Onay isteği noktadaki yazıyı, hassas düğme metnini ve hedefin küçük görüntüsünü taşır (kullanıcı NEYİ
     onayladığını görür); aynı eylemdeki hassas düğme denetimi yeniden sormaz. → sayfa hassas mı."""
     b = sec().baslik(k)
@@ -582,7 +590,8 @@ def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek=""):
             ayrinti += "\n" + _("Hassas düğme: “{dugme}”").format(dugme=dugme)
         if ek:
             ayrinti += "\n" + ek
-        goruntu = None if getattr(_EYLEM, "onaylandi", False) else hedef_goruntusu(k, nokta)
+        # goruntu_al=False: görüntü pencereyi öne getirirdi (odak çalmayan yollarda istenmez)
+        goruntu = None if getattr(_EYLEM, "onaylandi", False) or not goruntu_al else hedef_goruntusu(k, nokta)
         izin, neden = _panelden_onay(_("Hassas sayfada {eylem}").format(eylem=ne), b, ayrinti, goruntu)
         if not izin:
             raise Dur(10, _("HASSAS sayfa ({eslesen} ← {baslik}): bu sayfada {eylem} kullanıcının onayını ister "
@@ -641,7 +650,7 @@ def riskli_tus_engel(k, onayli, kombinasyon, birlikte=False):
     return True
 
 
-def ucbirim_komut_engel(k, onayli, metin, gizli=False):
+def ucbirim_komut_engel(k, onayli, metin, gizli=False, goruntu_al=True):
     """Hedef pencere bir uçbirimse (ucbirim_mi) ve yazılacak metin yıkıcı komut kalıbına uyuyorsa (riskli_komut)
     onay ister (riskli_tus_engel ile aynı yol). Komut, yazılmadan ÖNCE yakalanır: Enter ayrı gönderilse bile.
     Onay isteği komutu (kısaltılmış) taşır. → uçbirimde riskli komut mu (onaylandı)."""
@@ -657,7 +666,7 @@ def ucbirim_komut_engel(k, onayli, metin, gizli=False):
         b = au.baslik(pen)
         ayrinti = neden + "\n" + _("uçbirim: {sinif}").format(sinif=sinif) + "\n" + \
             _("yazılacak: {metin}").format(metin=_yazilacak(metin, gizli))
-        goruntu = None if getattr(_EYLEM, "onaylandi", False) else hedef_goruntusu(pen)
+        goruntu = None if getattr(_EYLEM, "onaylandi", False) or not goruntu_al else hedef_goruntusu(pen)
         izin, onay_neden = _panelden_onay(_("Uçbirime komut yaz: {komut}").format(komut=_yazilacak(metin, gizli)), b,
                                           ayrinti, goruntu)
         if not izin:

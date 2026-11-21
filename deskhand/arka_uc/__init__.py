@@ -82,6 +82,14 @@ class ArkaUc(ABC):
     def atspi_adresi(self) -> str | None:
         return None
 
+    def oturum_veri_yolu(self) -> str | None:
+        """org.a11y.Bus'ın yaşadığı OTURUM veri yolunun adresi (sanal: özel veri yolu); None = kullanıcının oturumu."""
+        return None
+
+    def ekran_korumasi(self, ne: str) -> None:
+        """Kullanıcının ekranına müdahaleden önce koruma (kde: oyun/film → Dur 15, karar bildirimi → 12). Girdi
+        göndermeyen ama kullanıcının uygulamasını etkileyen yollar (erişilebilirlik eylemi) çağırır; varsayılan: yok."""
+
     # -------- CHANGE 1 (Faz 1): isteğe bağlı yöntemler. Üst katman bunları yedekli çağırır; arka uç uygularsa
     # davranış zenginleşir. Varsayılanlar güvenli tarafta.
     def kimlikler(self) -> list[str]:
