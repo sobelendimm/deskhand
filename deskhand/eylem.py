@@ -20,14 +20,14 @@ from . import guvenlik
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, imlec_alti_denetle, onay_tusu_mu, yasak_denetle,
                        yazi_onay_ister_mi)
 from .hata import Dur, dur_denetle
-from .i18n import _
+from .i18n import N_, _
 from .insan import HARF_SN
 from .komutlar import akis_adimi
 from .ocr import KAYDIR_BEKLE, YEDEK_OKUMALAR, ara, ayni_konum, bul_dongu, dogrula, kayma, kok_ekle, nokta_metni, oku, satirla, \
     yazdir_eslesme
 
 GIRDI_KOMUTLARI = {"tikla", "tus", "yaz", "kaydir", "metne-tikla", "kapat", "simgeye-tikla", "bas", "fare",
-                   "surukle", "dizi", "renge-tikla", "akis", "ogeye-tikla"}
+                   "surukle", "dizi", "renge-tikla", "akis", "ogeye-tikla", "pencere"}
 OKUMA_KOMUTLARI = {"foto", "metin", "bekle", "simge-bul", "simge-kaydet", "renk-bul"}
 
 
@@ -610,6 +610,101 @@ def k_kapat(a):
             return
         time.sleep(0.1)
     raise Dur(8, _("pencere kapanmadı (kaydedilmemiş iş sorusu açık olabilir): {baslik}").format(baslik=b))
+
+
+PENCERE_ISLEMLERI = ("tasi", "boyut", "kucult", "buyut", "geri")
+_PENCERE_ISLEM_AD = {"tasi": N_("taşıma"), "boyut": N_("boyutlandırma"), "kucult": N_("küçültme"),
+                     "buyut": N_("büyütme"), "geri": N_("geri yükleme")}
+
+
+def _geo_bekle(k, tut, sure=1.0):
+    """Pencere geometrisi tut(geo) sağlanana dek (en çok `sure` sn) bekle → son geometri. Pencere kapandıysa Dur 8."""
+    bitis = time.monotonic() + sure
+    while True:
+        geo = _au().geometri(k)
+        if tut(geo) or time.monotonic() >= bitis:
+            return geo
+        time.sleep(0.05)
+
+
+def pencere_yonet(k, islem, x=None, y=None, g=None, h=None, desen=None):
+    """Pencereyi taşı/boyutlandır/küçült/büyüt/geri yükle (CLI `pencere`, MCP manage_window). Denetimler (arka uçtan
+    önce): DUR (13), yasak pencere (10), sınıf (-s) ve başlık (-b) kilidi (4), hedef konum/boyut ekran alanının dışına
+    taşıyorsa 2. kde'de kullanıcı oyunda/film izliyorsa arka uç 15 verir. Günlüğe yazılır.
+    → {"onceki": (x,y,g,y), "geometri": (x,y,g,y), "baslik": str, "uyari": str (boş = istenen oldu)}."""
+    dur_denetle()
+    if islem not in PENCERE_ISLEMLERI:
+        raise Dur(1, _("bilinmeyen pencere işlemi: {islem}").format(islem=repr(islem)))
+    if k == EKRAN:
+        raise Dur(1, _("masaüstü kipi taşınamaz/boyutlandırılamaz; pencere kimliği/adı ver"))
+    au = _au()
+    yasak_denetle(k)
+    guvenlik.sinif_denetle(k)
+    b = au.baslik(k)
+    if desen and not re.search(desen, b, re.I):
+        raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); pencere işlemi yapılmadı").format(
+            baslik=repr(b), desen=desen))
+    onceki = tuple(au.geometri(k))
+    gx, gy, gg, gh = onceki
+    ex0, ey0, ex1, ey1 = au.ekran_alani()
+    if islem == "tasi":
+        if x is None or y is None:
+            raise Dur(1, _("taşıma için x ve y gerekli"))
+        hedef = (int(x), int(y), gg, gh)
+    elif islem == "boyut":
+        if g is None or h is None:
+            raise Dur(1, _("boyutlandırma için genişlik ve yükseklik gerekli"))
+        if int(g) < 1 or int(h) < 1:
+            raise Dur(1, _("genişlik ve yükseklik en az 1 olmalı"))
+        hedef = (gx, gy, int(g), int(h))
+    else:
+        hedef = None
+    if hedef is not None and not (hedef[0] >= ex0 and hedef[1] >= ey0 and hedef[0] + hedef[2] <= ex1
+                                  and hedef[1] + hedef[3] <= ey1):
+        raise Dur(2, _("hedef pencere ekran alanının dışına taşıyor: konum {x},{y} boyut {g}x{h}; ekran alanı "
+                       "{x0},{y0}..{x1},{y1}").format(x=hedef[0], y=hedef[1], g=hedef[2], h=hedef[3],
+                                                      x0=ex0, y0=ey0, x1=ex1, y1=ey1))
+    if islem == "tasi":
+        au.tasi(k, hedef[0], hedef[1])
+        geo = _geo_bekle(k, lambda c: abs(c[0] - hedef[0]) <= 1 and abs(c[1] - hedef[1]) <= 1)
+    elif islem == "boyut":
+        au.boyutlandir(k, hedef[2], hedef[3])
+        geo = _geo_bekle(k, lambda c: abs(c[2] - hedef[2]) <= 1 and abs(c[3] - hedef[3]) <= 1)
+    else:
+        {"kucult": au.kucult, "buyut": au.buyut, "geri": au.geri_yukle}[islem](k)
+        # küçültmede geometri değişmez; büyütme/geri yüklemede yeni geometri otursun
+        geo = _geo_bekle(k, lambda c: islem == "kucult" or tuple(c) != onceki, 0.2 if islem == "kucult" else 0.6)
+    geo = tuple(geo)
+    uyari = ""
+    if hedef is not None and any(abs(a_ - b_) > 1 for a_, b_ in zip(geo, hedef)):
+        uyari = _("pencere yöneticisi istenenden farklı bir geometri verdi: istenen {istenen}, olan {olan}").format(
+            istenen=hedef, olan=geo)
+    degerler = " ".join(str(v) for v in (x, y, g, h) if v is not None)
+    gunluk(f"pencere | [{b}] | {islem}{' ' + degerler if degerler else ''} | {onceki} → {geo}")
+    return {"onceki": onceki, "geometri": geo, "baslik": b, "uyari": uyari}
+
+
+def k_pencere(a):
+    """Pencere yönetimi: `pencere <kimlik> tasi X Y | boyut G Y | kucult | buyut | geri`. Başlık kilidi isteğe bağlı
+    (-b); yasak pencere ve DUR çekirdekte (pencere_yonet)."""
+    d = list(a.deger or [])
+    gerekli = {"tasi": 2, "boyut": 2}.get(a.islem, 0)
+    if len(d) != gerekli:
+        raise Dur(1, _("pencere {islem}: {gerekli} sayı gerekli (verilen {verilen})").format(
+            islem=a.islem, gerekli=gerekli, verilen=len(d)))
+    try:
+        sayilar = [int(v) for v in d]
+    except ValueError:
+        raise Dur(1, _("pencere {islem}: değerler tam sayı (piksel) olmalı: {deger}").format(
+            islem=a.islem, deger=" ".join(d))) from None
+    x, y = (sayilar + [None, None])[:2] if a.islem == "tasi" else (None, None)
+    g, h = (sayilar + [None, None])[:2] if a.islem == "boyut" else (None, None)
+    r = pencere_yonet(a.kimlik, a.islem, x, y, g, h, a.baslik)
+    gx, gy, gg, gh = r["geometri"]
+    print(_("{islem} tamam: {baslik} | konum {x},{y} boyut {g}x{h}").format(
+        islem=_(_PENCERE_ISLEM_AD[a.islem]), baslik=r["baslik"], x=gx, y=gy, g=gg, h=gh))
+    if r["uyari"]:
+        print(_("UYARI: {uyari}").format(uyari=r["uyari"]), file=sys.stderr)
 
 
 def k_simgeye_tikla(a):

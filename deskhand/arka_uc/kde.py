@@ -590,6 +590,30 @@ class KdeArkaUc(ArkaUc):
         self._ekran_korumasi(_("pencere kapatma"))  # film izlerken oynatıcı penceresi kapatılmasın
         kd("windowclose", k)
 
+    # -------- pencere yönetimi (eylemler: kd() yeniden DENEMEZ; çerçeve geometrisi = geometri())
+    def _pencere_eylemi(self, k, ne, *kd_args):
+        """Kullanıcı oyunda/film izliyorsa pencereyi oynatmak da ekrana müdahaledir (15): one_getir ile aynı koruma."""
+        if k == EKRAN:
+            raise Dur(1, _("masaüstü kipi taşınamaz/boyutlandırılamaz; pencere kimliği/adı ver"))
+        self._ekran_korumasi(ne)
+        kd(*kd_args)
+
+    def tasi(self, k, x, y):
+        self._pencere_eylemi(k, _("pencere taşıma"), "windowmove", k, str(int(x)), str(int(y)))
+
+    def boyutlandir(self, k, g, y):
+        self._pencere_eylemi(k, _("pencere boyutlandırma"), "windowsize", k, str(int(g)), str(int(y)))
+
+    def kucult(self, k):
+        self._pencere_eylemi(k, _("pencere küçültme"), "windowminimize", k)
+
+    def buyut(self, k):
+        self._pencere_eylemi(k, _("pencere büyütme"), "windowstate", "--add", "MAXIMIZED", k)
+
+    def geri_yukle(self, k):
+        self._pencere_eylemi(k, _("pencere geri yükleme"), "windowstate", "--remove", "MINIMIZED", "--remove",
+                             "MAXIMIZED", k)
+
     # -------- fare / ekran
     def fare(self):
         return fare()

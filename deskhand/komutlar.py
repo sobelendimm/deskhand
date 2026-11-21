@@ -15,7 +15,10 @@ KOMUTLAR = (
     ("simge-bul", "find-icon"), ("simgeye-tikla", "click-icon"), ("ac", "open"), ("akis", "flow"),
     ("erisim", "a11y"), ("agac", "tree"), ("ogeye-tikla", "click-element"), ("dur", "stop"), ("devam", "resume"),
     ("durum", "status"), ("mesgul", "busy"), ("karar", "decide"), ("panel", "panel"), ("masaustu", "desktop"),
-    ("oturum", "sessions"), ("mcp", "mcp"), ("yardım", "help"),
+    ("oturum", "sessions"), ("mcp", "mcp"),
+    ("pencere", "window"),
+    ("doktor", "doctor"),
+    ("yardım", "help"),
 )
 TR_EN = dict(KOMUTLAR)
 EN_TR = {en: tr for tr, en in KOMUTLAR}
@@ -52,6 +55,7 @@ RENK = {"green": "yesil", "red": "kirmizi", "blue": "mavi"}
 MASAUSTU = {"start": "baslat", "stop": "durdur", "status": "durum"}
 OTURUM = {"status": "durum", "prepare": "hazirla", "policy": "politika", "clear": "sil"}
 ERISIM = {"on": "ac", "off": "kapat", "status": "durum"}
+PENCERE = {"move": "tasi", "resize": "boyut", "minimize": "kucult", "maximize": "buyut", "restore": "geri"}
 
 # .akis dosyası: yönerge ve özel adım sözcükleri (komut adları ic_ad ile)
 AKIS_YONERGE = {"screen": "ekran", "timeout": "sure", "repeat": "tekrar", "region": "bolge", "success": "basari",

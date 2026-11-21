@@ -136,6 +136,10 @@ Bu alanda iyi projeler var; size uyanı seçin.
 - [ahmetadakli/kde-desktop-mcp](https://github.com/ahmetadakli/kde-desktop-mcp) KDE'de en
   yakın güvenlik modeline sahip: seviyeli uygulama izin listesi, onay listesi, parola alanı
   koruması, kullanıcı devralınca duraklama, durdurma kısayolu. Erişilebilirlik ağacıyla çalışır.
+- [isac322/kwin-mcp](https://github.com/isac322/kwin-mcp) KDE Plasma 6 Wayland içindir:
+  girdiyi KWin'in EIS arayüzünden gönderir, her oturum için yalıtılmış bir
+  `kwin_wayland --virtual` açar; erişilebilirlik ağacı, pano ve dokunmatik hareket araçları
+  vardır. Onay ya da insan önceliği katmanı yoktur.
 - [agent-sh/computer-use-linux](https://github.com/agent-sh/computer-use-linux) (önce GNOME,
   çok arka uç), [Samthesurf/kwin-mcp](https://github.com/Samthesurf/kwin-mcp) (KDE Wayland),
   [alex-oleshkevich/wayland-mcp](https://github.com/alex-oleshkevich/wayland-mcp)
@@ -371,8 +375,6 @@ MCP'de aynı kodlar `[kod] ad: ayrıntı` biçiminde hata olarak döner.
   VS Code ve sırlarını KWallet/Secret Service'te tutan her şey arka plan masaüstünde girişli
   açılmaz.
 - Aynı anda **tek arka plan masaüstü**.
-- **Xvfb'nin henüz kimlik çerezi yok.** Yalnız yerel sokette dinler ama makinedeki başka bir
-  kullanıcı bağlanabilir. `-auth` çerezi planlandı.
 - **OCR yanlış okuyabilir.** Belirsiz eşleşmede tahmin etmez, durur; tıklamalar
   doğrulanabilir. Yine de küçük ya da düşük kontrastlı yazı yanlış okunabilir ya da
   bulunamayabilir.

@@ -28,7 +28,9 @@ from . import ARKA_ONEK, EKRAN, ArkaUc
 
 EKRAN_ADLARI = {"ekran", "masaustu", "masaüstü", "tum-ekran", "tüm-ekran"}
 ATOMLAR = ("_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW", "_NET_WM_NAME", "UTF8_STRING", "WM_NAME", "WM_CLASS",
-           "_NET_CLOSE_WINDOW", "WM_PROTOCOLS", "WM_DELETE_WINDOW", "_NET_SUPPORTING_WM_CHECK", "_NET_WM_PID")
+           "_NET_CLOSE_WINDOW", "WM_PROTOCOLS", "WM_DELETE_WINDOW", "_NET_SUPPORTING_WM_CHECK", "_NET_WM_PID",
+           "_NET_MOVERESIZE_WINDOW", "_NET_WM_STATE", "_NET_WM_STATE_HIDDEN", "_NET_WM_STATE_MAXIMIZED_VERT",
+           "_NET_WM_STATE_MAXIMIZED_HORZ", "WM_CHANGE_STATE", "WM_STATE")
 DEVRAL_BEKLE = 8.0  # "Devral" açıkken ilk girdiden önce en çok bu kadar beklenir, sonra 12
 
 # dotool değiştiricileri (akorda) → Linux tuş adı
@@ -280,6 +282,55 @@ class _X:
         hedef.send_event(ev, event_mask=maske)
         self.d.flush()
 
+    # -------- pencere yönetimi (EWMH; pencere yöneticisi yoksa yalnız taşı/boyutlandır doğrudan yapılır)
+    def wm_durumu(self, wid: int) -> set[str]:
+        """Pencerenin durumu: {"hidden" (küçültülmüş), "maximized" (dikey + yatay)}; bilinmeyen/yok → boş küme."""
+        p = self._ozellik(self.pencere(wid), "_NET_WM_STATE")
+        atomlar = {int(a) for a in p.value} if p is not None and len(p.value) else set()
+        durum = set()
+        if self.a["_NET_WM_STATE_HIDDEN"] in atomlar:
+            durum.add("hidden")
+        if {self.a["_NET_WM_STATE_MAXIMIZED_VERT"], self.a["_NET_WM_STATE_MAXIMIZED_HORZ"]} <= atomlar:
+            durum.add("maximized")
+        ws = self._ozellik(self.pencere(wid), "WM_STATE")
+        if ws is not None and len(ws.value) and int(ws.value[0]) == 3:  # IconicState
+            durum.add("hidden")
+        return durum
+
+    def tasi_boyutlandir(self, wid: int, x=None, y=None, g=None, h=None) -> None:
+        """İstemci alanını (geometri() ile aynı ölçü) taşı/boyutlandır: _NET_MOVERESIZE_WINDOW, StaticGravity
+        (x,y istemci alanının sol üst köşesi, çerçeve değil). Pencere yöneticisi yoksa doğrudan configure."""
+        if not self.var_mi(wid):
+            raise Dur(PENCERE_YOK, _("pencere bulunamadı: {kimlik}").format(kimlik=kimlik_yap(wid)))
+        if not self.wm_var():
+            kw = {ad: int(v) for ad, v in (("x", x), ("y", y), ("width", g), ("height", h)) if v is not None}
+            self.pencere(wid).configure(**kw)
+            self.d.sync()
+            return
+        bayrak = 10 | (2 << 12)  # StaticGravity | kaynak = araç (pager)
+        for bit, v in ((8, x), (9, y), (10, g), (11, h)):
+            if v is not None:
+                bayrak |= 1 << bit
+        self.istemci_mesaji(self.kok, wid, "_NET_MOVERESIZE_WINDOW",
+                            [bayrak, int(x or 0), int(y or 0), int(g or 0), int(h or 0)])
+
+    def durum_iste(self, wid: int, ne: str) -> None:
+        """kucult | buyut | geri: pencere yöneticisine EWMH/ICCCM isteği (yoksa Dur 9)."""
+        if not self.var_mi(wid):
+            raise Dur(PENCERE_YOK, _("pencere bulunamadı: {kimlik}").format(kimlik=kimlik_yap(wid)))
+        if not self.wm_var():
+            raise Dur(ARAC_EKSIK, _("sanal masaüstünde pencere yöneticisi yok: pencere durumu değiştirilemez"))
+        dikey, yatay = self.a["_NET_WM_STATE_MAXIMIZED_VERT"], self.a["_NET_WM_STATE_MAXIMIZED_HORZ"]
+        if ne == "kucult":
+            self.istemci_mesaji(self.kok, wid, "WM_CHANGE_STATE", [3])  # IconicState
+        elif ne == "buyut":
+            self.istemci_mesaji(self.kok, wid, "_NET_WM_STATE", [1, dikey, yatay, 1])  # _NET_WM_STATE_ADD
+        else:
+            from Xlib import X
+            if "hidden" in self.wm_durumu(wid):  # küçültülmüşse önce göster (etkinleştirme istemi simgeden çıkarır)
+                self.istemci_mesaji(self.kok, wid, "_NET_ACTIVE_WINDOW", [2, X.CurrentTime, 0])
+            self.istemci_mesaji(self.kok, wid, "_NET_WM_STATE", [0, dikey, yatay, 1])  # _NET_WM_STATE_REMOVE
+
     def goruntu(self):
         from PIL import Image
         from Xlib import X
@@ -509,6 +560,38 @@ class SanalArkaUc(ArkaUc):
                 raise Dur(AKTIF_DEGIL, _("pencere kapatma isteğini desteklemiyor (WM_DELETE_WINDOW yok): {kimlik}").format(kimlik=k))
             x.istemci_mesaji(w, wid, "WM_PROTOCOLS", [x.a["WM_DELETE_WINDOW"], X.CurrentTime], maske=0)
         self._cagir(f)
+
+    # -------- pencere yönetimi (EWMH; docs/ARCHITECTURE.md §2). Sanal masaüstü kullanıcıya ait değil: ekran
+    # koruması yok. İstek gönderildikten sonra durum doğrulanır (en çok ~1 sn).
+    def _pencere_islemi(self, k: str, f, bekle=None, ne: str = "") -> None:
+        if k == EKRAN:
+            raise Dur(PENCERE_YOK, _("masaüstü kipi taşınamaz/boyutlandırılamaz; pencere kimliği/adı ver"))
+        wid = kimlik_coz(k)
+        self._cagir(f, wid)
+        if bekle is None:
+            return
+        bitis = time.monotonic() + 1.0
+        while time.monotonic() < bitis:
+            if self._cagir(lambda x: bekle(x.wm_durumu(wid))):
+                return
+            time.sleep(0.02)
+        raise Dur(ARAC_EKSIK, _("pencere yöneticisi isteği yerine getirmedi: {ne}").format(ne=ne))
+
+    def tasi(self, k: str, x: int, y: int) -> None:
+        self._pencere_islemi(k, lambda xx, wid: xx.tasi_boyutlandir(wid, x=x, y=y))
+
+    def boyutlandir(self, k: str, g: int, y: int) -> None:
+        self._pencere_islemi(k, lambda xx, wid: xx.tasi_boyutlandir(wid, g=g, h=y))
+
+    def kucult(self, k: str) -> None:
+        self._pencere_islemi(k, lambda xx, wid: xx.durum_iste(wid, "kucult"), lambda d: "hidden" in d, _("küçültme"))
+
+    def buyut(self, k: str) -> None:
+        self._pencere_islemi(k, lambda xx, wid: xx.durum_iste(wid, "buyut"), lambda d: "maximized" in d, _("büyütme"))
+
+    def geri_yukle(self, k: str) -> None:
+        self._pencere_islemi(k, lambda xx, wid: xx.durum_iste(wid, "geri"),
+                             lambda d: not ({"hidden", "maximized"} & d), _("geri yükleme"))
 
     # -------- fare / ekran
     def fare(self):

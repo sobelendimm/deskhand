@@ -12,6 +12,9 @@ import threading
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
+from .. import hata
+from ..i18n import _
+
 EKRAN = "EKRAN"  # masaüstü kipi: tüm ekran
 ARKA_ONEK = "arka:"  # sanal arka ucun pencere kimlikleri her zaman bu önekle başlar
 
@@ -110,6 +113,32 @@ class ArkaUc(ABC):
     def etkinlik(self):
         """İnsan etkinliği izleyicisi (akis için) ya da None."""
         return None
+
+    # -------- Faz 9e: pencere yönetimi (isteğe bağlı; varsayılan = desteklenmiyor → Dur 9). Koordinatlar EKRAN
+    # pikseli; sınır denetimi (kod 2), yasak (10), DUR (13) üst katmanda (eylem.pencere_yonet). Dönüş: None.
+    def _pencere_islemi_yok(self, ne: str):
+        raise hata.Dur(hata.ARAC_EKSIK, _("'{arka_uc}' arka ucu pencere işlemini desteklemiyor: {ne}").format(
+            arka_uc=self.ad, ne=ne))
+
+    def tasi(self, k: str, x: int, y: int) -> None:
+        """Pencerenin sol üst köşesini (x, y) ekran pikseline taşı (geometri() ile aynı başlangıç noktası)."""
+        self._pencere_islemi_yok(_("taşıma"))
+
+    def boyutlandir(self, k: str, g: int, y: int) -> None:
+        """Pencere boyutunu g x y piksel yap (geometri() ile aynı ölçü: kde çerçeveli, sanal istemci alanı)."""
+        self._pencere_islemi_yok(_("boyutlandırma"))
+
+    def kucult(self, k: str) -> None:
+        """Pencereyi görev çubuğuna küçült."""
+        self._pencere_islemi_yok(_("küçültme"))
+
+    def buyut(self, k: str) -> None:
+        """Pencereyi çalışma alanını kaplayacak biçimde büyüt (tam ekran DEĞİL)."""
+        self._pencere_islemi_yok(_("büyütme"))
+
+    def geri_yukle(self, k: str) -> None:
+        """Küçültülmüş ya da büyütülmüş pencereyi normal boyuta/konuma döndür."""
+        self._pencere_islemi_yok(_("geri yükleme"))
 
 
 _YEREL = threading.local()  # iş parçacığına özgü hedef (MCP sunucusu: çağrı başına masaüstü; CLI kullanmaz)
