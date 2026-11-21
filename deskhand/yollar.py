@@ -104,6 +104,19 @@ def goruntu_bin() -> str | None:
     return a if os.path.isfile(a) and os.access(a, os.X_OK) else None
 
 
+EIS_AD = "deskhand-eis"
+
+
+def eis_bin() -> str | None:
+    """KWin EIS (libei) girdi yardımcısı (C): paket içinde derlenmiş deskhand/yardimci/deskhand-eis
+    (`make -C deskhand/yardimci deskhand-eis`; libei + libxkbcommon + libsystemd geliştirme dosyaları ister).
+    $DESKHAND_EIS_BIN önceliklidir (testler). Çalıştırılabilir değilse None (arka plan KWin oturumu kurulamaz)."""
+    for a in (os.environ.get("DESKHAND_EIS_BIN") or "", os.path.join(PAKET_DIZIN, "yardimci", EIS_AD)):
+        if a and os.path.isfile(a) and os.access(a, os.X_OK):
+            return a
+    return None
+
+
 # ---------------------------------------------------------------- geçiş (eski ekran → deskhand)
 
 # (ortam değişkeni, eski yol, yeni yolu veren işlev)
