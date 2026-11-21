@@ -262,6 +262,18 @@ def yapistirarak_mi(metin):
             and any(p for p in re.split(r"[\n\t]", metin)))
 
 
+def _pano_kullanici_degistirdi(au, son_pano):
+    """Geri yüklemeden hemen önce: pano artık bizim son yazdığımız metinden FARKLI mı (kullanıcı kopyaladı)? Hiçbir
+    şey yazmadıysak ya da okuma başarısızsa False (eski pano geri yüklenir)."""
+    if son_pano is None:
+        return False
+    try:
+        simdiki = au.pano_oku()
+    except Exception:  # noqa: BLE001 - okunamadı: bugünkü davranış (geri yükle)
+        return False
+    return simdiki != son_pano
+
+
 def _yapistirarak_yaz(g, k, desen, metin, onayli):
     """Metni panoya koyup yapıştırır. \\n → Enter, \\t → Tab tuşu (harf harf yoldaki anlamıyla); aradaki parçalar
     yapıştırılır. Eski pano içeriği önceden alınır, SONRA (hata/kesinti dahil) geri yüklenir. Her gönderim `g.gonder`
@@ -280,6 +292,7 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
     parcalar = re.split(r"(\n|\t)", metin)
     yazilan = 0
     adet = sum(1 for p in parcalar if p)
+    son_pano = None  # panoya EN SON yazdığımız metin (geri yüklemeden önce hâlâ bu mu diye bakılır)
     g.izle(k, desen)
     try:
         for p in parcalar:
@@ -302,6 +315,7 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
                     g.gonder(k, desen, "key enter" if p == "\n" else "key tab")
                 else:
                     au.pano_yaz(p, hassas=True)  # pano yöneticisi (Klipper) geçmişine yazılmasın
+                    son_pano = p
                     g.gonder(k, desen, f"key {tus}")
                     time.sleep(bekle)
             except Dur as e:
@@ -315,7 +329,11 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
     finally:
         g.izle_bitir()
         try:
-            uyari = au.pano_geri_yukle(yedek)  # denetimsiz: DUR ya da kesintide de eski pano geri gelir
+            if _pano_kullanici_degistirdi(au, son_pano):
+                uyari = None  # kullanıcının yeni pano içeriği ezilmesin
+                gunluk(f"{g.etiket} | pano geri yüklenmedi: pano bu arada kullanıcı tarafından değiştirildi")
+            else:
+                uyari = au.pano_geri_yukle(yedek)  # denetimsiz: DUR ya da kesintide de eski pano geri gelir
         except Exception as e:  # noqa: BLE001 - geri yükleme hatası asıl hatayı gizlemesin
             uyari = _("eski pano içeriği geri yüklenemedi: {hata}").format(hata=getattr(e, "mesaj", e))
         if uyari:

@@ -261,6 +261,48 @@ au = SahtePano()
 kod = yaz(au, "a 😀\r\nb")
 kontrol("\\r\\n → tek Enter", kod == 0 and au.hedef == "a 😀\nb", repr(au.hedef))
 
+# --- kullanıcı yapıştırma sırasında panoyu kendisi değiştirdi → eski pano GERİ YÜKLENMEZ (kullanıcının yeni içeriği ezilmez)
+au = SahtePano()
+
+
+def kullanici_kopyaladi(n):
+    au.pano = "kullanıcının yeni kopyası"
+
+
+au.kanca = kullanici_kopyaladi
+kod = yaz(au, "a 😀\nb 🎉")
+kontrol("pano bu arada kullanıcıca değişti → geri YÜKLENMEDİ, kullanıcının içeriği duruyor",
+        kod == 0 and au.pano == "kullanıcının yeni kopyası" and not any(o[0] == "geri" for o in au.olaylar),
+        f"{kod} {au.pano!r} {au.olaylar[-2:]}")
+
+# --- pano hâlâ bizim son yazdığımız metin → bugünkü gibi geri yüklenir
+au = SahtePano()
+kod = yaz(au, "a 😀\nb 🎉")
+kontrol("pano hâlâ bizim son metnimiz → eski pano geri yüklenir", kod == 0 and au.pano == "eski pano" and
+        au.olaylar[-1] == ("geri", "eski pano"))
+
+# --- pano okuma başarısız → bugünkü davranış: geri yükle
+au = SahtePano()
+okuma_sayac = []
+
+
+def bozuk_oku():
+    okuma_sayac.append(1)
+    raise Dur(9, "pano okunamadı")
+
+
+au.pano_oku = bozuk_oku
+kod = yaz(au, "a 😀")
+kontrol("geri yükleme öncesi pano okunamadı → yine geri yüklenir", kod == 0 and okuma_sayac and
+        au.olaylar[-1] == ("geri", "eski pano") and au.pano == "eski pano", f"{kod} {au.olaylar[-2:]}")
+
+# --- kullanıcı panoyu metin dışı (okuma → None) bir şeyle değiştirdi → geri yüklenmez
+au = SahtePano()
+au.kanca = lambda n: setattr(au, "pano", None)
+kod = yaz(au, "a 😀")
+kontrol("pano metin dışı/boş oldu (None ≠ bizim metin) → geri YÜKLENMEDİ",
+        kod == 0 and not any(o[0] == "geri" for o in au.olaylar), f"{kod} {au.olaylar[-2:]}")
+
 # --- hata/kesinti: eski pano HER durumda geri gelir
 au = SahtePano()
 

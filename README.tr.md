@@ -110,10 +110,10 @@ eşleşir (ş/s, ı/i…); birden çok eşleşme varsa tahmin etmez, durur. Ayr�
 ağacı (AT-SPI, düğmeye adıyla tıklama), kayıtlı simgeler, renk alanları ve tekrarlı işler
 için ekran tanıma *akışları*.
 
-### MCP sunucusu (14 araç)
+### MCP sunucusu (15 araç)
 
 `deskhand mcp` stdio MCP sunucusudur: `get_status`, `choose_desktop`, `manage_desktop`,
-`screenshot`, `read_text`, `find`, `click`, `type_text`, `press_key`, `scroll`, `drag`, `open_app`,
+`screenshot`, `read_text`, `find`, `click`, `type_text`, `press_key`, `scroll`, `drag`, `clipboard`, `open_app`,
 `manage_window`, `run_flow`. Ekran görüntüleri uzun kenarı 1280 piksele küçültülür. Koordinatlar bir
 `shot_id`'ye bağlıdır; bayat görüntüye göre tıklama reddedilir. MCP yüzeyinde "onaylandı"
 bayrağı yoktur: hassas eylemler her zaman panelden geçer.
