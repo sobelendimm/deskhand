@@ -25,6 +25,7 @@ from .i18n import N_, _, h_
 from .komutlar import DUGME, ERISIM, PENCERE, RENK, SECENEKLER, TR_EN, YON, cevirici, ic_ad, secimler, takma_adlar
 from .mesgul import k_karar, k_mesgul
 from .ocr import k_bekle, k_metin
+from .web import k_web
 from .uygulama import k_ac
 
 # Yardım metni: her paragraf (komut listesinde her komut) ayrı bir msgid → çeviri kısa parçalarla yapılır.
@@ -95,8 +96,12 @@ YARDIM_KOMUTLAR = (
        "tekrar korumalı"),
     N_("  ekran a11y (erisim) [on|off|status]     erişilebilirlik ağacını aç/kapat (Qt/GTK düğmeleri ad + konumla)"),
     N_("  ekran tree (agac) <kimlik> [desen] [--role R] [--all]   penceredeki ögeler: (merkez x,y) rol: ad"),
+    N_("  ekran web <kimlik> [sorgu] [--role R] [--all] [--page N]   tarayıcı penceresindeki web sayfasının ögeleri\n"
+       "                                          (tarayıcının erişilebilirlik ağacından, OCR'sız): #no (merkez x,y) rol: ad [durum];\n"
+       "                                          sayfa 60 öge, --all: görünmeyenler dahil hepsi; click-element bunları tıklar"),
     N_("  ekran click-element (ogeye-tikla) <kimlik> <ad> [right|double] [--role R] [--nth N] [--approved]\n"
-       "                    [--action [EYLEM]]    ADIYLA tıkla (OCR'sız); --action: fare/odak YOK, ögenin AT-SPI eylemi"),
+       "                    [--action [EYLEM]]    ADIYLA tıkla (OCR'sız; tarayıcıda web sayfası ögeleri dahil); --action: fare/odak\n"
+       "                                          YOK, ögenin AT-SPI eylemi"),
     N_("  ekran set-element (ogeye-yaz) <kimlik> <ad> <metin> [--role R] [--nth N] [--secret] [--approved]\n"
        "                                          ögenin değerini AT-SPI ile yaz (metin alanı, kaydırgaç; klavye/odak YOK)"),
     N_("  ekran stop | resume | status (dur | devam | durum)   DUR anahtarı: aç (hiçbir girdi gönderilmez) / kaldır / "
@@ -434,6 +439,10 @@ def ayristirici(prog=None, sessiz=False):
     s = komut("agac", k_agac, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("desen", nargs="?")
     secenek(s, "--rol", help=h_("yalnız bu rol (ör. 'push button', 'check box')"))
     secenek(s, "--hepsi", action="store_true", help=h_("etkileşimsiz ögeler dahil hepsi"))
+    s = komut("web", k_web, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("desen", nargs="?")
+    secenek(s, "--rol", help=h_("yalnız bu rol (ör. button, link, entry, 'check box', düğme, bağlantı)"))
+    secenek(s, "--hepsi", action="store_true", help=h_("görünmeyenler dahil hepsi (sayfalama yok)"))
+    secenek(s, "--sayfa", type=int, default=1, help=h_("sayfa numarası (her sayfada 60 öge)"))
     s = komut("ogeye-tikla", k_ogeye_tikla, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("ad")
     dugme(s); degistirici(s); secenek(s, "--rol")
     secenek(s, "--sira", type=int)

@@ -31,6 +31,8 @@ deskhand/
   gorsel.py        simge (NCC), renk alanları, ızgara
   eylem.py         tikla/yaz/tus/kaydir/bas/surukle/dizi: arka uçtan BAĞIMSIZ üst katman
   akis.py, erisim.py (AT-SPI), uygulama.py (ac)
+  web.py           web sayfası ögeleri: tarayıcının erişilebilirlik ağacından okuma (§9); MCP read_text(source="web"),
+                   CLI `web`, click-element'in web yolu
   cli.py           argparse; komut adları İngilizce + Türkçe takma adlar
   arka_uc/__init__.py   ArkaUc arayüzü + sec(hedef)
   arka_uc/kde.py        kdotool + dotool + kscreen-doctor (+ spectacle yalnız görüntü kurtarması)
@@ -276,3 +278,33 @@ Hassas eylem (hassas düğme, ödeme sayfası, yasak dışı ama riskli `ac`, ot
   protokolü kullanır (eylem metni "Riskli tuş: …" / "Uçbirime komut yaz: …"); gözetimsiz kipte `iste_sonuc` hiç panele
   yazmadan `gozetimsiz` nedeniyle red döner.
 - Onay diyaloğu penceresi yasak listesine (sınıf/başlık) otomatik eklenir: hiçbir otomasyon girdisi ona gitmez.
+
+## 9. Web sayfası ögeleri (tarayıcı erişilebilirlik ağacı)
+**Yol.** `deskhand/web.py` tarayıcı penceresindeki sayfanın etkileşimli ögelerini (bağlantı, düğme, alan, onay/radyo/seçim
+kutusu, sekme, menü ögesi; ad, rol, durum, PENCERE koordinatlı kutu, bağlantı adresi, alan değeri) AT-SPI ağacından okur.
+Araçlar: MCP `read_text(source="web")` (+ `role`, `offset`/`next`, `hidden`; sayfa başlığı, adres, `sensitive_page`),
+CLI `web <kimlik> [sorgu] [--rol R] [--hepsi] [--sayfa N]`, MCP `click(element=…, role=…)` ve CLI `click-element`.
+**Tık yolu (`erisim._web_sec/_web_tikla`).** Hedef pencere sınıfı tarayıcı/Electron ise `element` önce sayfada aranır
+(önce görünürler, yoksa görünmeyenler; bulunamazsa genel ağaç yolu = tarayıcı arayüzü). Bulunan ögenin `merkez`i
+MEVCUT `tikla_ic` yoluna verilir: gerçek fare tıklaması, bu yüzden DUR 13, yasak 10, başlık/sınıf kilidi 4, erişim seviyesi
+10, kde'de oyun/film 15, insan önceliği 12, imleç altı denetimi (`tikla_ic` → `Girdi.gonder`, `imlec_alti_denetle`)
+aynen çalışır; döngü kesici ve fark özeti MCP `click` sarmalayıcısındadır. Hassas denetim `eylem.hassas_nokta`'da: ögenin ADI
+hedef metne eklenir (yazısız `aria-label` düğmesinde OCR yazıyı okumasa da onay istenir), belge başlığı ağaçtan gelir ve
+pencere başlığına EK denetlenir (`hassas_sayfa_engel(ek_basliklar=…)`). Devre dışı öge 6 (genel `ogeye-tikla` iletisiyle
+aynı); görüş alanı dışındaki öge mevcut kaydırma yoluyla (`kaydir_ic`, tüm girdi denetimleriyle, en çok 8 tur, ilerleme
+yoksa hata) görüş alanına getirilip tıklanır. `via="action"`: Action arayüzü (NActions + GetName) üzerinden, fare/odak yok;
+denetimler `_ogeye_eylem` ile aynı (öge kimliği veri yolu adı + nesne yolu BİRLİKTE tutulur).
+**Konum doğrulama (fail-closed).** Wayland'de ögeler uygulamaya göre pencere-yerel, küresel istemci alanı ya da küresel
+dekorlu çerçeve koordinatında gelebilir. `web.konum_coz`, üst düzey çerçevenin sınırını (GetExtents SCREEN ve WINDOW)
+pencerenin bilinen geometrisiyle ±1 px karşılaştırıp çerçeveyi belirler; hiçbirine uymuyorsa okuma `konum_dogrulandi=false`
+bildirir ve tık REDDEDİLİR (kod 2: "öge konumu doğrulanamadı; OCR ile metne tıklamayı dene"). Sanal masaüstünde (X11, tek
+çerçeve) denetim otomatik uyar.
+**Neden erişilebilirlik ağacı.** Uzaktan denetim protokolü (Marionette/BiDi) kimliksiz yerel kapı açar ve sayfa otomasyon
+görür (`navigator.webdriver`); AT-SPI yeni kapı açmaz, sayfaya görünmez, Chromium/Electron'da da aynıdır. Ölçüm
+(tests/web_olcum.py): kapsama %100, kutu farkı ≤ 1 px, 1.000 öge ~0,25 sn. Marionette istemcisi YALNIZ ölçüm betiğindedir.
+**Arka plan Firefox.** Sanal masaüstü uygulamalardan önce kendi erişilebilirlik kayıt defterini başlatıp `IsEnabled=true`
+yazdığı için `ac --arka` ile açılan Firefox ek ortam değişkeni (GNOME_ACCESSIBILITY) olmadan ağacı sunar (test_web_bag.py).
+**Sınırlar.** Başka bir ögenin ÜSTÜNÜ örten öge (modal, yapışkan başlık) ağaçtan ayırt edilemez; imleç altı denetimi yalnız
+pencere düzeyindedir. Gerçek (kde, Wayland) ekranda koordinat çerçevesi henüz gerçek ekranda doğrulanmadı: `konum_coz`
+varsayımları (üç çerçeve, ±1 px, dekorasyon payı sınırları) elle denenmelidir. Pencere sınıfı bilinen tarayıcı listesinde
+değilse `click-element` sayfaya bakmaz (`web` okuması ve koordinatlı tık yine çalışır). `ogeye-yaz` web alanlarında yoktur.

@@ -687,7 +687,14 @@ def screenshot(
 def read_text(
     window: Pencere = None,
     query: Annotated[str | None, Field(description="Only return matches of this text (Turkish-aware, fuzzy)")] = None,
-    source: Literal["ocr", "tree"] = "ocr",
+    source: Annotated[Literal["ocr", "tree", "web"], Field(description="web = elements of the web page in a browser "
+                                                                       "window, from the browser's accessibility tree "
+                                                                       "(no OCR; links, buttons, fields, state)")] = "ocr",
+    role: Annotated[str | None, Field(description="source=web: only this role (button, link, entry, 'check box', "
+                                                  "heading...; also düğme/bağlantı/giriş/başlık)")] = None,
+    offset: Annotated[int, Field(ge=0, description="source=web: skip this many items (use the previous result's "
+                                                   "`next`)")] = 0,
+    hidden: Annotated[bool, Field(description="source=web: include items outside the visible scroll area")] = False,
     region: Annotated[list[int] | None, Field(min_length=4, max_length=4, description="[x,y,w,h] window px")] = None,
     wait_s: Annotated[float, Field(ge=0, le=60, description="With query: wait until it appears")] = 0,
     deep: Annotated[bool, Field(description="Slower multi-pass OCR (coloured buttons)")] = False,
@@ -695,11 +702,17 @@ def read_text(
     desktop: Masaustu = "auto",
 ) -> dict[str, Any]:
     """Read the text in a window by OCR (Turkish+English) or the accessibility tree. Boxes/centers are WINDOW pixels;
-    the returned shot_id lets you click those coordinates. Forbidden windows are excluded."""
+    the returned shot_id lets you click those coordinates. Forbidden windows are excluded. source="web" lists the
+    interactive elements of the page in a browser window (role, name, state, centre; links' href, fields' value);
+    `query` filters by name, results are paged (max_items, offset/next) and `page` carries the title, address and
+    sensitive_page (payment page). Click them with click(element=name)."""
     with baglam(desktop, _("metin okuma: {pencere}").format(pencere=window or _("tüm ekran"))) as bilgi:
         k = api.pencere(window)
         with kilitli():
-            if source == "tree":
+            if source == "web":
+                r = api.web_oku(k, query, role, hidden, max_items, offset, wait_s)
+                geo = api.arka().geometri(k)
+            elif source == "tree":
                 with api.okuma(k):
                     r = api.agac_oku(k, query, en_cok=max_items)
                 geo = api.arka().geometri(k)
@@ -744,9 +757,12 @@ def click(
                                                     "shot_id")] = None,
     text: Annotated[str | None, Field(description="Visible text to click (preferred)")] = None,
     icon: Annotated[str | None, Field(description="Saved icon name")] = None,
-    element: Annotated[str | None, Field(description="Accessibility element name")] = None,
+    element: Annotated[str | None, Field(description="Accessibility element name (in a browser window: the web "
+                                                    "page's element; else the window's accessibility tree)")] = None,
     via: Annotated[Literal["mouse", "action"], Field(description="With element: 'action' runs its accessibility "
                                                                  "action (no mouse, no focus change)")] = "mouse",
+    role: Annotated[str | None, Field(description="With element: only this role (button, link, entry...); also "
+                                                  "narrows a name shared by a button and a link")] = None,
     x: Annotated[float | None, Field(description="Image x of shot_id")] = None,
     y: Annotated[float | None, Field(description="Image y of shot_id")] = None,
     shot_id: str | None = None,
@@ -768,12 +784,16 @@ def click(
     need the user's approval in the Deskhand panel; the server asks them. button="triple" selects a line/paragraph.
     via='action' (element only) uses the element's accessibility action instead of the mouse (no pointer, no focus
     change). The result's after reports changed (+ changed_region/changed_ratio/new_text); "warning" = same click, no
-    effect."""
+    effect. In browser windows element= is searched in the web page first (real mouse click at the element's centre, all
+    the usual checks; a sensitive name or a payment-titled page asks the user; disabled = [6]; an element outside the
+    view is scrolled into view first); read_text(source="web") lists the names."""
     hedefler = [t for t in (text, icon, element) if t] + (["xy"] if x is not None or y is not None else [])
     if len(hedefler) != 1:
         raise ToolError("[1] " + _("tam olarak BİR hedef ver: text, icon, element ya da x+y (+shot_id)"))
     if via == "action" and (not element or button != "left"):
         raise ToolError("[1] " + _("via='action' yalnız element hedefiyle ve button='left' ile kullanılır"))
+    if role and not element:
+        raise ToolError("[1] " + _("role yalnız element hedefiyle kullanılır"))
     with baglam(desktop, _("tıklama: {hedef} @ {pencere}").format(hedef=text or icon or element or _("koordinat"),
                                                                  pencere=window or _("görüntü"))) as bilgi:
         hata.dur_denetle()
@@ -797,7 +817,7 @@ def click(
         elif icon:
             hdf = ("icon", icon)
         elif element:
-            hdf = ("element", dongu.metin_norm(element))
+            hdf = ("element", dongu.metin_norm(element), role)
         else:
             hdf = ("xy", dongu.Nokta(wx, wy))
         dhedef = ("click", *hdf, nth, button, tuple(sorted(mod)), tuple(offset) if offset else None)
@@ -814,7 +834,7 @@ def click(
                 return api.simgeye_tikla(k, icon, button, nth, 0.9, desen, onayli, mod=mod)
             if element:
                 return api.ogeye_tikla(k, element, button, nth, desen, onayli, mod=mod,
-                                       eylem="" if via == "action" else None)
+                                       eylem="" if via == "action" else None, rol=role)
             return api.tikla(k, wx, wy, button, desen, onayli, mod=mod)
         mesaj, onaylandi = onayla_ve_yap("click", k, yap, " | " + _("hedef: {hedef}").format(
             hedef=text or icon or element or f"({x},{y})"))

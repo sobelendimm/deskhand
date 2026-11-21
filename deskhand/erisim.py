@@ -599,8 +599,11 @@ def _oge_secimi(a, ogeler, sure):
     """Ada göre ögeyi seç (fare ve eylem yolu AYNI): bulunamadı 6, birden çok 5, --sira, devre dışı 6. → (öge, kademe)."""
     bulunan, kademe = erisim_ara(ogeler, a.ad, a.rol)
     if not bulunan:
+        from . import web
+        ipucu = ("\n" + _("Web sayfası ögeleri için: `web {kimlik} '{ad}'`").format(kimlik=a.kimlik, ad=a.ad)
+                 if web.tarayici_mi(a.kimlik) else "")
         raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `ekran agac {kimlik}`"
-                       ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", kimlik=a.kimlik))
+                       ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", kimlik=a.kimlik) + ipucu)
     if a.sira is None and len(bulunan) > 1:
         print(_("# '{ad}' için {sayi} öge:").format(ad=a.ad, sayi=len(bulunan)))
         for i, o in enumerate(bulunan, 1):
@@ -632,6 +635,9 @@ def k_ogeye_tikla(a):
     try:
         sec().one_getir(a.kimlik)
         denetle(a.kimlik, a.baslik)
+        w = _web_sec(a, "fare")  # tarayıcı penceresi: önce sayfa ögeleri (tarayıcının erişilebilirlik ağacı)
+        if w is not None:
+            return _web_tikla(g, a, w, mod)
         ogeler, sure = erisim_ogeleri(a.kimlik)
         o, kademe = _oge_secimi(a, ogeler, sure)
         # öge bulunduktan SONRA tek onay: istek ögenin adını, noktadaki yazıyı ve çevresinin görüntüsünü taşır
@@ -685,14 +691,14 @@ def _atspi_gunluk(k, etiket, ne):
     gunluk(f"{etiket} | {yer} | {ne}")
 
 
-def _hassas_oge(k, onayli, ne, o, bilgi, ek_metinler=()):
+def _hassas_oge(k, onayli, ne, o, bilgi, ek_metinler=(), ek_basliklar=()):
     """Hassas düğme / ödeme sayfası denetimi (fare yolundaki hassas_nokta ile aynı kurallar, OCR yerine AT-SPI
     yazıları: ad, açıklama, çocuk adları). Görüntü eklenmez (pencereyi öne getirirdi). → onay alındı mı."""
     metinler = [*ek_metinler, o["ad"], bilgi.get("aciklama", ""), *bilgi.get("cocuklar", [])]
     metinler = [m for m in metinler if m]
-    nokta = (o["cx"], o["cy"])
+    nokta = (o["cx"], o["cy"]) if o.get("cx") is not None else None
     onayli_oldu = False
-    if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=nokta, goruntu_al=False):
+    if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=nokta, goruntu_al=False, ek_basliklar=ek_basliklar):
         onayli, onayli_oldu = True, True
     if hassas_engel(onayli, *metinler, hedef=sec().baslik(k), k=None, nokta=nokta):
         onayli_oldu = True
@@ -712,7 +718,134 @@ def _eylem_baglami(a, tur="fare"):
     return o, kademe, sure
 
 
+# ---------------------------------------------------------------- web sayfası ögeleri (tarayıcı penceresi)
+
+WEB_KAYDIR_EN_COK = 8  # görünmeyen ögeyi görüş alanına getirmek için en çok bu kadar kaydırma turu
+
+
+def _web_sec(a, tur):
+    """Hedef pencere bir tarayıcıysa ögeyi önce SAYFADAN (tarayıcının erişilebilirlik ağacı: deskhand.web) seç: önce
+    görünürler, yoksa görünmeyenler de. tur "fare": tıklama yolu, ögenin konumu doğrulanmış olmalı (çerçeve sınırı
+    pencere geometrisiyle eşleşmezse tık YOK: fail-closed). Sayfada yoksa / ağaçta belge yoksa None (tarayıcı arayüzü
+    için genel ağaç yolu denenir). Birden çok eşleşme 5, devre dışı 6.
+    → {"oge", "sayfa", "idx", "sure"} | None"""
+    from . import web
+    from .hata import ARAC_EKSIK
+    k = a.kimlik
+    if not web.tarayici_mi(k):
+        return None
+    web.hazirla(k)  # yasak pencere 10 + erişilebilirlik veri yolu
+    rol = getattr(a, "rol", None)
+    try:
+        try:
+            oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, rol, a.sira, True, yol_ver=True)
+        except Dur as e:
+            if e.kod != 6:
+                raise
+            oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, rol, a.sira, False, yol_ver=True)
+    except Dur as e:
+        if e.kod in (6, ARAC_EKSIK):
+            return None
+        raise
+    if tur == "fare" and not sayfa.get("konum_dogrulandi"):
+        raise Dur(2, _("öge konumu doğrulanamadı (erişilebilirlik çerçeve sınırı pencere geometrisine uymuyor); "
+                       "tıklanmadı. OCR ile metne tıklamayı dene (click-text)"), tur=web.KONUM_HATA_TURU)
+    if "devre_disi" in oge["durum"]:
+        raise Dur(6, _("'{ad}' devre dışı (tıklanamaz)").format(ad=oge["ad"]))
+    return {"oge": oge, "sayfa": sayfa, "idx": idx, "sure": sure}
+
+
+def _web_gorunur_yap(g, a, w):
+    """Görüş alanı dışındaki ögeyi, bulunduğu yöne fare tekerleğiyle kaydırarak (mevcut kaydırma yolu: kaydir_ic, tüm
+    girdi denetimleriyle) görüş alanına getir. Her turdan sonra sayfa yeniden okunur; ilerleme yoksa ya da en çok
+    WEB_KAYDIR_EN_COK turda görünmezse anlaşılır hata."""
+    from . import web
+    from .eylem import kaydir_ic
+    k = a.kimlik
+    o, idx = w["oge"], w["idx"]
+    onceki, tur = None, 0
+    while not o["gorunur"] and tur < WEB_KAYDIR_EN_COK:
+        if not o["merkez"]:
+            raise Dur(6, _("'{ad}' sayfada var ama görünmüyor (kutusu yok: gizli ya da kapalı bir bölümde)").format(
+                ad=o["ad"]))
+        if o["merkez"] == onceki:
+            break  # kaydırma ögeyi oynatmadı: sayfa sonu / kaydırılamayan bölüm
+        onceki = o["merkez"]
+        gx, gy, gw, gh = w["sayfa"].get("gorus") or (0, 0, *sec().geometri(k)[2:])
+        cx, cy = o["merkez"]
+        if cy >= gy + gh:
+            yon, mesafe = "asagi", cy - (gy + gh) + gh / 2
+        elif cy < gy:
+            yon, mesafe = "yukari", gy - cy + gh / 2
+        elif cx >= gx + gw:
+            yon, mesafe = "sag", cx - (gx + gw) + gw / 2
+        elif cx < gx:
+            yon, mesafe = "sol", gx - cx + gw / 2
+        else:
+            raise Dur(6, _("'{ad}' görüş alanında ama görünmüyor (gizli ya da üstü örtülü)").format(ad=o["ad"]))
+        adim = max(1, min(12, int(mesafe // 150)))
+        kaydir_ic(g, k, a.baslik, yon, adim, (int(gx + gw / 2), int(gy + gh / 2)))
+        tur += 1
+        time.sleep(0.4)  # yumuşak kaydırma bitsin
+        oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, getattr(a, "rol", None), idx + 1, False, yol_ver=True)
+        if not sayfa.get("konum_dogrulandi"):
+            raise Dur(2, _("öge konumu doğrulanamadı; tıklanmadı"), tur=web.KONUM_HATA_TURU)
+        o, w = oge, {**w, "oge": oge, "sayfa": sayfa, "idx": idx}
+        print(_("kaydırıldı: {yon} ({adim} adım)").format(yon=yon, adim=adim))
+    if not o["gorunur"]:
+        raise Dur(6, _("'{ad}' sayfada var ama görüş alanına getirilemedi ({tur} kaydırma)").format(ad=o["ad"], tur=tur))
+    return w
+
+
+def _web_tikla(g, a, w, mod):
+    """Web ögesine GERÇEK fare tıklaması: ögenin merkezi (pencere pikseli) mevcut tikla_ic yoluna gider; tüm
+    denetimler fare yolundakiyle aynı: DUR/yasak/kilit/seviye/oyun-film/imleç altı/insan önceliği tikla_ic ve
+    Girdi.gonder'de, hassas düğme + ödeme sayfası denetimi hassas_nokta'da (ögenin ADI de hedef metin: OCR yazıyı
+    okuyamasa, ör. yazısız simge düğmesi, yine onay istenir; sayfa başlığı ağaçtan da denetlenir)."""
+    k = a.kimlik
+    if not w["oge"]["gorunur"]:
+        w = _web_gorunur_yap(g, a, w)
+    o, sayfa = w["oge"], w["sayfa"]
+    cx, cy = o["merkez"]
+    basliklar = (sayfa.get("baslik") or "",) if sayfa.get("hassas_sayfa") else ()
+    hassas_nokta(g, k, a.onayli, _("tıklama"), cx, cy, nokta_metni(k, cx, cy), ek_metinler=(a.ad, o["ad"]),
+                 ek_basliklar=basliklar)
+    print(_("bulundu: web {rol} '{ad}' ({x},{y}) {konum}, {sn} sn").format(
+        rol=o["rol"], ad=o["ad"], x=cx, y=cy, konum=sayfa.get("konum"), sn=f"{w['sure']:.2f}"))
+    tikla_ic(g, k, a.baslik, cx, cy, a.dugme, sec().geometri(k), mod=mod)
+
+
+def _web_eylem(a, w):
+    """Web ögesinde erişilebilirlik EYLEMİ (via=action / --eylem): gerçek girdi ve odak yok; fare yolundaki
+    denetimlerin imleç altı hariç hepsi (_ogeye_eylem ile aynı: hassas ad/ödeme sayfası, korumalar eylemden hemen önce)."""
+    from . import web
+    k, o, sayfa = a.kimlik, w["oge"], w["sayfa"]
+    basliklar = (sayfa.get("baslik") or "",) if sayfa.get("hassas_sayfa") else ()
+    merkez = o.get("merkez")
+    oz = {"ad": o["ad"], "cx": merkez[0] if merkez else None, "cy": merkez[1] if merkez else None}
+    etiket = f"ogeye-tikla '{a.ad}' --eylem" + (f" {a.eylem}" if a.eylem else "")
+    onayli = _hassas_oge(k, a.onayli, _("tıklama (erişilebilirlik eylemi)"), oz, {}, ek_metinler=(a.ad,),
+                         ek_basliklar=basliklar)
+    if onayli:
+        etiket += " --onayli"
+    _atspi_korumalari(k, a.baslik, "fare")  # onay beklenmiş olabilir
+    r = web.eylem_yap(k, o, a.eylem or None)
+    _atspi_gunluk(k, etiket, f"atspi action {r['eylem']} (web)" + ("" if r["tamam"] else " (reddedildi)"))
+    if not r["tamam"]:
+        raise Dur(6, _("eylem çalışmadı: '{eylem}' (öge reddetti)").format(eylem=r["eylem"]))
+    print(_("eylem yapıldı: web {rol} '{ad}' → {eylem} (eylemler: {liste}), {sn} sn").format(
+        rol=o["rol"], ad=o["ad"], eylem=r["eylem"], liste=", ".join(r["eylemler"]), sn=f"{w['sure']:.2f}"))
+
+
 def _ogeye_eylem(a):
+    from .guvenlik import eylem_basladi
+    eylem_basladi()
+    if a.kimlik == EKRAN:
+        raise Dur(1, _("erişilebilirlik eylemi pencere ister (masaüstü kipi değil)"))
+    _atspi_korumalari(a.kimlik, a.baslik, "fare")  # ağaca bile bakmadan: yasak/kilitli pencerede hiçbir şey
+    w = _web_sec(a, "eylem")
+    if w is not None:
+        return _web_eylem(a, w)
     o, kademe, sure = _eylem_baglami(a, "fare")
     k = a.kimlik
     bilgi = _atspi_calistir(_oge_istegi(k, o, "incele"))

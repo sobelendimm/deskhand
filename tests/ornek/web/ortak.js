@@ -5,6 +5,10 @@
 (function () {
   "use strict";
   var sayac = 0;
+  // <html data-baslik-koru>: günlük satırının ardına özgün başlık eklenir ("TIK <ad> #<sıra> | <başlık>"); başlığı
+  // anlamlı olan sayfalar (ör. ödeme başlıklı) tıklamadan sonra da aynı başlığı taşır.
+  var koru = document.documentElement.hasAttribute("data-baslik-koru");
+  var asil = document.title;
   window.__gunluk = [];
   function ad(el) {
     while (el && el !== document) {
@@ -16,7 +20,7 @@
   function yaz(a) {
     sayac += 1;
     window.__gunluk.push(a);
-    document.title = "TIK " + a + " #" + sayac;
+    document.title = "TIK " + a + " #" + sayac + (koru ? " | " + asil : "");
   }
   window.__tikYaz = yaz;
   document.addEventListener("mousedown", function (e) {

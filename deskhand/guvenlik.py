@@ -573,14 +573,21 @@ def _nokta_ayrintisi(nokta, yakin):
     return "\n" + _("{x},{y} noktasındaki yazı: {yazi}").format(x=round(nokta[0]), y=round(nokta[1]), yazi=yazi)
 
 
-def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=True):
+def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=True, ek_basliklar=()):
     """Başlığı ödeme/onay sayfası olan pencerede eylem (tıklama, Enter/boşluk, Enter/boşluklu yazı) onay ister.
     yakin: tıklanacak noktadaki yazılar, nokta: (x, y) pencere pikseli, ek: ayrıntıya eklenecek satır (tuş, yazı),
     goruntu_al: onay isteğine hedefin küçük görüntüsü eklensin mi (pencereyi öne getirir).
+    ek_basliklar: pencere başlığına EK olarak denetlenecek başlıklar (web: erişilebilirlik ağacından gelen belge başlığı).
     Onay isteği noktadaki yazıyı, hassas düğme metnini ve hedefin küçük görüntüsünü taşır (kullanıcı NEYİ
     onayladığını görür); aynı eylemdeki hassas düğme denetimi yeniden sormaz. → sayfa hassas mı."""
     b = sec().baslik(k)
     m = HASSAS_SAYFA.search(katla(b))
+    for eb in ek_basliklar:
+        if m:
+            break
+        m = HASSAS_SAYFA.search(katla(eb or ""))
+        if m:
+            b = eb
     onayli = onayli_gecerli(onayli)
     if m and not onayli:
         ayrinti = _("Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}").format(eslesen=repr(m.group(0)))

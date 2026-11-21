@@ -52,6 +52,8 @@ ROL_TAKMA = {
     "seçim kutusu": {"combo box", "list box"}, "secim kutusu": {"combo box", "list box"},
     "sekme": {"page tab"}, "menü": {"menu item", "check menu item", "radio menu item"},
     "menu": {"menu item", "check menu item", "radio menu item"}, "başlık": {"heading"}, "baslik": {"heading"},
+    # at-spi2 sürümüne göre düğme "button" ya da "push button" olur: ikisi de aynı
+    "button": {"button", "push button", "toggle button"}, "push button": {"button", "push button", "toggle button"},
 }
 # Bu rollerin altına inilmez (etkileşimli alt öge taşımazlar; 1.000 bağlantılı sayfada çağrı sayısını yarıya indirir)
 _YAPRAK = frozenset({"button", "push button", "toggle button", "link", "entry", "password text", "spin button",
@@ -159,15 +161,52 @@ def _oturum_atspi_adresi() -> str | None:
         return None
 
 
+KONUM_TOLERANS = 1  # px: çerçeve sınırı ile pencerenin bilinen geometrisi arasındaki en çok fark
+KONUM_HATA_TURU = "konum"  # Dur.tur: öge konumu doğrulanamadı (tık yolu bunu yutmaz; fail-closed)
+
+
+def konum_coz(geo, ekran, pencere):
+    """Üst düzey çerçevenin ERİŞİLEBİLİRLİK sınırlarını pencerenin bilinen geometrisiyle (geo = x, y, g, y: pencere
+    çerçevesi) karşılaştırıp ögelerin hangi koordinat çerçevesinde geldiğini belirle. Wayland'de uygulamaya göre
+    (1) KÜRESEL dekorlu çerçeve (ekran sınırı geometriyle ±1 px aynı), (2) KÜRESEL istemci alanı (ekran sınırı geometrinin
+    içinde, kenar payları tutarlı: sol/sağ eşit, alt ≥ 0), (3) PENCERE-YEREL (pencere türü sınır 0,0 ve boyut geometriyle
+    tutarlı) olabilir; hiçbiri tutmuyorsa None (konum doğrulanamaz: tık YOK). ekran / pencere: GetExtents(SCREEN / WINDOW).
+    → (koordinat türü, köken (ox, oy): öge koordinatına eklenince PENCERE pikseli, çerçeve adı) | None."""
+    X, Y, W, H = geo
+    t = KONUM_TOLERANS
+    if ekran and len(ekran) == 4:
+        sx, sy, sw, sh = ekran
+        if all(abs(a - b) <= t for a, b in zip(ekran, geo)):
+            return SCREEN, (-X, -Y), "kuresel_cerceve"
+        dx, dy = sx - X, sy - Y
+        if (sw > 0 and sh > 0 and 0 <= dx <= 64 and 0 <= dy <= 160 and abs((W - sw) - 2 * dx) <= t
+                and -t <= (Y + H) - (sy + sh) <= 64):
+            return SCREEN, (-X, -Y), "kuresel_istemci"
+    if pencere and len(pencere) == 4:
+        wx, wy, ww, wh = pencere
+        if (abs(wx) <= t and abs(wy) <= t and 0 < ww <= W + t and 0 < wh <= H + t and W - ww <= 128
+                and H - wh <= 192):
+            dx = max(0, round((W - ww) / 2))
+            dy = max(0, H - wh - dx)
+            return WINDOW, (dx - wx, dy - wy), "pencere"
+    return None
+
+
+def _veri_yolu_adresi(au, sanal: bool) -> str:
+    adres = au.atspi_adresi() if sanal else _oturum_atspi_adresi()
+    if not adres:
+        raise Dur(ARAC_EKSIK, _("erişilebilirlik veri yolu bulunamadı (org.a11y.Bus yanıt vermedi)"))
+    return adres
+
+
 def _baglam(k):
-    """→ (arka uç, _Yol, uygulama veri yolu adı, çerçeve yolu, koordinat türü, köken (ox, oy))."""
+    """→ (arka uç, _Yol, uygulama veri yolu adı, çerçeve yolu, koordinat türü, köken (ox, oy), konum: çerçeve adı | None).
+    konum None = çerçeve sınırı pencere geometrisiyle eşleşmedi: koordinatlar doğrulanamadı (okuma uyarır, tık reddeder)."""
     if k == EKRAN or not k:
         raise Dur(1, _("web ögeleri pencere ister (masaüstü kipi değil)"))
     au = sec(k)
     sanal = getattr(au, "ad", "") == "sanal"
-    adres = au.atspi_adresi() if sanal else _oturum_atspi_adresi()
-    if not adres:
-        raise Dur(ARAC_EKSIK, _("erişilebilirlik veri yolu bulunamadı (org.a11y.Bus yanıt vermedi)"))
+    adres = _veri_yolu_adresi(au, sanal)
     try:
         pid = int(au.pid(k) or 0) if hasattr(au, "pid") else 0
     except (TypeError, ValueError):
@@ -176,15 +215,20 @@ def _baglam(k):
     yol = _Yol(adres)
     try:
         bus, cerceve = _cerceve_bul(yol, pid, baslik)
-        if sanal:  # X11: ekran koordinatı kesin; pencere pikseli = ekran − pencerenin sol üstü
-            X, Y = au.geometri(k)[:2]
-            return au, yol, bus, cerceve, SCREEN, (-X, -Y)
-        # Wayland: ekran koordinatı yok → çerçeveye göre konum + dekorasyon payı (erisim.erisim_ogeleri ile aynı)
-        X, Y, W, H = au.geometri(k)
-        fe = _deg(yol.toplu([_m(bus, cerceve, BILESEN, "GetExtents", "u", (WINDOW,))])[0], (0, 0, W, H))
+        geo = tuple(au.geometri(k))
+        ekran, pencere = yol.toplu([_m(bus, cerceve, BILESEN, "GetExtents", "u", (SCREEN,)),
+                                    _m(bus, cerceve, BILESEN, "GetExtents", "u", (WINDOW,))])
+        cozum = konum_coz(geo, _deg(ekran), _deg(pencere))
+        if cozum:
+            return au, yol, bus, cerceve, cozum[0], cozum[1], cozum[2]
+        if sanal:  # X11 tek çerçeve: ekran koordinatı kesin (geometri eşleşmese de pencere piksel dönüşümü bellidir)
+            return au, yol, bus, cerceve, SCREEN, (-geo[0], -geo[1]), None
+        # Wayland, eşleşme yok: okuma için eski kestirim (tık yolu konum=None görünce REDDEDER)
+        X, Y, W, H = geo
+        fe = _deg(pencere, (0, 0, W, H))
         ox = max(0, round((W - fe[2]) / 2)) if W > fe[2] else 0
         oy = max(0, H - fe[3] - ox) if H > fe[3] else 0
-        return au, yol, bus, cerceve, WINDOW, (ox - fe[0], oy - fe[1])
+        return au, yol, bus, cerceve, WINDOW, (ox - fe[0], oy - fe[1]), None
     except BaseException:
         yol.kapat()
         raise
@@ -287,7 +331,7 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
             alt_alan, alt_derin = alan, derin
             if belge:
                 oz, j = (_deg(r2[j], {}) or {}), j + 1
-                belgeler.append({"ad": ad, "adres": oz.get("DocURL", ""), "durum": d, "derinlik": derin + 1})
+                belgeler.append({"ad": ad, "adres": oz.get("DocURL", ""), "durum": d, "derinlik": derin + 1, "kutu": kutu})
                 alt_derin = derin + 1
             if kutu and (belge or rol == "internal frame"):
                 alt_alan = _kesisim(alan, kutu)
@@ -326,7 +370,7 @@ def _durum_listesi(d: set[str], rol: str) -> list[str]:
     return liste
 
 
-def _bicimle(o, ad_siniri) -> dict:
+def _bicimle(o, ad_siniri, bus=None) -> dict:
     from .guvenlik import hassas_mi
     ad = o["ad"]
     kisa = ad if not ad_siniri or len(ad) <= ad_siniri else ad[:ad_siniri - 1] + "…"
@@ -339,6 +383,8 @@ def _bicimle(o, ad_siniri) -> dict:
         sonuc["cerceve"] = o["_derin"] - 1  # iç içe belge (iframe) derinliği
     if hassas_mi(ad):
         sonuc["hassas"] = True
+    if bus:  # erişilebilirlik eylemi için nesne adresi (iç alan; varsayılan çıktıda yok)
+        sonuc["_bus"], sonuc["_yol"] = bus, o["_yol"]
     return sonuc
 
 
@@ -382,16 +428,18 @@ def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> N
 
 # ---------------------------------------------------------------- dış arayüz
 
-def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_AD_SINIRI, ayrinti=True) -> dict:
+def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_AD_SINIRI, ayrinti=True,
+        yol_ver=False) -> dict:
     """Sayfa ögeleri + sayfalama bilgisi. → {"ogeler": [...], "toplam": n, "atla": a, "sonraki": a2 | None,
     "sayfa": sayfa bilgisi, "sure": sn, "dugum": yürünen düğüm}. Ögeler belge sırasında.
 
     sorgu: ada göre süzme (Türkçe harf/büyük-küçük duyarsız; tam > içerir > benzer, erisim.erisim_ara ile aynı)
     roller: AT-SPI rol adları ya da takma adlar ("düğme", "bağlantı", "giriş", "başlık"…); None = etkileşimli ögeler
     gorunur: True = yalnız görünür (kaydırma alanı içinde, gizli değil); False = görünmeyenler de (gorunur: false)
-    en_cok / atla: sayfalama (en_cok=0: hepsi); ad_siniri: ad kırpma (0 = kırpma); ayrinti: href / değer / seçili seçenek"""
+    en_cok / atla: sayfalama (en_cok=0: hepsi); ad_siniri: ad kırpma (0 = kırpma); ayrinti: href / değer / seçili seçenek
+    yol_ver: ögelere erişilebilirlik kimliği (_bus + _yol: İKİSİ BİRLİKTE; yalnız yol başka uygulamaya gidebilir) ekle"""
     t0 = time.monotonic()
-    au, yol, bus, cerceve, koord, koken = _baglam(k)
+    au, yol, bus, cerceve, koord, koken, konum = _baglam(k)
     try:
         ham, belgeler, dugum = _yuru(yol, bus, cerceve, koord, koken, _rol_kumesi(roller), gorunur)
         for o in ham:
@@ -406,13 +454,15 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
         toplam = len(ham)
         atla = max(0, int(atla or 0))
         secili = ham[atla:atla + en_cok] if en_cok else ham[atla:]
-        ogeler = [_bicimle(o, ad_siniri) for o in secili]
+        ogeler = [_bicimle(o, ad_siniri, bus if yol_ver else None) for o in secili]
         if ayrinti and ogeler:
             _ayrinti_ekle(yol, bus, ogeler, secili)
         for i, o in enumerate(ogeler):
             o["no"] = atla + i + 1
         ust = min(belgeler, key=lambda b: b["derinlik"]) if belgeler else None
         sayfa = _sayfa_ozeti(ust, au.baslik(k), len(belgeler))
+        sayfa["konum"] = konum  # hangi koordinat çerçevesinde geldiği (None = doğrulanamadı)
+        sayfa["konum_dogrulandi"] = konum is not None
         son = atla + len(ogeler)
         return {"ogeler": ogeler, "toplam": toplam, "atla": atla, "sonraki": son if son < toplam else None,
                 "sayfa": sayfa, "sure": round(time.monotonic() - t0, 3), "dugum": dugum}
@@ -427,6 +477,8 @@ def _sayfa_ozeti(belge, pencere_basligi, belge_sayisi) -> dict:
         return {"baslik": "", "adres": "", "yukleniyor": None, "pencere": pencere_basligi, "belge": 0}
     s = {"baslik": belge["ad"], "adres": belge["adres"], "yukleniyor": "busy" in belge["durum"],
          "pencere": pencere_basligi, "belge": belge_sayisi}
+    if belge.get("kutu"):
+        s["gorus"] = list(belge["kutu"])  # üst belgenin görüş alanı (pencere pikseli): kaydırma yönü için
     if HASSAS_SAYFA.search(katla(belge["ad"] or "")):
         s["hassas_sayfa"] = True
     return s
@@ -447,30 +499,163 @@ def sayfa_bilgisi(k) -> dict:
     return oku(k, roller=["__yok__"], en_cok=0, ayrinti=False)["sayfa"]
 
 
-def oge_bul(k, ad, rol=None, sira=None, gorunur=True) -> dict:
-    """Ada (ve isteğe bağlı role) göre TEK öge. Birden çok eşleşmede sira (1…) verilmezse Dur 5 (liste iletide);
-    yoksa Dur 6."""
-    s = oku(k, sorgu=ad, roller=[rol] if rol else None, gorunur=gorunur, en_cok=0, ad_siniri=0)
+def oge_ve_sayfa(k, ad, rol=None, sira=None, gorunur=True, yol_ver=False):
+    """oge_bul ile aynı seçim; ek olarak sayfa bilgisi ve okuma bilgisi. → (öge, sayfa, süre, eşleşme sırası 0…)."""
+    s = oku(k, sorgu=ad, roller=[rol] if rol else None, gorunur=gorunur, en_cok=0, ad_siniri=0, yol_ver=yol_ver)
     bulunan = s["ogeler"]
     if not bulunan:
         raise Dur(BULUNAMADI, _("'{ad}' sayfada bulunamadı ({sn} sn)").format(ad=ad, sn=f"{s['sure']:.2f}"))
     if sira is None and len(bulunan) > 1:
         liste = "\n".join(f"  #{i} {o['rol']}: {o['ad']} {o['merkez']}" for i, o in enumerate(bulunan[:15], 1))
-        raise Dur(BELIRSIZ, _("'{ad}' için {sayi} öge; sira ile seç:\n{liste}").format(
+        raise Dur(BELIRSIZ, _("'{ad}' için {sayi} öge; sira ile seç (CLI --sira, MCP nth):\n{liste}").format(
             ad=ad, sayi=len(bulunan), liste=liste))
     sira = sira or 1
     if not 1 <= sira <= len(bulunan):
         raise Dur(1, _("sira 1..{en_cok} olmalı").format(en_cok=len(bulunan)))
-    return bulunan[sira - 1]
+    return bulunan[sira - 1], s["sayfa"], s["sure"], sira - 1
+
+
+def oge_bul(k, ad, rol=None, sira=None, gorunur=True) -> dict:
+    """Ada (ve isteğe bağlı role) göre TEK öge. Birden çok eşleşmede sira (1…) verilmezse Dur 5 (liste iletide);
+    yoksa Dur 6."""
+    return oge_ve_sayfa(k, ad, rol, sira, gorunur)[0]
 
 
 def ogeleri_yaz(ogeler, dosya=None) -> None:
-    """Kısa metin çıktısı (CLI/MCP için): #no (merkez) rol: ad [durum] {hassas}."""
+    """Kısa metin çıktısı (CLI için): #no (merkez) rol: ad [durum] {hassas} → adres = değer."""
     import sys
     f = dosya or sys.stdout
     for o in ogeler:
         ek = (" [" + ", ".join(o["durum"]) + "]") if o["durum"] else ""
         ek += "" if o["gorunur"] else " " + _("(görünmüyor)")
         ek += (" " + _("HASSAS")) if o.get("hassas") else ""
+        ek += f" → {o['href'][:80]}" if o.get("href") else ""
+        ek += f" = {o['deger'][:60]!r}" if o.get("deger") else ""
+        ek += " " + _("(çerçeve {n})").format(n=o["cerceve"]) if o.get("cerceve") else ""
         m = f"({o['merkez'][0]},{o['merkez'][1]})" if o["merkez"] else "(?)"
         print(f"  #{o['no']} {m} {o['rol']}: {o['ad'] or _('(adsız)')}{ek}", file=f)
+
+
+# ---------------------------------------------------------------- araçların (MCP / CLI / tık) ortak girişi
+
+# Tarayıcı / Electron pencere sınıfları: click-element önce sayfa ögelerine bakar (başka pencerelerde ağaç taraması
+# yapılmaz). Sınıf listede yoksa `web` okuma komutu / read_text(source="web") yine çalışır.
+_TARAYICI_SINIFI = r"firefox|mozilla|librewolf|waterfox|floorp|zen|chrom|brave|vivaldi|opera|edge|thorium|epiphany|falkon|electron"
+
+
+def tarayici_mi(k) -> bool:
+    import re
+    if k == EKRAN or not k:
+        return False
+    try:
+        sinif = (sec(k).sinif(k) or "").lower()
+    except Dur:
+        return False
+    if re.search(_TARAYICI_SINIFI, sinif):
+        return True
+    from .uygulama import CHROMIUM_IKILILERI
+    return sinif in CHROMIUM_IKILILERI
+
+
+IPUCU_ERISIM = _("İpucu: tarayıcı erişilebilirlik açıkken başlamamış olabilir; kapatıp arka planda yeniden aç "
+                 "(ac --arka / open_app desktop=background: erişilebilirlik kendiliğinden açılır) ya da Firefox'u "
+                 "GNOME_ACCESSIBILITY=1, Chromium'u --force-renderer-accessibility ile başlat")
+
+
+def hazirla(k) -> None:
+    """Okuma/tık öncesi ortak denetim: pencere kipi, yasak pencere (10), erişilebilirlik veri yolu açık (kendiliğinden)."""
+    from . import api
+    if k == EKRAN or not k:
+        raise Dur(1, _("web ögeleri pencere ister (masaüstü kipi değil)"))
+    if api.yasak_mi(k):
+        raise Dur(10, _("YASAK pencere: ağacı okunmaz"))
+    from .erisim import erisim_ac_garanti
+    erisim_ac_garanti()
+
+
+def oku_korumali(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, bekle=0.0) -> dict:
+    """oku() + araç düzeyi denetimler ve anlaşılır hatalar: yasak pencere 10, pencere kipi 1, uygulaması ağaçta yok ya
+    da web belgesi yok → ipucuyla Dur. bekle: sorgu görünene dek en çok bu kadar sn."""
+    hazirla(k)
+    bitis = time.monotonic() + max(0.0, bekle)
+    while True:
+        try:
+            s = oku(k, sorgu, roller, gorunur, en_cok, atla)
+        except Dur as e:
+            if e.kod in (BULUNAMADI, ARAC_EKSIK) and "İpucu" not in e.mesaj:
+                raise Dur(e.kod, e.mesaj + "\n" + IPUCU_ERISIM, tur=getattr(e, "tur", None))
+            raise
+        if s["sayfa"]["belge"] == 0:
+            raise Dur(BULUNAMADI, _("pencerede web belgesi yok (sayfa yüklenmedi, pencere bir tarayıcı değil ya da "
+                                    "tarayıcının erişilebilirliği kapalı)") + "\n" + IPUCU_ERISIM)
+        if s["ogeler"] or not sorgu or time.monotonic() >= bitis:
+            return s
+        time.sleep(0.25)
+
+
+def _eylem_birincil(liste):
+    sira = {a.lower(): i for i, a in enumerate(liste)}
+    for ad in ("click", "press", "activate", "toggle", "jump", "check", "uncheck", "select", "open"):
+        if ad in sira:
+            return sira[ad]
+    return None
+
+
+def eylem_yap(k, oge, eylem=None) -> dict:
+    """Öge için erişilebilirlik EYLEMİ (gerçek fare/klavye girdisi yok). oge: oku(yol_ver=True) çıktısı (_bus + _yol
+    BİRLİKTE). Güvenlik denetimleri ÇAĞIRANDA. → {"eylem": çalışan, "eylemler": tümü, "tamam": bool}."""
+    if not oge.get("_bus") or not oge.get("_yol"):
+        raise Dur(1, _("öge kimliği yok (yol_ver)"))
+    au = sec(k)
+    yol = _Yol(_veri_yolu_adresi(au, getattr(au, "ad", "") == "sanal"))
+    try:
+        arayuz = "org.a11y.atspi.Action"
+        # GetActions bazı tarayıcılarda anlamsız (';;') döner: NActions + GetName(i) güvenilir yol
+        n = int(_ozd(yol.toplu([_ozellik(oge["_bus"], oge["_yol"], "NActions", arayuz)])[0], 0) or 0)
+        liste = [(_deg(g_, "") or "") for g_ in yol.toplu([_m(oge["_bus"], oge["_yol"], arayuz, "GetName", "i", (i,))
+                                                          for i in range(n)])] if n else []
+        if not liste:
+            raise Dur(BULUNAMADI, _("öge eylem arayüzü sunmuyor (Action yok): fare ile tıkla"))
+        if eylem:
+            sira = next((i for i, a in enumerate(liste) if a.lower() == eylem.lower()), None)
+            if sira is None:
+                raise Dur(BULUNAMADI, _("'{eylem}' eylemi yok; ögenin eylemleri: {liste}").format(
+                    eylem=eylem, liste=", ".join(liste)))
+        else:
+            sira = _eylem_birincil(liste)
+            if sira is None:
+                raise Dur(BULUNAMADI, _("birincil eylem yok; ögenin eylemleri: {liste}").format(liste=", ".join(liste)))
+        r = yol.toplu([_m(oge["_bus"], oge["_yol"], arayuz, "DoAction", "i", (sira,))], yeniden=False)[0]
+        return {"eylem": liste[sira], "eylemler": liste, "tamam": bool(r and r[0])}
+    finally:
+        yol.kapat()
+
+
+# ---------------------------------------------------------------- CLI: web
+
+SAYFA_BOYUTU = 60
+
+
+def k_web(a):
+    """Tarayıcı penceresindeki sayfa ögeleri (erişilebilirlik ağacından): `web <kimlik> [sorgu] [--rol R] [--hepsi]
+    [--sayfa N]`. Çıktı: başlık satırı + `#no (merkez x,y) rol: ad [durum]`; merkez PENCERE pikselidir (click ile aynı)."""
+    hepsi = bool(getattr(a, "hepsi", False))
+    sayfa_no = max(1, int(getattr(a, "sayfa", 1) or 1))
+    atla = 0 if hepsi else (sayfa_no - 1) * SAYFA_BOYUTU
+    s = oku_korumali(a.kimlik, getattr(a, "desen", None), getattr(a, "rol", None), not hepsi,
+                     0 if hepsi else SAYFA_BOYUTU, atla)
+    sf = s["sayfa"]
+    toplam_sayfa = max(1, -(-s["toplam"] // SAYFA_BOYUTU))
+    print(_("# {baslik} | {adres} | {sayi} öge gösterildi / {toplam} toplam{sayfa}, {sn} sn").format(
+        baslik=sf["baslik"] or _("(başlıksız)"), adres=sf["adres"], sayi=len(s["ogeler"]), toplam=s["toplam"],
+        sayfa="" if hepsi else _(", sayfa {n}/{t}").format(n=sayfa_no, t=toplam_sayfa), sn=f"{s['sure']:.2f}"))
+    if sf.get("hassas_sayfa"):
+        print(_("# DİKKAT: ödeme/onay sayfası: bu sayfadaki her tıklama kullanıcının onayını ister"))
+    if not sf.get("konum_dogrulandi"):
+        print(_("# UYARI: öge konumu doğrulanamadı (çerçeve sınırı pencere geometrisine uymuyor): tıklama yapılmaz; "
+                "OCR ile metne tıklamayı dene"))
+    if not s["ogeler"] and getattr(a, "desen", None):
+        raise Dur(BULUNAMADI, _("bulunamadı"))
+    ogeleri_yaz(s["ogeler"])
+    if s["sonraki"] is not None:
+        print(_("# devamı: --sayfa {n}").format(n=sayfa_no + 1))
