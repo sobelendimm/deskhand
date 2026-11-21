@@ -1244,6 +1244,8 @@ class SanalGirdi:
             hata.dur_denetle()
             if self.denetle is not None:
                 self.denetle(k, desen)
+                from ..guvenlik import girdi_seviye_denetle
+                girdi_seviye_denetle(k, satirlar)  # uygulama erişim seviyesi (goruntule/tikla/tam): kde ile aynı
             self.etk_denetle()
             for s in satirlar:
                 self._calistir(s)

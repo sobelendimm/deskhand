@@ -99,7 +99,7 @@ O_BOS = N_("Bekleyen onay isteği yok.")
 O_AC = N_("Diyaloğu aç")
 O_KARAR = {"izin": N_("izin verildi"), "red": N_("reddedildi"), "sure": N_("süre doldu"),
            "panel-yok": N_("panel kapalıydı"), "panel-kapandi": N_("panel kapandı"), "dur": N_("DUR nedeniyle red"),
-           "hata": N_("hata"), "bekliyor": N_("bekliyor"), "geri": N_("istek geri çekildi")}
+           "gozetimsiz": N_("gözetimsiz kip: red"), "hata": N_("hata"), "bekliyor": N_("bekliyor"), "geri": N_("istek geri çekildi")}
 MASAUSTU = {"ekran": N_("Ekranınız"), "arka": N_("Arka plan (görünmez masaüstü)")}
 
 # ---- onay diyaloğu
@@ -131,6 +131,12 @@ Y_TAM_EKRAN_NOT = N_("Kapalıysa film/oyun sırasında bildirim gösterilmez, 'Y
 Y_YASAK = N_("Yasak pencereler")
 Y_YASAK_ACIKLAMA = N_("Bu desenlere (regex, büyük/küçük harf duyarsız) uyan pencere başlığı ya da sınıfına hiçbir "
                       "girdi gönderilmez ve bu uygulamalar başlatılmaz. # ile başlayan satırlar açıklamadır.")
+Y_SEVIYE = N_("Uygulama erişim seviyeleri")
+Y_SEVIYE_ACIKLAMA = N_("Her satır: DESEN = goruntule | tikla | tam. DESEN pencere başlığı ya da sınıfı için regex'tir "
+                       "(büyük/küçük harf duyarsız). goruntule: hiçbir girdi gönderilmez (okuma ve ekran görüntüsü "
+                       "serbest); tikla: fare serbest, klavye (yaz/tuş) yok; tam: kısıt yok. Birden çok satır uyarsa "
+                       "en kısıtlayıcı olan geçerlidir. Varsayılan: boş (hiçbir kısıt yok).")
+Y_SEVIYE_HATA = N_("{no}. satır geçerli değil: {hata}")
 Y_KAYDET = N_("Kaydet")
 Y_GERI_AL = N_("Geri al")
 Y_KAYDEDILDI = N_("Kaydedildi.")

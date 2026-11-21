@@ -491,6 +491,8 @@ class Girdi:
                 raise self.kesildi
             dur_denetle()
             self.denetle(k, desen)
+            from ..guvenlik import girdi_seviye_denetle
+            girdi_seviye_denetle(k, satirlar)  # uygulama erişim seviyesi (goruntule/tikla/tam): iki arka uçta aynı
             self.koruma_denetle()  # her gönderimde: dizi/akış ortasında kullanıcı film/oyun açtıysa dur (15)
             self.etk_denetle()
             try:

@@ -1,6 +1,6 @@
 """Tüm dosya yolları. Her biri ortam değişkeniyle değiştirilebilir (testler geçici klasör verir):
 
-  DESKHAND_CONFIG_DIR   ~/.config/deskhand          yasak-pencereler.txt
+  DESKHAND_CONFIG_DIR   ~/.config/deskhand          yasak-pencereler.txt, uygulama-seviyeleri.txt
   DESKHAND_STATE_DIR    ~/.local/state/deskhand     girdi günlüğü (7 gün)
   DESKHAND_CACHE_DIR    ~/.cache/deskhand           ekran görüntüleri, OCR önbelleği (5 gün)
   DESKHAND_DATA_DIR     ~/.local/share/deskhand     simgeler/, akislar/, etkinlik/
@@ -65,6 +65,11 @@ def gunluk_dizin() -> str:
 
 def yasak_dosya() -> str:
     return os.path.join(config_dir(), "yasak-pencereler.txt")
+
+
+def seviye_dosya() -> str:
+    """Uygulama erişim seviyeleri (DESEN = goruntule | tikla | tam). Varsayılan kurulumda dosya YOKTUR."""
+    return os.path.join(config_dir(), "uygulama-seviyeleri.txt")
 
 
 def simge_dizin() -> str:

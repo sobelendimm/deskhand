@@ -794,7 +794,8 @@ def type_text(
     desktop: Masaustu = "auto",
 ) -> dict[str, Any]:
     """Type into the focused field of the window (click the field first). Stops if the window/title changes or the
-    user starts typing. Enter on a payment page needs the user's approval."""
+    user starts typing. Enter on a payment page, and a destructive shell command typed into a terminal window (rm -r,
+    sudo, curl | sh, mkfs, forced pushes...), need the user's approval."""
     with baglam(desktop, _("yazı: {pencere}").format(pencere=window)) as bilgi:
         hata.dur_denetle()
         k = _pencere_zorunlu(window)
@@ -870,8 +871,9 @@ def press_key(
     desktop: Masaustu = "auto",
 ) -> dict[str, Any]:
     """Send a key or shortcut to the window. Held keys are always released (cancel, STOP, shutdown). Enter/Space on a
-    payment page needs the user's approval. The result's after reports changed (+ changed_region/changed_ratio/
-    new_text); "warning" = same key, no effect."""
+    payment page, and session-ending shortcuts (ctrl+alt+delete, ctrl+alt+F1-F12, meta+l, alt+sysrq...), need the
+    user's approval. In unattended mode (DESKHAND_GOZETIMSIZ=1) every approval is refused without asking. The result's
+    after reports changed (+ changed_region/changed_ratio/new_text); "warning" = same key, no effect."""
     with baglam(desktop, _("tuş {tuslar}: {pencere}").format(tuslar=keys, pencere=window)) as bilgi:
         hata.dur_denetle()
         k = _pencere_zorunlu(window)

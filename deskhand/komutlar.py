@@ -41,6 +41,7 @@ def takma_adlar(tr: str) -> list[str]:
 # çağıran yerde seçilir; burada yok.
 SECENEKLER = {
     "--baslik": "--title", "--sinif": "--class", "--arka": "--background", "--ekranimda": "--on-my-screen",
+    "--gozetimsiz": "--unattended",
     "--sira": "--nth", "--bolge": "--region", "--bekle": "--wait", "--kay": "--offset",
     "--kaydirarak": "--scroll-search", "--onayli": "--approved", "--hassas": "--precise", "--hepsi": "--all",
     "--derin": "--deep", "--izgara": "--grid", "--genislik": "--width", "--basili": "--hold",

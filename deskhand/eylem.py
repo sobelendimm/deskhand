@@ -224,11 +224,17 @@ def kaydir_ic(g, k, desen, yon, adim, nokta=None):
 
 
 def _yazi_hassas(g, k, onayli, metin):
-    """Enter/Tab/boşluklu yazı hassas sayfada onay ister (\\n = formu gönder; Tab + boşluk = odaktaki düğmeye bas).
-    → sayfa hassas ve onaylandı mı."""
-    goster = f"***({len(metin)})" if g.gizli else repr(metin if len(metin) <= 120 else metin[:117] + "…")
-    return hassas_sayfa_engel(k, onayli, _("yazı (Enter/Tab/boşluk içeriyor)"),
-                              ek=_("yazılacak: {metin}").format(metin=goster))
+    """Yazının onay gerektiren yanları: (1) Enter/Tab/boşluklu yazı hassas sayfada onay ister (\\n = formu gönder;
+    Tab + boşluk = odaktaki düğmeye bas); (2) hedef pencere bir UÇBİRİMse ve metin yıkıcı komut kalıbına uyuyorsa
+    (rm -r, sudo, curl | sh…) onay ister — komut yazılmadan ÖNCE, Enter ayrı gönderilse bile. Yapıştırarak/parça
+    parça yazan her yol bu işlevden geçmeli. → onay gerektiren bir durum vardı mı (onaylandı)."""
+    goster = guvenlik._yazilacak(metin, g.gizli)
+    sayfa = False
+    if any(c.isspace() for c in metin):
+        sayfa = hassas_sayfa_engel(k, onayli, _("yazı (Enter/Tab/boşluk içeriyor)"),
+                                   ek=_("yazılacak: {metin}").format(metin=goster))
+    komut = guvenlik.ucbirim_komut_engel(k, onayli, metin, g.gizli)
+    return sayfa or komut
 
 
 # ---------------------------------------------------------------- yapıştırarak yazma (Faz 9a)
@@ -344,6 +350,7 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
 
 def yaz_ic(g, k, desen, metin, onayli=False):
     metin = metin.replace("\r\n", "\n").replace("\r", "\n")
+    guvenlik.seviye_denetle(k, "klavye")  # uygulama erişim seviyesi: onay diyaloğundan ÖNCE (boşuna sormasın)
     if yazi_onay_ister_mi(metin) and _yazi_hassas(g, k, onayli, metin):  # yazmadan ÖNCE (bir eylem = bir onay)
         g.etiket += " --onayli"
         _au().one_getir(k)  # onay diyaloğu odağı almış olabilir
@@ -361,6 +368,7 @@ def yaz_ic(g, k, desen, metin, onayli=False):
     try:
         for p in parcalar:
             denetle(k, desen)  # kelime başında tam denetim (yasak pencere dahil); harf aralarını gözcü izler
+            guvenlik.seviye_denetle(k, "klavye")
             if yazi_onay_ister_mi(p):  # yazarken sayfa ödeme sayfasına geçtiyse (ilk Enter formu gönderdi): onay
                 _yazi_hassas(g, k, onayli, metin)
             try:  # kelime başında klavye/fare: kendi yazımızın dışında insan girdisi var mı
@@ -482,6 +490,7 @@ def _onayli_etiket(g):
 def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=()):
     """Tıklanacak nokta ve oradaki yazı belli olduktan SONRA tek onay (bir eylem = bir onay): ödeme sayfası ve/veya
     hassas düğme. Onay isteği noktadaki yazıyı + hassas düğme metnini + çevresinin küçük görüntüsünü taşır."""
+    guvenlik.seviye_denetle(k, "fare")  # erişim seviyesi: onay diyaloğundan ÖNCE
     metinler = [*ek_metinler, *yakin]
     if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=(x, y)):  # True = hassas sayfa VE onaylandı
         _onayli_etiket(g)
@@ -568,6 +577,9 @@ def k_tus(a):
         yasak_denetle(a.kimlik)
     g = girdi_al(f"tus {kombinasyon}")
     try:
+        guvenlik.seviye_denetle(a.kimlik, "klavye")  # erişim seviyesi: onay diyaloğundan ÖNCE
+        if guvenlik.riskli_tus_engel(a.kimlik, getattr(a, "onayli", False), kombinasyon):  # ctrl+alt+del, meta+l…
+            _onayli_etiket(g)
         # Enter/boşluk ÇÖZÜLMÜŞ tuşa göre (x:Return, k:28, kpenter… dahil); onay öne getirmeden önce sorulur
         if onay_tusu_mu(kombinasyon) and hassas_sayfa_engel(
                 a.kimlik, a.onayli, _("Enter/boşluk"), ek=_("tuş: {kombinasyon}").format(kombinasyon=kombinasyon)):
@@ -618,6 +630,9 @@ def k_bas(a):
         raise Dur(1, _("süre 0-30 sn olmalı"))
     g = girdi_al(f"bas {kombinasyon} {a.sure} sn")
     try:
+        guvenlik.seviye_denetle(a.kimlik, "klavye")
+        if guvenlik.riskli_tus_engel(a.kimlik, getattr(a, "onayli", False), kombinasyon, birlikte=True):
+            _onayli_etiket(g)
         if onay_tusu_mu(kombinasyon) and hassas_sayfa_engel(
                 a.kimlik, a.onayli, _("Enter/boşluk"), ek=_("tuş: {kombinasyon}").format(kombinasyon=kombinasyon)):
             g.etiket += " --onayli"
@@ -755,6 +770,7 @@ def k_kapat(a):
         raise Dur(1, _("masaüstü kapatılamaz; pencere kimliği/adı ver"))
     if not a.baslik:
         raise Dur(1, _("kapat için -b <başlık deseni> zorunlu (yanlış pencere kapanmasın)"))
+    guvenlik.seviye_denetle(a.kimlik, "klavye")  # pencereyi kapatmak fare/klavye ötesi bir eylem: 'tam' ister
     b = _au().baslik(a.kimlik)
     if not re.search(a.baslik, b, re.I):
         raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); kapatılmadı").format(baslik=repr(b), desen=a.baslik))
