@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Deskhand Form Testi</title>
+<style>
+  body { font: 15px sans-serif; margin: 16px; }
+  fieldset { margin: 8px 0; padding: 8px; }
+  label { margin-right: 12px; }
+  .satir { margin: 6px 0; }
+  .simge { width: 36px; height: 32px; font-size: 18px; }
+  #bosluk { height: 2600px; }
+</style>
+<script src="ortak.js"></script>
+</head>
+<body>
+<h1>Üyelik formu</h1>
+<p>Bu sayfa yalnız test içindir; gönderilen hiçbir şey yok.</p>
+
+<form onsubmit="return false">
+  <div class="satir"><label for="ad">Ad Soyad</label><input id="ad" type="text" data-ad="Ad Soyad"></div>
+  <div class="satir"><label for="eposta">E-posta adresi</label><input id="eposta" type="email" data-ad="E-posta adresi"></div>
+  <div class="satir"><label for="parola">Parola</label><input id="parola" type="password" data-ad="Parola"></div>
+  <div class="satir"><input type="search" placeholder="Ürün ara" data-ad="Ürün ara"></div>
+  <div class="satir"><input type="text" title="Posta kodu" size="8" data-ad="Posta kodu"></div>
+  <div class="satir"><label for="not">Sipariş notu</label><textarea id="not" rows="2" cols="30" data-ad="Sipariş notu"></textarea></div>
+
+  <fieldset>
+    <legend>Tercihler</legend>
+    <label><input type="checkbox" checked data-ad="Bülten aboneliği"> Bülten aboneliği</label>
+    <label><input type="checkbox" data-ad="Koşulları kabul ediyorum"> Koşulları kabul ediyorum</label>
+  </fieldset>
+  <fieldset>
+    <legend>Teslimat</legend>
+    <label><input type="radio" name="teslim" checked data-ad="Kargo ile"> Kargo ile</label>
+    <label><input type="radio" name="teslim" data-ad="Mağazadan teslim"> Mağazadan teslim</label>
+  </fieldset>
+  <div class="satir"><label for="sehir">Şehir</label>
+    <select id="sehir" data-ad="Şehir"><option>Niğde</option><option>Nevşehir</option><option>Kayseri</option></select>
+  </div>
+
+  <div class="satir">
+    <button type="button" class="simge" aria-label="Ayarlar" data-ad="Ayarlar">⚙</button>
+    <button type="button" class="simge" title="Yazdır" data-ad="Yazdır"><svg width="16" height="16" aria-hidden="true"><rect x="2" y="5" width="12" height="7" fill="#444"/></svg></button>
+    <button type="button" class="simge" aria-label="Kapat" data-ad="Kapat">×</button>
+    <button type="button" data-ad="Kaydet">Kaydet</button>
+    <button type="button" disabled data-ad="Gönder">Gönder</button>
+    <a href="#yardim" data-ad="Yardım">Yardım</a>
+  </div>
+
+  <!-- görünmeyen ögeler: hiç bildirilmemeli ya da görünmez işaretlenmeli -->
+  <button type="button" style="display:none" data-ad="Gizli düğme">Gizli düğme</button>
+  <button type="button" style="visibility:hidden" data-ad="Saklı düğme">Saklı düğme</button>
+  <div hidden><a href="#gizli" data-ad="Gizli bağlantı">Gizli bağlantı</a></div>
+</form>
+
+<div id="bosluk"></div>
+<button type="button" id="sonda" data-ad="Sayfa sonu düğmesi">Sayfa sonu düğmesi</button>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Çerçeve</title>
+<style>body { font: 14px sans-serif; margin: 8px; } .satir { margin: 4px 0; }</style>
+<script src="ortak.js"></script>
+</head>
+<body>
+<div class="satir"><button type="button" id="dugme">Çerçeve düğmesi</button></div>
+<div class="satir"><label for="alan">Çerçeve alanı</label> <input id="alan" type="text"></div>
+<div class="satir"><a href="#c" id="bag">Çerçeve bağlantısı</a></div>
+<script>
+  // ?k=1 / ?k=2: aynı sayfa iki çerçevede; adlar ayırt edilsin
+  (function () {
+    var k = new URLSearchParams(location.search).get("k") || "1";
+    var d = document.getElementById("dugme"), a = document.getElementById("alan"), b = document.getElementById("bag");
+    d.textContent = "Çerçeve " + k + " düğmesi";
+    d.dataset.ad = d.textContent;
+    document.querySelector("label").textContent = "Çerçeve " + k + " alanı";
+    a.dataset.ad = "Çerçeve " + k + " alanı";
+    b.textContent = "Çerçeve " + k + " bağlantısı";
+    b.dataset.ad = b.textContent;
+  })();
+</script>
+</body>
+</html>
