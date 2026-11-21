@@ -53,7 +53,7 @@ YARDIM_KOMUTLAR = (
     N_("  ekran screenshot (foto) <kimlik> [png] [--region x,y,g,y] [--width N] [--grid [ADIM]]"),
     N_("  ekran click (tikla) <kimlik> <x> <y> [right|double|middle] [--shot] [--approved]"),
     N_("  ekran key (tus) <kimlik> <kombinasyon> [--approved]   ör. ctrl+s, Return, alt+F4"),
-    N_("  ekran type (yaz) <kimlik> <metin> [--secret]   \\n → Return, \\t → Tab; --secret günlüğe metni yazmaz;\n"
+    N_("  ekran type (yaz) <kimlik> <metin> [--secret]   \\n → Return, \\t → Tab, \\\\ → \\; --secret günlüğe metni yazmaz;\n"
        "                                          '-' ile başlayan metin: ekran type <kimlik> -- \"-5 derece\""),
     N_("  ekran scroll (kaydir) <kimlik> [down|up|left|right] [ADIM] [--point x,y]"),
     N_("  ekran read (metin) <kimlik> [desen] [--region ..] [--precise] [--all] [--deep]   yazılar + koordinatlar"),
@@ -241,6 +241,16 @@ class _SessizAyristirici(argparse.ArgumentParser):
         raise AyristirmaHatasi(message)
 
 
+_KACIS = {"n": "\n", "t": "\t", "\\": "\\"}
+
+
+def kacis_coz(metin):
+    """`type` metnindeki kaçışlar: \\n → Enter, \\t → Tab, \\\\ → tek ters bölü (kabuk çift tırnakta \\n'i olduğu
+    gibi iletir; çevrilmezse adres çubuğuna '\\n' harfleri yazılıyordu). Başka ters bölüler dokunulmadan kalır.
+    Yalnız komut satırı/dizi/akış için: MCP'de JSON gerçek satır sonu taşır, orada çevrilmez."""
+    return re.sub(r"\\([nt\\])", lambda m: _KACIS[m.group(1)], metin)
+
+
 def ayristirici(prog=None, sessiz=False):
     """Komut satırı ayrıştırıcısı. Seçenek KISALTMASI YOK (allow_abbrev=False, alt komutlar dahil): `--onay` ya da
     `--appr` `--onayli`/`--approved` sayılmasın (akış/dizi adımlarındaki önceden onay denetimi tam adla yapılır).
@@ -299,7 +309,7 @@ def ayristirici(prog=None, sessiz=False):
     s = komut("tus", k_tus, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("kombinasyon")
     secenek(s, "--onayli", action="store_true", help=h_("ödeme sayfasında Enter/boşluk: kullanıcı AÇIKÇA onayladı"))
     s = komut("kapat", k_kapat, parents=[ortak]); s.add_argument("kimlik")
-    s = komut("yaz", k_yaz, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("metin")
+    s = komut("yaz", k_yaz, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("metin", type=kacis_coz)
     secenek(s, "--gizli", action="store_true", help=h_("günlüğe metni yazma"))
     secenek(s, "--onayli", action="store_true",
             help=h_("ödeme sayfasında Enter/Tab/boşluk içeren yazı: kullanıcı AÇIKÇA onayladı"))
