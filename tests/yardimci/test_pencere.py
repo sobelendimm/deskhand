@@ -68,6 +68,7 @@ class CiftEtiket(QLabel):
 app = QApplication(sys.argv)
 if os.environ.get("SINIF"):  # WM_CLASS sınıfı (xcb: uygulama adı): örn. SINIF=xterm → uçbirim sınıflı test penceresi
     app.setApplicationName(os.environ["SINIF"])
+    app.setDesktopFileName(os.environ["SINIF"])  # Wayland (KWin oturumu): sınıf = xdg app_id
 if os.environ.get("TUS_LOG"):  # her tuş basışını (odaktaki parçadan bağımsız) "tus_ham" olarak yaz
     from PyQt6.QtCore import QEvent, QObject
 

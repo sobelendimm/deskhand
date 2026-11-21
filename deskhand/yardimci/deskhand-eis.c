@@ -31,6 +31,13 @@
  *
  * BIRAKMA GÜVENCESİ: basılı tuş/düğmeleri izler; stdin EOF, SIGTERM/SIGINT/SIGHUP, EIS kopması ve her hata çıkışında
  * hepsi bırakılır (EIS kopmuşsa gönderilemez; basılı kalanı o hâlde KWin'in kendisi bırakır, bkz. tests).
+ * AYGIT DEĞİŞİMİ: KWin düzen değişince klavye aygıtını kaldırıp yenisini verir: kaldırılan aygıtla basılı kalanlar yeni
+ * aygıt RESUMED olunca ondan bas+bırak ile temizlenir; aygıt yokken olay gönderilmez (en çok AYGIT_YEDEK_MS beklenir);
+ * tuş haritası her zaman yeni aygıtın EIS keymap'inden okunur.
+ * İŞARETÇİ: hareketten sonraki ilk düğme/kaydırma olayı HAREKET_DUGME_MS bekler (KWin işaretçi odağını eşzamansız
+ * uygular); imleç zaten hedefteyse önce 1 px komşuya gidilir ("park edilmiş imleç": altına yeni pencere geldiyse aynı
+ * konuma hareket olay üretmezdi). Kaydırma: ayrık 120'lik birim + sonda scroll_stop.
+ * KAPANIŞ: bırakmalar → ei_ping/PONG eşitlemesi → ei_unref → RemoteDesktop.disconnect(çerez).
  * Çıkış kodları: 0 normal (EOF / cik / sinyal) · 1 kullanım · 2 --bus yok/yasak · 3 D-Bus/EIS bağlantı hatası ·
  *   4 aygıtlar hazır olmadı · 5 EIS koptu.
  * Derleme: make -C deskhand/yardimci deskhand-eis  (libei-1.0, xkbcommon, libsystemd). */
@@ -67,6 +74,8 @@
 #define BASILI_AZAMI 64
 #define EVDEV_SHIFT KEY_LEFTSHIFT
 #define EVDEV_ALTGR KEY_RIGHTALT
+#define HAREKET_DUGME_MS 20  /* KWin işaretçi odağını eşzamansız uygular: hareketten sonra ilk düğme/kaydırma öncesi */
+#define AYGIT_YEDEK_MS 600   /* aygıt değişiminde (kaldırıldı → yenisi RESUMED) olay göndermeden önce en çok bekleme */
 
 struct tus_ad { const char *ad; int kod; };
 static const struct tus_ad TUS_ADLARI[] = {
@@ -96,6 +105,20 @@ static int typedelay = 2, typehold = 8, keydelay = 2, keyhold = 8;
 static int basili_tus[BASILI_AZAMI], basili_tus_n;
 static int basili_dugme[8], basili_dugme_n;
 static double son_x = -1, son_y = -1; /* son mutlak konum (mousemove için) */
+static long son_hareket_ms = -1000000;  /* son işaretçi hareketinin zamanı (hareket→düğme beklemesi) */
+/* klavye/işaretçi aygıtı KALDIRILDIĞINDA (KWin düzen değişince klavyeyi değiştirir) o aygıtla basılı olanlar: yeni aygıt
+ * RESUMED olunca yeni aygıttan bas+bırak ile temizlenir (KWin kaldırılan aygıtın basılı düğmesini bırakmayabilir) */
+static int artik_tus[BASILI_AZAMI], artik_tus_n;
+static int artik_dugme[8], artik_dugme_n;
+static sd_bus *veri_yolu;  /* connectToEIS çağrısının veri yolu: kapanışta disconnect(çerez) */
+static int eis_cerez;
+static bool pong_geldi;
+static struct ei_device *son_klavye, *son_dugme; /* tuş/düğme olaylarının en son gönderildiği aygıtlar */
+
+static void izle_ekle(int *dizi, int *n, int azami, int kod);
+static int tus_gonder(int kod, bool bas);
+static int dugme_gonder(int kod, bool bas);
+static void artik_temizle(struct ei_device *d);
 
 /* klavye haritası: karakter/keysym → (evdev kodu, gereken değiştirici) */
 struct eslem { uint32_t cp; xkb_keysym_t sym; int kod; int mod; }; /* mod: bit0 Shift, bit1 AltGr */
@@ -236,6 +259,22 @@ static const struct eslem *eslem_ara(uint32_t cp, xkb_keysym_t sym) {
     return iyi;
 }
 
+/* kaldırılan aygıtla basılı kalanları YENİ (RESUMED) aygıttan bas+bırak ile temizle */
+static void artik_temizle(struct ei_device *d) {
+    if (artik_tus_n && ei_device_has_capability(d, EI_DEVICE_CAP_KEYBOARD)) {
+        for (int i = 0; i < artik_tus_n; i++) {
+            if (tus_gonder(artik_tus[i], true) == 0) tus_gonder(artik_tus[i], false);
+        }
+        artik_tus_n = 0;
+    }
+    if (artik_dugme_n && ei_device_has_capability(d, EI_DEVICE_CAP_BUTTON)) {
+        for (int i = 0; i < artik_dugme_n; i++) {
+            if (dugme_gonder(artik_dugme[i], true) == 0) dugme_gonder(artik_dugme[i], false);
+        }
+        artik_dugme_n = 0;
+    }
+}
+
 static void olaylari_isle(void) {
     ei_dispatch(ei); /* kopma EI_EVENT_DISCONNECT olarak gelir */
     struct ei_event *e;
@@ -257,6 +296,7 @@ static void olaylari_isle(void) {
             if (a) {
                 a->aktif = true;
                 ei_device_start_emulating(d, ++emulasyon_no);
+                artik_temizle(d);
             }
             break; }
         case EI_EVENT_DEVICE_PAUSED: {
@@ -266,10 +306,22 @@ static void olaylari_isle(void) {
         case EI_EVENT_DEVICE_REMOVED: {
             struct aygit *a = aygit_bul(d);
             if (a) {
+                /* bu aygıtla basılı olanlar "artık": yeni aygıt gelince ondan bas+bırak ile temizlenecek */
+                if (d == son_klavye)
+                    for (; basili_tus_n > 0; basili_tus_n--)
+                        izle_ekle(artik_tus, &artik_tus_n, BASILI_AZAMI, basili_tus[basili_tus_n - 1]);
+                if (d == son_dugme)
+                    for (; basili_dugme_n > 0; basili_dugme_n--)
+                        izle_ekle(artik_dugme, &artik_dugme_n, 8, basili_dugme[basili_dugme_n - 1]);
+                if (d == son_klavye) son_klavye = NULL;
+                if (d == son_dugme) son_dugme = NULL;
                 ei_device_unref(a->d);
                 *a = aygitlar[--aygit_n];
             }
             break; }
+        case EI_EVENT_PONG:
+            pong_geldi = true;
+            break;
         case EI_EVENT_DISCONNECT:
             koptu = true;
             break;
@@ -319,21 +371,44 @@ static void izle_sil(int *dizi, int *n, int kod) {
         }
 }
 
+/* aygıt yoksa (değişim sürüyor: eski kaldırıldı, yenisi henüz RESUMED değil) kısa süre bekle; RESUMED olmayan aygıta
+ * gönderilen olay sessizce düşerdi */
+static struct ei_device *aygit_bekle(struct ei_device *(*bul)(void)) {
+    struct ei_device *a = bul();
+    long son = simdi_ms() + AYGIT_YEDEK_MS;
+    while (!a && !koptu && simdi_ms() < son) {
+        if (bekle_ms(10) < 0) break;
+        a = bul();
+    }
+    return a;
+}
+
+/* hareketten hemen sonraki ilk düğme/kaydırma olayı: KWin işaretçi odağını eşzamansız günceller; beklenmezse olay
+ * ESKİ yüzeye gidebilir */
+static void hareket_sonrasi_bekle(void) {
+    long gecen = simdi_ms() - son_hareket_ms;
+    if (gecen >= 0 && gecen < HAREKET_DUGME_MS) bekle_ms((int)(HAREKET_DUGME_MS - gecen));
+    son_hareket_ms = -1000000; /* yalnız ilk olay bekler */
+}
+
 static int tus_gonder(int kod, bool bas) {
-    struct ei_device *k = klavye_aygit();
+    struct ei_device *k = aygit_bekle(klavye_aygit);
     if (!k) return -1;
     ei_device_keyboard_key(k, (uint32_t)kod, bas);
     ei_device_frame(k, ei_now(ei));
+    son_klavye = k;
     if (bas) izle_ekle(basili_tus, &basili_tus_n, BASILI_AZAMI, kod);
     else izle_sil(basili_tus, &basili_tus_n, kod);
     return 0;
 }
 
 static int dugme_gonder(int kod, bool bas) {
-    struct ei_device *p = dugme_aygit();
+    struct ei_device *p = aygit_bekle(dugme_aygit);
     if (!p) return -1;
+    if (bas) hareket_sonrasi_bekle();
     ei_device_button_button(p, (uint32_t)kod, bas);
     ei_device_frame(p, ei_now(ei));
+    son_dugme = p;
     if (bas) izle_ekle(basili_dugme, &basili_dugme_n, 8, kod);
     else izle_sil(basili_dugme, &basili_dugme_n, kod);
     return 0;
@@ -371,12 +446,22 @@ static void sinirlar(double *bx, double *by, double *bw, double *bh) {
 }
 
 static int konuma_git(double x, double y) {
-    struct ei_device *p = mutlak_aygit();
+    struct ei_device *p = aygit_bekle(mutlak_aygit);
     if (!p) return -1;
+    if (x == son_x && y == son_y && basili_dugme_n == 0) {
+        /* "park edilmiş imleç": imleç zaten oradayken altına yeni pencere geldiyse aynı konuma mutlak hareket olay
+         * üretmez, tık eski yüzeye gider → önce 1 px komşuya, sonra hedefe (düğme basılıyken yapılmaz: sürükleme) */
+        double bx, by, bw, bh;
+        sinirlar(&bx, &by, &bw, &bh);
+        double kx = x + 1 <= bx + bw - 1 ? x + 1 : x - 1;
+        ei_device_pointer_motion_absolute(p, kx, y);
+        ei_device_frame(p, ei_now(ei));
+    }
     ei_device_pointer_motion_absolute(p, x, y);
     ei_device_frame(p, ei_now(ei));
     son_x = x;
     son_y = y;
+    son_hareket_ms = simdi_ms();
     return 0;
 }
 
@@ -587,13 +672,18 @@ static const char *komut_kaydir(const char *arg, bool yatay) {
     while (*son == ' ') son++;
     if (son == arg || *son || !isfinite(v) || fabs(v) > 10000) return "sayi-gecersiz";
     int n = (int)fabs(v), yon = v > 0 ? 1 : -1;
-    struct ei_device *k = kaydirma_aygit();
+    struct ei_device *k = aygit_bekle(kaydirma_aygit);
     if (!k) return "kaydirma-yok";
+    if (n) hareket_sonrasi_bekle();
     for (int i = 0; i < n; i++) {
-        /* libei: artı y = aşağı, artı x = sağ; dotool wheel artı = yukarı */
+        /* libei: artı y = aşağı, artı x = sağ; dotool wheel artı = yukarı. Ayrık birim 120 = bir çentik */
         ei_device_scroll_discrete(k, yatay ? yon * 120 : 0, yatay ? 0 : -yon * 120);
         ei_device_frame(k, ei_now(ei));
         if (bekle_ms(5) < 0) return kes_hatasi();
+    }
+    if (n) { /* kaydırma dizisinin sonu (wl_pointer.axis_stop) */
+        ei_device_scroll_stop(k, yatay, !yatay);
+        ei_device_frame(k, ei_now(ei));
     }
     return NULL;
 }
@@ -700,9 +790,31 @@ static void satir_isle(char *satir) {
 
 /* ------------------------------------------------------------------ açılış / kapanış */
 
+/* kapanış sırası: son bırakmalar → ei_ping/PONG ile eşitle (KWin hepsini işledi) → ei_unref → disconnect(çerez)
+ * D-Bus çağrısı (aksi hâlde KWin "Broken pipe" uyarıları yazar) */
 static void cik(int kod) {
     hepsini_birak();
+    if (ei && !koptu) {
+        struct ei_ping *p = ei_new_ping(ei);
+        if (p) {
+            pong_geldi = false;
+            ei_ping(p);
+            ei_dispatch(ei);
+            long son = simdi_ms() + 300;
+            while (!pong_geldi && !koptu && simdi_ms() < son) {
+                struct pollfd pf = {.fd = ei_get_fd(ei), .events = POLLIN};
+                if (poll(&pf, 1, 20) > 0) olaylari_isle();
+            }
+            ei_ping_unref(p);
+        }
+    }
     if (ei) ei_unref(ei);
+    ei = NULL;
+    if (veri_yolu) {
+        if (!koptu) sd_bus_call_method(veri_yolu, HIZMET, NESNE, ARAYUZ, "disconnect", NULL, NULL, "i", eis_cerez);
+        sd_bus_flush_close_unref(veri_yolu);
+        veri_yolu = NULL;
+    }
     exit(kod);
 }
 
@@ -774,6 +886,8 @@ int main(int argc, char **argv) {
         return 3;
     }
     sd_bus_message_unref(yan);
+    veri_yolu = bus;
+    eis_cerez = cerez;
     ei = ei_new_sender(NULL);
     if (!ei) return 3;
     ei_configure_name(ei, "deskhand-eis");

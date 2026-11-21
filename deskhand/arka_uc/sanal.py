@@ -468,6 +468,7 @@ def takili_birak(ekran: str) -> tuple[int, int]:
 
 class SanalArkaUc(ArkaUc):
     ad = "sanal"
+    tur = "xvfb"
 
     def __init__(self):
         self._kilit = threading.RLock()
@@ -477,7 +478,7 @@ class SanalArkaUc(ArkaUc):
     # -------- bağlantı
     def _durum(self) -> dict:
         d = masaustu.durum_oku()
-        if d is None:
+        if d is None or masaustu.tur(d) != "xvfb":  # KWin türündeki masaüstü bu arka uca ait değil (arka_uc.sec)
             raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
         return d
 
@@ -496,7 +497,7 @@ class SanalArkaUc(ArkaUc):
         """DOĞRULANMIŞ sanal ekran adı: durum dosyasındaki Xvfb yaşıyor (PID + komut satırı + soket). Bayat
         sanal.json + aynı numarada başka bir X sunucusu → girdi oraya gitmesin: Dur 14."""
         d = masaustu.durum(saglik=False)
-        if d is None:
+        if d is None or masaustu.tur(d) != "xvfb":
             raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
         return d["ekran"]
 

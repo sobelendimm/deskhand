@@ -31,7 +31,8 @@ def _ozel_bus_adresleri() -> set[str]:
 
 
 def _ozel_bus_mu(adres: str) -> bool:
-    """Adres Deskhand'nin özel veri yolu mu? Durum dosyasındaki adres ya da RUNTIME_DIR/sanal-N/ altındaki soket."""
+    """Adres Deskhand'nin özel veri yolu mu? Durum dosyasındaki adres ya da RUNTIME_DIR/sanal-N/ (Xvfb) ya da
+    RUNTIME_DIR/kwin-<kimlik>/ (KWin) altındaki soket."""
     if not adres:
         return False
     if adres in _ozel_bus_adresleri():
@@ -45,7 +46,7 @@ def _ozel_bus_mu(adres: str) -> bool:
         for alan in parca.split(","):
             if alan.split(":", 1)[-1].startswith("path="):
                 yol = os.path.realpath(alan.split("path=", 1)[1])
-                if yol.startswith(os.path.join(kok, "sanal-")):
+                if yol.startswith((os.path.join(kok, "sanal-"), os.path.join(kok, "kwin-"))):  # Xvfb / KWin türü
                     return True
     return False
 

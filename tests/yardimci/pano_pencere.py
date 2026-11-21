@@ -20,6 +20,7 @@ def log(satir):
 app = QApplication(sys.argv)
 if os.environ.get("SINIF"):  # WM_CLASS sınıfı (xcb: uygulama adı): örn. SINIF=xterm → uçbirim sınıflı pencere
     app.setApplicationName(os.environ["SINIF"])
+    app.setDesktopFileName(os.environ["SINIF"])  # Wayland (KWin oturumu): sınıf = xdg app_id
 kutu = QPlainTextEdit()
 kutu.setWindowTitle(os.environ.get("BASLIK", "pano-test"))
 kutu.resize(700, 400)

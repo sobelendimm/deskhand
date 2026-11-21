@@ -163,6 +163,24 @@ def satir_arka_plan():
     return _satir(ad, "tamam", _("çalışıyor ({ekran}, {boyut})").format(ekran=d.get("ekran", "?"), boyut=b))
 
 
+def satir_arka_tur():
+    """Arka plan masaüstü hangi türle açılır (KWin oturumu / Xvfb) ve KWin türünün ön koşulları: ScreenShot2 sanal
+    arka uçta /dev/udmabuf okuma-yazma ister (yoksa görüntü alınamaz). Salt okunur; süreç başlatmaz."""
+    from . import kwin_oturum
+    ad = _("Arka plan masaüstü türü")
+    ok, neden = kwin_oturum.kullanilabilir()
+    if not ok:
+        return _satir(ad, "tamam", _("Xvfb + openbox (KWin oturumu kullanılamıyor: {neden})").format(neden=neden))
+    gpu = kwin_oturum.render_sec()
+    ayrinti = _("yalıtık KWin oturumu (GPU: {gpu})").format(
+        gpu=_("tümleşik {dugum}").format(dugum=gpu["dugum"]) if gpu else _("varsayılan"))
+    if not os.access("/dev/udmabuf", os.R_OK | os.W_OK):
+        return _satir(ad, "uyari", ayrinti + " — " + _("/dev/udmabuf okunamıyor/yazılamıyor: KWin ekran görüntüsü "
+                                                       "alamaz, Xvfb'ye düşülür"),
+                      _("kullanıcıya /dev/udmabuf rw izni (ör. kvm grubu ya da udev ACL)"))
+    return _satir(ad, "tamam", ayrinti + " · udmabuf rw")
+
+
 def satir_gpu_ocr():
     from . import ocr_gpu
     ad = _("GPU metin okuma (OCR)")
@@ -179,7 +197,7 @@ def satir_gpu_ocr():
 
 
 SATIRLAR = (satir_surum, satir_oturum, satir_kwin, satir_panel, satir_girdi_merkezi, satir_yardimcilar, satir_erisim,
-            satir_arka_plan, satir_gpu_ocr)
+            satir_arka_plan, satir_arka_tur, satir_gpu_ocr)
 
 
 def topla() -> list[dict]:

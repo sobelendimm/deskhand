@@ -1,8 +1,10 @@
 """Arka uç (backend) arayüzü: pencere bulma, görüntü alma ve girdi gönderme burada soyutlanır.
 
-Üst katman (guvenlik, eylem, ocr, akis...) yalnız bu arayüzü kullanır. İki arka uç vardır:
+Üst katman (guvenlik, eylem, ocr, akis...) yalnız bu arayüzü kullanır. Arka uçlar:
   kde   — kullanıcının gerçek KDE Plasma (Wayland) masaüstü: kdotool + dotool + spectacle
-  sanal — görünmez ikinci masaüstü (Xvfb + openbox): python-xlib (XTEST girdi, XGetImage görüntü)
+  sanal — görünmez ikinci masaüstü; iki türü var (dışarıdan aynı: ad "sanal", "arka:" önekli kimlikler):
+          kwin.py  yalıtık KWin oturumu (kdotool + deskhand-eis + deskhand-goruntu, özel veri yolu) — koşullar
+                   uygunsa varsayılan; sanal.py  Xvfb + openbox (python-xlib: XTEST girdi, XGetImage görüntü)
 Ayrıntılı sözleşme: docs/ARCHITECTURE.md §2.
 """
 from __future__ import annotations
@@ -203,15 +205,37 @@ def hedef_ad(kimlik: str | None = None, arka_bayragi: bool = False) -> str:
 
 
 _ORNEKLER: dict[str, ArkaUc] = {}
+_TUR_ORNEKLERI: dict[str, ArkaUc] = {}  # arka plan masaüstü türü → örnek (KWin örneği kalıcı EIS bağlantısını tutar)
+
+
+def arka_tur() -> str:
+    """Arka plan masaüstünün türü: çalışan (ya da en son kaydı duran) masaüstünün durum kaydından ("kwin" | "xvfb").
+    Kayıt yoksa "xvfb" (kapalı masaüstünde her iki arka uç da aynı Dur 14'ü verir). ~0,1 ms (yalnız JSON okuma)."""
+    from .. import masaustu
+    return masaustu.tur(masaustu.durum_oku())
 
 
 def sec(kimlik: str | None = None, arka_bayragi: bool = False) -> ArkaUc:
+    """Hedefin arka ucu. "sanal" hedefi (görünmez masaüstü) türüne göre: KWin oturumu → KwinArkaUc, Xvfb →
+    SanalArkaUc. İkisinin de `ad`ı "sanal"dır (üst katman kuralları, kimlik öneki, çıkış kodları aynı)."""
     ad = hedef_ad(kimlik, arka_bayragi)
+    if ad == "sanal":
+        tur = arka_tur()
+        au = _ORNEKLER.get("sanal")
+        # _ORNEKLER["sanal"] = geçerli türün örneği (testlerin koyduğu `tur`suz sahte arka uç olduğu gibi kalır)
+        if au is None or getattr(au, "tur", tur) != tur:
+            au = _TUR_ORNEKLERI.get(tur)
+            if au is None:
+                if tur == "kwin":
+                    from .kwin import KwinArkaUc
+                    au = KwinArkaUc()
+                else:
+                    from .sanal import SanalArkaUc
+                    au = SanalArkaUc()
+                _TUR_ORNEKLERI[tur] = au
+            _ORNEKLER["sanal"] = au
+        return au
     if ad not in _ORNEKLER:
-        if ad == "sanal":
-            from .sanal import SanalArkaUc
-            _ORNEKLER[ad] = SanalArkaUc()
-        else:
-            from .kde import KdeArkaUc
-            _ORNEKLER[ad] = KdeArkaUc()
+        from .kde import KdeArkaUc
+        _ORNEKLER[ad] = KdeArkaUc()
     return _ORNEKLER[ad]

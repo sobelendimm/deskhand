@@ -1,6 +1,7 @@
-"""Yalıtık arka plan KWin oturumu (Faz 12a yapı taşı): `kwin_wayland --virtual` + özel D-Bus + özel Wayland soketi
-(+ isteğe bağlı XWayland). Xvfb + openbox masaüstünün (masaustu.py) yerine geçecek altyapının yaşam döngüsü; CLI'ye ve
-ArkaUc'a BAĞLI DEĞİL, bağımsız kullanılır:
+"""Yalıtık arka plan KWin oturumu: `kwin_wayland --virtual` + özel D-Bus + özel Wayland soketi (+ XWayland).
+Arka plan masaüstünün KWin türünün yaşam döngüsü. Tek giriş noktası masaustu.py'dir (masaustu_baslat koşullar
+uygunsa bunu kullanır, durum RUNTIME_DIR/sanal.json'da "tur": "kwin" ile durur; arka uç: arka_uc/kwin.py). Bu modül
+masaustu.py'yi içe AKTARMAZ (ortak yapı taşları arka_ortak.py'de); testler doğrudan da kullanabilir:
 
     bilgi = kwin_oturum.baslat((1920, 1080))        # dict (adres, soket, pid'ler, XWayland ekranı…)
     env = kwin_oturum.uygulama_ortami(bilgi)         # bu oturumda açılacak uygulamaların ortamı
@@ -19,9 +20,16 @@ dokunulmaz). Klavye düzeni yalıtık kxkbrc'ye yazılır. Gerçek oturuma bağl
 Süreçler tek bellek kafesinde (masaustu.py ile aynı: systemd-run --user --scope MemoryMax=…, nice 10, ionice idle).
 XWayland: X soketlerini (+ kilit dosyalarını, Xauthority) biz kurar ve KWin'e `--xwayland-fd/-display/-xauthority`
 ile veririz (kwin_wayland_wrapper'ın yaptığı gibi); böylece ekran adı kesin bilinir ve temizlenir.
+
+GPU: birden çok render aygıtı varsa oturum, ekrana bağlı çıkışı OLMAYAN, boot_vga=0 olan TÜMLEŞİK GPU'yu kullanır
+(arka plan masaüstü en çok kullanıcı oyun oynarken çalışır: oyun GPU'sundan zaman çalmasın); KWIN_RENDER_NODES ile
+verilir (ölçüldü: KWin 6.8 sanal arka ucu bu değişkeni kabul ediyor; KWIN_DRM_DEVICES yalnız DRM arka ucu içindir).
+KWin'in OpenGL oluşturucu adı d["gpu"]'ya yazılır; istemcilerin aygıtı surec_gpu_pci ile doğrulanır (testler). Uygun
+aygıt yoksa KWin'in varsayılanı; o GPU'yla açılamazsa bir kez varsayılanla.
 """
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -34,7 +42,8 @@ import subprocess
 import sys
 import time
 
-from . import hata, masaustu, yollar
+from . import arka_ortak as ao
+from . import yollar
 from .hata import ARAC_EKSIK, SANAL_KAPALI, ZAMAN_ASIMI, Dur
 from .i18n import _
 
@@ -118,6 +127,113 @@ def guvenlik_kapilari(bus_adres: str, soket_adi: str, config_dizini: str, home: 
                 ekran=repr(xekran)))
 
 
+def baglanti_denetle(d: dict) -> None:
+    """HER bağlantıdan önce (arka_uc/kwin.py: kdotool, deskhand-goruntu, deskhand-eis, wl-copy/wl-paste, busctl):
+    durum kaydındaki değerler hâlâ yalnız bu oturumu mu gösteriyor? guvenlik_kapilari'na ek olarak Wayland soketi ve
+    veri yolu soketi oturumun çalışma dizininde, çalışma dizini Deskhand'in RUNTIME_DIR'inde, Wayland soketi kullanıcının
+    soketi DEĞİL. Değilse Dur(14) (bayat/oynanmış durum dosyası gerçek oturuma bağlatamaz). ~0,1 ms."""
+    try:
+        cdir, wyol, wad = d["calisma"], d["wayland_yol"], d["wayland"]
+        bus = d["dbus_adres"]
+    except (KeyError, TypeError):
+        raise Dur(SANAL_KAPALI, _("KWin oturum kaydı eksik; bağlanılmadı"))
+    if not (cdir and os.path.basename(cdir).startswith(OTURUM_ONEK) and _icinde(cdir, yollar.runtime_dir())
+            and not _ayni_yol(cdir, yollar.runtime_dir())):
+        raise Dur(SANAL_KAPALI, _("KWin oturum dizini Deskhand'in çalışma dizininde değil: {dizin}").format(dizin=cdir))
+    guvenlik_kapilari(bus, wad, os.path.join(cdir, "ev", "config"), home=os.path.join(cdir, "ev"), calisma=cdir,
+                      xekran=d.get("xwayland"))
+    if os.path.basename(wyol) != wad or not _icinde(wyol, cdir):
+        raise Dur(SANAL_KAPALI, _("Wayland soketi oturum dizininde değil: {yol}").format(yol=wyol))
+    by = _bus_yolu(bus)
+    if not by or not _icinde(by, cdir):
+        raise Dur(SANAL_KAPALI, _("özel veri yolu soketi oturum dizininde değil: {adres}").format(adres=bus))
+    g = _gercek_degerler()
+    for w in g["wayland"]:
+        gercek = w if os.path.isabs(w) else os.path.join(g["runtime"], w)
+        if _ayni_yol(wyol, gercek):
+            raise Dur(SANAL_KAPALI, _("Wayland soketi kullanıcının gerçek soketi; bağlanılmadı"))
+
+
+def canli_mi(d: dict) -> bool:
+    """Kayıttaki KWin süreci (PID + komut satırında özel soket adı) ve Wayland soketi yaşıyor mu."""
+    return _kwin_mi(d) and os.path.exists(d.get("wayland_yol") or "")
+
+
+# ---------------------------------------------------------------- GPU seçimi
+
+def _oku(yol: str) -> str:
+    try:
+        with open(yol) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def render_aygitlari() -> list[dict]:
+    """Bu makinedeki render aygıtları (sysfs; salt okunur) → [{dugum, kart, boot_vga, bagli, tumlesik, surucu, pci}].
+    bagli: karta bağlı (connected) bir ekran çıkışı var mı. tumlesik: amdgpu'da görüntü belleği <= 2 GiB (APU'nun
+    ayrılmış belleği), i915'te PCI veri yolu 00 (işlemci içi). Sabit PCI adresi kullanılmaz."""
+    sonuc = []
+    for kart in sorted(glob.glob("/sys/class/drm/card[0-9]*")):
+        ad = os.path.basename(kart)
+        if not re.fullmatch(r"card\d+", ad):
+            continue
+        aygit = os.path.join(kart, "device")
+        try:
+            render = sorted(x for x in os.listdir(os.path.join(aygit, "drm")) if x.startswith("renderD"))
+        except OSError:
+            continue
+        if not render:
+            continue
+        dugum = os.path.join("/dev/dri", render[0])
+        if not os.path.exists(dugum):
+            continue
+        surucu = os.path.basename(os.path.realpath(os.path.join(aygit, "driver")))
+        pci = os.path.basename(os.path.realpath(aygit))
+        bagli = any(_oku(os.path.join(c, "status")) == "connected" for c in glob.glob(f"{kart}-*"))
+        vram = _oku(os.path.join(aygit, "mem_info_vram_total"))
+        tumlesik = (surucu == "amdgpu" and vram.isdigit() and int(vram) <= 2 << 30) or \
+            (surucu == "i915" and pci.split(":")[1:2] == ["00"])
+        sonuc.append({"dugum": dugum, "kart": ad, "boot_vga": _oku(os.path.join(aygit, "boot_vga")), "bagli": bagli,
+                      "tumlesik": tumlesik, "surucu": surucu, "pci": pci,
+                      "erisim": os.access(dugum, os.R_OK | os.W_OK)})
+    return sonuc
+
+
+def render_sec(aygitlar: list[dict] | None = None) -> dict | None:
+    """Oturumun render aygıtı: birden çok aygıt varsa ekrana bağlı çıkışı OLMAYAN + boot_vga=0 + tümleşik + erişilebilir
+    ilk aygıt; yoksa None (KWin'in varsayılanı: tek aygıt ya da uygun aday yok). DESKHAND_KWIN_GPU=varsayilan ile
+    kapatılabilir (tanılama)."""
+    if (os.environ.get("DESKHAND_KWIN_GPU") or "").strip().lower() in ("varsayilan", "default", "0"):
+        return None
+    aygitlar = render_aygitlari() if aygitlar is None else aygitlar
+    if len(aygitlar) < 2:
+        return None
+    for a in aygitlar:
+        if a["erisim"] and not a["bagli"] and a["boot_vga"] == "0" and a["tumlesik"]:
+            return a
+    return None
+
+
+def surec_gpu_pci(pid) -> list[str]:
+    """Sürecin kullandığı GPU'ların PCI adresleri (/proc/<pid>/fdinfo, "drm-pdev:"; yalnız kendi süreçlerimiz okunur).
+    KWin'in kendisi yetenekli ikili olduğu için okunamaz: oturumdaki bir Wayland istemcisi (dmabuf geri bildirimiyle
+    KWin'in aygıtını seçer) üzerinden doğrulanır (testler)."""
+    sonuc = set()
+    try:
+        for fd in os.listdir(f"/proc/{int(pid)}/fdinfo"):
+            try:
+                with open(f"/proc/{int(pid)}/fdinfo/{fd}") as f:
+                    for satir in f:
+                        if satir.startswith("drm-pdev:"):
+                            sonuc.add(satir.split(":", 1)[1].strip())
+            except OSError:
+                continue
+    except (OSError, ValueError, TypeError):
+        pass
+    return sorted(sonuc)
+
+
 # ---------------------------------------------------------------- sürüm / kullanılabilirlik
 
 def kwin_surumu() -> tuple[int, ...] | None:
@@ -137,9 +253,11 @@ def kullanilabilir() -> tuple[bool, str]:
     if s[:2] < ASGARI_SURUM:
         return False, _("KWin {surum} < 6.8 (EIS/ScreenShot2 yetkisi için 6.8 gerekir)").format(
             surum=".".join(map(str, s)))
-    for arac in ("dbus-daemon", "nice", "ionice", "sh", "busctl", "env"):
+    for arac in ("dbus-daemon", "nice", "ionice", "sh", "busctl", "env", "kdotool"):
         if not shutil.which(arac):
             return False, _("{arac} yok").format(arac=arac)
+    if not any(a["erisim"] for a in render_aygitlari()):
+        return False, _("erişilebilir render aygıtı yok (/dev/dri/renderD*)")
     if not yollar.eis_bin():
         return False, _("deskhand-eis yok (make -C deskhand/yardimci deskhand-eis; libei + libxkbcommon gerekir)")
     if not yollar.goruntu_bin():
@@ -155,9 +273,15 @@ def _oturum_dizini(kimlik: str) -> str:
 
 def _kwin_ortami(d: dict) -> dict:
     """KWin ve özel dbus-daemon'un TAM ortamı (env -i eşdeğeri: os.environ'dan HİÇBİR ŞEY alınmaz). Kullanıcının
-    WAYLAND_DISPLAY / DISPLAY / DBUS_SESSION_BUS_ADDRESS değerleri burada yoktur ve asla eklenmez."""
+    WAYLAND_DISPLAY / DISPLAY / DBUS_SESSION_BUS_ADDRESS değerleri burada yoktur ve asla eklenmez. KDE_FULL_SESSION /
+    KDE_SESSION_VERSION KWin'e VERİLMEZ (tam Plasma oturumu yoluna girmesin; uygulamalara ve kdotool'a verilir); yetki
+    kapatıcı (KWIN_WAYLAND_NO_PERMISSION_CHECKS) gerekmiyor (6.8: EIS + ScreenShot2 yetkisiz). ATSPI_DBUS_IMPLEMENTATION:
+    özel veri yolunun etkinleştirdiği at-spi-bus-launcher kendi dbus-daemon'unu açsın (dbus-broker --scope=user
+    kullanıcının GERÇEK erişilebilirlik veri yolunu yeniden kullanabiliyordu)."""
     ev = os.path.join(d["calisma"], "ev")
+    gpu = {"KWIN_RENDER_NODES": d["render_dugumu"]} if d.get("render_dugumu") else {}
     return {
+        **gpu,
         "PATH": ASGARI_PATH,
         "HOME": ev,
         "LANG": os.environ.get("LANG") or "C.UTF-8",
@@ -169,7 +293,7 @@ def _kwin_ortami(d: dict) -> dict:
         "DBUS_SESSION_BUS_ADDRESS": d["dbus_adres"],
         "XDG_SESSION_TYPE": "wayland",
         "XDG_CURRENT_DESKTOP": "KDE",
-        "KDE_SESSION_VERSION": "6",
+        "ATSPI_DBUS_IMPLEMENTATION": "dbus-daemon",
     }
 
 
@@ -180,16 +304,24 @@ def kdotool_ortami(d: dict) -> dict:
             "XDG_SESSION_TYPE": "wayland", "LANG": os.environ.get("LANG") or "C.UTF-8"}
 
 
-def uygulama_ortami(d: dict, env: dict | None = None) -> dict:
-    """Bu oturumda başlatılacak uygulamaların ortamı: os.environ + env, üstüne oturum değerleri ZORLA (kullanıcının
-    Wayland/X ekranına, oturum veri yoluna, sesine kaçamasın). masaustu.uygulama_ortami ile aynı güvenceler; ses
-    bölümü (PULSE_SINK/PULSE_PROP/PIPEWIRE_*) aynı işlevden gelir. `env` yalnız araç takımı ipuçlarını
-    (QT_QPA_PLATFORM, GDK_BACKEND…) değiştirebilir; ağ/ekran/veri yolu/ses değişkenleri her zaman oturumundur."""
-    sahte = {"no": OTURUM_ONEK + d["kimlik"], "ekran": d.get("xwayland") or ":0", "dbus_adres": d["dbus_adres"],
-             "ses": d.get("ses"), "xauth": d.get("xauth"), "kimlik": d.get("kimlik")}
-    e = masaustu.uygulama_ortami(sahte, {k: v for k, v in (env or {}).items()})
-    # masaustu X11 kipine göre kurar; Wayland kipine çevir
-    e.pop("DESKHAND_SANAL", None)
+def uygulama_ortami(d: dict, env: dict | None = None, izinli: tuple = ()) -> dict:
+    """Bu oturumda başlatılacak uygulamaların ortamı: os.environ + env; kullanıcının oturumuna ait değişkenler
+    (arka_ortak.CIKARILACAK_ORTAM: gerçek veri yolu, Wayland/X ekranı, Xauthority, erişilebilirlik adresi, ses
+    sunucusu, SSH ajanı, EIS/libei soketi…) birleştirmeden önce ve SONRA silinir, üstüne oturum değerleri ZORLA yazılır.
+    Xvfb türüyle aynı güvenceler (ses bölümü aynı işlevden). `env` yalnız araç takımı ipuçlarını (QT_QPA_PLATFORM,
+    GDK_BACKEND…) değiştirebilir; ekran/veri yolu/ses değişkenleri her zaman oturumundur."""
+    e = ao.ortam_tabani(env, izinli)
+    e.update({
+        "DBUS_SESSION_BUS_ADDRESS": d["dbus_adres"],
+        # Chromium/Electron anahtarlık arka ucunu bunlardan seçer
+        "XDG_CURRENT_DESKTOP": "KDE",
+        "KDE_SESSION_VERSION": "6",
+        # oturumun içinden çalışan süreçler (tespit, kde.pano_ortami) kendilerini arka plan masaüstünde bilsin
+        "DESKHAND_SANAL": d.get("ekran") or d.get("wayland") or OTURUM_ONEK + str(d.get("kimlik")),
+    })
+    if d.get("kimlik"):  # durdururken kafes dışındaki/kafessiz süreçler de bulunabilsin (_isaretli_surecler)
+        e["DESKHAND_SANAL_KIMLIK"] = d["kimlik"]
+    ao.ses_ortami_uygula(e, d.get("ses"), os.path.join(d["calisma"], "ses-yok"))
     e["WAYLAND_DISPLAY"] = d["wayland_yol"]  # MUTLAK yol: değişken yoksa libwayland kullanıcının wayland-0'ına düşerdi
     e["XDG_SESSION_TYPE"] = "wayland"
     for k, v in {"QT_QPA_PLATFORM": "wayland", "GDK_BACKEND": "wayland", "MOZ_ENABLE_WAYLAND": "1",
@@ -255,17 +387,19 @@ class _XSoketleri:
             self.dosyalar.append(yol_i)
             os.chmod(yol_i, 0o777)
         except BaseException:
-            self.kapat()
+            self.temizle()  # yalnız BİZİM oluşturduğumuz soket/kilit dosyaları (başkasınınkine dokunulmaz)
             raise
 
     def fdler(self) -> tuple[list[int], int]:
         return [self.soketler[0].fileno(), self.soketler[1].fileno()], self.soketler[2].fileno()
 
     def kilit_pid(self, pid: int) -> None:
-        for yol in self.kilitler:
+        for yol in self.kilitler:  # kilit 0444 açıldı: yazmak için kısa süre sahibine yazma izni
             try:
+                os.chmod(yol, 0o644)
                 with open(yol, "w") as f:
                     f.write(f"{pid:10d}\n")
+                os.chmod(yol, 0o444)
             except OSError:
                 pass
 
@@ -307,7 +441,7 @@ def _x_temizle(d: dict) -> list[str]:
                 pid = int(f.read().strip() or 0)
         except (OSError, ValueError):
             pid = None
-        if pid is not None and (pid in sahipler or not masaustu._canli(pid)):
+        if pid is not None and (pid in sahipler or not ao._canli(pid)):
             for y in (yol, f"{X_DIZIN}/X{no}"):
                 try:
                     os.unlink(y)
@@ -326,7 +460,7 @@ def _bos_x_cifti(bas: int = ILK_XEKRAN) -> int:
 # ---------------------------------------------------------------- yardımcı: bekle, kafes, başlat
 
 def _bekle(kosul, sure: float, aralik: float = 0.02) -> bool:
-    return masaustu._bekle(kosul, sure, aralik)
+    return ao._bekle(kosul, sure, aralik)
 
 
 def _gunluk(cdir: str, ad: str):
@@ -341,31 +475,6 @@ def _log_sonu(cdir: str, ad: str, n: int = 400) -> str:
         return ""
 
 
-def _kapida_baslat(d: dict, argv: list[str], env: dict, pass_fds=(), **popen) -> subprocess.Popen:
-    """masaustu.kafeste_baslat ile aynı (nice 10 + ionice idle, kafese ALINDIKTAN SONRA exec) + pass_fds
-    (masaustu.kafeste_baslat ek dosya tanıtıcısı geçirmeye izin vermiyor: XWayland soketleri için gerekli)."""
-    tam = [*masaustu._oncelik(), *argv]
-    kafes = d.get("kafes")
-    if not kafes:
-        return subprocess.Popen(tam, env=env, pass_fds=tuple(pass_fds), start_new_session=True, **popen)
-    r, w = os.pipe()
-    try:
-        p = subprocess.Popen(["sh", "-c", masaustu.KAPI.format(fd=r), "deskhand-kapi", *tam], env=env,
-                             pass_fds=(r, *pass_fds), start_new_session=True, **popen)
-    finally:
-        os.close(r)
-    try:
-        masaustu._kafese_al(kafes, p.pid)
-    except BaseException:
-        os.close(w)
-        p.kill()
-        p.wait()
-        raise
-    os.write(w, b"\n")
-    os.close(w)
-    return p
-
-
 def _busctl(d: dict, *a, zaman: float = 5.0) -> subprocess.CompletedProcess:
     return subprocess.run(["busctl", f"--address={d['dbus_adres']}", "--no-pager", *a], capture_output=True, text=True,
                           timeout=zaman, env=kdotool_ortami(d))
@@ -376,6 +485,56 @@ def _kwin_hazir(d: dict) -> bool:
         return _busctl(d, "status", "org.kde.KWin", zaman=3).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
+
+
+def _kwin_bilgisi(d: dict) -> str:
+    """org.kde.KWin.supportInformation (özel veri yolunda; tanılama/ölçüm)."""
+    try:
+        return _busctl(d, "call", "org.kde.KWin", "/KWin", "org.kde.KWin", "supportInformation", zaman=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def _hazir_denetle(d: dict, k: subprocess.Popen) -> None:
+    """Oturum "hazır" sayılmadan önce (KWin beklerken ölürse HEMEN hata): ScreenShot2 arayüzü yayında, bir kare
+    yakalanabiliyor ve boyutu oturum boyutu (ölçek 1: KWin'in çıkış deposu ölçeği ezmedi), EIS aygıtları hazır ve
+    bölgesi aynı boyut; KWin'in OpenGL oluşturucu adı kaydedilir."""
+    def oldu():
+        if k.poll() is not None:
+            raise Dur(ARAC_EKSIK, _("KWin hazırlanırken kapandı: {hata}").format(hata=_log_sonu(d["calisma"], "kwin")))
+
+    def ss2():
+        oldu()
+        try:
+            return _busctl(d, "introspect", "org.kde.KWin", "/org/kde/KWin/ScreenShot2",
+                           "org.kde.KWin.ScreenShot2", zaman=3).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+    if not _bekle(ss2, 10, 0.05):
+        raise Dur(ARAC_EKSIK, _("KWin ScreenShot2 arayüzü hazır olmadı"))
+    hedef = tuple(d["boyut"][:2])
+    son = None
+    for _i in range(50):
+        oldu()
+        try:
+            im = goruntu(d)
+            if im.size == hedef:
+                break
+            son = _("kare boyutu {boyut} ≠ oturum {hedef} (ölçek 1 değil?)").format(boyut=im.size, hedef=hedef)
+        except Dur as e:
+            son = e.mesaj
+        time.sleep(0.05)
+    else:
+        raise Dur(ARAC_EKSIK, _("KWin oturumundan kare alınamadı: {hata}").format(hata=son))
+    oldu()
+    with Eis(d) as e:
+        if e.boyut != hedef:
+            raise Dur(ARAC_EKSIK, _("EIS bölgesi {boyut} ≠ oturum {hedef}").format(boyut=e.boyut, hedef=hedef))
+    oldu()
+    m = re.search(r"OpenGL renderer string:\s*([^\n]+)", _kwin_bilgisi(d).replace("\\n", "\n"))
+    d["gpu"] = m.group(1).strip() if m else ""
+    if not d["gpu"] or re.search(r"llvmpipe|softpipe|swrast", d["gpu"], re.I):
+        d["uyarilar"].append(_("KWin donanım hızlandırması yok ({gpu}): yazılım çizimi").format(gpu=d["gpu"] or "?"))
 
 
 def _kxkbrc(cfg: str, duzen: tuple[str, str]) -> None:
@@ -408,8 +567,8 @@ def _durum_oku(cdir: str) -> dict | None:
 
 def _kwin_mi(d: dict) -> bool:
     pid = (d.get("pid") or {}).get("kwin")
-    kom = masaustu._komut_satiri(pid)
-    return masaustu._canli(pid) and any(os.path.basename(k) == "kwin_wayland" for k in kom) and d["wayland"] in kom
+    kom = ao._komut_satiri(pid)
+    return ao._canli(pid) and any(os.path.basename(k) == "kwin_wayland" for k in kom) and d["wayland"] in kom
 
 
 def _oturum_dizinleri() -> list[str]:
@@ -441,15 +600,29 @@ def gerekli() -> dict:
 
 def baslat(boyut: tuple[int, int] = (1920, 1080), xwayland: bool = True,
            duzen: tuple[str, str] = ("tr", "")) -> dict:
-    """Yalıtık KWin oturumunu başlat → bilgi dict'i. Hata olursa başlatılan her şeyi kapatır."""
+    """Yalıtık KWin oturumunu başlat → bilgi dict'i. Hata olursa başlatılan her şeyi kapatır. GPU: render_sec()
+    tümleşik GPU'yu seçtiyse onunla; o GPU'yla açılamazsa (sürücü/aygıt sorunu) bir kez KWin'in varsayılanıyla."""
+    gpu = render_sec()
+    if gpu is None:
+        return _baslat_tek(boyut, xwayland, duzen, None)
+    try:
+        return _baslat_tek(boyut, xwayland, duzen, gpu["dugum"])
+    except Dur as e:
+        d = _baslat_tek(boyut, xwayland, duzen, None)
+        d["uyarilar"].append(_("tümleşik GPU ({dugum}) ile açılamadı ({hata}); varsayılan GPU kullanılıyor").format(
+            dugum=gpu["dugum"], hata=e.mesaj))
+        return d
+
+
+def _baslat_tek(boyut, xwayland: bool, duzen: tuple[str, str], render_dugumu: str | None) -> dict:
     ok, neden = kullanilabilir()
     if not ok:
         raise Dur(ARAC_EKSIK, neden)
     g, y = int(boyut[0]), int(boyut[1])
     if not (320 <= g <= 8192 and 240 <= y <= 8192):
         raise Dur(1, _("geçersiz ekran boyutu: {boyut}").format(boyut=repr(boyut)))
-    bellek = masaustu._bellek_siniri()
-    takas = masaustu._takas_siniri() if bellek else None
+    bellek = ao._bellek_siniri()
+    takas = ao._takas_siniri() if bellek else None
     if bellek and not shutil.which("systemd-run"):
         raise Dur(ARAC_EKSIK, _("systemd-run yok: bellek kafesi kurulamaz (bilerek kapatmak için DESKHAND_SANAL_BELLEK=0)"))
     temizle_kalintilar()
@@ -459,7 +632,7 @@ def baslat(boyut: tuple[int, int] = (1920, 1080), xwayland: bool = True,
     os.makedirs(cdir, mode=0o700)
     soket_adi = f"deskhand-{kimlik}"
     d = {"surum": 1, "tur": "kwin", "kimlik": kimlik, "calisma": cdir, "boyut": [g, y], "duzen": list(duzen),
-         "wayland": soket_adi, "wayland_yol": os.path.join(cdir, soket_adi), "dbus_adres": f"unix:path={cdir}/bus",
+         "ekran": soket_adi, "render_dugumu": render_dugumu, "wayland": soket_adi, "wayland_yol": os.path.join(cdir, soket_adi), "dbus_adres": f"unix:path={cdir}/bus",
          "xwayland": None, "xauth": None, "x_ana": None, "kafes": None, "cgroup": "", "bellek": bellek,
          "takas": takas, "pid": {}, "ses": None, "uyarilar": [], "baslangic": time.time(),
          "baslatan_pid": os.getpid(), "kwin_surum": ".".join(map(str, kwin_surumu() or ()))}
@@ -467,7 +640,8 @@ def baslat(boyut: tuple[int, int] = (1920, 1080), xwayland: bool = True,
         if len(d["wayland_yol"]) > 100 or len(f"{cdir}/bus") > 100:
             raise Dur(ARAC_EKSIK, _("çalışma dizini yolu çok uzun (soket yolu 108 bayt sınırı): {dizin}").format(dizin=cdir))
         ev = os.path.join(cdir, "ev")
-        for a in ("config", "cache", "data", "state"):
+        # XDG_*_HOME'lar + standart yerleri (Qt var olmayan standart veri dizininde qFatal verebiliyor)
+        for a in ("config", "cache", "data", "state", ".config", ".cache", ".local/share", ".local/state"):
             os.makedirs(os.path.join(ev, a), mode=0o700)
         xekran = None
         if xwayland:
@@ -491,13 +665,13 @@ def baslat(boyut: tuple[int, int] = (1920, 1080), xwayland: bool = True,
 def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     ortam = _kwin_ortami(d)
     # ses: boş çıkış (masaustu ile aynı); özel D-Bus'tan ÖNCE
-    ses, uyari = masaustu.ses_kur(OTURUM_ONEK + d["kimlik"])
+    ses, uyari = ao.ses_kur(OTURUM_ONEK + d["kimlik"])
     d["ses"] = ses
     if uyari:
         d["uyarilar"].append(uyari)
     # 1) özel dbus-daemon: kafesin İLK süreci (systemd-run --scope exec eder: PID dbus-daemon'un kendisi).
     #    Komut `env -i …` ile açılır: systemd-run'ın kendi ortamı (gerçek veri yolu adresi!) dbus-daemon'a GEÇMEZ.
-    conf, adres = masaustu._dbus_yapilandir(cdir)
+    conf, adres = ao._dbus_yapilandir(cdir)
     if adres != d["dbus_adres"]:
         raise Dur(ARAC_EKSIK, _("özel veri yolu adresi beklenenden farklı: {adres}").format(adres=adres))
     env_args = [f"{k}={v}" for k, v in ortam.items()]
@@ -507,13 +681,13 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
             kafes = f"deskhand-kwin-{d['kimlik']}-{os.getpid()}.scope"
             komut = ["systemd-run", "--user", "--scope", "--quiet", f"--unit={kafes}",
                      "-p", f"MemoryMax={d['bellek']}", "-p", f"MemorySwapMax={d.get('takas') or '0'}",
-                     "-p", "Delegate=yes", "-p", "TimeoutStopSec=5", "--", *masaustu._oncelik(), *dbus_cmd]
+                     "-p", "Delegate=yes", "-p", "TimeoutStopSec=5", "--", *ao._oncelik(), *dbus_cmd]
             p = subprocess.Popen(komut, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                 env=masaustu._kullanici_bus_ortami(), start_new_session=True)
+                                 env=ao._kullanici_bus_ortami(), start_new_session=True)
             d["kafes"] = kafes
         else:
             d["uyarilar"].append(_("bellek kafesi KAPALI (DESKHAND_SANAL_BELLEK=0)"))
-            p = subprocess.Popen([*masaustu._oncelik(), *dbus_cmd], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+            p = subprocess.Popen([*ao._oncelik(), *dbus_cmd], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                  env={"PATH": ASGARI_PATH}, start_new_session=True)
     d["pid"]["dbus"] = p.pid
     _durum_yaz(d)
@@ -521,7 +695,7 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     if not _bekle(lambda: os.path.exists(bus_soket) or p.poll() is not None, 8) or p.poll() is not None:
         raise Dur(ARAC_EKSIK, _("özel D-Bus (dbus-daemon) açılmadı: {hata}").format(hata=_log_sonu(cdir, "dbus")))
     if d["kafes"]:
-        d["cgroup"] = masaustu._cgroup(p.pid)
+        d["cgroup"] = ao._cgroup(p.pid)
         if not d["cgroup"].endswith("/" + d["kafes"]):
             raise Dur(ARAC_EKSIK, _("dbus-daemon bellek kafesinde değil: {cgroup}").format(cgroup=repr(d["cgroup"])))
 
@@ -533,11 +707,21 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     try:
         if xekran:
             no = int(xekran[1:])
-            xs = _XSoketleri(no)
-            xs.ac()  # çakışırsa OSError (baslat temizler)
+            for deneme in range(20):  # başka bir oturum aynı anda aynı numarayı aldıysa (O_EXCL kilit) sonrakine geç
+                xs = _XSoketleri(no)
+                try:
+                    xs.ac()
+                    break
+                except OSError:
+                    xs = None
+                    if deneme == 19:
+                        raise
+                    no = _bos_x_cifti(no + 2)
+            xekran = f":{no}"
+            guvenlik_kapilari(d["dbus_adres"], d["wayland"], os.path.join(cdir, "ev", "config"), xekran=xekran)
             d["xwayland"], d["x_ana"] = xekran, no
             d["xauth"] = os.path.join(cdir, "Xauthority")
-            masaustu._xauth_yaz(d["xauth"], no, secrets.token_bytes(16))
+            ao._xauth_yaz(d["xauth"], no, secrets.token_bytes(16))
             ana_fd, init_fd = xs.fdler()
             kwin += ["--xwayland", "--xwayland-display", xekran, "--xwayland-init-display", f":{no + 1}",
                      "--xwayland-xauthority", d["xauth"], "--xwayland-initfd", str(init_fd)]
@@ -547,7 +731,7 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
         _durum_yaz(d)
         # 3) KWin (aynı kafeste)
         with _gunluk(cdir, "kwin") as log:
-            k = _kapida_baslat(d, kwin, ortam, pass_fds=fdler, stdin=subprocess.DEVNULL, stdout=log, stderr=log)
+            k = ao.kafeste_baslat(d, kwin, ortam, pass_fds=fdler, stdin=subprocess.DEVNULL, stdout=log, stderr=log)
     finally:
         if xs is not None:
             xs.kapat()  # KWin kendi kopyalarını tutar
@@ -562,16 +746,17 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
         raise Dur(ARAC_EKSIK, _("KWin özel veri yoluna bağlanmadı: {hata}").format(hata=_log_sonu(cdir, "kwin")))
     if not _kwin_mi(d):
         raise Dur(ARAC_EKSIK, _("KWin süreci doğrulanamadı (pid {pid})").format(pid=k.pid))
+    _hazir_denetle(d, k)
 
     # 4) ses bekçisi (masaustu ile aynı ikinci savunma hattı)
     if ses:
         from . import ses_bekcisi
         with _gunluk(cdir, "ses-bekcisi") as log:
-            p = masaustu.kafeste_baslat(d, [sys.executable, "-I", ses_bekcisi.__file__, d.get("kafes") or ""],
+            p = ao.kafeste_baslat(d, [sys.executable, "-I", ses_bekcisi.__file__, d.get("kafes") or ""],
                                         uygulama_ortami(d), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                         stderr=log)
         d["pid"]["ses_bekcisi"] = p.pid
-        satir = masaustu._satir_bekle(p, 5)
+        satir = ao._satir_bekle(p, 5)
         if p.stdout:
             p.stdout.close()
         if satir != "hazir":
@@ -581,41 +766,45 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
 # ---------------------------------------------------------------- durdur / temizlik
 
 def _kapat_ic(d: dict) -> list[str]:
-    """PID ile kapat: önce kafesteki uygulamalar, sonra çekirdek (ses bekçisi, KWin, dbus); X soketleri/kilitleri,
-    boş ses çıkışı ve çalışma dizini temizlenir. masaustu._kapat_ic ile aynı sıra."""
+    """PID ile kapat: önce kafesteki (ve ortam işaretli: kafesten kaçmış) uygulamalar, sonra çekirdek (KWin, ses
+    bekçisi, bildirim, erişilebilirlik kayıt defteri, dbus) SIGTERM, kısa bekleme, kalan SIGKILL; X soketleri/kilitleri
+    (KWin SIGTERM'de kendisi siler; SIGKILL olduysa biz), boş ses çıkışı EN SON ve çalışma dizini temizlenir.
+    masaustu (Xvfb) ile aynı sıra. Süreç adıyla değil yalnız kayıtlı PID / kafes cgroup'u ile (pkill yok)."""
     notlar = []
     pid = {k: int(v) for k, v in (d.get("pid") or {}).items() if v}
     cg = d.get("cgroup") or ""
     if cg and not (d.get("kafes") and cg.endswith("/" + d["kafes"])):
         cg = ""
-    haric = masaustu._atalar()
-    cekirdek = [p for ad in ("ses_bekcisi", "atspi_registryd", "kwin", "dbus") if (p := pid.get(ad)) and masaustu._canli(p)]
+    haric = ao._atalar()
+    sira = ("kwin", "ses_bekcisi", "bildirim", "a11y", "dbus")
+    cekirdek = [p for ad in sira if (p := pid.get(ad)) and ao._canli(p)]
 
     def surecler() -> list[int]:
-        return sorted({p for p in masaustu._kafes_surecleri(cg) if p not in haric})
+        isaretli = ao._isaretli_surecler(d) if d.get("kimlik") else []
+        return sorted({p for p in ao._kafes_surecleri(cg) + isaretli if p not in haric})
 
     uygulamalar = [p for p in surecler() if p not in cekirdek]
     if uygulamalar:
-        masaustu._sinyal(uygulamalar, signal.SIGTERM)
-        _bekle(lambda: not any(masaustu._canli(p) for p in uygulamalar), 3, 0.05)
+        ao._sinyal(uygulamalar, signal.SIGTERM)
+        _bekle(lambda: not any(ao._canli(p) for p in uygulamalar), 3, 0.05)
     # KWin temiz kapansın (XWayland'i kapatır, kendi dosyalarını yazar), sonra ses bekçisi ve dbus
-    for ad in ("kwin", "ses_bekcisi", "atspi_registryd", "dbus"):
+    for ad in sira:
         p = pid.get(ad)
-        if p and masaustu._canli(p):
-            masaustu._sinyal([p], signal.SIGTERM)
+        if p and ao._canli(p):
+            ao._sinyal([p], signal.SIGTERM)
             if ad == "kwin":
-                _bekle(lambda p=p: not masaustu._canli(p), 4, 0.05)
-    _bekle(lambda: not any(masaustu._canli(p) for p in cekirdek + surecler()), 3, 0.05)
-    kalan = [p for p in set(cekirdek + surecler()) if masaustu._canli(p)]
+                _bekle(lambda p=p: not ao._canli(p), 4, 0.05)
+    _bekle(lambda: not any(ao._canli(p) for p in cekirdek + surecler()), 3, 0.05)
+    kalan = [p for p in set(cekirdek + surecler()) if ao._canli(p)]
     if kalan:
-        masaustu._sinyal(kalan, signal.SIGKILL)
-        _bekle(lambda: not any(masaustu._canli(p) for p in kalan), 2, 0.05)
+        ao._sinyal(kalan, signal.SIGKILL)
+        _bekle(lambda: not any(ao._canli(p) for p in kalan), 2, 0.05)
         notlar.append(_("{sayi} süreç SIGKILL ile kapatıldı").format(sayi=len(kalan)))
-    canli = [p for p in set(cekirdek + surecler()) if masaustu._canli(p)]
+    canli = [p for p in set(cekirdek + surecler()) if ao._canli(p)]
     if canli:
         notlar.append(_("kapanmayan süreçler: {surecler}; boş ses çıkışı bu yüzden KALDIRILMADI").format(surecler=canli))
     else:
-        n = masaustu.ses_kaldir(d.get("ses"))
+        n = ao.ses_kaldir(d.get("ses"))
         if n:
             notlar.append(n)
     notlar += _x_temizle(d)
@@ -647,7 +836,7 @@ def temizle_kalintilar() -> list[str]:
                 yapilan.append(os.path.basename(cdir))
             continue
         bas = d.get("baslatan_pid")
-        if _kwin_mi(d) or (bas and masaustu._canli(bas) and not d["pid"].get("kwin") and bas != os.getpid()):
+        if _kwin_mi(d) or (bas and ao._canli(bas) and not d["pid"].get("kwin") and bas != os.getpid()):
             continue  # canlı ya da başka bir süreç şu an başlatıyor
         if bas == os.getpid() and not d["pid"].get("kwin") and time.time() - d["baslangic"] < 60:
             continue
@@ -669,7 +858,7 @@ def uygulama_baslat(d: dict, argv: list[str], env: dict | None = None, **popen) 
         popen.setdefault("stdout", log)
         popen.setdefault("stderr", log)
     try:
-        return masaustu.kafeste_baslat(d, list(argv), uygulama_ortami(d, env), **popen)
+        return ao.kafeste_baslat(d, list(argv), uygulama_ortami(d, env), **popen)
     finally:
         if log is not None:
             log.close()
@@ -746,14 +935,14 @@ def atspi_baslat(d: dict) -> str | None:
     adres = atspi_adresi(d)
     if not adres:
         return None
-    pid = (d["pid"] or {}).get("atspi_registryd")
-    if not (pid and masaustu._canli(pid)):
+    pid = (d["pid"] or {}).get("a11y")
+    if not (pid and ao._canli(pid)):
         if not os.path.exists(ATSPI_REGISTRYD):
             return None
         with _gunluk(d["calisma"], "atspi") as log:
-            p = masaustu.kafeste_baslat(d, [ATSPI_REGISTRYD], kdotool_ortami(d), stdin=subprocess.DEVNULL, stdout=log,
+            p = ao.kafeste_baslat(d, [ATSPI_REGISTRYD], kdotool_ortami(d), stdin=subprocess.DEVNULL, stdout=log,
                                         stderr=log)
-        d["pid"]["atspi_registryd"] = p.pid
+        d["pid"]["a11y"] = p.pid
         _durum_yaz(d)
 
         def a11y_kayit():  # kayıt defteri a11y veri yolunda: --address ile ona bağlan
