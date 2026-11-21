@@ -195,16 +195,41 @@ def ucbirim_mi(sinif):
 
 
 _SARMALAYICI = {"env", "time", "nohup", "nice", "ionice", "command", "builtin", "exec", "stdbuf", "setsid", "xargs",
-                "watch", "timeout", "chrt", "unbuffer"}
-_KABUK = {"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"}
+                "watch", "timeout", "chrt", "unbuffer", "taskset", "flock", "caffeinate", "systemd-inhibit"}
+# sarmalayıcı → (argüman ALAN seçenekler, komuttan önceki konumsal argüman sayısı): `nice -n 5 X`, `timeout -s 9 5 X`
+_SARMALAYICI_SECENEK = {
+    "env": ({"-u", "--unset", "-C", "--chdir"}, 0), "nice": ({"-n", "--adjustment"}, 0),
+    "ionice": ({"-c", "-n", "-p", "-P", "-u", "--class", "--classdata"}, 0),
+    "timeout": ({"-s", "--signal", "-k", "--kill-after"}, 1), "chrt": ({"-T", "-P", "-D"}, 1),
+    "stdbuf": ({"-i", "-o", "-e"}, 0), "watch": ({"-n", "--interval", "-q", "--equexit"}, 0),
+    "xargs": ({"-I", "-i", "-n", "-P", "-d", "-L", "-l", "-s", "-a", "-E", "-e", "--max-args", "--max-procs",
+               "--delimiter", "--arg-file", "--replace", "--max-lines", "--max-chars", "--eof"}, 0),
+    "time": ({"-f", "-o", "--format", "--output"}, 0), "exec": ({"-a"}, 0), "taskset": (set(), 1),
+    "flock": ({"-w", "-E", "--timeout", "--conflict-exit-code"}, 1),
+    "systemd-inhibit": ({"--what", "--who", "--why", "--mode"}, 0),
+}
+_KABUK = {"sh", "bash", "zsh", "dash", "ksh", "mksh", "fish", "csh", "tcsh", "yash", "busybox-sh"}
 _YETKI = {"sudo", "doas", "pkexec", "run0"}
 _GUC = {"shutdown", "reboot", "poweroff", "halt"}
 _SISTEMD_GUC = {"poweroff", "reboot", "suspend", "halt", "hibernate", "hybrid-sleep", "suspend-then-hibernate", "kexec"}
+# kabuk anahtar sözcükleri: asıl komut bunlardan SONRA gelir (`if true; then sudo reboot; fi`, `{ sudo x; }`, `! sudo x`)
+_ANAHTAR = {"{", "}", "!", "if", "then", "do", "else", "elif", "while", "until", "time", "fi", "done", "esac", "coproc",
+            "(", ")", "[[", "]]"}
+_ATAMA = re.compile(r"([A-Za-z_]\w*)(\+?=)(.*)", re.S)
+_ATAMA_KOMUT = {"export", "declare", "typeset", "local", "readonly"}
+# betik yorumlayıcıları: `python3 -c KOD`, `perl -e KOD` … → KOD dosya silme / komut çalıştırma / dinamik kod içeriyor mu
+_YORUMLAYICI = re.compile(r"(?:python|pypy)[\d.]*|perl[\d.]*|ruby[\d.]*|node|nodejs|deno|bun|php[\d.]*|lua[\d.]*|"
+                          r"luajit|tclsh[\d.]*|osascript|Rscript")
+_YORUMLAYICI_KOD = re.compile(
+    r"rmtree|remove_tree|rm_r|rm_rf|rmSync|rmdirSync|unlinkSync|unlink|\bremove\s*\(|removedirs|\brmdir\b|"
+    r"\bos\s*\.\s*(?:system|popen|exec\w*|spawn\w*|kill\w*|remove|truncate)|subprocess|child_process|\bpty\b|"
+    r"\bsystem\s*\(|\bexec\s*\(|\beval\s*\(|__import__|importlib|\bcompile\s*\(|\bqx\b|%x|`|FileUtils|"
+    r"execSync|spawnSync|\bspawn\s*\(|File\s*\.\s*delete|shell_exec|passthru|proc_open", re.I)
 # kök / ev dizini ya da sistem dizini hedefleri (rm, chmod -R, chown -R); rm için ayrıca * ve ./*
 _KOK_HEDEF = re.compile(r"/|/\*|~/?|~/\*|\$HOME/?|\$\{HOME\}/?|/(?:etc|usr|bin|sbin|lib|lib64|var|boot|home|root|opt|sys|dev|srv)/?\*?")
 _RM_HEDEF = re.compile(r"\*|\./\*|" + _KOK_HEDEF.pattern)
 _ZARARSIZ_AYGIT = re.compile(r"/dev/(?:null|zero|full|stdout|stderr|stdin|tty\w*|pts/\w+|fd/\d+)$")
-_AYIRAC = re.compile(r"\|\||&&|[;&|\n\r]|\$\(|`")
+_DISK_AYGIT = re.compile(r"/dev/(?:sd[a-z]|hd[a-z]|vd[a-z]|xvd[a-z]|nvme\d|mmcblk\d|md\d|dm-\d|disk\d)\S*")
 _DISK_YONLENDIR = re.compile(r">>?\s*/dev/(?:sd[a-z]|hd[a-z]|vd[a-z]|xvd[a-z]|nvme\d|mmcblk\d|md\d|dm-\d|disk\d)")
 _CATAL_BOMBASI = re.compile(r":\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;?\s*:|"
                             r"\b(\w+)\s*\(\s*\)\s*\{\s*\1\s*\|\s*\1\s*&\s*\}")
@@ -213,35 +238,333 @@ _BORU_KABUK = re.compile(r"\b(?:curl|wget)\b[^\n;&]*\|\s*(?:sudo\s+(?:-\S+\s+)*)
                          r"\b(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*<\(\s*(?:curl|wget)\b|"
                          r"\b(?:ba|z|da|k)?sh\s+-c\s+[\"']?\$\(\s*(?:curl|wget)\b")
 _VIM_SUDO = re.compile(r":\s*w\s*!\s*sudo\b")
+_ISARET = "\x00"  # komut ikamesinin (bilinmeyen değer) yer tutucusu
+_ANSI = {"n": "\n", "t": "\t", "r": "\r", "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "v": "\v",
+         "\\": "\\", "'": "'", '"': '"', "?": "?"}
+_ANSI_SAYI = re.compile(r"x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c(.)", re.S)
 
 
-def _belirtec(t):
-    """Komut belirteci: tırnak/ters bölü/parantez kırpılır (\\rm, "rm", 'rm')."""
-    return t.strip("'\"`\\()")
+# ---- küçük kabuk sözcük çözümleyicisi (bash'in sözcük bölme/tırnak kurallarının riskli komut denetimine yeten kısmı)
+
+def _ters_tirnak_sonu(s, i):
+    j = i
+    while j < len(s):
+        if s[j] == "\\":
+            j += 2
+            continue
+        if s[j] == "`":
+            return j
+        j += 1
+    return len(s)
+
+
+def _cift_tirnak_sonu(s, i):
+    """i: açılış "'ndan sonrası → kapanış "'ndan SONRAKİ dizin (yoksa len)."""
+    j = i
+    while j < len(s):
+        c = s[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == '"':
+            return j + 1
+        if c == "$" and s[j + 1:j + 2] == "(":
+            j = _kapanis(s, j + 2) + 1
+            continue
+        if c == "`":
+            j = _ters_tirnak_sonu(s, j + 1) + 1
+            continue
+        j += 1
+    return len(s)
+
+
+def _kapanis(s, i):
+    """i: '(' sonrası → eşleşen ')' dizini (tırnaklar atlanır) | len(s)."""
+    derin, j = 1, i
+    while j < len(s):
+        c = s[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == "'":
+            k = s.find("'", j + 1)
+            j = len(s) if k < 0 else k + 1
+            continue
+        if c == '"':
+            j = _cift_tirnak_sonu(s, j + 1)
+            continue
+        if c == "(":
+            derin += 1
+        elif c == ")":
+            derin -= 1
+            if derin == 0:
+                return j
+        j += 1
+    return len(s)
+
+
+def _ansi_c(s, i):
+    """$'…' (i: açılış tırnağından sonrası) → (çözülmüş metin, kapanıştan sonraki dizin)."""
+    out, j = [], i
+    while j < len(s):
+        c = s[j]
+        if c == "'":
+            return "".join(out), j + 1
+        if c == "\\" and j + 1 < len(s):
+            d = s[j + 1]
+            m = _ANSI_SAYI.match(s, j + 1)
+            if d in _ANSI:
+                out.append(_ANSI[d])
+                j += 2
+            elif m:
+                if m.group(5) is not None:
+                    out.append(chr(ord(m.group(5)) & 0x1F))
+                else:
+                    deger = m.group(1) or m.group(2) or m.group(3)
+                    try:
+                        out.append(chr(int(deger, 16) if deger else int(m.group(4), 8)))
+                    except (ValueError, OverflowError):
+                        pass
+                j = m.end()
+            else:
+                out.append("\\" + d)
+                j += 2
+            continue
+        out.append(c)
+        j += 1
+    return "".join(out), len(s)
+
+
+class _Komut:
+    __slots__ = ("kelimeler", "ic", "yon")
+
+    def __init__(self):
+        self.kelimeler, self.ic, self.yon = [], [], []  # sözcükler, komut ikamesi içleri, (işleç, hedef) yönlendirmeler
+
+
+def _ayristir(s):
+    """Kabuk metni → boru hatları [[_Komut]]. Tırnaklar/ters bölüler kaldırılır, $'…' açılır, komut ikamesi ($(…),
+    `…`, <(…), >(…)) içeriği ayrıca saklanır (yerinde _ISARET), yorumlar atlanır. Kapanmamış tırnak metnin sonuna dek."""
+    hatlar, hat = [], []
+    kom = _Komut()
+    kel = None  # None = sözcük başlamadı
+    yon_op = None  # bir sonraki sözcük bu yönlendirmenin hedefi
+    i, n = 0, len(s)
+
+    def sozcuk_bitir():
+        nonlocal kel, yon_op
+        if kel is not None:
+            if yon_op is not None:
+                kom.yon.append((yon_op, kel))
+                yon_op = None
+            else:
+                kom.kelimeler.append(kel)
+            kel = None
+
+    def komut_bitir():
+        nonlocal kom
+        sozcuk_bitir()
+        if kom.kelimeler or kom.ic or kom.yon:
+            hat.append(kom)
+        kom = _Komut()
+
+    def hat_bitir():
+        nonlocal hat
+        komut_bitir()
+        if hat:
+            hatlar.append(hat)
+        hat = []
+
+    def ekle(t):
+        nonlocal kel
+        kel = (kel or "") + t
+
+    while i < n:
+        c = s[i]
+        if c in " \t":
+            sozcuk_bitir()
+            i += 1
+        elif c in "\n\r;":
+            hat_bitir()
+            i += 1
+        elif c == "&":
+            if s[i + 1:i + 2] == "&":
+                hat_bitir()
+                i += 2
+            elif s[i + 1:i + 2] == ">":  # &> / &>> dosya
+                sozcuk_bitir()
+                j = i + 2 + (s[i + 2:i + 3] == ">")
+                yon_op = s[i:j]
+                i = j
+            else:
+                hat_bitir()
+                i += 1
+        elif c == "|":
+            if s[i + 1:i + 2] == "|":
+                hat_bitir()
+                i += 2
+            else:
+                komut_bitir()
+                i += 2 if s[i + 1:i + 2] == "&" else 1
+        elif c in "()":
+            hat_bitir()
+            i += 1
+        elif c in "<>":
+            if s[i + 1:i + 2] == "(":  # süreç ikamesi <(…) >(…)
+                j = _kapanis(s, i + 2)
+                kom.ic.append(s[i + 2:j])
+                ekle(_ISARET)
+                i = j + 1
+                continue
+            if kel is not None and kel.isdigit():  # 2>dosya: tanımlayıcı numarası sözcük değil
+                kel = None
+            sozcuk_bitir()
+            j = i
+            while j < n and s[j] in "<>&|-":
+                j += 1
+            yon_op = s[i:j]
+            i = j
+        elif c == "#" and kel is None:
+            k = s.find("\n", i)
+            i = n if k < 0 else k
+        elif c == "\\":
+            if s[i + 1:i + 2] == "\n":
+                i += 2
+            else:
+                ekle(s[i + 1:i + 2])
+                i += 2
+        elif c == "'":
+            k = s.find("'", i + 1)
+            k = n if k < 0 else k
+            ekle(s[i + 1:k])
+            i = k + 1
+        elif c == "$" and s[i + 1:i + 2] == "'":
+            metin, i = _ansi_c(s, i + 2)
+            ekle(metin)
+        elif c == "$" and s[i + 1:i + 3] == "((":  # aritmetik: komut değil
+            j = _kapanis(s, i + 2)
+            ekle(_ISARET)
+            i = min(n, j + 2)
+        elif c == "$" and s[i + 1:i + 2] == "(":
+            j = _kapanis(s, i + 2)
+            kom.ic.append(s[i + 2:j])
+            ekle(_ISARET)
+            i = j + 1
+        elif c == "`":
+            j = _ters_tirnak_sonu(s, i + 1)
+            kom.ic.append(s[i + 1:j])
+            ekle(_ISARET)
+            i = j + 1
+        elif c == '"':
+            j = i + 1
+            parca = []
+            while j < n and s[j] != '"':
+                d = s[j]
+                if d == "\\" and j + 1 < n:
+                    parca.append(s[j + 1] if s[j + 1] in '$`"\\' else ("" if s[j + 1] == "\n" else "\\" + s[j + 1]))
+                    j += 2
+                elif d == "$" and s[j + 1:j + 2] == "(" and s[j + 2:j + 3] != "(":
+                    k = _kapanis(s, j + 2)
+                    kom.ic.append(s[j + 2:k])
+                    parca.append(_ISARET)
+                    j = k + 1
+                elif d == "`":
+                    k = _ters_tirnak_sonu(s, j + 1)
+                    kom.ic.append(s[j + 1:k])
+                    parca.append(_ISARET)
+                    j = k + 1
+                else:
+                    parca.append(d)
+                    j += 1
+            ekle("".join(parca))
+            i = j + 1
+        else:
+            ekle(c)
+            i += 1
+    hat_bitir()
+    return hatlar
 
 
 def _yol_adi(t):
-    return _belirtec(t).rsplit("/", 1)[-1]
+    return t.rsplit("/", 1)[-1]
 
 
 def _ozyinelemeli(belirtecler):
     return any(re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", t) or t == "--recursive" for t in belirtecler)
 
 
-def _parca_riski(belirtecler, derinlik=0):
-    """Tek komut parçası (; && | ile bölünmüş) belirteçleri → neden listesi."""
+def _degisken_coz(t, degiskenler):
+    """$AD / ${AD} → bu metinde atanmış değeri (S=sudo; $S reboot); bilinmeyen değişken olduğu gibi kalır."""
+    if "$" not in t:
+        return t
+    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: degiskenler.get(m.group(1) or m.group(2), m.group(0)), t)
+
+
+def _kume_ac(t):
+    """Küme açılımı (tek düzey): pre{a,b}post → [prea post, preb post]; `{sudo,reboot}` → sudo reboot."""
+    m = re.fullmatch(r"(.*?)\{([^{}]*,[^{}]*)\}(.*)", t, re.S)
+    if not m or _ISARET in t:
+        return [t]
+    return [m.group(1) + x + m.group(3) for x in m.group(2).split(",")]
+
+
+def _komut_riski(kom, degiskenler, derinlik):
+    """Tek basit komut → (neden listesi, asıl komut adı)."""
+    t = []
+    for w in kom.kelimeler:
+        t += _kume_ac(_degisken_coz(w, degiskenler))
     nedenler = []
-    t = [x for x in (_belirtec(b) for b in belirtecler) if x]
+    for op, hedef in kom.yon:
+        if ">" in op and _DISK_AYGIT.fullmatch(_degisken_coz(hedef, degiskenler)):
+            nedenler.append(_("> /dev/diskaygıtı: diskin üzerine yazar"))
     i = 0
-    while i < len(t):  # ortam atamaları (A=1 komut) ve sarmalayıcılar (time, nohup, nice -n 5, xargs…) atlanır
-        if re.fullmatch(r"\w+=\S*", t[i]) or _yol_adi(t[i]) in _SARMALAYICI or (
-                i and _yol_adi(t[i - 1]) in _SARMALAYICI and (t[i].startswith("-") or t[i].isdigit())):
+    while i < len(t):
+        w = t[i]
+        if w in _ANAHTAR:
             i += 1
-        else:
-            break
+            continue
+        m = _ATAMA.fullmatch(w)
+        if m:
+            if _ISARET not in m.group(3):
+                degiskenler[m.group(1)] = m.group(3)
+            i += 1
+            continue
+        if not w or w.startswith("$") or _ISARET in w:  # bilinmeyen değer komut konumunda: sonrakine bak
+            i += 1
+            continue
+        ad = _yol_adi(w)
+        if ad in ("busybox", "toybox"):  # busybox rm -rf ~ → rm
+            i += 1
+            continue
+        if ad in _SARMALAYICI:
+            secenekler, konumsal = _SARMALAYICI_SECENEK.get(ad, (set(), 0))
+            i += 1
+            while i < len(t) and t[i].startswith("-") and t[i] != "-":
+                o = t[i]
+                i += 1
+                if o == "--":
+                    break
+                if ad == "env" and (o in ("-S", "--split-string") or o.startswith("--split-string=")):
+                    ic = o.split("=", 1)[1] if "=" in o else (t[i] if i < len(t) else "")
+                    if "=" not in o:
+                        i += 1
+                    if derinlik < 3:
+                        nedenler += _metin_riskleri(" ".join([ic, *t[i:]]), derinlik + 1)
+                    return nedenler, ""
+                if o in secenekler and "=" not in o:
+                    i += 1
+            i += min(konumsal, max(0, len(t) - i - 1))
+            continue
+        break
     if i >= len(t):
-        return nedenler
+        return nedenler, ""
     komut, arg = _yol_adi(t[i]), t[i + 1:]
+    if komut in _ATAMA_KOMUT:
+        for a in arg:
+            m = _ATAMA.fullmatch(a)
+            if m and _ISARET not in m.group(3):
+                degiskenler[m.group(1)] = m.group(3)
+        return nedenler, komut
     if komut in _YETKI:
         nedenler.append(_("{komut} ile yetki yükseltme").format(komut=komut))
     if komut in _GUC or (komut in ("init", "telinit") and any(a in ("0", "6") for a in arg)):
@@ -260,45 +583,83 @@ def _parca_riski(belirtecler, derinlik=0):
             nedenler.append(_("git push +ref: zorla itme (uzak geçmişi ezer)"))
     if komut in ("chmod", "chown", "chgrp") and _ozyinelemeli(arg) and any(_KOK_HEDEF.fullmatch(a) for a in arg):
         nedenler.append(_("{komut} -R kök/ev/sistem dizininde: tüm dosyaların izin/sahipliğini değiştirir").format(komut=komut))
-    if komut in _KABUK | {"eval"} and derinlik < 2:  # sh -c "sudo …" / eval "rm -rf /": gömülü komut da denetlenir
+    if derinlik < 3:
+        if komut in _KABUK | {"eval"}:  # sh -c "sudo …" / bash -lc … / eval "rm -rf /": gömülü komut da denetlenir
+            for j, a in enumerate(arg):
+                if komut == "eval" or re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a):
+                    nedenler += _metin_riskleri(" ".join(arg[j + (0 if komut == "eval" else 1):]), derinlik + 1)
+                    break
+            if any("curl" in x or "wget" in x for x in kom.ic):  # bash <(curl …), sh -c "$(curl …)"
+                nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
+        if _YORUMLAYICI.fullmatch(komut):  # python3 -c KOD, perl -e KOD …
+            for j, a in enumerate(arg):
+                if re.fullmatch(r"-[a-zA-Z]*[ceEpr]", a) and j + 1 < len(arg) and _YORUMLAYICI_KOD.search(arg[j + 1]):
+                    nedenler.append(_("{komut} ile satır içi kod: dosya silme / komut çalıştırma / dinamik kod").format(
+                        komut=komut))
+                    break
+    if komut == "find":
+        if "-delete" in arg:
+            nedenler.append(_("find -delete: bulunan her şeyi siler (geri alınamaz)"))
         for j, a in enumerate(arg):
-            if a == "-c" or komut == "eval":
-                ic = " ".join(arg[j + (0 if komut == "eval" else 1):])
-                nedenler += _metin_riskleri(ic, derinlik + 1)
-                break
+            if a in ("-exec", "-execdir", "-ok", "-okdir") and j + 1 < len(arg):
+                son = next((n for n in range(j + 1, len(arg)) if arg[n] in (";", "+", "\\;")), len(arg))
+                ic = arg[j + 1:son]
+                if ic and _yol_adi(ic[0]) == "rm":
+                    nedenler.append(_("find -exec rm: bulunan her şeyi siler (geri alınamaz)"))
+                elif ic and derinlik < 3:
+                    alt = _Komut()
+                    alt.kelimeler = ic
+                    nedenler += _komut_riski(alt, dict(degiskenler), derinlik + 1)[0]
     # rm: komut konumunda (xargs/env/time sarmalayıcıları atlanmıştı) ya da bir yürütücünün argümanı olarak
-    # (sudo rm -rf, find … -exec rm -r). echo/grep/man gibi komutların METİN argümanındaki 'rm' sayılmaz.
+    # (sudo rm -rf). echo/grep/man gibi komutların METİN argümanındaki 'rm' sayılmaz.
     j = 0 if komut == "rm" else next((n for n, a in enumerate(arg) if _yol_adi(a) == "rm"), None) \
-        if komut in _YETKI | {"find"} else None
+        if komut in _YETKI else None
     if j is not None:
         sonrasi = arg[j + (0 if komut == "rm" else 1):]
         if _ozyinelemeli(sonrasi) or "--no-preserve-root" in sonrasi:
             tehlikeli = any(_RM_HEDEF.fullmatch(x) for x in sonrasi)
             nedenler.append(_("rm -r: özyinelemeli silme (geri alınamaz)")
                             + (_("; hedef kök/ev dizini ya da *") if tehlikeli else ""))
-    return nedenler
+    return nedenler, komut
 
 
 def _metin_riskleri(metin, derinlik=0):
     nedenler = []
     if _CATAL_BOMBASI.search(metin):
         nedenler.append(_("çatal bombası (sistemi kilitler)"))
-    if _BORU_KABUK.search(metin):
-        nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
     if _DISK_YONLENDIR.search(metin):
         nedenler.append(_("> /dev/diskaygıtı: diskin üzerine yazar"))
     if _VIM_SUDO.search(metin):
         nedenler.append(_(":w !sudo: dosyayı yetkiyle yazar"))
-    for parca in _AYIRAC.split(metin):
-        nedenler += _parca_riski(parca.split(), derinlik)
+    hatlar = _ayristir(metin)
+    duz = " ; ".join(" | ".join(" ".join(k.kelimeler) for k in hat) for hat in hatlar)  # tırnaksız/kaçışsız hâli
+    if _BORU_KABUK.search(metin) or _BORU_KABUK.search(duz):
+        nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
+    degiskenler = {}
+    for hat in hatlar:
+        adlar = []
+        for kom in hat:
+            n_, ad = _komut_riski(kom, degiskenler, derinlik)
+            nedenler += n_
+            adlar.append(ad)
+            if derinlik < 3:
+                for ic in kom.ic:  # komut ikamesinin içi de çalışır: $(sudo reboot)
+                    nedenler += _metin_riskleri(ic, derinlik + 1)
+        indir = next((n for n, a in enumerate(adlar) if a in ("curl", "wget")), None)
+        if indir is not None and any(a in _KABUK or a in _YETKI for a in adlar[indir + 1:]):
+            nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
     return nedenler
 
 
 def riskli_komut(metin):
     """Metin yıkıcı bir kabuk komutu kalıbına uyuyor mu? → neden metni | None. Yalnız METNE bakar; hedef pencerenin
-    uçbirim olup olmadığı (ucbirim_mi) çağıranda denetlenir. Dar, gerekçeli kalıplar: geri alınamaz silme (rm -r),
-    yetki yükseltme (sudo/doas/pkexec/run0), indirileni kabuğa verme, disk biçimlendirme/üzerine yazma, çatal bombası,
-    kökte toplu izin/sahiplik değişikliği, kapatma/yeniden başlatma/askıya alma, zorla git push, :w !sudo."""
+    uçbirim olup olmadığı (ucbirim_mi) çağıranda denetlenir. Metin kabuk kurallarıyla sözcüklere ayrılır (tırnak/ters
+    bölü kaldırılır, $'…' açılır, komut ikamesinin içi ayrıca denetlenir); kabuk anahtar sözcükleri ({ } ! if then do…),
+    değişken atamaları ve bilinmeyen $DEĞİŞKEN komut adı atlanır, aynı metindeki atama çözülür (S=sudo; $S reboot);
+    busybox X → X; sh/bash -c, eval, env -S içi ve python -c / perl -e kodu yeniden denetlenir.
+    Dar, gerekçeli kalıplar: geri alınamaz silme (rm -r, find -delete, find -exec rm), yetki yükseltme
+    (sudo/doas/pkexec/run0), indirileni kabuğa verme, disk biçimlendirme/üzerine yazma, çatal bombası, kökte toplu
+    izin/sahiplik değişikliği, kapatma/yeniden başlatma/askıya alma, zorla git push, :w !sudo."""
     if not metin or not metin.strip():
         return None
     nedenler = list(dict.fromkeys(_metin_riskleri(metin)))
