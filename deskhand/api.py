@@ -419,6 +419,18 @@ def kaydir(k, yon="down", adim=3, nokta=None, baslik=None) -> str:
                                  nokta=f"{int(nokta[0])},{int(nokta[1])}" if nokta else None))
 
 
+def pencere_yonet(k, islem, x=None, y=None, g=None, h=None, baslik=None) -> dict:
+    """tasi | boyut | kucult | buyut | geri (eylem.pencere_yonet: DUR, yasak, kilit, ekran sınırı, kde'de 15)."""
+    from .eylem import pencere_yonet as f
+    return f(k, islem, x, y, g, h, baslik)
+
+
+def pencere_kapat(k, baslik) -> str:
+    """Pencereyi kapat (CLI `kapat` ile aynı komut: başlık kilidi zorunlu, kibar kapatma, doğrulama)."""
+    from .eylem import k_kapat
+    return calistir(k_kapat, ns(kimlik=k, baslik=baslik))
+
+
 # ---------------------------------------------------------------- uygulama
 
 def uygulama_komutu(uygulama: str, argumanlar: list[str] | None = None) -> tuple[list[str], str, list[str]]:

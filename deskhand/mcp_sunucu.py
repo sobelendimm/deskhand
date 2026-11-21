@@ -856,6 +856,47 @@ def open_app(
         return {**bilgi, **r}
 
 
+@mcp.tool(title="Manage window", annotations=YUMUSAK)
+def manage_window(
+    window: PencereZorunlu,
+    action: Literal["move", "resize", "minimize", "maximize", "restore", "close"],
+    x: Annotated[int | None, Field(description="move: left edge, screen pixels")] = None,
+    y: Annotated[int | None, Field(description="move: top edge, screen pixels")] = None,
+    width: Annotated[int | None, Field(ge=1, description="resize: width in pixels")] = None,
+    height: Annotated[int | None, Field(ge=1, description="resize: height in pixels")] = None,
+    desktop: Masaustu = "auto",
+) -> dict[str, Any]:
+    """Move, resize, minimize, maximize, restore or close a window; returns its new geometry. Targets that would leave
+    the screen are refused [2]. On the user's screen it does not touch windows while they watch a video or play [15].
+    close asks the window to close politely (the app may ask to save first); closing runs the usual checks."""
+    with baglam(desktop, _("pencere {islem}: {pencere}").format(islem=action, pencere=window)) as bilgi:
+        hata.dur_denetle()
+        k = _pencere_zorunlu(window)
+        y_ = api.yasak_mi(k)
+        if y_:
+            raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
+        desen = baslik_kilidi(window, k)
+        if action == "close":
+            with kilitli():
+                mesaj = api.pencere_kapat(k, desen)
+            return {**bilgi, "status": "closed", "message": mesaj, "window_closed": True}
+        islem = {"move": "tasi", "resize": "boyut", "minimize": "kucult", "maximize": "buyut",
+                 "restore": "geri"}[action]
+        if action == "move" and (x is None or y is None):
+            raise ToolError("[1] " + _("move için x ve y gerekli"))
+        if action == "resize" and (width is None or height is None):
+            raise ToolError("[1] " + _("resize için width ve height gerekli"))
+        with kilitli():
+            r = api.pencere_yonet(k, islem, x, y, width, height, desen)
+        s = {**bilgi, "status": {"move": "moved", "resize": "resized", "minimize": "minimized",
+                                 "maximize": "maximized", "restore": "restored"}[action],
+             "window": {"id": k, "title": r["baslik"], "geometry": list(r["geometri"])},
+             "previous_geometry": list(r["onceki"])}
+        if r["uyari"]:
+            s["note"] = r["uyari"]
+        return s
+
+
 @mcp.tool(title="Run flow", annotations=EYLEM)
 def run_flow(
     action: Literal["list", "run"] = "list",

@@ -12,15 +12,17 @@ import sys
 from . import __version__, guvenlik, yollar
 from .akis import k_akis
 from .arka_uc import ARKA_ONEK, hedef_ad, sec
+from .doktor import k_doktor
 from .erisim import k_agac, k_erisim, k_ogeye_tikla
 from .eylem import (GIRDI_KOMUTLARI, KAYDIR_YON, OKUMA_KOMUTLARI, k_bas, k_dizi, k_fare, k_kapat, k_kaydir,
-                    k_metne_tikla, k_renge_tikla, k_simgeye_tikla, k_surukle, k_tikla, k_tus, k_uyu, k_yaz)
+                    k_metne_tikla, k_pencere, k_renge_tikla, k_simgeye_tikla, k_surukle, k_tikla, k_tus, k_uyu,
+                    k_yaz)
 from .gorsel import k_foto, k_renk_bul, k_simge_bul, k_simge_kaydet
 from .gunluk import gunluk, temizle
 from .guvenlik import yasak_denetle
 from .hata import SANAL_KAPALI, Dur, dur_denetle, dur_dosyasi
 from .i18n import N_, _, h_
-from .komutlar import DUGME, ERISIM, RENK, SECENEKLER, TR_EN, YON, cevirici, ic_ad, secimler, takma_adlar
+from .komutlar import DUGME, ERISIM, PENCERE, RENK, SECENEKLER, TR_EN, YON, cevirici, ic_ad, secimler, takma_adlar
 from .mesgul import k_karar, k_mesgul
 from .ocr import k_bekle, k_metin
 from .uygulama import k_ac
@@ -61,6 +63,9 @@ YARDIM_KOMUTLAR = (
        "                    [--region ..] [--scroll-search [N]] [--approved]"),
     N_("  ekran wait (bekle) <kimlik> <metin> [--timeout SN] [--gone] [--region ..]"),
     N_("  ekran -b DESEN close (kapat) <kimlik>   pencereyi kapatır (başlık kilidi zorunlu)"),
+    N_("  ekran window (pencere) <kimlik> move (tasi) X Y | resize (boyut) G Y | minimize (kucult) | maximize (buyut) |\n"
+       "                                          restore (geri)   pencereyi taşı/boyutlandır/küçült/büyüt/geri yükle\n"
+       "                                          (ekran pikseli; ekran dışına taşarsa 2)"),
     N_("  ekran hold (bas) <kimlik> <tuş[+tuş]> <SN>   tuşu basılı tut (oyunda yürüme); kesintide hemen bırakır"),
     N_("  ekran click ... --hold SN | --repeat N   fare düğmesini basılı tut (kazma) / N kez tıkla"),
     N_("  ekran drag (surukle) <kimlik> x1 y1 x2 y2 [left|right] [--duration 0.4]   sürükle-bırak"),
@@ -101,6 +106,9 @@ YARDIM_KOMUTLAR = (
        "bildirimle\n"
        "                                          sorar: Arka planda yap / Ekranımda yap / Sonra. \"arka\" → komutlara "
        "--background"),
+    N_("  ekran doctor (doktor) [--json]          kurulum ve oturum sağlığı: bağımlılıklar, oturum, panel, yardımcılar "
+       "(salt okunur;\n"
+       "                                          zorunlu bağımlılık eksikse çıkış kodu 9)"),
     N_("  ekran help (yardım)                     bu metin"),
 )
 YARDIM_ORTAK = (
@@ -139,7 +147,8 @@ def yardim_metni():
     return re.sub(r"(?m)^(\s+)(?:ekran|deskhand)(?=\s)", lambda m: m.group(1) + prog_adi(), metin)
 
 
-KOMUTSUZ_ARKA_UC = {"dur", "devam", "durum", "yardım", "yardim", "uyu", "mesgul", "karar", "panel", "masaustu", "oturum", "mcp"}  # arka uç gerekmeyen komutlar
+KOMUTSUZ_ARKA_UC = {"dur", "devam", "durum", "yardım", "yardim", "uyu", "mesgul", "karar", "panel", "masaustu", "oturum", "mcp",
+                    "doktor"}  # arka uç gerekmeyen komutlar
 
 
 def prog_adi():
@@ -309,6 +318,10 @@ def ayristirici(prog=None, sessiz=False):
     s = komut("tus", k_tus, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("kombinasyon")
     secenek(s, "--onayli", action="store_true", help=h_("ödeme sayfasında Enter/boşluk: kullanıcı AÇIKÇA onayladı"))
     s = komut("kapat", k_kapat, parents=[ortak]); s.add_argument("kimlik")
+    s = komut("pencere", k_pencere, parents=[ortak]); s.add_argument("kimlik")
+    s.add_argument("islem", type=cevirici(PENCERE), choices=secimler(PENCERE, ["tasi", "boyut", "kucult", "buyut", "geri"]),
+                   metavar="{move,resize,minimize,maximize,restore}")
+    s.add_argument("deger", nargs="*", metavar="PX", help=h_("move: X Y (ekran pikseli); resize: GENİŞLİK YÜKSEKLİK"))
     s = komut("yaz", k_yaz, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("metin", type=kacis_coz)
     secenek(s, "--gizli", action="store_true", help=h_("günlüğe metni yazma"))
     secenek(s, "--onayli", action="store_true",
@@ -372,6 +385,7 @@ def ayristirici(prog=None, sessiz=False):
     s = komut("masaustu", k_masaustu, add_help=False); s.add_argument("arg", nargs=argparse.REMAINDER)
     s = komut("karar", k_karar); s.add_argument("ozet", help=h_("görev özeti (bildirimde gösterilir)"))
     s.add_argument("--json", action="store_true")
+    s = komut("doktor", k_doktor); s.add_argument("--json", action="store_true")
     komut("dur", k_dur)
     komut("devam", k_devam)
     komut("durum", k_durum)
