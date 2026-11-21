@@ -46,10 +46,11 @@ SECENEKLER = {
     "--tekrar": "--repeat", "--komut": "--command", "--gizli": "--secret", "--yok": "--gone",
     "--esik": "--threshold", "--dosya": "--file", "--kal": "--stay", "--nokta": "--point", "--rol": "--role",
     "--en-az": "--min-pixels", "--foto": "--shot", "--boyut": "--size", "--openbox-yok": "--no-openbox",
+    "--degistirici": "--mod",
 }
 
 # konumsal değerler: İngilizce → Türkçe (içeride Türkçe)
-DUGME = {"left": "sol", "right": "sag", "double": "cift", "middle": "orta"}
+DUGME = {"left": "sol", "right": "sag", "double": "cift", "triple": "uclu", "middle": "orta"}
 YON = {"down": "asagi", "up": "yukari", "left": "sol", "right": "sag"}
 RENK = {"green": "yesil", "red": "kirmizi", "blue": "mavi"}
 MASAUSTU = {"start": "baslat", "stop": "durdur", "status": "durum"}

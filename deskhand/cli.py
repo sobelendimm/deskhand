@@ -53,7 +53,7 @@ YARDIM_KOMUT_BASI = (
 YARDIM_KOMUTLAR = (
     N_("  ekran windows (bul) <desen>             kimlik | başlık | x y genişlik yükseklik"),
     N_("  ekran screenshot (foto) <kimlik> [png] [--region x,y,g,y] [--width N] [--grid [ADIM]]"),
-    N_("  ekran click (tikla) <kimlik> <x> <y> [right|double|middle] [--shot] [--approved]"),
+    N_("  ekran click (tikla) <kimlik> <x> <y> [right|double|triple|middle] [--mod ctrl+shift] [--shot] [--approved]"),
     N_("  ekran key (tus) <kimlik> <kombinasyon> [--approved]   ör. ctrl+s, Return, alt+F4"),
     N_("  ekran type (yaz) <kimlik> <metin> [--secret]   \\n → Return, \\t → Tab, \\\\ → \\; --secret günlüğe metni yazmaz;\n"
        "                                          '-' ile başlayan metin: ekran type <kimlik> -- \"-5 derece\""),
@@ -282,7 +282,7 @@ def ayristirici(prog=None, sessiz=False):
             help=h_("kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı açıkça izin verdiyse)"))
     secenek(ortak, "--ekranimda", action="store_true", default=argparse.SUPPRESS,  # komuttan sonra da kabul
             help=h_("kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı açıkça izin verdiyse)"))
-    dugmeler = ["sol", "sag", "cift", "orta"]
+    dugmeler = ["sol", "sag", "cift", "uclu", "orta"]
 
     def komut(tr, f, **kw):
         """Alt komut: İngilizce adla, Türkçe ad(lar) takma ad; `komut` alanı her zaman Türkçe iç ad."""
@@ -294,12 +294,17 @@ def ayristirici(prog=None, sessiz=False):
         s.add_argument("dugme", nargs="?", default="sol", type=cevirici(DUGME), choices=secimler(DUGME, secenekler),
                        metavar="{" + ",".join(en for en, t in DUGME.items() if t in secenekler) + "}")
 
+    def degistirici(s):
+        """Tıklamaya değiştirici tuş: --mod ctrl+shift (keydown → tık → keyup; bırakma her durumda)."""
+        secenek(s, "--degistirici", en="--mod", dest="mod", default=None,
+                help=h_("tık sırasında basılı tutulacak tuşlar: ctrl, shift, alt, meta (ör. ctrl+shift)"))
+
     s = komut("bul", k_bul, parents=[ortak]); s.add_argument("desen")
     s = komut("foto", k_foto, parents=[ortak, okuma]); s.add_argument("kimlik"); s.add_argument("cikti", nargs="?")
     secenek(s, "--bolge"); secenek(s, "--genislik", type=int)
     secenek(s, "--izgara", type=int, nargs="?", const=100)
     s = komut("tikla", k_tikla, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("x", type=float)
-    s.add_argument("y", type=float); dugme(s)
+    s.add_argument("y", type=float); dugme(s); degistirici(s)
     secenek(s, "--foto", action="store_true", help=h_("x,y son fotoğrafın pikseli (bölge/ölçek eşlenir)"))
     secenek(s, "--onayli", action="store_true", help=h_("kullanıcı bu hassas tıklamayı AÇIKÇA onayladı"))
     secenek(s, "--basili", type=float, default=0.0, help=h_("düğmeyi SN basılı tut (oyunda kazma)"))
@@ -336,7 +341,7 @@ def ayristirici(prog=None, sessiz=False):
     secenek(s, "--hepsi", action="store_true", help=h_("gürültü süzgeci kapalı"))
     secenek(s, "--derin", action="store_true", help=h_("3 okuma yöntemi birlikte: renkli düğmeler de görünür"))
     s = komut("metne-tikla", k_metne_tikla, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("metin")
-    dugme(s)
+    dugme(s); degistirici(s)
     secenek(s, "--sira", type=int); secenek(s, "--bekle", type=float, default=0.0)
     secenek(s, "--kay", help=h_("dx,dy: metnin merkezinden kaydırarak tıkla (ör. etiketin sağındaki kutu)"))
     secenek(s, "--kaydirarak", type=int, nargs="?", const=10, default=0,
@@ -348,14 +353,14 @@ def ayristirici(prog=None, sessiz=False):
     s = komut("simge-bul", k_simge_bul, parents=[ortak, okuma]); s.add_argument("kimlik"); s.add_argument("ad")
     secenek(s, "--esik", type=float, default=0.9); secenek(s, "--bolge")
     s = komut("simgeye-tikla", k_simgeye_tikla, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("ad")
-    dugme(s)
+    dugme(s); degistirici(s)
     secenek(s, "--esik", type=float, default=0.9); secenek(s, "--sira", type=int); secenek(s, "--bolge")
     secenek(s, "--onayli", action="store_true", help=h_("kullanıcı bu hassas tıklamayı AÇIKÇA onayladı"))
     s = komut("renk-bul", k_renk_bul, parents=[ortak, okuma]); s.add_argument("kimlik")
     s.add_argument("renk", type=cevirici(RENK))
     secenek(s, "--bolge"); secenek(s, "--en-az", type=int, default=250)
     s = komut("renge-tikla", k_renge_tikla, parents=[ortak]); s.add_argument("kimlik")
-    s.add_argument("renk", type=cevirici(RENK)); dugme(s); secenek(s, "--bolge")
+    s.add_argument("renk", type=cevirici(RENK)); dugme(s); degistirici(s); secenek(s, "--bolge")
     secenek(s, "--en-az", type=int, default=250); secenek(s, "--sira", type=int)
     secenek(s, "--onayli", action="store_true")
     s = komut("bekle", k_bekle, parents=[ortak, okuma]); s.add_argument("kimlik"); s.add_argument("metin")
@@ -375,7 +380,7 @@ def ayristirici(prog=None, sessiz=False):
     secenek(s, "--rol", help=h_("yalnız bu rol (ör. 'push button', 'check box')"))
     secenek(s, "--hepsi", action="store_true", help=h_("etkileşimsiz ögeler dahil hepsi"))
     s = komut("ogeye-tikla", k_ogeye_tikla, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("ad")
-    dugme(s); secenek(s, "--rol")
+    dugme(s); degistirici(s); secenek(s, "--rol")
     secenek(s, "--sira", type=int)
     secenek(s, "--onayli", action="store_true", help=h_("kullanıcı bu hassas tıklamayı AÇIKÇA onayladı"))
     s = komut("mesgul", k_mesgul); s.add_argument("--json", action="store_true")

@@ -1,4 +1,4 @@
-"""Deskhand (deskhand) MCP sunucusu (stdio): yapay zekâ ajanları masaüstünü 12 araçla kullanır (README: MCP).
+"""Deskhand (deskhand) MCP sunucusu (stdio): yapay zekâ ajanları masaüstünü 13 araçla kullanır (README: MCP).
 
 Çalıştırma:  python3 -m deskhand.mcp_sunucu        (Claude Code kaydı: README.md (MCP))
 Ortam:       DESKHAND_MCP_SADECE_ARKA=1  → yalnız görünmez masaüstü (foreground yasak; `deskhand-bg` kaydı)
@@ -38,7 +38,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 
-from . import __version__, api, guvenlik, hata, masaustu
+from . import __version__, api, dongu, fark, guvenlik, hata, masaustu
 from .arka_uc import EKRAN
 from .i18n import N_, _
 
@@ -85,7 +85,11 @@ Recommended flow:
 3. read_text(window) (cheaper than screenshot); screenshot when layout matters.
 4. click(window, text="Save"): click visible TEXT, not coordinates. Coordinates only with the shot_id of a fresh \
 screenshot/read_text.
-5. Verify: read the click result (after.changed) or read_text again before the next step.
+5. Verify: read the action result (after.changed; changed_region = [x, y, w, h] window pixels of what changed, \
+changed_ratio = its share of the window, new_text = text now shown there) or read_text again before the next step.
+6. If the result has "warning", the same action repeated with no effect: do NOT repeat it again; read the screen and \
+try another way. After 5 fruitless repeats the identical call is refused ([7]) until the screen changes or you do \
+something else.
 
 Safety rules (enforced by the server, you cannot override them):
 - Forbidden windows never receive input and are masked (black) in screenshots and OCR. Do not retry.
@@ -94,6 +98,8 @@ Deskhand panel. Deskhand asks them; on "kullanıcı onayı alınamadı" stop and
 - [13] the user pressed STOP: send nothing until they resume. [12] the user is using the computer: wait and retry \
 later. [4] the window title changed: re-check the window.
 - Actions need a window (title pattern or id from get_status/open_app); one input action runs at a time.
+- click: button="triple" selects a line/paragraph; modifiers=["ctrl"] etc. are held during the click (multi-select, \
+open in new tab). drag moves between two points of a shot (selection, sliders, drag and drop).
 - Images: coordinates are pixels of the returned image (max long edge 1280); the server rescales them."""
 
 mcp = MCPServer("deskhand", title="Deskhand", instructions=TALIMAT, version=__version__)
@@ -405,8 +411,26 @@ def _pencere_zorunlu(window: str | None) -> str:
     return k
 
 
-def _sonra(k: str, once: str | None, bekle: float = 0.35) -> dict:
-    """Eylem sonrası doğrulama: pencere hâlâ var mı, başlık, görüntü değişti mi."""
+def _yeni_metin(im, bolge) -> list[str] | None:
+    """Değişen bölgenin kısa OCR'ı (en çok 8 satır): eylemin ekranda ne gösterdiğini ajan ayrıca okumak zorunda kalmasın."""
+    x, y, w, h = bolge
+    if w < 16 or h < 10:
+        return None
+    try:
+        from .ocr import gurultu_mu, oku, satirla
+        parca = im.crop((max(0, x - 6), max(0, y - 6), min(im.width, x + w + 6), min(im.height, y + h + 6)))
+        satirlar = [s_ for s_ in satirla(oku(parca)) if not gurultu_mu(s_)]
+    except Exception as e:  # noqa: BLE001 - isteğe bağlı bilgi: OCR yoksa/çökerse sessizce yok
+        log.debug("new_text okunamadı: %s", e)
+        return None
+    metinler = [s_["t"].strip()[:160] for s_ in satirlar if s_["t"].strip()]
+    return metinler[:8] or None
+
+
+def _sonra(k: str, once: fark.Once | None, bekle: float = 0.35) -> dict:
+    """Eylem sonrası doğrulama: pencere hâlâ var mı, başlık, görüntü değişti mi (changed; değiştiyse
+    changed_region = pencere pikseli [x, y, w, h], changed_ratio = sınır kutusunun pencereye oranı, küçük bölgede
+    new_text). Yanıp sönen yazı imleci değişiklik sayılmaz (fark.py)."""
     time.sleep(bekle)
     au = api.arka()
     try:
@@ -418,18 +442,53 @@ def _sonra(k: str, once: str | None, bekle: float = 0.35) -> dict:
     if once is not None:
         try:
             im, *_x = api.goruntu_al(k)
-            s["changed"] = api.ozet(im) != once
         except hata.Dur:
-            pass
+            return s
+        d = fark.fark(once, fark.once_al(im))
+        s["changed"] = d is not None
+        if d is not None:
+            s["changed_region"] = d["region"]
+            s["changed_ratio"] = d["ratio"]
+            if fark.yeni_metin_uygun(d):
+                yeni = _yeni_metin(im, d["region"])
+                if yeni:
+                    s["new_text"] = yeni
     return s
 
 
-def _once(k: str) -> str | None:
+def _once(k: str) -> fark.Once | None:
     try:
         im, _, _, _ = api.goruntu_al(k)
-        return api.ozet(im)
+        return fark.once_al(im)
     except hata.Dur:
         return None
+
+
+# ---------------------------------------------------------------- döngü kesici (oturum başına bellek)
+
+_DONGU = dongu.DonguKesici(ayni_ekran=fark.ayni_ekran)
+
+
+def _dongu_kapisi(arac: str, k: str, hedef: tuple, once: fark.Once | None) -> None:
+    """Eylemden ÖNCE (kilit altında, eylem öncesi ekran `once` ölçüldükten sonra): aynı eylem 5 kez üst üste
+    ekranı değiştirmediyse 6.'sı yürütülmez ([7]); ekran bu arada değiştiyse sayaç sıfırlanır."""
+    try:
+        _DONGU.kontrol(arac, k, hedef, lambda: once if once is not None else _once(k))
+    except dongu.DonguReddi as e:
+        raise ToolError("[7] " + _("aynı eylem {sayi} kez üst üste ekranı değiştirmedi; özdeş çağrı yapılmadı. "
+                                   "screenshot/read_text ile ekranı oku ve FARKLI bir yol dene (ekran değişince ya "
+                                   "da başka bir eylem yapılınca bu kısıt kalkar)").format(sayi=e.sayi)) from None
+
+
+def _dongu_sonrasi(arac: str, k: str, hedef: tuple, once: fark.Once | None, sonra: dict) -> str | None:
+    """Eylemden SONRA: sonucu halkaya yaz. Aynı eylem 3+ kez sonuçsuzsa ajana uyarı metni (yoksa None).
+    Ölçüm yoksa (verify=False, pencere kapandı) sayaç artmaz."""
+    n = _DONGU.kaydet(arac, k, hedef, once, sonra.get("changed"))
+    if n >= dongu.UYARI_ESIK:
+        return _("aynı eylem {sayi} kez üst üste ekranı DEĞİŞTİRMEDİ: tekrarlama. Ekran görüntüsü ya da metin okuyup "
+                 "başka bir yol dene (başka öğe/koordinat, başka tuş, önce odağı ya da bir açılır pencereyi kontrol "
+                 "et).").format(sayi=n)
+    return None
 
 
 # ================================================================ ARAÇLAR
@@ -653,7 +712,10 @@ def click(
     y: Annotated[float | None, Field(description="Image y of shot_id")] = None,
     shot_id: str | None = None,
     nth: Annotated[int | None, Field(ge=1, description="Which match when the text appears several times")] = None,
-    button: Literal["left", "right", "middle", "double"] = "left",
+    button: Literal["left", "right", "middle", "double", "triple"] = "left",
+    modifiers: Annotated[list[Literal["ctrl", "shift", "alt", "meta"]] | None,
+                         Field(description="Keys held during the click, e.g. [\"ctrl\"] (multi-select, open in new "
+                                           "tab); always released")] = None,
     offset: Annotated[list[int] | None, Field(min_length=2, max_length=2,
                                               description="[dx,dy] from the text centre, e.g. field next to a "
                                                           "label")] = None,
@@ -664,7 +726,8 @@ def click(
 ) -> dict[str, Any]:
     """Click visible text (preferred), an icon, an accessibility element, or x,y of a screenshot (needs its shot_id;
     stale shots are refused). Give exactly ONE target. Sensitive buttons (Buy/Pay/Authorize...) or payment pages
-    need the user's approval in the Deskhand panel; the server asks them."""
+    need the user's approval in the Deskhand panel; the server asks them. button="triple" selects a line/paragraph.
+    The result's after reports changed (+ changed_region/changed_ratio/new_text); "warning" = same click, no effect."""
     hedefler = [t for t in (text, icon, element) if t] + (["xy"] if x is not None or y is not None else [])
     if len(hedefler) != 1:
         raise ToolError("[1] " + _("tam olarak BİR hedef ver: text, icon, element ya da x+y (+shot_id)"))
@@ -685,22 +748,36 @@ def click(
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
         desen = baslik_kilidi(window, k)
         once = {}
+        mod = list(dict.fromkeys(modifiers or ()))
+        if text:
+            hdf = ("text", dongu.metin_norm(text))
+        elif icon:
+            hdf = ("icon", icon)
+        elif element:
+            hdf = ("element", dongu.metin_norm(element))
+        else:
+            hdf = ("xy", dongu.Nokta(wx, wy))
+        dhedef = ("click", *hdf, nth, button, tuple(sorted(mod)), tuple(offset) if offset else None)
 
         def yap(onayli):
             once["ozet"] = _once(k) if verify else None
+            _dongu_kapisi("click", k, dhedef, once["ozet"])
             if text:
                 return api.metne_tikla(k, text, button, nth, wait_s, 10 if scroll_search else 0, desen, onayli,
-                                       kay=offset)
+                                       kay=offset, mod=mod)
             if icon:
-                return api.simgeye_tikla(k, icon, button, nth, 0.9, desen, onayli)
+                return api.simgeye_tikla(k, icon, button, nth, 0.9, desen, onayli, mod=mod)
             if element:
-                return api.ogeye_tikla(k, element, button, nth, desen, onayli)
-            return api.tikla(k, wx, wy, button, desen, onayli)
+                return api.ogeye_tikla(k, element, button, nth, desen, onayli, mod=mod)
+            return api.tikla(k, wx, wy, button, desen, onayli, mod=mod)
         mesaj, onaylandi = onayla_ve_yap("click", k, yap, " | " + _("hedef: {hedef}").format(
             hedef=text or icon or element or f"({x},{y})"))
         s = {**bilgi, "status": "clicked", "message": mesaj, "approved_by_user": onaylandi}
         if verify:
             s["after"] = _sonra(k, once.get("ozet"))
+        uyari = _dongu_sonrasi("click", k, dhedef, once.get("ozet"), s.get("after") or {})
+        if uyari:
+            s["warning"] = uyari
         return s
 
 
@@ -739,22 +816,34 @@ def press_key(
     keys: Annotated[str, Field(description="Key or shortcut: enter, esc, ctrl+s, alt+F4, 'ctrl+l ctrl+c' (sequence)")],
     repeat: Annotated[int, Field(ge=1, le=50)] = 1,
     hold_s: Annotated[float, Field(ge=0, le=10, description="Hold the key(s) down this long (games)")] = 0,
+    verify: Annotated[bool, Field(description="Report whether the window changed")] = True,
     desktop: Masaustu = "auto",
 ) -> dict[str, Any]:
     """Send a key or shortcut to the window. Held keys are always released (cancel, STOP, shutdown). Enter/Space on a
-    payment page needs the user's approval."""
+    payment page needs the user's approval. The result's after reports changed (+ changed_region/changed_ratio/
+    new_text); "warning" = same key, no effect."""
     with baglam(desktop, _("tuş {tuslar}: {pencere}").format(tuslar=keys, pencere=window)) as bilgi:
         hata.dur_denetle()
         k = _pencere_zorunlu(window)
         desen = baslik_kilidi(window, k)
+        once = {}
+        dhedef = ("keys", dongu.metin_norm(keys), repeat, hold_s)
 
         def yap(onayli):
+            once["ozet"] = _once(k) if verify else None
+            _dongu_kapisi("press_key", k, dhedef, once["ozet"])
             if hold_s > 0:
                 return api.bas(k, keys, hold_s, desen, onayli)
             # tekrar = TEK tuş dizisi (tek eylem): ödeme sayfasında N ayrı onay diyaloğu yerine bir onay
             return api.tus(k, " ".join([keys] * repeat), desen, onayli)
         mesaj, onaylandi = onayla_ve_yap("press_key", k, yap, " | " + _("tuş: {kombinasyon}").format(kombinasyon=keys))
-        return {**bilgi, "status": "pressed", "message": mesaj, "approved_by_user": onaylandi}
+        s = {**bilgi, "status": "pressed", "message": mesaj, "approved_by_user": onaylandi}
+        if verify:
+            s["after"] = _sonra(k, once.get("ozet"))
+        uyari = _dongu_sonrasi("press_key", k, dhedef, once.get("ozet"), s.get("after") or {})
+        if uyari:
+            s["warning"] = uyari
+        return s
 
 
 @mcp.tool(title="Scroll", annotations=YUMUSAK)
@@ -777,11 +866,63 @@ def scroll(
                 raise ToolError("[1] " + _("x ve y birlikte verilmeli"))
             nokta = cekim_noktasi(cekim_coz(shot_id, k), x, y)
         desen = baslik_kilidi(window, k)
+        dhedef = ("scroll", direction, amount, dongu.Nokta(*nokta) if nokta else None)
         with kilitli():
             once = _once(k)
+            _dongu_kapisi("scroll", k, dhedef, once)
             mesaj = api.kaydir(k, direction, amount, nokta, desen)
             sonra = _sonra(k, once, 0.3)
-        return {**bilgi, "status": "scrolled", "message": mesaj, "changed": sonra.get("changed")}
+        s = {**bilgi, "status": "scrolled", "message": mesaj, "changed": sonra.get("changed")}
+        for alan in ("changed_region", "changed_ratio", "new_text"):
+            if alan in sonra:
+                s[alan] = sonra[alan]
+        uyari = _dongu_sonrasi("scroll", k, dhedef, once, sonra)
+        if uyari:
+            s["warning"] = uyari
+        return s
+
+
+@mcp.tool(title="Drag", annotations=EYLEM)
+def drag(
+    window: PencereZorunlu,
+    from_x: Annotated[float, Field(description="Start x, image pixels of shot_id")],
+    from_y: Annotated[float, Field(description="Start y, image pixels of shot_id")],
+    to_x: Annotated[float, Field(description="End x, image pixels of shot_id")],
+    to_y: Annotated[float, Field(description="End y, image pixels of shot_id")],
+    shot_id: Annotated[str, Field(description="Fresh screenshot/read_text of this window the coordinates refer to; "
+                                              "stale shots are refused")],
+    hold_s: Annotated[float, Field(ge=0.1, le=10, description="Seconds the button stays down while moving")] = 0.4,
+    button: Literal["left", "right", "middle"] = "left",
+    desktop: Masaustu = "auto",
+) -> dict[str, Any]:
+    """Press at (from_x, from_y), move to (to_x, to_y), release: select text/area, slider, drag and drop. Stops if
+    the window changes or the user moves the mouse; the button is always released. Sensitive start points need the
+    user's approval. The result's after reports changed (+ changed_region/changed_ratio/new_text)."""
+    with baglam(desktop, _("sürükleme: {pencere}").format(pencere=window)) as bilgi:
+        hata.dur_denetle()
+        k = _pencere_zorunlu(window)
+        c = cekim_coz(shot_id, k)
+        p1 = cekim_noktasi(c, from_x, from_y)
+        p2 = cekim_noktasi(c, to_x, to_y)
+        y_ = api.yasak_mi(k)
+        if y_:
+            raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
+        desen = baslik_kilidi(window, k)
+        once = {}
+        dhedef = ("drag", dongu.Nokta(*p1), dongu.Nokta(*p2), button)
+
+        def yap(onayli):
+            once["ozet"] = _once(k)
+            _dongu_kapisi("drag", k, dhedef, once["ozet"])
+            return api.surukle(k, p1[0], p1[1], p2[0], p2[1], button, hold_s, desen, onayli)
+        mesaj, onaylandi = onayla_ve_yap("drag", k, yap, " | " + _("sürükleme: ({x1},{y1}) → ({x2},{y2})").format(
+            x1=round(from_x), y1=round(from_y), x2=round(to_x), y2=round(to_y)))
+        s = {**bilgi, "status": "dragged", "message": mesaj, "approved_by_user": onaylandi,
+             "after": _sonra(k, once.get("ozet"))}
+        uyari = _dongu_sonrasi("drag", k, dhedef, once.get("ozet"), s["after"])
+        if uyari:
+            s["warning"] = uyari
+        return s
 
 
 @mcp.tool(title="Open app", annotations=YUMUSAK)

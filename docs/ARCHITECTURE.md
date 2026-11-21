@@ -46,6 +46,8 @@ deskhand/
   onay.py          insan onayı protokolü (§8)
   girdi_merkezi.py panelin içinde hazır bekleyen tek dotool + RUNTIME_DIR/girdi.sock (Qt'siz; §2, §4)
   gui/             panel, tepsi, onay diyaloğu
+  fark.py          eylem öncesi/sonrası ekran farkı (changed, changed_region, changed_ratio; NumPy, imleç dayanıklı)
+  dongu.py         döngü kesici: aynı eylem 3. sonuçsuzda uyarı, 5'ten sonra ret (MCP, oturum başına bellek)
   mcp_sunucu.py    MCP yüzeyi
 bin/ekran          uyumluluk: `python3 -m deskhand "$@"` (Türkçe komutlar aynen)
 tests/             ekransız testler: test_ocr.py, test_mantik.py ...; ekranlı: tests/ekranli/ (yalnız elle)

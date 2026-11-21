@@ -214,6 +214,8 @@ def k_agac(a):
 def k_ogeye_tikla(a):
     """Erişilebilirlik ağacındaki ögeye ADIYLA tıkla: OCR'ın okuyamadığı düğmeler (renkli/orta ton zemin) dahil.
     Tıklama gerçek fare girdisidir; tüm denetimler (pencere, başlık, yasak, hassas düğme, insan önceliği) aynen."""
+    from .eylem import mod_coz
+    mod = mod_coz(getattr(a, "mod", None))
     g = girdi_al(f"ogeye-tikla '{a.ad}' {a.dugme}")
     try:
         sec().one_getir(a.kimlik)
@@ -240,6 +242,6 @@ def k_ogeye_tikla(a):
                      nokta_metni(a.kimlik, o["cx"], o["cy"]), ek_metinler=(a.ad, o["ad"]))
         print(_("bulundu: {rol} '{ad}' ({x},{y}) {kademe} eşleşme, {sn} sn").format(
             rol=o["rol"], ad=o["ad"], x=f"{o['cx']:.0f}", y=f"{o['cy']:.0f}", kademe=kademe, sn=f"{sure:.2f}"))
-        tikla_ic(g, a.kimlik, a.baslik, o["cx"], o["cy"], a.dugme, sec().geometri(a.kimlik))
+        tikla_ic(g, a.kimlik, a.baslik, o["cx"], o["cy"], a.dugme, sec().geometri(a.kimlik), mod=mod)
     finally:
         girdi_birak(g)
