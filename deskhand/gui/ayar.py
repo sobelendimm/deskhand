@@ -88,6 +88,53 @@ def yasak_kaydet(metin: str) -> None:
     os.replace(gecici, yol)
 
 
+# ---------------------------------------------------------------- uygulama erişim seviyeleri
+
+def seviye_metni() -> str:
+    """uygulama-seviyeleri.txt metni; yoksa açıklamalı boş şablon (dosya OLUŞTURULMAZ: yalnız Kaydet yazar).
+    Varsayılan kurulumda dosyada hiçbir kural satırı yoktur."""
+    try:
+        with open(yollar.seviye_dosya()) as f:
+            return f.read()
+    except OSError:
+        from ..guvenlik import VARSAYILAN_SEVIYE
+        from ..i18n import _
+        return _(VARSAYILAN_SEVIYE)
+
+
+def seviye_dogrula(metin: str) -> tuple[int, str] | None:
+    """Her kural satırı `DESEN = goruntule|tikla|tam` (ya da view|click|full) olmalı, DESEN derlenebilmeli.
+    → (satır no, hata) ya da None."""
+    from ..guvenlik import SEVIYELER
+    from ..i18n import _
+    for no, satir in enumerate(metin.splitlines(), 1):
+        s = satir.strip()
+        if not s or s.startswith("#"):
+            continue
+        desen, ayrac, sev = s.rpartition("=")
+        if not ayrac or not desen.strip():
+            return no, _("DESEN = goruntule | tikla | tam biçiminde olmalı")
+        if sev.strip().lower() not in SEVIYELER:
+            return no, _("bilinmeyen seviye {sev}; goruntule, tikla ya da tam olmalı").format(sev=repr(sev.strip()))
+        try:
+            re.compile(desen.strip(), re.I)
+        except re.error as e:
+            return no, str(e)
+    return None
+
+
+def seviye_kaydet(metin: str) -> None:
+    hata = seviye_dogrula(metin)
+    if hata:
+        raise ValueError(hata)
+    yol = yollar.seviye_dosya()
+    os.makedirs(os.path.dirname(yol), exist_ok=True)
+    gecici = yol + f".{os.getpid()}"
+    with open(gecici, "w") as f:
+        f.write(metin if metin.endswith("\n") else metin + "\n")
+    os.replace(gecici, yol)
+
+
 # ---------------------------------------------------------------- deskhand.ayarlar köprüsü
 
 class KararAyarlari:

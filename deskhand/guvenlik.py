@@ -6,6 +6,10 @@
 - Başlık (-b) ve sınıf (-s) kilidi: her girdiden hemen önce (4).
 - DUR anahtarı (RUNTIME_DIR/dur): her girdi satırından önce (13); `dur` oluşturur, `devam` siler. Yazma/kaldırma
   atomik: kullanıcının (arayüzden) koyduğu DUR'u ajan hiçbir yarışta kaldıramaz ya da ezemez.
+- Riskli tuş kombinasyonları (oturumu/sistemi sonlandıran, ekrandan çıkaran) ve uçbirime yazılan yıkıcı komutlar:
+  YASAK değil, insan onayı (hassas düğmeyle aynı yol; --onayli yoksa panelden onay, panel kapalıysa 10).
+- Uygulama erişim seviyeleri (CONFIG_DIR/uygulama-seviyeleri.txt; varsayılan: dosya yok = kısıt yok):
+  goruntule (girdi yok) | tikla (yalnız fare) | tam. Gözetimsiz kip (DESKHAND_GOZETIMSIZ=1): onay sorulmaz, red (10).
 """
 from __future__ import annotations
 
@@ -16,7 +20,7 @@ import threading
 
 from . import yollar
 from .arka_uc import EKRAN, sec
-from .hata import KULLANICI_DUR, Dur, dur_dosyasi
+from .hata import KULLANICI_DUR, Dur, dur_dosyasi, gozetimsiz
 from .i18n import N_, _
 from .ocr import katla
 
@@ -89,9 +93,216 @@ def onay_tusu_mu(kombinasyon):
 
 
 def yazi_onay_ister_mi(metin):
-    """Yazı Enter (\n), Tab ya da boşluk (her tür Unicode boşluk: nbsp da Space tuşuyla yazılır) içeriyor mu
-    (hassas sayfada formu gönderme / odaktaki düğmeye basma olabilir)."""
-    return any(c.isspace() for c in metin)
+    """Yazı onay gerektirebilir mi? (1) Enter (\\n), Tab ya da boşluk içeriyor (her tür Unicode boşluk: nbsp da Space
+    tuşuyla yazılır): hassas sayfada formu gönderme / odaktaki düğmeye basma olabilir; (2) yıkıcı bir uçbirim komutu
+    kalıbına uyuyor (riskli_komut). Yalnız METİNLE karar verilir (ucuz ön eleme); hedef pencerenin uçbirim olup
+    olmadığına eylem._yazi_hassas bakar (ucbirim_komut_engel)."""
+    return any(c.isspace() for c in metin) or riskli_komut(metin) is not None
+
+
+# ---------------------------------------------------------------- riskli tuş kombinasyonları
+
+# Tuş adı → kanonik ad (ctrl/alt/super/delete/backspace/sysrq/l/fN). tus_coz çıktısındaki x:… (keysym) ve k:… (evdev)
+# biçimleri ve X/xdotool eş adları da çözülür; böylece 'x:Delete', 'k:111', 'Control_L' gibi yazımlar kaçmaz.
+_TUS_ESANLAM = {
+    "control": "ctrl", "leftctrl": "ctrl", "rightctrl": "ctrl", "lctrl": "ctrl", "rctrl": "ctrl",
+    "control_l": "ctrl", "control_r": "ctrl",
+    "leftalt": "alt", "rightalt": "alt", "altgr": "alt", "alt_l": "alt", "alt_r": "alt", "iso_level3_shift": "alt",
+    "meta": "super", "win": "super", "windows": "super", "cmd": "super", "leftmeta": "super", "rightmeta": "super",
+    "super_l": "super", "super_r": "super", "meta_l": "super", "meta_r": "super",
+    "del": "delete", "bksp": "backspace", "sys_req": "sysrq", "sysreq": "sysrq",
+}
+_EVDEV_AD = {29: "ctrl", 97: "ctrl", 56: "alt", 100: "alt", 125: "super", 126: "super", 111: "delete", 14: "backspace",
+             99: "sysrq", 38: "l", **{59 + i: f"f{i + 1}" for i in range(10)}, 87: "f11", 88: "f12"}
+_KEYSYM_AD = {0xffe3: "ctrl", 0xffe4: "ctrl", 0xffe9: "alt", 0xffea: "alt", 0xfe03: "alt", 0xffe7: "super",
+              0xffe8: "super", 0xffeb: "super", 0xffec: "super", 0xffff: "delete", 0xff08: "backspace",
+              0xff15: "sysrq", 0x6c: "l", 0x4c: "l", **{0xffbe + i: f"f{i + 1}" for i in range(12)}}
+_FTUS = re.compile(r"f([1-9]|1[0-2])")
+
+
+def _tus_kanonik(t):
+    """Tek tuş adı (kombinasyonun '+' ile bölünmüş parçası) → kanonik ad (küçük harf); tanınmayan aynen küçük harf."""
+    t = (t or "").strip()
+    if t.startswith("k:"):
+        try:
+            return _EVDEV_AD.get(int(t[2:]), t.lower())
+        except ValueError:
+            return t.lower()
+    if t.startswith("x:"):
+        ad = t[2:].lower()
+        if ad in _TUS_ESANLAM:
+            return _TUS_ESANLAM[ad]
+        ks = _keysym(t[2:])
+        return _KEYSYM_AD.get(ks, ad) if ks is not None else ad
+    t = t.lower()
+    return _TUS_ESANLAM.get(t, t)
+
+
+def _akor_riski(tuslar):
+    """Birlikte basılan kanonik tuş kümesi → neden | None."""
+    ctrl, alt, ust = "ctrl" in tuslar, "alt" in tuslar, "super" in tuslar
+    if ctrl and alt:
+        if "delete" in tuslar:
+            return _("Ctrl+Alt+Delete: oturum/güç menüsünü açar")
+        if "backspace" in tuslar:
+            return _("Ctrl+Alt+Backspace: grafik oturumunu sonlandırır")
+        f = next((t for t in sorted(tuslar) if _FTUS.fullmatch(t)), None)
+        if f:
+            return _("Ctrl+Alt+{tus}: sanal uçbirime geçer (masaüstü oturumundan çıkar)").format(tus=f.upper())
+        if "l" in tuslar:
+            return _("Ctrl+Alt+L: ekranı kilitler")
+    if ust and "l" in tuslar:
+        return _("Meta+L: ekranı kilitler")
+    if alt and "sysrq" in tuslar and any(t not in ("alt", "sysrq", "ctrl", "shift", "super") for t in tuslar):
+        return _("Alt+SysRq+tuş: çekirdek müdahale (SysRq) kısayolu; sistemi yeniden başlatabilir/kapatabilir")
+    return None
+
+
+def riskli_tus(kombinasyon, birlikte=False):
+    """Oturumu/sistemi sonlandıran ya da ekrandan çıkaran tuş kombinasyonu mu? → neden metni | None.
+    Yasak DEĞİL: çağıran insan onayı ister (riskli_tus_engel). kombinasyon: eylem.tus_coz çıktısı ya da ham metin
+    ('ctrl+alt+delete', 'x:Delete', 'k:111', boşlukla ayrılmış akorlar).
+    Dar kapsam: ctrl+alt+delete, ctrl+alt+backspace, ctrl+alt+f1…f12 (sanal uçbirim), meta+l ve ctrl+alt+l (ekran
+    kilidi), alt+sysrq+tuş. birlikte=True (bas: boşlukla ayrılmış tuşlar AYNI ANDA basılı kalır): tek küme sayılır."""
+    akorlar = [[_tus_kanonik(t) for t in akor.split("+") if t] for akor in (kombinasyon or "").split()]
+    kumeler = [set(a) for a in akorlar]
+    if birlikte and len(akorlar) > 1:
+        kumeler.append({t for a in akorlar for t in a})
+    for kume in kumeler:
+        neden = _akor_riski(kume)
+        if neden:
+            return neden
+    return None
+
+
+# ---------------------------------------------------------------- uçbirime yıkıcı komut yazma
+
+# Uçbirim öykünücüsü pencere sınıfları (tek sabit liste; sınıf adında sözcük olarak aranır: org.kde.konsole,
+# com.mitchellh.ghostty, gnome-terminal-server, Alacritty…). Başka bir pencerede (tarayıcı, düzenleyici) yazılan
+# "rm -rf" metni sıradan yazıdır: tetiklenmez.
+UCBIRIM_SINIFLARI = (
+    "konsole", "yakuake", "ghostty", "kitty", "alacritty", "foot", "footclient", "wezterm", "wezterm-gui", "xterm",
+    "uxterm", "gnome-terminal", "tilix", "terminator", "ptyxis", "kgx", "gnome-console", "xfce4-terminal",
+    "lxterminal", "qterminal", "mate-terminal", "urxvt", "rxvt", "guake", "tilda", "terminology", "sakura",
+    "cool-retro-term", "contour", "rio",
+)
+_UCBIRIM = re.compile(r"(?<![a-z0-9])(?:" + "|".join(re.escape(a) for a in UCBIRIM_SINIFLARI) + r")(?![a-z0-9])", re.I)
+
+
+def ucbirim_mi(sinif):
+    """Pencere sınıfı bir uçbirim öykünücüsü mü (UCBIRIM_SINIFLARI)?"""
+    return bool(_UCBIRIM.search(sinif or ""))
+
+
+_SARMALAYICI = {"env", "time", "nohup", "nice", "ionice", "command", "builtin", "exec", "stdbuf", "setsid", "xargs",
+                "watch", "timeout", "chrt", "unbuffer"}
+_KABUK = {"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"}
+_YETKI = {"sudo", "doas", "pkexec", "run0"}
+_GUC = {"shutdown", "reboot", "poweroff", "halt"}
+_SISTEMD_GUC = {"poweroff", "reboot", "suspend", "halt", "hibernate", "hybrid-sleep", "suspend-then-hibernate", "kexec"}
+# kök / ev dizini ya da sistem dizini hedefleri (rm, chmod -R, chown -R); rm için ayrıca * ve ./*
+_KOK_HEDEF = re.compile(r"/|/\*|~/?|~/\*|\$HOME/?|\$\{HOME\}/?|/(?:etc|usr|bin|sbin|lib|lib64|var|boot|home|root|opt|sys|dev|srv)/?\*?")
+_RM_HEDEF = re.compile(r"\*|\./\*|" + _KOK_HEDEF.pattern)
+_ZARARSIZ_AYGIT = re.compile(r"/dev/(?:null|zero|full|stdout|stderr|stdin|tty\w*|pts/\w+|fd/\d+)$")
+_AYIRAC = re.compile(r"\|\||&&|[;&|\n\r]|\$\(|`")
+_DISK_YONLENDIR = re.compile(r">>?\s*/dev/(?:sd[a-z]|hd[a-z]|vd[a-z]|xvd[a-z]|nvme\d|mmcblk\d|md\d|dm-\d|disk\d)")
+_CATAL_BOMBASI = re.compile(r":\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;?\s*:|"
+                            r"\b(\w+)\s*\(\s*\)\s*\{\s*\1\s*\|\s*\1\s*&\s*\}")
+_BORU_KABUK = re.compile(r"\b(?:curl|wget)\b[^\n;&]*\|\s*(?:sudo\s+(?:-\S+\s+)*)?(?:/usr/bin/env\s+)?(?:\S*/)?"
+                         r"(?:ba|z|da|k|c|fi)?sh\b|"
+                         r"\b(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*<\(\s*(?:curl|wget)\b|"
+                         r"\b(?:ba|z|da|k)?sh\s+-c\s+[\"']?\$\(\s*(?:curl|wget)\b")
+_VIM_SUDO = re.compile(r":\s*w\s*!\s*sudo\b")
+
+
+def _belirtec(t):
+    """Komut belirteci: tırnak/ters bölü/parantez kırpılır (\\rm, "rm", 'rm')."""
+    return t.strip("'\"`\\()")
+
+
+def _yol_adi(t):
+    return _belirtec(t).rsplit("/", 1)[-1]
+
+
+def _ozyinelemeli(belirtecler):
+    return any(re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", t) or t == "--recursive" for t in belirtecler)
+
+
+def _parca_riski(belirtecler, derinlik=0):
+    """Tek komut parçası (; && | ile bölünmüş) belirteçleri → neden listesi."""
+    nedenler = []
+    t = [x for x in (_belirtec(b) for b in belirtecler) if x]
+    i = 0
+    while i < len(t):  # ortam atamaları (A=1 komut) ve sarmalayıcılar (time, nohup, nice -n 5, xargs…) atlanır
+        if re.fullmatch(r"\w+=\S*", t[i]) or _yol_adi(t[i]) in _SARMALAYICI or (
+                i and _yol_adi(t[i - 1]) in _SARMALAYICI and (t[i].startswith("-") or t[i].isdigit())):
+            i += 1
+        else:
+            break
+    if i >= len(t):
+        return nedenler
+    komut, arg = _yol_adi(t[i]), t[i + 1:]
+    if komut in _YETKI:
+        nedenler.append(_("{komut} ile yetki yükseltme").format(komut=komut))
+    if komut in _GUC or (komut in ("init", "telinit") and any(a in ("0", "6") for a in arg)):
+        nedenler.append(_("sistemi kapatma/yeniden başlatma ({komut})").format(komut=komut))
+    if komut in ("systemctl", "loginctl") and (any(a in _SISTEMD_GUC for a in arg) or (
+            komut == "loginctl" and any(a.startswith(("terminate-", "kill-")) for a in arg))):
+        nedenler.append(_("{komut} ile kapatma/yeniden başlatma/askıya alma/oturum sonlandırma").format(komut=komut))
+    if re.fullmatch(r"mkfs(\.\w+)?", komut):
+        nedenler.append(_("mkfs: disk bölümünü biçimlendirir (veri siler)"))
+    if komut == "dd" and any(a.startswith("of=/dev/") and not _ZARARSIZ_AYGIT.match(a[3:]) for a in arg):
+        nedenler.append(_("dd of=/dev/…: aygıtın üzerine yazar"))
+    if komut == "git" and "push" in arg:
+        if any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a) or a.startswith("--force") for a in arg):
+            nedenler.append(_("git push --force: uzak geçmişi ezer"))
+        elif any(a.startswith("+") and len(a) > 1 for a in arg):
+            nedenler.append(_("git push +ref: zorla itme (uzak geçmişi ezer)"))
+    if komut in ("chmod", "chown", "chgrp") and _ozyinelemeli(arg) and any(_KOK_HEDEF.fullmatch(a) for a in arg):
+        nedenler.append(_("{komut} -R kök/ev/sistem dizininde: tüm dosyaların izin/sahipliğini değiştirir").format(komut=komut))
+    if komut in _KABUK | {"eval"} and derinlik < 2:  # sh -c "sudo …" / eval "rm -rf /": gömülü komut da denetlenir
+        for j, a in enumerate(arg):
+            if a == "-c" or komut == "eval":
+                ic = " ".join(arg[j + (0 if komut == "eval" else 1):])
+                nedenler += _metin_riskleri(ic, derinlik + 1)
+                break
+    # rm: komut konumunda (xargs/env/time sarmalayıcıları atlanmıştı) ya da bir yürütücünün argümanı olarak
+    # (sudo rm -rf, find … -exec rm -r). echo/grep/man gibi komutların METİN argümanındaki 'rm' sayılmaz.
+    j = 0 if komut == "rm" else next((n for n, a in enumerate(arg) if _yol_adi(a) == "rm"), None) \
+        if komut in _YETKI | {"find"} else None
+    if j is not None:
+        sonrasi = arg[j + (0 if komut == "rm" else 1):]
+        if _ozyinelemeli(sonrasi) or "--no-preserve-root" in sonrasi:
+            tehlikeli = any(_RM_HEDEF.fullmatch(x) for x in sonrasi)
+            nedenler.append(_("rm -r: özyinelemeli silme (geri alınamaz)")
+                            + (_("; hedef kök/ev dizini ya da *") if tehlikeli else ""))
+    return nedenler
+
+
+def _metin_riskleri(metin, derinlik=0):
+    nedenler = []
+    if _CATAL_BOMBASI.search(metin):
+        nedenler.append(_("çatal bombası (sistemi kilitler)"))
+    if _BORU_KABUK.search(metin):
+        nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
+    if _DISK_YONLENDIR.search(metin):
+        nedenler.append(_("> /dev/diskaygıtı: diskin üzerine yazar"))
+    if _VIM_SUDO.search(metin):
+        nedenler.append(_(":w !sudo: dosyayı yetkiyle yazar"))
+    for parca in _AYIRAC.split(metin):
+        nedenler += _parca_riski(parca.split(), derinlik)
+    return nedenler
+
+
+def riskli_komut(metin):
+    """Metin yıkıcı bir kabuk komutu kalıbına uyuyor mu? → neden metni | None. Yalnız METNE bakar; hedef pencerenin
+    uçbirim olup olmadığı (ucbirim_mi) çağıranda denetlenir. Dar, gerekçeli kalıplar: geri alınamaz silme (rm -r),
+    yetki yükseltme (sudo/doas/pkexec/run0), indirileni kabuğa verme, disk biçimlendirme/üzerine yazma, çatal bombası,
+    kökte toplu izin/sahiplik değişikliği, kapatma/yeniden başlatma/askıya alma, zorla git push, :w !sudo."""
+    if not metin or not metin.strip():
+        return None
+    nedenler = list(dict.fromkeys(_metin_riskleri(metin)))
+    return "; ".join(nedenler[:3]) if nedenler else None
 
 
 # ---------------------------------------------------------------- yasak pencereler
@@ -135,6 +346,108 @@ def baslatma_yasak_denetle(*metinler):
             if m and re.search(d, m, re.I):
                 raise Dur(10, _("YASAK uygulama: {uygulama} /{desen}/ ile eşleşti; başlatılmadı ({dosya})").format(
                     uygulama=repr(m), desen=d, dosya=yollar.yasak_dosya()))
+
+
+# ---------------------------------------------------------------- uygulama erişim seviyeleri
+
+# CONFIG_DIR/uygulama-seviyeleri.txt: "DESEN = goruntule | tikla | tam" (DESEN yasak listesindeki gibi başlık/sınıf
+# regex'i, # yorum). Dosya yoksa/boşsa HİÇBİR kısıt yoktur (varsayılan kurulumda satır yok; araç kendiliğinden
+# uygulama kısıtlamaz). goruntule = hiçbir girdi yok (okuma/ekran görüntüsü serbest); tikla = fare serbest, klavye
+# (yaz/tuş/bas) yok; tam = kısıt yok. Birden çok desen uyarsa EN KISITLAYICI seviye geçerlidir. `ac` etkilenmez.
+VARSAYILAN_SEVIYE = N_("""# Uygulama erişim seviyeleri: DESEN = goruntule | tikla | tam
+#   DESEN: pencere BAŞLIĞI ya da SINIFI için regex (büyük/küçük harf duyarsız), yasak pencereler gibi.
+#   goruntule: hiçbir girdi gönderilmez (okuma ve ekran görüntüsü serbest)
+#   tikla:     fare serbest, klavye girdisi (yaz/tuş/bas) gönderilmez
+#   tam:       kısıt yok (varsayılan; İngilizce eş adlar: view, click, full)
+# Birden çok satır uyarsa en kısıtlayıcı olan geçerlidir. Varsayılan: boş (hiçbir kısıt yok).
+# Örnekler (başındaki # işaretini kaldırarak açın):
+# KeePassXC = goruntule
+# konsole = tikla
+""")
+SEVIYELER = {"goruntule": 0, "view": 0, "tikla": 1, "click": 1, "tam": 2, "full": 2}
+_SEVIYE_KOK = {0: "goruntule", 1: "tikla", 2: "tam"}
+
+
+def seviye_satiri_coz(satir):
+    """Bir kural satırı → (desen, seviye 0-2) | None (boş/yorum). Biçimi bozuk satır (= yok, bilinmeyen seviye)
+    GÜVENLİ TARAFTA yorumlanır: en kısıtlayıcı seviye (goruntule); panel bozuk satırı kaydetmez (seviye_dogrula)."""
+    s = satir.strip()
+    if not s or s.startswith("#"):
+        return None
+    desen, ayrac, sev = s.rpartition("=")
+    if not ayrac:
+        return s, 0
+    desen, sev = desen.strip(), sev.strip().lower()
+    return (desen, SEVIYELER.get(sev, 0)) if desen else None
+
+
+def seviye_kurallari():
+    """Dosyadaki [(desen, seviye)] (dosya yoksa/boşsa []). Dosya OKUNURKEN oluşturulmaz. Her çağrıda taze okunur
+    (küçük dosya, ~20 µs; önbellek zaman damgası kaba kaldığında eski kuralı gösterebilirdi): panelden yapılan
+    değişiklik hemen geçerli olur."""
+    try:
+        with open(yollar.seviye_dosya()) as f:
+            return [k for k in (seviye_satiri_coz(l) for l in f) if k]
+    except OSError:
+        return []
+
+
+def seviye_coz(baslik, sinif, kurallar=None):
+    """Pencere başlığı/sınıfı için geçerli seviye (0 goruntule, 1 tikla, 2 tam). Uyan en kısıtlayıcı kural kazanır;
+    derlenemeyen desen düz metin olarak aranır (kısıtı sessizce düşürmemek için)."""
+    seviye = 2
+    for desen, s in (seviye_kurallari() if kurallar is None else kurallar):
+        try:
+            uydu = re.search(desen, baslik, re.I) or re.search(desen, sinif, re.I)
+        except re.error:
+            uydu = desen.lower() in baslik.lower() or desen.lower() in sinif.lower()
+        if uydu:
+            seviye = min(seviye, s)
+    return seviye
+
+
+def seviye_denetle(k, tur):
+    """Pencere k'ya `tur` girdisi ("klavye" | "fare") gönderilebilir mi? Kısıtlıysa Dur(10). Kural yoksa (varsayılan)
+    arka uca hiç sorulmaz. Masaüstü kipinde (EKRAN) klavye etkin pencereye gider → o denetlenir; fare imlecin
+    altındaki pencereyi imlec_alti_denetle denetler."""
+    kurallar = seviye_kurallari()
+    if not kurallar:
+        return
+    au = sec()
+    if k == EKRAN or not k:
+        if tur != "klavye":
+            return
+        k = au.aktif()
+        if not k:
+            return  # denetle() etkin pencere belirlenemezse zaten durur
+    b, sinif = au.baslik(k), au.sinif(k)
+    s = seviye_coz(b, sinif, kurallar)
+    if s == 0 or (s == 1 and tur == "klavye"):
+        raise Dur(10, _("UYGULAMA SEVİYESİ: {baslik} (sınıf {sinif}) '{seviye}' seviyesinde; {tur} girdisi gönderilmez "
+                        "({dosya})").format(baslik=repr(b), sinif=repr(sinif), seviye=_SEVIYE_KOK[s],
+                                            tur=_("klavye") if tur == "klavye" else _("fare"), dosya=yollar.seviye_dosya()))
+
+
+_FARE_FIILLERI = {"mouseto", "buttondown", "buttonup", "click", "wheel", "hwheel"}
+_KLAVYE_FIILLERI = {"key", "keydown", "keyup", "type"}
+
+
+def girdi_turu(satirlar):
+    """dotool satırları → "klavye" | "fare" | None (yalnız ayar satırları: typedelay/typehold). Karışıksa klavye."""
+    fiiller = {(s.split(None, 1) or [""])[0] for s in satirlar}
+    if fiiller & _KLAVYE_FIILLERI:
+        return "klavye"
+    if fiiller & _FARE_FIILLERI:
+        return "fare"
+    return None
+
+
+def girdi_seviye_denetle(k, satirlar):
+    """Arka uçların Girdi.gonder'i, denetle(k, desen)'ten hemen sonra çağırır (iki arka uçta aynı): gönderilecek
+    satırların türüne göre uygulama erişim seviyesi. Ayar satırları (typedelay/typehold) denetlenmez."""
+    tur = girdi_turu(satirlar)
+    if tur:
+        seviye_denetle(k, tur)
 
 
 # ---------------------------------------------------------------- pencere / başlık / sınıf kilidi
@@ -186,6 +499,7 @@ def imlec_alti_denetle(k, px=None, py=None):
     if w == k:
         return
     yasak_denetle(w)
+    seviye_denetle(w, "fare")  # imlecin altındaki başka pencere 'goruntule' seviyesinde olabilir
     if k == EKRAN:
         return
     if au.sinif(w) != au.sinif(k):
@@ -259,6 +573,7 @@ def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek=""):
     onayladığını görür); aynı eylemdeki hassas düğme denetimi yeniden sormaz. → sayfa hassas mı."""
     b = sec().baslik(k)
     m = HASSAS_SAYFA.search(katla(b))
+    onayli = onayli_gecerli(onayli)
     if m and not onayli:
         ayrinti = _("Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}").format(eslesen=repr(m.group(0)))
         ayrinti += _nokta_ayrintisi(nokta, yakin)
@@ -288,6 +603,7 @@ def hassas_engel(onayli, *metinler, hedef="", k=None, nokta=None):
     """Hassas düğme (Satın al / Öde / Yetkilendir / Hesabı sil…) onay ister. k + nokta verildiyse onay isteği
     noktadaki yazıyı ve çevresinin küçük görüntüsünü taşır."""
     eslesen = hassas_mi(*metinler)
+    onayli = onayli_gecerli(onayli)
     if eslesen and not onayli:
         yakin = [m for m in metinler if m]
         asil = next((m for m in yakin if HASSAS.search(katla(m))), eslesen)  # kullanıcıya ekrandaki yazı gösterilir
@@ -300,6 +616,61 @@ def hassas_engel(onayli, *metinler, hedef="", k=None, nokta=None):
                             "({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
                 eslesen=eslesen, yakin=yakin, neden=neden), tur="hassas")
     return eslesen
+
+
+def _yazilacak(metin, gizli):
+    """Onay ayrıntısında gösterilecek (kısaltılmış) yazı; --gizli ise yalnız uzunluk."""
+    return f"***({len(metin)})" if gizli else repr(metin if len(metin) <= 120 else metin[:117] + "…")
+
+
+def riskli_tus_engel(k, onayli, kombinasyon, birlikte=False):
+    """Oturumu/sistemi sonlandıran ya da ekrandan çıkaran tuş kombinasyonu (riskli_tus) onay ister: --onayli yoksa
+    panelden insan onayı, panel kapalıysa/red/gözetimsiz kipte Dur(10). → kombinasyon riskli mi (onaylandı)."""
+    neden = riskli_tus(kombinasyon, birlikte)
+    if not neden:
+        return False
+    if not onayli_gecerli(onayli):
+        b = sec().baslik(k) if k and k != EKRAN else ""
+        goruntu = None if getattr(_EYLEM, "onaylandi", False) else hedef_goruntusu(k)
+        izin, onay_neden = _panelden_onay(_("Riskli tuş: {kombinasyon}").format(kombinasyon=kombinasyon), b,
+                                          neden + "\n" + _("tuş: {kombinasyon}").format(kombinasyon=kombinasyon), goruntu)
+        if not izin:
+            raise Dur(10, _("RİSKLİ TUŞ ({kombinasyon}): {neden}; kullanıcının onayını ister ({onay_neden}); kullanıcı "
+                            "sohbette açıkça onayladıysa --onayli ile tekrarla").format(
+                kombinasyon=kombinasyon, neden=neden, onay_neden=onay_neden), tur="hassas")
+    return True
+
+
+def ucbirim_komut_engel(k, onayli, metin, gizli=False):
+    """Hedef pencere bir uçbirimse (ucbirim_mi) ve yazılacak metin yıkıcı komut kalıbına uyuyorsa (riskli_komut)
+    onay ister (riskli_tus_engel ile aynı yol). Komut, yazılmadan ÖNCE yakalanır: Enter ayrı gönderilse bile.
+    Onay isteği komutu (kısaltılmış) taşır. → uçbirimde riskli komut mu (onaylandı)."""
+    neden = riskli_komut(metin)  # ucuz ön eleme: sınıf sorgusu (kde: kdotool) yalnız eşleşince
+    if not neden:
+        return False
+    au = sec()
+    pen = k if k and k != EKRAN else au.aktif()
+    sinif = au.sinif(pen) if pen else ""
+    if not ucbirim_mi(sinif):
+        return False
+    if not onayli_gecerli(onayli):
+        b = au.baslik(pen)
+        ayrinti = neden + "\n" + _("uçbirim: {sinif}").format(sinif=sinif) + "\n" + \
+            _("yazılacak: {metin}").format(metin=_yazilacak(metin, gizli))
+        goruntu = None if getattr(_EYLEM, "onaylandi", False) else hedef_goruntusu(pen)
+        izin, onay_neden = _panelden_onay(_("Uçbirime komut yaz: {komut}").format(komut=_yazilacak(metin, gizli)), b,
+                                          ayrinti, goruntu)
+        if not izin:
+            raise Dur(10, _("UÇBİRİM KOMUTU ({neden} ← {baslik}): yıkıcı olabilecek komutu uçbirime yazmak kullanıcının "
+                            "onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile "
+                            "tekrarla").format(neden=neden, baslik=repr(b), onay_neden=onay_neden), tur="hassas")
+    return True
+
+
+def onayli_gecerli(onayli):
+    """--onayli (kullanıcı sohbette açıkça onayladı) geçerli mi? Gözetimsiz kipte sohbet/insan yoktur: --onayli
+    sayılmaz, onay gerektiren her eylem reddedilir (onay.iste_sonuc 'gozetimsiz')."""
+    return bool(onayli) and not gozetimsiz()
 
 
 # ---------------------------------------------------------------- DUR anahtarı

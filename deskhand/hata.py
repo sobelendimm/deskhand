@@ -43,6 +43,12 @@ def dur_dosyasi() -> str:
     return os.path.join(calisma_dizini(), "dur")
 
 
+def gozetimsiz() -> bool:
+    """Gözetimsiz kip (DESKHAND_GOZETIMSIZ=1 ya da --unattended/--gozetimsiz): başında insan yok (zamanlanmış akış);
+    onay gerektiren her eylem panel diyaloğu açılmadan reddedilir (onay.iste_sonuc: tek nokta)."""
+    return os.environ.get("DESKHAND_GOZETIMSIZ", "").strip().lower() in ("1", "true", "yes", "evet", "on")
+
+
 def dur_denetle() -> None:
     """DUR anahtarı açıksa Dur(13). Her girdi satırından önce çağrılır (iki arka uçta da). ~2 µs."""
     if os.path.exists(dur_dosyasi()):

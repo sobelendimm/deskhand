@@ -1,6 +1,7 @@
 """İnsan onayı protokolü (docs/ARCHITECTURE.md §8): hassas eylem YALNIZ panelde bir insan "Bir kez izin ver" derse yapılır.
 
 İsteyen taraf (CLI / MCP / akış):  iste(eylem, hedef, ayrinti, masaustu, sure=120) -> bool
+  0. Gözetimsiz kip (DESKHAND_GOZETIMSIZ=1 / --unattended): hiçbir diyalog açılmaz, beklenmez → HEMEN red.
   1. Panel canlı değilse (RUNTIME_DIR/panel.pid + /proc doğrulaması) HEMEN red.
   2. RUNTIME_DIR/onay/istek-<uuid>.json yazılır (dizin 0700, dosya 0600; geçici adla yazılıp yerine konur).
   3. yanit-<uuid>.json beklenir. Süre dolarsa, panel kapanırsa ya da DUR açılırsa → red.
@@ -22,6 +23,7 @@ import uuid
 from typing import NamedTuple
 
 from . import yollar
+from .hata import gozetimsiz
 from .i18n import N_, _
 
 VARSAYILAN_SURE = 120.0
@@ -47,6 +49,7 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "panel-kapandi": N_("Deskhand paneli beklerken kapandı → red"),
     "dur": N_("kullanıcı DUR dedi → red"),
     "hata": N_("onay isteği yazılamadı → red"),
+    "gozetimsiz": N_("gözetimsiz çalışmada hassas eylem yapılmaz"),
 }
 KARARLAR = ("izin", "red")
 _ID = re.compile(r"[0-9a-f]{32}")
@@ -208,6 +211,8 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
             _kaydet_gunluk(s, eylem, hedef, masaustu)
         return s
 
+    if gozetimsiz():  # başında insan yok: panel diyaloğu açılmaz, beklenmez (tek nokta: CLI, MCP, akış hep buradan)
+        return bitir(OnaySonucu(False, "gozetimsiz"))
     if _dur_acik():
         return bitir(OnaySonucu(False, "dur"))
     ppid = panel_pid()

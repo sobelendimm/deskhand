@@ -66,6 +66,18 @@ class CiftEtiket(QLabel):
 
 
 app = QApplication(sys.argv)
+if os.environ.get("SINIF"):  # WM_CLASS sınıfı (xcb: uygulama adı): örn. SINIF=xterm → uçbirim sınıflı test penceresi
+    app.setApplicationName(os.environ["SINIF"])
+if os.environ.get("TUS_LOG"):  # her tuş basışını (odaktaki parçadan bağımsız) "tus_ham" olarak yaz
+    from PyQt6.QtCore import QEvent, QObject
+
+    class TusKaydi(QObject):
+        def eventFilter(self, nesne, olay):
+            if olay.type() == QEvent.Type.KeyPress and not olay.isAutoRepeat():
+                log(f"tus_ham {olay.text() or olay.key()}")
+            return False
+    _tus_kaydi = TusKaydi()
+    app.installEventFilter(_tus_kaydi)
 w = QWidget()
 w.setWindowTitle(os.environ.get("BASLIK", "ekran-test ANA"))
 w.resize(760, 640)

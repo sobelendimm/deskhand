@@ -712,6 +712,33 @@ class AyarlarSekmesi(QScrollArea):
         kok.addWidget(g)
         self.yasak_yukle()
 
+        # ---- uygulama erişim seviyeleri (yasak pencerelerle aynı kalıp)
+        g = self._grup(T.Y_SEVIYE)
+        gl = QVBoxLayout(g)
+        gl.addWidget(self._soluk(T.Y_SEVIYE_ACIKLAMA))
+        self.seviye = QPlainTextEdit()
+        f = self.seviye.font()
+        f.setFamily("monospace")
+        f.setStyleHint(f.StyleHint.Monospace)
+        self.seviye.setFont(f)
+        self.seviye.setMinimumHeight(110)
+        gl.addWidget(self.seviye)
+        sat = QHBoxLayout()
+        self.l_seviye = QLabel("")
+        self.l_seviye.setWordWrap(True)
+        sat.addWidget(self.l_seviye, 1)
+        b_geri = QPushButton()
+        self.mt(b_geri.setText, T.Y_GERI_AL)
+        b_geri.clicked.connect(self.seviye_yukle)
+        b_kaydet = QPushButton()
+        self.mt(b_kaydet.setText, T.Y_KAYDET)
+        b_kaydet.clicked.connect(self.seviye_kaydet)
+        sat.addWidget(b_geri)
+        sat.addWidget(b_kaydet)
+        gl.addLayout(sat)
+        kok.addWidget(g)
+        self.seviye_yukle()
+
         # ---- kısayol
         panel = A.panel_oku()
         g = self._grup(T.Y_KISAYOL)
@@ -791,7 +818,7 @@ class AyarlarSekmesi(QScrollArea):
         self.mt.tazele()
         self._tus_yaz()
         self.cakisma_goster()
-        for e in (getattr(self, "l_karar", None), self.l_yasak):  # eski dildeki "Kaydedildi." vb.
+        for e in (getattr(self, "l_karar", None), self.l_yasak, self.l_seviye):  # eski dildeki "Kaydedildi." vb.
             if e is not None:
                 e.setText("")
 
@@ -860,6 +887,20 @@ class AyarlarSekmesi(QScrollArea):
             return False
         A.yasak_kaydet(metin)
         self.l_yasak.setText(_(T.Y_KAYDEDILDI))
+        return True
+
+    def seviye_yukle(self):
+        self.seviye.setPlainText(A.seviye_metni())
+        self.l_seviye.setText("")
+
+    def seviye_kaydet(self) -> bool:
+        metin = self.seviye.toPlainText()
+        h = A.seviye_dogrula(metin)
+        if h:
+            self.l_seviye.setText(_(T.Y_SEVIYE_HATA).format(no=h[0], hata=h[1]))
+            return False
+        A.seviye_kaydet(metin)
+        self.l_seviye.setText(_(T.Y_KAYDEDILDI))
         return True
 
     def tus(self) -> str:

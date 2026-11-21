@@ -24,7 +24,8 @@ deskhand/
                    eski araç çalışmaya devam eder).
   hata.py          Dur(kod, mesaj) + çıkış kodları (§5)
   gunluk.py        günlük + temizlik
-  guvenlik.py      yasak pencereler, hassas düğme, ödeme sayfası, başlık/sınıf kilidi, denetle(), DUR anahtarı
+  guvenlik.py      yasak pencereler, hassas düğme, ödeme sayfası, riskli tuş/uçbirim komutu onayı, uygulama erişim
+                   seviyeleri, başlık/sınıf kilidi, denetle(), DUR anahtarı
   insan.py         Wayland etkinlik izleyici (ekran-etkinlik C yardımcısı) + insan_bekle
   ocr.py           oku, satirla, ara, derin_oku, önbellek, ön işleme
   gorsel.py        simge (NCC), renk alanları, ızgara
@@ -84,7 +85,8 @@ bir kimlik yanlış arka uca gidemez). Özel kimlik `EKRAN` = masaüstü kipi (t
 `baslat(argv, env, cikti)`: `env`, her iki arka uçta da `os.environ`'a EKLENECEK/değişecek değişkenlerdir (tam ortam
 değil). Sanalda masaüstü değerleri (DISPLAY, özel D-Bus, ses...) her zaman üstün gelir.
 
-**Girdi nesnesi:** `gonder(k, desen, *satirlar)` (her çağrıdan önce `guvenlik.denetle`), `zorla(satir)` (bırakma;
+**Girdi nesnesi:** `gonder(k, desen, *satirlar)` (her çağrıdan önce `guvenlik.denetle`, hemen ardından
+`guvenlik.girdi_seviye_denetle(k, satirlar)`: uygulama erişim seviyesi, §4), `zorla(satir)` (bırakma;
 denetimsiz, kesintide bile), `ham(satir)`, `izle(k, desen)` / `izle_bitir()` (gözcü), `etk_denetle()`,
 `insan_kontrol()`, `kapat()`.
 
@@ -120,6 +122,32 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 - Yasak pencereler (`yasak-pencereler.txt`): hiçbir girdi + başlatma yok (10). **Liste varsayılan olarak boştur**
   (yalnız yerleşik panel/onay penceresi yasağı vardır); kullanıcı kendi yasaklarını ekler.
 - Hassas düğme / ödeme sayfası başlığı → `--onayli` yoksa 10. `--onayli` YALNIZ kullanıcı sohbette açıkça onayladıysa.
+- **Riskli tuş kombinasyonları → insan onayı** (yasak DEĞİL). `guvenlik.riskli_tus(kombinasyon) -> neden | None`:
+  ctrl+alt+delete, ctrl+alt+backspace, ctrl+alt+f1…f12 (sanal uçbirim), meta+l ve ctrl+alt+l (ekran kilidi),
+  alt+sysrq+tuş. `k_tus` / `k_bas` hassas-eylem yolunu kullanır (`riskli_tus_engel`): `--onayli` yoksa panelden onay,
+  panel kapalıysa 10; `dizi`/akış adımları aynı işlevlerden geçtiği için aynen kapsanır. Pencere sınıfından bağımsız.
+  `k_bas` tuşları aynı anda basılı tuttuğundan boşlukla ayrılmış tuşlar tek küme sayılır (`birlikte=True`).
+- **Uçbirime yıkıcı komut yazma → insan onayı.** Hedef pencerenin sınıfı uçbirim öykünücüsüyse (`UCBIRIM_SINIFLARI`,
+  tek sabit liste) ve yazılacak metin dar bir yıkıcı kalıba uyuyorsa (`riskli_komut`: rm -r, sudo/doas/pkexec/run0,
+  curl|wget … | sh, mkfs, dd of=/dev/…, > /dev/disk, çatal bombası, kökte chmod/chown -R, shutdown/reboot/poweroff/halt,
+  systemctl/loginctl poweroff/reboot/suspend, git push --force/-f, :w !sudo) onay istenir. Denetim `eylem._yazi_hassas`
+  (imza değişmez) ve `guvenlik.yazi_onay_ister_mi` üzerinden akar: yazmadan ÖNCE yapılır (Enter ayrı gönderilse bile
+  komut metni yakalanır), parça parça/yapıştırarak yazan her yol aynı işlevi kullanmalıdır. Onay isteği komutu
+  (kısaltılmış; `--gizli` ise yalnız uzunluğu), nedeni ve sınıfı taşır. Uçbirim olmayan pencerede metin sıradan yazıdır.
+- **Uygulama erişim seviyeleri** (varsayılan YOK): `CONFIG_DIR/uygulama-seviyeleri.txt`, satır `DESEN = goruntule | tikla |
+  tam` (DESEN yasak listesindeki gibi başlık/sınıf regex'i; İngilizce eş adlar view/click/full). goruntule = hiçbir
+  girdi yok (10; okuma/ekran görüntüsü serbest), tikla = fare serbest, klavye (yaz/tuş/bas) ve pencere kapatma yok (10),
+  tam = kısıt yok. Dosya yoksa/boşsa hiçbir kısıt yoktur (araç kendiliğinden uygulama kısıtlamaz); dosya okunurken
+  oluşturulmaz, yalnız panelden Kaydet yazar. Birden çok desen uyarsa EN KISITLAYICI geçerlidir; biçimi bozuk satır
+  (= yok, bilinmeyen seviye) güvenli tarafta goruntule sayılır (panel bozuk satırı kaydetmez). Denetim iki arka uçta
+  aynıdır: `Girdi.gonder`, `denetle(k, desen)`'ten hemen sonra `guvenlik.girdi_seviye_denetle(k, satirlar)` çağırır
+  (key/keydown/type = klavye; mouseto/click/button/wheel = fare; typedelay/typehold ayar satırı denetlenmez); masaüstü
+  kipinde klavye etkin pencereye, fare `imlec_alti_denetle` ile imlecin altındaki pencereye bakar. `ac` ile başlatma
+  etkilenmez. Seviye reddi onaydan ÖNCE verilir (boş diyalog açılmaz).
+- **Gözetimsiz kip.** `DESKHAND_GOZETIMSIZ=1` ya da genel bayrak `--unattended` (`--gozetimsiz`): onay gerektiren her
+  eylem panel diyaloğu açılmadan ve beklemeden reddedilir (10, "gözetimsiz çalışmada hassas eylem yapılmaz"). Tek nokta
+  `onay.iste_sonuc` (CLI, MCP, akış hepsi oradan geçer). Sohbet/insan olmadığından `--onayli` de geçersiz sayılır
+  (`guvenlik.onayli_gecerli`). Zamanlanmış akışlar için.
 - Başlık (`-b`) ve sınıf (`-s`) kilidi her girdiden hemen önce (4).
 - DUR anahtarı: `DESKHAND_RUNTIME_DIR/dur` varsa her girdi çağrısından önce Dur(13); basılı her şey bırakılır.
   `deskhand dur` oluşturur, `deskhand devam` siler. Arayüz/tepsi/kısayol bunu kullanır.
@@ -180,6 +208,9 @@ Arayüz sözleşmesine zamanla giren kararların özeti (ayrıntılar ilgili bö
   müdahale etmez (kod 15); yalnız açık kullanıcı izniyle istisna vardır. Sanal masaüstü bundan etkilenmez (§4).
 - **Yasak listesi varsayılan boş.** Deskhand bir "tıklama aracıdır"; kullanıcı neyi yasaklayacağına kendisi karar
   verir. Yalnız Deskhand'in kendi panel/onay penceresi daima yasaktır (§4).
+- **Riskli eylem = onay, yasak değil.** Yasak listeleri varsayılan boş kalır; oturumu sonlandıran tuşlar ve uçbirime
+  yazılan yıkıcı komutlar insan onayı ister (dolaylı komut enjeksiyonuna karşı), uygulama erişim seviyeleri de varsayılan
+  olarak yoktur (§4). Gözetimsiz kipte onay asla sorulmaz, red olur.
 - **Sanal ekran güvenliği.** Sanal X bağlantısı yalnız doğrulanmış `:N` ekranına açılır; boş `DISPLAY` asla
   gerçek masaüstüne düşmez (§4).
 - **Devral ve bildirimler.** Sanal masaüstünde kullanıcı "Devral" ile denetimi alabilir; bu durum ve bildirimler
@@ -198,5 +229,7 @@ Hassas eylem (hassas düğme, ödeme sayfası, yasak dışı ama riskli `ac`, ot
   Yanıt: `yanit-<uuid>.json` {id, karar: "izin"|"red", kaynak: "arayuz", zaman}. Yalnız panel yazar.
   İsteyen yanıtı bekler; süre dolarsa ya da panel kapalıysa → red (mesaj: "Deskhand paneli kapalı, onay alınamadı").
   Tek kullanımlık; istek/yanıt dosyaları kullanılınca silinir; dizin 0700.
-- CLI `--onayli` kalır (kullanıcı sohbette açıkça onayladıysa), MCP yüzeyinde YOK.
+- CLI `--onayli` kalır (kullanıcı sohbette açıkça onayladıysa), MCP yüzeyinde YOK. Riskli tuş ve uçbirim komutu da bu
+  protokolü kullanır (eylem metni "Riskli tuş: …" / "Uçbirime komut yaz: …"); gözetimsiz kipte `iste_sonuc` hiç panele
+  yazmadan `gozetimsiz` nedeniyle red döner.
 - Onay diyaloğu penceresi yasak listesine (sınıf/başlık) otomatik eklenir: hiçbir otomasyon girdisi ona gitmez.

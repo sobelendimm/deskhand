@@ -39,6 +39,10 @@ YARDIM_GUVENLIK = (
        "kullanıcı o adımı açıkça onayladıysa verilir. Her girdi ~/.local/state/deskhand/ günlüğüne yazılır."),
     N_("İNSAN ÖNCELİĞİ: kullanıcı fareyi YA DA klavyeyi kullanıyorsa (Wayland boşta bildirimi, yetkisiz) girdi\n"
        "gönderilmez: 1,5 sn sessizlik beklenir (en çok 8 sn), olmazsa 12. Basılı tutarken insan girdisi → hemen bırakır."),
+    N_("ONAY İSTEYEN RİSKLİ EYLEMLER (yasak değil, insan onayı; --approved ya da panelden): oturumu/ekranı sonlandıran\n"
+       "tuşlar (ctrl+alt+delete/backspace/F1-F12, meta+l, alt+sysrq+…) ve uçbirime yıkıcı komut yazma (rm -r, sudo,\n"
+       "curl | sh, mkfs, dd of=/dev/…, git push --force…). ~/.config/deskhand/uygulama-seviyeleri.txt (varsayılan: yok)\n"
+       "uygulama başına 'DESEN = goruntule | tikla | tam' ile girdiyi sınırlar (goruntule: girdi yok; tikla: klavye yok)."),
     N_("DUR ANAHTARI: 'ekran stop' sonrası hiçbir deskhand süreci girdi göndermez (13), basılı tuşlar bırakılır; "
        "'ekran resume' kaldırır."),
 )
@@ -111,6 +115,8 @@ YARDIM_ORTAK = (
        "DESKHAND_HEDEF=arka)."),
     N_("       --on-my-screen (--ekranimda) kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı "
        "açıkça izin verdiyse)."),
+    N_("       --unattended (--gozetimsiz)  gözetimsiz kip (ortam: DESKHAND_GOZETIMSIZ=1): onay gerektiren her eylem "
+       "panel diyaloğu açılmadan reddedilir (10)."),
     N_("screenshot/read/wait bitince önceki pencere geri öne gelir (--stay: gelmesin)."),
 )
 YARDIM_CIKIS = (
@@ -273,6 +279,10 @@ def ayristirici(prog=None, sessiz=False):
             help=h_("kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı açıkça izin verdiyse)"))
     secenek(ortak, "--ekranimda", action="store_true", default=argparse.SUPPRESS,  # komuttan sonra da kabul
             help=h_("kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı açıkça izin verdiyse)"))
+    secenek(p, "--gozetimsiz", action="store_true", default=False,
+            help=h_("gözetimsiz kip: onay gerektiren eylem diyalog açılmadan reddedilir (10); ortam: DESKHAND_GOZETIMSIZ=1"))
+    secenek(ortak, "--gozetimsiz", action="store_true", default=argparse.SUPPRESS,  # komuttan sonra da kabul
+            help=h_("gözetimsiz kip: onay gerektiren eylem diyalog açılmadan reddedilir (10)"))
     dugmeler = ["sol", "sag", "cift", "orta"]
 
     def komut(tr, f, **kw):
@@ -397,6 +407,8 @@ def main(argv=None):
         os.environ["DESKHAND_HEDEF"] = "arka"  # bu süreç ve başlattıkları aynı arka ucu seçsin
     if a.ekranimda:
         os.environ["DESKHAND_EKRANIMDA"] = "1"  # kullanıcı açıkça izin verdi: oyun/film sırasında da ön plan
+    if a.gozetimsiz:
+        os.environ["DESKHAND_GOZETIMSIZ"] = "1"  # başında insan yok: onay diyaloğu açılmaz, hassas eylem reddedilir
     guvenlik.SINIF_DESEN = a.sinif
     onceki = au = None
     try:
