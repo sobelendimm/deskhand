@@ -420,6 +420,7 @@ def ayristirici(prog=None, sessiz=False):
     secenek(s, "--bolge")
     s = komut("ac", k_ac, parents=[ortak]); s.add_argument("uygulama", nargs="?")
     secenek(s, "--komut", dest="komut_satiri", help=h_("uygulama adı yerine bu komutu başlat"))
+    secenek(s, "--onayli", action="store_true", help=h_("--komut yıkıcı bir kalıba uyuyorsa: kullanıcı AÇIKÇA onayladı"))
     s.add_argument("--site", action="append",
                    help=h_("(--arka) oturum kopyasına bu sitenin yerel deposunu da al; tekrarlanabilir"))
     secenek(s, "--sure", en="--timeout", type=float, default=30.0)

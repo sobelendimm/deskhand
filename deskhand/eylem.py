@@ -165,6 +165,8 @@ def mod_coz(mod):
 def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod=()):
     """mod: mod_coz çıktısı (dotool tuş adları). Değiştirici: keydown → tıklama → keyup; bırakma HER durumda
     (hata, kesinti, DUR) `zorla` ile yapılır (basili_bekle/k_bas ile aynı güvence)."""
+    if mod:
+        guvenlik.seviye_denetle(k, "klavye")  # değiştirici tuş basılı tıklama klavye girdisidir: 'tikla' seviyesinde yok
     geo = geo or _au().geometri(k)
     fx, fy, px, py = ekran_noktasi(k, x, y, geo)
     _au().one_getir(k)
@@ -242,14 +244,8 @@ def _yazi_hassas(g, k, onayli, metin):
 YAPISTIR_ESIK = 200  # bundan uzun yazı panoya konup yapıştırılır (harf harf yazmak ~10 ms/harf)
 YAPISTIR_BEKLE = 0.2  # yapıştır tuşundan sonra eski panoyu geri yüklemeden önce (hedef içeriği okusun); arka uç
 #                       `pano_bekle` özniteliğiyle değiştirebilir
-# Yapıştırma tuşu ctrl+shift+v olan uçbirimlerin pencere sınıfları (küçük harf, alt dize eşleşir). Tek yerde toplanır.
-UCBIRIM_SINIFLARI = ("konsole", "ghostty", "kitty", "alacritty", "wezterm", "xterm", "yakuake", "terminal",
-                     "tilix", "terminator", "rxvt", "ptyxis", "qterminal", "foot", "kgx", "contour", "st-256color")
-
-
-def ucbirim_mi(sinif):
-    s = (sinif or "").lower()
-    return any(u in s for u in UCBIRIM_SINIFLARI)
+# Yapıştırma tuşu ctrl+shift+v olan uçbirimler: TEK liste guvenlik.UCBIRIM_SINIFLARI (yıkıcı komut onayıyla ortak).
+ucbirim_mi = guvenlik.ucbirim_mi
 
 
 def _pano_var():
@@ -814,6 +810,7 @@ def pencere_yonet(k, islem, x=None, y=None, g=None, h=None, desen=None):
     au = _au()
     yasak_denetle(k)
     guvenlik.sinif_denetle(k)
+    guvenlik.seviye_denetle(k, "fare")  # pencereyi oynatmak girdi sayılır: 'goruntule' seviyesinde yok
     b = au.baslik(k)
     if desen and not re.search(desen, b, re.I):
         raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); pencere işlemi yapılmadı").format(

@@ -10,7 +10,7 @@ import time
 from . import yollar
 from .arka_uc import sec
 from .gunluk import gunluk
-from .guvenlik import baslatma_yasak_denetle
+from .guvenlik import baslatma_komut_engel, baslatma_yasak_denetle
 from .hata import Dur
 from .i18n import _
 from .ocr import norm
@@ -128,6 +128,7 @@ def k_ac(a):
     if a.komut_satiri:
         komut, ad = shlex.split(a.komut_satiri), a.komut_satiri
         baslatma_yasak_denetle(a.komut_satiri)
+        baslatma_komut_engel(a.komut_satiri, getattr(a, "onayli", False))  # rm -r / sudo / curl | sh…: insan onayı
     elif a.uygulama:
         g = uygulama_bul(a.uygulama)
         baslatma_yasak_denetle(g["ad"], g["ad_en"], g["exec"], g["kimlik"])

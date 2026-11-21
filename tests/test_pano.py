@@ -219,7 +219,7 @@ for sinif_, beklenen in (("org.kde.konsole", True), ("com.mitchellh.ghostty", Tr
                          ("foot", True), ("org.wezfurlong.wezterm", True), ("XTerm", True), ("yakuake", True),
                          ("gnome-terminal-server", True), ("Tilix", True), ("firefox", False), ("kwrite", False),
                          ("org.kde.dolphin", False), ("", False)):
-    kontrol(f"uçbirim sınıfı: {sinif_!r} → {beklenen}", eylem.ucbirim_mi(sinif_) == beklenen)
+    kontrol(f"uçbirim sınıfı: {sinif_!r} → {beklenen}", guvenlik.ucbirim_mi(sinif_) == beklenen)
 
 # --- emoji + çok satırlı + sekme: yapıştırılır, \n Enter, \t Tab, eski pano geri gelir
 au = SahtePano()

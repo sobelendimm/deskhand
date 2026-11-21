@@ -184,7 +184,7 @@ UCBIRIM_SINIFLARI = (
     "konsole", "yakuake", "ghostty", "kitty", "alacritty", "foot", "footclient", "wezterm", "wezterm-gui", "xterm",
     "uxterm", "gnome-terminal", "tilix", "terminator", "ptyxis", "kgx", "gnome-console", "xfce4-terminal",
     "lxterminal", "qterminal", "mate-terminal", "urxvt", "rxvt", "guake", "tilda", "terminology", "sakura",
-    "cool-retro-term", "contour", "rio",
+    "cool-retro-term", "contour", "rio", "terminal", "st-256color",
 )
 _UCBIRIM = re.compile(r"(?<![a-z0-9])(?:" + "|".join(re.escape(a) for a in UCBIRIM_SINIFLARI) + r")(?![a-z0-9])", re.I)
 
@@ -664,6 +664,25 @@ def ucbirim_komut_engel(k, onayli, metin, gizli=False):
             raise Dur(10, _("UÇBİRİM KOMUTU ({neden} ← {baslik}): yıkıcı olabilecek komutu uçbirime yazmak kullanıcının "
                             "onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile "
                             "tekrarla").format(neden=neden, baslik=repr(b), onay_neden=onay_neden), tur="hassas")
+    return True
+
+
+def baslatma_komut_engel(komut_metni, onayli=False):
+    """Ham komut satırıyla uygulama başlatma (CLI `ac --komut`, MCP open_app args): komut yıkıcı bir kabuk kalıbına
+    uyuyorsa (riskli_komut: rm -r, sudo, curl | sh…) insan onayı ister (uçbirime yazmayla aynı kalıp ve aynı onay yolu;
+    gözetimsiz kipte --onayli geçmez). Red → Dur(10), HİÇBİR şey başlatılmaz. → riskli miydi (onaylandı)."""
+    neden = riskli_komut(komut_metni)
+    if not neden:
+        return False
+    eylem_basladi()  # başlatma kendi eylemi: önceki eylemin onayı taşınmaz
+    if not onayli_gecerli(onayli):
+        izin, onay_neden = _panelden_onay(_("Komut başlat: {komut}").format(komut=_yazilacak(komut_metni, False)),
+                                          _("uygulama başlatma"), neden + "\n" + _("komut: {komut}").format(
+                                              komut=_yazilacak(komut_metni, False)))
+        if not izin:
+            raise Dur(10, _("RİSKLİ KOMUT BAŞLATMA ({neden}): yıkıcı olabilecek komutu başlatmak kullanıcının onayını "
+                            "ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile "
+                            "tekrarla").format(neden=neden, onay_neden=onay_neden), tur="hassas")
     return True
 
 

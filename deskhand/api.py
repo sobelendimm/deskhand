@@ -487,9 +487,10 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     """Uygulamayı GEÇERLİ hedefte başlat, YENİ penceresini bekle (uygulama.k_ac ile aynı döngü; ek: env).
     Yasak uygulama başlatılmaz (10)."""
     from .gunluk import gunluk
-    from .guvenlik import baslatma_yasak_denetle
+    from .guvenlik import baslatma_komut_engel, baslatma_yasak_denetle
     from .uygulama import tum_pencereler
     baslatma_yasak_denetle(*yasak_metinleri, *argv)
+    baslatma_komut_engel(shlex.join(argv))  # yıkıcı kalıp: insan onayı (MCP yüzeyinde onaylı bayrağı yok)
     au = arka()
     once = tum_pencereler()
     os.makedirs(yollar.cikti(), exist_ok=True)
