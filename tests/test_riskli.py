@@ -422,8 +422,9 @@ for ad_ in ("kde", "sanal"):
         au.pen["{w}"][:2] = ["Terminal", "org.kde.konsole"]
 
 # başka bir yolun (ör. panodan yapıştırarak yazma) _yazi_hassas'ı doğrudan çağırması da kapsanır; imza değişmedi
-kontrol("_yazi_hassas imzası (g, k, onayli, metin) korundu",
-        list(inspect.signature(eylem._yazi_hassas).parameters) == ["g", "k", "onayli", "metin"])
+kontrol("_yazi_hassas imzası (g, k, onayli, metin) korundu (+ isteğe bağlı goruntu_al: odaksız erişilebilirlik yolu)",
+        list(inspect.signature(eylem._yazi_hassas).parameters) == ["g", "k", "onayli", "metin", "goruntu_al"] and
+        inspect.signature(eylem._yazi_hassas).parameters["goruntu_al"].default is True)
 au = kur("kde")
 with arka_uc.hedef_sabit("kde"):
     g_ = SahteGirdi(au)

@@ -135,7 +135,7 @@ ORNEK = {  # komut → kimliksiz argümanlar
     "ac": ["x"], "akis": [K, "ad"], "erisim": [], "agac": [K], "ogeye-tikla": [K, "ad"], "ogeye-yaz": [K, "ad", "metin"],
     "dur": [], "devam": [],
     "durum": [], "mesgul": [], "karar": ["görev"], "panel": [], "masaustu": ["durum"], "oturum": ["durum"],
-    "mcp": [], "pencere": [K, "move", "1", "2"], "doktor": [], "yardım": [],
+    "mcp": [], "pano": ["read"], "pencere": [K, "move", "1", "2"], "doktor": [], "yardım": [],
 }
 kontrol("örnek tablosu tüm komutları kapsıyor", set(ORNEK) == set(komutlar.TR_EN), set(komutlar.TR_EN) ^ set(ORNEK))
 hatalar = []
