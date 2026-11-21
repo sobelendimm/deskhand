@@ -408,6 +408,24 @@ def yaz(k, metin, baslik=None, gizli=False, onayli=False) -> str:
     return calistir(k_yaz, ns(kimlik=k, metin=metin, gizli=gizli, baslik=baslik, onayli=onayli))
 
 
+def pano_oku() -> str | None:
+    """Geçerli hedefin panosunun metni (boş / metin dışı: None). Ön planda hassas eylemdir: onayı çağıran verir."""
+    from .gunluk import gunluk
+    au = arka()
+    metin = au.pano_oku()
+    gunluk(f"pano oku | {au.ad} | {len(metin) if metin is not None else 'boş'}")  # içerik günlüğe yazılmaz
+    return metin
+
+
+def pano_yaz(metin: str) -> None:
+    """Geçerli hedefin panosunu `metin` yapar ("" = temizle); pano yöneticisi geçmişine yazılmaz. DUR (13) ve
+    ön plan koruması (15) arka uçta."""
+    from .gunluk import gunluk
+    au = arka()
+    au.pano_yaz(metin, hassas=True)
+    gunluk(f"pano yaz | {au.ad} | {len(metin)} karakter")  # içerik günlüğe yazılmaz
+
+
 def tus(k, kombinasyon, baslik=None, onayli=False) -> str:
     from .eylem import k_tus
     return calistir(k_tus, ns(kimlik=k, kombinasyon=kombinasyon, baslik=baslik, onayli=onayli))

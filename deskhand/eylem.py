@@ -13,7 +13,7 @@ import unicodedata
 
 
 from . import yollar
-from .arka_uc import EKRAN, sec
+from .arka_uc import EKRAN, ArkaUc, sec
 from .gorsel import bolge_coz, pencere_goruntusu, renk_alanlari, simge_bul_ic
 from .gunluk import gunluk
 from . import guvenlik
@@ -231,11 +231,108 @@ def _yazi_hassas(g, k, onayli, metin):
                               ek=_("yazılacak: {metin}").format(metin=goster))
 
 
+# ---------------------------------------------------------------- yapıştırarak yazma (Faz 9a)
+
+YAPISTIR_ESIK = 200  # bundan uzun yazı panoya konup yapıştırılır (harf harf yazmak ~10 ms/harf)
+YAPISTIR_BEKLE = 0.2  # yapıştır tuşundan sonra eski panoyu geri yüklemeden önce (hedef içeriği okusun); arka uç
+#                       `pano_bekle` özniteliğiyle değiştirebilir
+# Yapıştırma tuşu ctrl+shift+v olan uçbirimlerin pencere sınıfları (küçük harf, alt dize eşleşir). Tek yerde toplanır.
+UCBIRIM_SINIFLARI = ("konsole", "ghostty", "kitty", "alacritty", "wezterm", "xterm", "yakuake", "terminal",
+                     "tilix", "terminator", "rxvt", "ptyxis", "qterminal", "foot", "kgx", "contour", "st-256color")
+
+
+def ucbirim_mi(sinif):
+    s = (sinif or "").lower()
+    return any(u in s for u in UCBIRIM_SINIFLARI)
+
+
+def _pano_var():
+    return type(_au()).pano_yaz is not ArkaUc.pano_yaz  # arka uç pano uyguluyor mu
+
+
+def _yazilamayan_var(metin):
+    yazilabilir_mi = _istege_bagli("yazilabilir_mi", lambda c: True)
+    return any(c not in "\n\t" and not (" " <= c <= "~") and not yazilabilir_mi(c) for c in metin)
+
+
+def yapistirarak_mi(metin):
+    """Yazı panoya konup yapıştırılsın mı: arka uç panoyu destekliyor VE (klavye düzeninde olmayan karakter —
+    emoji vb. — var ya da yazı YAPISTIR_ESIK'ten uzun) VE panoya konacak bir satır var."""
+    return (_pano_var() and (len(metin) > YAPISTIR_ESIK or _yazilamayan_var(metin))
+            and any(p for p in re.split(r"[\n\t]", metin)))
+
+
+def _yapistirarak_yaz(g, k, desen, metin, onayli):
+    """Metni panoya koyup yapıştırır. \\n → Enter, \\t → Tab tuşu (harf harf yoldaki anlamıyla); aradaki parçalar
+    yapıştırılır. Eski pano içeriği önceden alınır, SONRA (hata/kesinti dahil) geri yüklenir. Her gönderim `g.gonder`
+    üzerinden (DUR, başlık/sınıf kilidi, ön plan koruması, insan önceliği) gider. → yapıldı mı (False: pano
+    kullanılamadı, hiçbir şey gönderilmedi; çağıran harf harf yazmaya döner)."""
+    au = _au()
+    try:
+        yedek = au.pano_yedekle()
+    except Dur as e:
+        if e.kod != 9:
+            raise
+        print(_("UYARI: pano kullanılamadı ({neden}); harf harf yazılıyor").format(neden=e.mesaj), file=sys.stderr)
+        return False
+    tus = "ctrl+shift+v" if ucbirim_mi(au.sinif(k)) else "ctrl+v"
+    bekle = getattr(au, "pano_bekle", YAPISTIR_BEKLE)
+    parcalar = re.split(r"(\n|\t)", metin)
+    yazilan = 0
+    adet = sum(1 for p in parcalar if p)
+    g.izle(k, desen)
+    try:
+        for p in parcalar:
+            if not p:
+                continue
+            denetle(k, desen)  # parça başında tam denetim (yasak pencere dahil); gönderimde yine denetlenir
+            if yazi_onay_ister_mi(p):  # yazarken sayfa ödeme sayfasına geçtiyse: onay
+                _yazi_hassas(g, k, onayli, metin)
+            try:
+                g.etk_denetle(_("yazma kesildi"))
+            except Dur as e:
+                raise Dur(e.kod, _("{mesaj} ({yazilan}/{toplam} karakter tamam)").format(
+                    mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
+            if g.kesildi:
+                e = g.kesildi
+                raise Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam)").format(
+                    mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
+            try:
+                if p in "\n\t":
+                    g.gonder(k, desen, "key enter" if p == "\n" else "key tab")
+                else:
+                    au.pano_yaz(p, hassas=True)  # pano yöneticisi (Klipper) geçmişine yazılmasın
+                    g.gonder(k, desen, f"key {tus}")
+                    time.sleep(bekle)
+            except Dur as e:
+                if e.kod != 13:
+                    raise
+                raise Dur(e.kod, _("{mesaj} ({yazilan}/{toplam} karakter tamam)").format(
+                    mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
+            yazilan += len(p)
+            gunluk(f"{g.etiket} | [{au.baslik(k)}] | " + (f"yapistir ***({len(p)})" if g.gizli else
+                   f"yapistir {p[:200]!r}" if p not in "\n\t" else ("key enter" if p == "\n" else "key tab")))
+    finally:
+        g.izle_bitir()
+        try:
+            uyari = au.pano_geri_yukle(yedek)  # denetimsiz: DUR ya da kesintide de eski pano geri gelir
+        except Exception as e:  # noqa: BLE001 - geri yükleme hatası asıl hatayı gizlemesin
+            uyari = _("eski pano içeriği geri yüklenemedi: {hata}").format(hata=getattr(e, "mesaj", e))
+        if uyari:
+            print(_("UYARI: {uyari}").format(uyari=uyari), file=sys.stderr)
+    print(_("yazıldı: {karakter} karakter, {parca} parça (panodan yapıştırıldı)").format(karakter=len(metin), parca=adet))
+    return True
+
+
 def yaz_ic(g, k, desen, metin, onayli=False):
     metin = metin.replace("\r\n", "\n").replace("\r", "\n")
     if yazi_onay_ister_mi(metin) and _yazi_hassas(g, k, onayli, metin):  # yazmadan ÖNCE (bir eylem = bir onay)
         g.etiket += " --onayli"
         _au().one_getir(k)  # onay diyaloğu odağı almış olabilir
+    if yapistirarak_mi(metin):
+        if _yapistirarak_yaz(g, k, desen, metin, onayli):
+            return
+        metin = yazima_hazirla(metin)  # pano yok: eski yol (yedekli karakterler değişir, yedeği yoksa DUR)
     g.gonder(k, desen, "typedelay 4", "typehold 6")
     # kelime + ardındaki boşluk birer parça; uzun kelimeler 6 harfte bölünür (sızıntı üst sınırı küçük kalsın)
     parcalar = []
@@ -465,7 +562,9 @@ def k_tus(a):
 
 
 def k_yaz(a):
-    metin = yazima_hazirla(a.metin)
+    ham = a.metin.replace("\r\n", "\n").replace("\r", "\n")
+    # yapıştırılacak yazıda klavye düzeninde olmayan karakter (emoji…) sorun değil: yazima_hazirla yalnız harf harf yazılacaksa
+    metin = ham if yapistirarak_mi(ham) else yazima_hazirla(ham)
     if a.kimlik == EKRAN:  # masaüstü kipi: yazı o an etkin pencereye gider → ona kilitlen (değişirse durur)
         a.kimlik = _au().aktif()
         if not a.kimlik:

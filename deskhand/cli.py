@@ -67,6 +67,8 @@ YARDIM_KOMUTLAR = (
        "                                          restore (geri)   pencereyi taşı/boyutlandır/küçült/büyüt/geri yükle\n"
        "                                          (ekran pikseli; ekran dışına taşarsa 2)"),
     N_("  ekran hold (bas) <kimlik> <tuş[+tuş]> <SN>   tuşu basılı tut (oyunda yürüme); kesintide hemen bırakır"),
+    N_("  ekran clipboard (pano) read|write [metin] [--approved]   pano: metni oku (ön planda onay ister) / yaz\n"
+       "                                          (stdin'den de yazılır); yazma geçmişe düşmez, DUR ve oyun/film korumalıdır"),
     N_("  ekran click ... --hold SN | --repeat N   fare düğmesini basılı tut (kazma) / N kez tıkla"),
     N_("  ekran drag (surukle) <kimlik> x1 y1 x2 y2 [left|right] [--duration 0.4]   sürükle-bırak"),
     N_("  ekran move (fare) <kimlik> x y          tıklamadan gezdir (açıklama baloncuğu)"),
@@ -171,6 +173,41 @@ def arka_al():
 def k_bul(a):
     for w, b, geo in arka_al().pencereler(a.desen):
         print(f"{w} | {b} | {' '.join(map(str, geo))}")
+
+
+PANO_ISLEM = {"read": "oku", "write": "yaz"}
+
+
+def k_pano(a):
+    """Pano: oku | yaz [metin]. Ön planda (kullanıcının gerçek panosu) okuma hassas eylemdir: --onayli yoksa panelden
+    insan onayı (hassas düğmelerle aynı kalıp). Yazma DUR (13) ve oyun/film korumasına (15) tabidir; pano yöneticisi
+    geçmişine yazılmaz. Metin verilmezse ve stdin bir boru ise stdin'den okunur."""
+    dur_denetle()
+    guvenlik.eylem_basladi()
+    au = arka_al()
+    if a.islem == "yaz":
+        metin = a.metin
+        if metin is None:
+            if sys.stdin.isatty():
+                raise Dur(1, _("yazılacak metin yok: pano yaz <metin> ya da metni stdin'den ver"))
+            metin = sys.stdin.read()
+        au.pano_yaz(metin, hassas=True)
+        gunluk(f"pano yaz | {au.ad} | {len(metin)} karakter")  # içerik günlüğe yazılmaz
+        print(_("panoya yazıldı: {karakter} karakter").format(karakter=len(metin)))
+        return
+    if a.metin is not None:
+        raise Dur(1, _("pano oku metin almaz"))
+    if au.ad == "kde" and not a.onayli:
+        izin, neden = guvenlik._panelden_onay(
+            _("Panoyu oku"), _("pano"), _("Bir yapay zekâ ajanı kullanıcının panosunun metnini okumak istiyor"))
+        if not izin:
+            raise Dur(10, _("HASSAS pano okuma: panonun içeriği kullanıcının onayını ister ({neden}); kullanıcı "
+                            "sohbette açıkça onayladıysa --onayli ile tekrarla").format(neden=neden), tur="hassas")
+    metin = au.pano_oku()
+    gunluk(f"pano oku | {au.ad} | {len(metin) if metin is not None else 'boş'}" + (" --onayli" if a.onayli else ""))
+    if metin is None:
+        raise Dur(6, _("pano boş ya da metin içermiyor"))
+    sys.stdout.write(metin + ("\n" if sys.stdout.isatty() and not metin.endswith("\n") else ""))
 
 
 def k_dur(a):
@@ -318,6 +355,11 @@ def ayristirici(prog=None, sessiz=False):
         s.add_argument(ad, type=float)
     dugme(s, ["sol", "sag", "orta"])
     secenek(s, "--sure", en="--duration", type=float, default=0.4); secenek(s, "--onayli", action="store_true")
+    s = komut("pano", k_pano, parents=[ortak]); s.add_argument("islem", type=cevirici(PANO_ISLEM),
+                                                              choices=secimler(PANO_ISLEM, PANO_ISLEM.values()),
+                                                              metavar="{read,write}")
+    s.add_argument("metin", nargs="?", default=None)
+    secenek(s, "--onayli", action="store_true", help=h_("ön plan panosunu okumak için: kullanıcı AÇIKÇA onayladı"))
     s = komut("uyu", k_uyu); s.add_argument("sn", type=float)
     s = komut("dizi", k_dizi, parents=[ortak]); s.add_argument("kimlik"); secenek(s, "--dosya")
     s = komut("tus", k_tus, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("kombinasyon")

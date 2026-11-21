@@ -16,6 +16,8 @@ from __future__ import annotations
 import fcntl
 import os
 import re
+import subprocess
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -30,7 +32,12 @@ EKRAN_ADLARI = {"ekran", "masaustu", "masaüstü", "tum-ekran", "tüm-ekran"}
 ATOMLAR = ("_NET_CLIENT_LIST", "_NET_ACTIVE_WINDOW", "_NET_WM_NAME", "UTF8_STRING", "WM_NAME", "WM_CLASS",
            "_NET_CLOSE_WINDOW", "WM_PROTOCOLS", "WM_DELETE_WINDOW", "_NET_SUPPORTING_WM_CHECK", "_NET_WM_PID",
            "_NET_MOVERESIZE_WINDOW", "_NET_WM_STATE", "_NET_WM_STATE_HIDDEN", "_NET_WM_STATE_MAXIMIZED_VERT",
-           "_NET_WM_STATE_MAXIMIZED_HORZ", "WM_CHANGE_STATE", "WM_STATE")
+           "_NET_WM_STATE_MAXIMIZED_HORZ", "WM_CHANGE_STATE", "WM_STATE",
+           "CLIPBOARD", "TARGETS", "INCR", "DESKHAND_PANO", "text/plain;charset=utf-8")
+PANO_ZAMAN = 3.0  # sanal pano okuma/yazma bu sürede bitmeli (sonra Dur 7)
+PANO_AZAMI = 64 * 1024 * 1024  # pano_sahibi.AZAMI_VERI ile aynı
+PANO_BEKLE = 0.1  # yapıştırma sonrası geri yüklemeden önce bekleme (Qt/GTK pano isteğini ms'de yanıtlar)
+XA_STRING = 31
 DEVRAL_BEKLE = 8.0  # "Devral" açıkken ilk girdiden önce en çok bu kadar beklenir, sonra 12
 
 # dotool değiştiricileri (akorda) → Linux tuş adı
@@ -339,6 +346,69 @@ class _X:
         if len(veri) != self.W * self.H * 4:
             raise Dur(ARAC_EKSIK, _("beklenmeyen görüntü biçimi (derinlik {derinlik}, {bayt} bayt)").format(derinlik=im.depth, bayt=len(veri)))
         return Image.frombuffer("RGB", (self.W, self.H), veri, "raw", "BGRX", 0, 1)  # salt okunur: değişirse PIL kopyalar
+
+
+def pano_oku_x(x: "_X", sure: float = PANO_ZAMAN) -> tuple[str | None, bool]:
+    """CLIPBOARD seçiminin metni (ICCCM: ConvertSelection; büyük veri için INCR). → (metin | None, metin_disi).
+    Sahip yoksa (None, False); sahip var ama metin sunmuyorsa (None, True). Salt okunur: seçimi değiştirmez."""
+    import select
+    from Xlib import X
+    d, a = x.d, x.a
+    bitis = time.monotonic() + sure
+    pw = x.kok.create_window(0, 0, 1, 1, 0, X.CopyFromParent, X.InputOutput, X.CopyFromParent,
+                             event_mask=X.PropertyChangeMask)
+
+    def olay_bekle(kosul):
+        while True:
+            while d.pending_events():
+                r = kosul(d.next_event())
+                if r is not None:
+                    return r
+            kalan = bitis - time.monotonic()
+            if kalan <= 0:
+                raise Dur(hata.ZAMAN_ASIMI, _("pano okunamadı: seçim sahibi {sn} sn içinde yanıt vermedi").format(
+                    sn=f"{sure:.0f}"))
+            select.select([d.fileno()], [], [], min(kalan, 0.2))
+
+    def donustur(hedef):
+        """→ özelliğin değeri (bayt ya da atom dizisi) | None (sahip reddetti)."""
+        pw.convert_selection(a["CLIPBOARD"], hedef, a["DESKHAND_PANO"], X.CurrentTime)
+        d.flush()
+        ozellik = olay_bekle(lambda e: (e.property if e.type == X.SelectionNotify and e.requestor.id == pw.id
+                                        else None))
+        if ozellik == X.NONE:
+            return None
+        pr = pw.get_property(ozellik, X.AnyPropertyType, 0, 0x1FFFFFFF, delete=True)
+        if pr is None:
+            return None
+        if pr.property_type != a["INCR"]:
+            return pr.value
+        parcalar = []
+        while True:  # INCR: sahip parçaları özelliğe yazar; okuyup sildikçe sonrakini yazar, boş parça = bitti
+            olay_bekle(lambda e: True if (e.type == X.PropertyNotify and e.window.id == pw.id and
+                                          e.atom == ozellik and e.state == X.PropertyNewValue) else None)
+            pr = pw.get_property(ozellik, X.AnyPropertyType, 0, 0x1FFFFFFF, delete=True)
+            v = bytes(pr.value) if pr is not None else b""
+            if not v:
+                return b"".join(parcalar)
+            parcalar.append(v)
+
+    try:
+        if d.get_selection_owner(a["CLIPBOARD"]) == X.NONE:
+            return None, False
+        h = donustur(a["TARGETS"])
+        hedefler = {int(v) for v in h} if h is not None and not isinstance(h, (bytes, bytearray)) else set()
+        for atom, kod in ((a["UTF8_STRING"], "utf-8"), (a["text/plain;charset=utf-8"], "utf-8"),
+                          (XA_STRING, "latin-1")):
+            if hedefler and atom not in hedefler:
+                continue  # TARGETS yanıtlayan sahip bu türü sunmuyor (TARGETS yanıtlamayan eski sahipler denenir)
+            veri = donustur(atom)
+            if veri is not None:
+                return bytes(veri).decode(kod, "replace"), False
+        return None, True
+    finally:
+        pw.destroy()
+        d.flush()
 
 
 def kalici_klavye(ekran: str) -> int:
@@ -654,6 +724,104 @@ class SanalArkaUc(ArkaUc):
 
     def etkinlik(self):
         return _DevralEtkinlik()
+
+    # -------- pano (docs/ARCHITECTURE.md §2). X11'de pano içeriği seçimin SAHİBİNDE yaşar; Deskhand komutları kısa
+    # ömürlü olduğundan sahip, masaüstünün kafesinde ilk kullanımda başlatılan pano_sahibi.py yardımcısıdır (masaüstü
+    # kapanınca kafesle birlikte kapanır). Okuma süreç içinde (ConvertSelection). Kullanıcının GERÇEK panosuna
+    # dokunmaz: tek bağlantı sanal ekranın X'idir (x_ac → guvenli_ekran).
+    pano_bekle = PANO_BEKLE
+
+    def _pano_baglan(self):
+        import socket
+        d = self._durum()
+        yol = os.path.join(d["calisma"], "pano.sock")
+
+        def dene():
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(1.0)
+            try:
+                s.connect(yol)
+                return s
+            except OSError:
+                s.close()
+                return None
+        s = dene()
+        if s is not None:
+            return s
+        with open(os.path.join(d["calisma"], "pano.lock"), "w") as kilit:  # eşzamanlı komutlar tek yardımcı başlatsın
+            fcntl.flock(kilit, fcntl.LOCK_EX)
+            s = dene()
+            if s is not None:
+                return s
+            from .. import pano_sahibi
+            with masaustu._gunluk_dosyasi(d["calisma"], "pano") as log:
+                p = masaustu.kafeste_baslat(d, [sys.executable, "-I", pano_sahibi.__file__, d["ekran"], yol],
+                                            masaustu.uygulama_ortami(d), stdin=subprocess.DEVNULL,
+                                            stdout=subprocess.PIPE, stderr=log)
+            satir = masaustu._satir_bekle(p, 5)
+            if p.stdout:
+                p.stdout.close()
+            if satir != "hazir":
+                raise Dur(ARAC_EKSIK, _("pano yardımcısı başlamadı ({yanit}); günlük: {dosya}").format(
+                    yanit=satir or _("yanıt yok"), dosya=os.path.join(d["calisma"], "pano.log")))
+        s = dene()
+        if s is None:
+            raise Dur(ARAC_EKSIK, _("pano yardımcısına bağlanılamadı"))
+        return s
+
+    def _pano_istek(self, baslik: bytes, veri: bytes = b"") -> str:
+        self.ekran_adi()  # bayat durum dosyası: Dur 14
+        son = None
+        for _deneme in (0, 1):  # yardımcı öldüyse (bayat soket) ikincide yeniden başlatılır
+            s = self._pano_baglan()
+            try:
+                s.settimeout(PANO_ZAMAN)
+                s.sendall(baslik + b"\n" + veri)
+                yanit = b""
+                while not yanit.endswith(b"\n"):
+                    parca = s.recv(256)
+                    if not parca:
+                        break
+                    yanit += parca
+                if yanit:
+                    return yanit.decode(errors="replace").strip()
+            except OSError as e:
+                son = e
+            finally:
+                s.close()
+        raise Dur(ARAC_EKSIK, _("pano yardımcısı yanıt vermedi: {hata}").format(hata=son or _("bağlantı kapandı")))
+
+    def _pano_yaz_ham(self, metin: str) -> None:
+        if not metin:
+            yanit = self._pano_istek(b"TEMIZLE")
+        else:
+            veri = metin.encode()
+            if len(veri) > PANO_AZAMI:
+                raise Dur(1, _("metin sanal panoya sığmıyor (en çok {mb} MB)").format(mb=PANO_AZAMI >> 20))
+            yanit = self._pano_istek(b"YAZ %d" % len(veri), veri)
+        if yanit != "tamam":
+            raise Dur(ARAC_EKSIK, _("pano yardımcısı: {yanit}").format(yanit=yanit))
+
+    def pano_oku(self) -> str | None:
+        return self._cagir(pano_oku_x)[0]
+
+    def pano_yaz(self, metin: str, hassas: bool = True) -> None:
+        """hassas: sanal masaüstünde pano yöneticisi yok, yok sayılır."""
+        hata.dur_denetle()
+        self._pano_yaz_ham(metin)
+
+    def pano_yedekle(self):
+        metin, disi = self._cagir(pano_oku_x)
+        return {"metin": metin, "metin_disi": disi}
+
+    def pano_geri_yukle(self, yedek) -> str | None:
+        try:
+            self._pano_yaz_ham(yedek.get("metin") or "")
+        except Dur as e:
+            return _("eski pano içeriği geri yüklenemedi: {hata}").format(hata=e.mesaj)
+        if yedek.get("metin_disi"):
+            return _("eski pano içeriği metin değildi; görünmez masaüstünde geri yüklenemez, pano temizlendi")
+        return None
 
     def atspi_adresi(self) -> str | None:
         """Özel veri yolundaki erişilebilirlik veri yolunun adresi (org.a11y.Bus; gerekirse etkinleşir)."""
