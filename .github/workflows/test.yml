@@ -1,0 +1,75 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: System packages
+        run: |
+          sudo apt-get update
+          # libei-dev / libxkbcommon-dev: for deskhand-eis (the Makefile target is skipped if missing).
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng \
+            xvfb openbox xdotool x11-utils \
+            gcc make pkg-config libsystemd-dev libwayland-dev wayland-protocols \
+            libei-dev libxkbcommon-dev \
+            at-spi2-core python3-gi gir1.2-atspi-2.0 \
+            bubblewrap dbus dbus-x11 \
+            libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
+            libxcb-image0 libxcb-render-util0 libxcb-xinerama0 libgl1 fonts-dejavu-core
+
+      # Ubuntu 24.04 restricts unprivileged user namespaces via AppArmor; bubblewrap (bwrap) needs them.
+      - name: Allow unprivileged user namespaces (bwrap)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Build native helpers
+        run: make -C deskhand/yardimci
+
+      - name: Test suites (one by one)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          # Virtual X display + window manager; session D-Bus for the tests that need one.
+          Xvfb :99 -screen 0 1920x1080x24 >/tmp/xvfb.log 2>&1 &
+          export DISPLAY=:99
+          sleep 2
+          openbox >/tmp/openbox.log 2>&1 &
+          sleep 1
+          # NOTE: no KWin-dependent suites exist among tests/test_*.py at this point; if added later they
+          # must skip when KWin is absent or be excluded in tests/ci_kos.sh. test_ocr_gpu skips its GPU
+          # case without the OCR venv/GPU. tests/ekranli/ is never run (real screen).
+          dbus-run-session -- tests/ci_kos.sh
+
+      - name: i18n source audit
+        run: python3 tools/i18n_cikar.py --denetle
+
+      # No coverage threshold: missing English translations are not an error for now, only format errors.
+      - name: i18n catalogue audit
+        run: python3 tools/i18n_denetle.py
