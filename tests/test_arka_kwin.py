@@ -492,6 +492,21 @@ with api.hedef("sanal"):
     r = api.yaz(k, "düz Türkçe çğış", None, False, False)
 kontrol("yaz: düzende olan metin harf harf (pano dokunulmadı)", bekle(lambda: son("yazi=") == "düz Türkçe çğış", 3)
         and "panodan" not in r and au.pano_oku() == "eski pano ğ", f"{son('yazi=')!r} {r}")
+# 0.8.1 regresyonu (Steam iade formu: 12/24'te "kullanıcı klavye/fare kullandı"): 24+ karakter Türkçe, kelime kelime
+# parçalı yazı, insan girdisi yokken 10 tekrar + uzun cümle → hep TAM, kesilme yok
+TAM = []
+for i, metin_ in enumerate(["Satın alımdan vazgeçtim."] * 10 +
+                           ["Şu iade talebini, ürünü hiç açmadığım için gönderiyorum; lütfen Çarşamba'ya kadar iade edin."]):
+    g.gonder(k, None, "key ctrl+a", "key backspace")
+    bekle(lambda: son("yazi=") == "", 3)
+    try:
+        with api.hedef("sanal"):
+            r = api.yaz(k, metin_, None, False, False)
+    except Dur as e:
+        r = f"Dur {e.kod}: {e.mesaj}"
+    TAM.append(bekle(lambda: son("yazi=") == metin_, 3) and "panodan" not in r or (i, r, son("yazi=")))
+kontrol("yaz: 'Satın alımdan vazgeçtim.' ×10 + 93 karakterlik cümle → hep TAM (parçalı harf harf, kesilme yok)",
+        all(x is True for x in TAM), str([x for x in TAM if x is not True][:3]))
 r = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, stdin=subprocess.DEVNULL, timeout=5)
 kontrol("pano: kullanıcının GERÇEK panosu bizim yazdığımızı içermiyor", b"eski pano" not in r.stdout and
         b"Merhaba" not in r.stdout)

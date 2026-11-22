@@ -100,7 +100,7 @@ atexit.register(lambda: (setattr(subprocess, "run", asil_run), setattr(subproces
 
 class SahteEtkinlik:  # kde.insan_var_mi'nin yardımcı süreci (salt okuma, ama gerçek süreç açardı)
     def calisiyor(self): return False
-    def insan(self, beri): return False
+    def insan(self, beri, yerlesme=0.0): return False
     def kapat(self): pass
 
 

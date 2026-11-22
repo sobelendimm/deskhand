@@ -213,7 +213,7 @@ try:
         def __init__(self, insan=False, calisir=True):
             self.hazir_an, self._insan, self._c, self.kapandi = time.monotonic(), insan, calisir, False
         def calisiyor(self): return self._c
-        def insan(self, beri): return self._insan
+        def insan(self, beri, yerlesme=0.0): return self._insan
         def kapat(self): self.kapandi = True
     eski_etk = mesgul._etkinlik_yap
     e = SahteEtk(insan=True)

@@ -875,7 +875,7 @@ class _DevralEtkinlik:
     def kendi_girdi(self, bas, son) -> None:
         pass
 
-    def insan(self, beri) -> bool:
+    def insan(self, beri, yerlesme=0.0) -> bool:  # yerlesme: kde Etkinlik imzası (sanalda anlamsız)
         return _devral_var()
 
     def sessiz_mi(self, sure=1.5) -> bool:

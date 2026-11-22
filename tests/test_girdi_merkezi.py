@@ -119,7 +119,7 @@ class SahteEtk:
     def kendi_girdi(self, bas, son):
         self.kendi.append((bas, son))
 
-    def insan(self, beri):
+    def insan(self, beri, yerlesme=0.0):
         return False
 
     def calisiyor(self):

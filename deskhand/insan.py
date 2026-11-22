@@ -16,7 +16,11 @@ from .hata import Dur
 from .i18n import _
 
 ETKINLIK_MS = 50   # bu kadar ms hiç girdi yoksa 'bosta'; sonraki ilk girdi 'aktif'
-KENDI_PAY = 0.12   # kendi girdimizin compositor'a ulaşıp 'aktif' olayı üretmesi için zaman payı (sn)
+KENDI_PAY = 0.25   # kendi girdimizin compositor'a ulaşıp 'aktif' olayı üretmesi için zaman payı (sn; 0.8.1: 0,12 → 0,25,
+#                    dotool kuyruğu / meşgul compositor yansımayı geciktirebilir)
+SUREKLILIK_PAY = 0.05  # 'bosta' bildiriminin bize ulaşma payı (sn): ETKINLIK_MS + bu kadar girdisiz geçerse bosta gelmeli
+YERLESME = 0.3     # etkinlik sürüyor görünüyor ama son girdi bizimdi: 'bosta' için en çok bu kadar beklenir (sn; kendi
+#                    girdimizin yansıması dotool kuyruğunda / compositor'da gecikmiş olabilir; insan sürdürürse yine 12)
 # YALNIZ TESTLER: bu süreç İNSANI TAKLİT ediyor (ör. yazarken fareyi oynatan ikinci süreç) → kendisi insan
 # önceliği için beklemez. Gerçek kullanımda ASLA verilmez.
 INSAN_TAKLIDI = os.environ.get("DESKHAND_INSAN_TAKLIDI") == "1" or os.environ.get("EKRAN_INSAN_TAKLIDI") == "1"
@@ -101,23 +105,56 @@ class Etkinlik:
     def _bizim(self, t):
         return any(b <= t <= s for b, s in reversed(self.kendi))
 
-    def insan(self, beri):
-        """'beri' anından bu yana İNSAN girdisi var mı? (1) bizim pencerelerimiz dışında 'aktif' olayı, ya da
-        (2) etkinlik hâlâ sürüyor ('bosta' gelmedi) ama bizim girdimiz bitmiş / hiç girdimiz yok."""
-        if not self.calisiyor():
-            return False
+    def _kapsaniyor(self, bas, bit):
+        """[bas, bit] boyunca SÜREN etkinlik (arada 'bosta' yok) bizim girdimizle açıklanıyor mu? Boşta bildirimi
+        ETKINLIK_MS hiç girdi olmayınca gelir: bu aralıkta kendi pencerelerimizin dışında ETKINLIK_MS (+ pay) kadar
+        boşluk varsa bosta gelmeliydi; gelmediyse o boşlukta başkası (insan) girdi gönderdi."""
+        esik = ETKINLIK_MS / 1000 + SUREKLILIK_PAY
+        imlec = bas
+        for b, s in self.kendi:  # zamana göre sıralı (kendi_girdi sırayla eklenir)
+            if s < imlec:
+                continue
+            if b > bit:
+                break
+            if b - imlec > esik:
+                return False
+            imlec = max(imlec, s)
+        return bit - imlec <= esik
+
+    def _insan(self, beri):
+        """→ None (insan yok) | "olay" (pencerelerimiz dışında 'aktif': kesin) | "suruyor" (bosta gelmedi, etkinlik
+        kendi girdimizle açıklanamıyor: yansıma gecikmesi de olabilir)."""
         simdi = time.monotonic()
         olaylar = list(self.olaylar)
         if any(tur == "aktif" and t >= beri and not self._bizim(t) for tur, t in olaylar):
-            return True
-        if not olaylar:  # yardımcı başladığından beri hiç 'bosta' gelmedi = kesintisiz girdi
-            return simdi - self.hazir_an > ETKINLIK_MS / 1000 + 0.15
+            return "olay"
+        if not olaylar:  # yardımcı başladığından beri hiç 'bosta' gelmedi = kesintisiz girdi (açılıştan beri)
+            if simdi - self.hazir_an <= ETKINLIK_MS / 1000 + 0.15:
+                return None
+            # Biz ETKINLIK_MS dolmadan yazmaya başladıysak bosta HİÇ gelmez (harf arası < ETKINLIK_MS): süreklilik
+            # bizim pencerelerimizle örtülüyorsa insan değil (0.8.0'da 2. kelime sınırında yanlış 12 veriyordu)
+            return None if self._kapsaniyor(self.hazir_an, simdi) else "suruyor"
         tur, t = olaylar[-1]
         if tur != "aktif":
-            return False
+            return None
         if not self._bizim(t):
-            return True  # insan başlattı, sürüyor
-        return simdi > self.kendi[-1][1] + ETKINLIK_MS / 1000 + 0.05  # bizimki bitti, etkinlik sürüyor → insan
+            return "olay"  # insan başlattı, sürüyor
+        return None if self._kapsaniyor(t, simdi) else "suruyor"  # bizimki bitti, etkinlik sürüyor → insan
+
+    def insan(self, beri, yerlesme=0.0):
+        """'beri' anından bu yana İNSAN girdisi var mı? (1) bizim pencerelerimiz dışında 'aktif' olayı, ya da
+        (2) etkinlik hâlâ sürüyor ('bosta' gelmedi) ve bu süreklilik bizim girdimizle açıklanamıyor (girdimiz
+        bitmiş / hiç girdimiz yok / pencerelerimiz arasında ETKINLIK_MS'den uzun boşluk). yerlesme > 0: yalnız (2)
+        durumunda 'bosta' gelsin diye en çok bu kadar sn beklenir (kendi girdimizin gecikmeli yansıması); insan
+        girdisi sürerse bosta gelmez → yine True."""
+        if not self.calisiyor():
+            return False
+        sonuc = self._insan(beri)
+        bitis = time.monotonic() + yerlesme
+        while sonuc == "suruyor" and time.monotonic() < bitis:
+            time.sleep(0.01)
+            sonuc = self._insan(beri)
+        return sonuc is not None
 
     def sessiz_mi(self, sure=1.5):
         """Son 'sure' saniyedir hiç girdi yok mu? (beklerken biz girdi göndermeyiz → her girdi insanındır)"""
@@ -137,7 +174,7 @@ class Etkinlik:
 def klavye_bekle(etk, beri, azami=8.0):
     """İNSAN ÖNCELİĞİ (klavye + fare): 'beri'den bu yana insan girdisi varsa, 1,5 sn hiç girdi olmayana dek
     bekle (en çok 'azami' sn), yoksa DUR 12. Kullanıcı ör. terminale yazarken araç araya girmesin."""
-    if etk is None or not etk.insan(beri):
+    if etk is None or not etk.insan(beri, yerlesme=YERLESME):
         return
     print(_("bekleniyor: kullanıcı klavye/fare kullanıyor…"), file=sys.stderr)
     bitis = time.monotonic() + azami

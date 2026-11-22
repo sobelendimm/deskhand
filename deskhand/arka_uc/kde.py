@@ -19,7 +19,7 @@ from .. import yollar
 from ..gunluk import gunluk
 from ..hata import INSAN, KULLANICI_DUR, KULLANICI_MESGUL, Dur, dur_denetle, gercek_ekran_denetle
 from ..i18n import _
-from ..insan import INSAN_TAKLIDI, Etkinlik, girdi_suresi, insan_bekle, klavye_bekle
+from ..insan import INSAN_TAKLIDI, YERLESME, Etkinlik, girdi_suresi, insan_bekle, klavye_bekle
 from . import EKRAN, ArkaUc
 
 EKRAN_ADLARI = {"ekran", "masaustu", "masaüstü", "tum-ekran", "tüm-ekran"}
@@ -472,8 +472,9 @@ class Girdi:
 
     def etk_denetle(self, ne=None):
         """Son denetimden bu yana insan klavye/fare kullandıysa DUR 12 (komut ortası: beklemeden durur).
-        ne: çevrilmiş ek (varsayılan "girdi gönderilmedi")."""
-        if self.etk is not None and self.etk.insan(self.son_etk):
+        ne: çevrilmiş ek (varsayılan "girdi gönderilmedi"). Etkinlik yalnız 'sürüyor' görünüyorsa (son girdi bizimdi)
+        'bosta' için kısa yerleşme beklemesi (YERLESME): kendi girdimizin gecikmeli yansıması insan sanılmasın."""
+        if self.etk is not None and self.etk.insan(self.son_etk, yerlesme=YERLESME):
             raise Dur(12, _("kullanıcı klavye/fare kullandı (insan önceliği); {ne}").format(
                 ne=ne or _("girdi gönderilmedi")))
         self.son_etk = time.monotonic()
