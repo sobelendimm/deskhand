@@ -253,7 +253,8 @@ def kullanilabilir() -> tuple[bool, str]:
     if s[:2] < ASGARI_SURUM:
         return False, _("KWin {surum} < 6.8 (EIS/ScreenShot2 yetkisi için 6.8 gerekir)").format(
             surum=".".join(map(str, s)))
-    for arac in ("dbus-daemon", "nice", "ionice", "sh", "busctl", "env", "kdotool"):
+    from .arka_uc.kwin import pencere_araci
+    for arac in ("dbus-daemon", "nice", "ionice", "sh", "busctl", "env", pencere_araci()):
         if not shutil.which(arac):
             return False, _("{arac} yok").format(arac=arac)
     if not any(a["erisim"] for a in render_aygitlari()):
@@ -962,30 +963,11 @@ def goruntu(d: dict, bolge=None):
         raise Dur(ARAC_EKSIK, str(e))
 
 
-def _kd(d: dict, *a) -> str:
-    """kdotool (özel veri yolunda). Salt okuma sorguları boş dönerse 3 kez yeniden dener (kde.kd gibi)."""
-    for _i in range(4):
-        r = subprocess.run(["kdotool", *a], capture_output=True, text=True, env=kdotool_ortami(d), timeout=10)
-        if r.stdout.strip() or not a or a[0] not in ("search", "getwindowname", "getwindowgeometry",
-                                                      "getwindowclassname", "getactivewindow"):
-            return r.stdout.strip()
-        time.sleep(0.01)
-    return ""
-
-
 def pencereler(d: dict) -> list[tuple[str, str, tuple[int, int, int, int]]]:
-    """[(kimlik, başlık, (x, y, g, y))] — kdotool özel veri yolunda."""
-    kimlikler = sorted(set(_kd(d, "search", "--name", ".").split()) | set(_kd(d, "search", "--class", ".").split()))
-    sonuc = []
-    for w in kimlikler:
-        geo = _kd(d, "getwindowgeometry", w)
-        p = re.search(r"Position:\s*(-?[\d.]+),(-?[\d.]+)", geo)
-        s = re.search(r"Geometry:\s*([\d.]+)x([\d.]+)", geo)
-        if not (p and s):
-            continue  # listelenirken kapanan pencere
-        sonuc.append((w, _kd(d, "getwindowname", w),
-                      tuple(round(float(v)) for v in (*p.groups(), *s.groups()))))
-    return sonuc
+    """[(kdotool kimliği, başlık, (x, y, g, y))] — kdotool özel veri yolunda. Ham kdotool çağrısı YALNIZ arka_uc/
+    içindedir (docs/ARCHITECTURE.md §4): arka_uc/kwin.oturum_pencereleri."""
+    from .arka_uc.kwin import oturum_pencereleri
+    return oturum_pencereleri(d)
 
 
 def atspi_adresi(d: dict) -> str | None:

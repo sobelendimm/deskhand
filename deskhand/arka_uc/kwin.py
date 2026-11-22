@@ -44,6 +44,34 @@ PANO_YAZ_AZAMI = 64 * 1024 * 1024   # yazılabilecek metin en çok (Xvfb türüy
 GOZCU_ARALIK = 0.012  # yazı gözcüsü yoklama aralığı (her yoklama tek kdotool çağrısı)
 
 
+def pencere_araci() -> str:
+    """KWin türünün pencere aracı (kwin_oturum.kullanilabilir denetler; ham çağrılar yalnız arka_uc/ içinde)."""
+    return "kdotool"
+
+
+def oturum_pencereleri(d: dict) -> list[tuple[str, str, tuple[int, int, int, int]]]:
+    """Durum kaydı olmadan (kwin_oturum ile doğrudan açılmış oturumda; testler): [(kdotool kimliği, başlık, çerçeve
+    geometrisi)]. Ortam: kwin_oturum.kdotool_ortami (özel veri yolu)."""
+    env = kwin_oturum.kdotool_ortami(d)
+
+    def kd(*a):
+        for _i in range(4):
+            r = subprocess.run(["kdotool", *a], capture_output=True, text=True, env=env, timeout=KD_ZAMAN,
+                               stdin=subprocess.DEVNULL)
+            if r.stdout.strip() or a[0] not in _KD_OKUMA:
+                return r.stdout.strip()
+            time.sleep(0.01)
+        return ""
+    sonuc = []
+    for w in sorted(set(kd("search", "--name", ".").split()) | set(kd("search", "--class", ".").split())):
+        geo = kd("getwindowgeometry", w)
+        p = re.search(r"Position:\s*(-?[\d.]+),(-?[\d.]+)", geo)
+        s_ = re.search(r"Geometry:\s*([\d.]+)x([\d.]+)", geo)
+        if p and s_:
+            sonuc.append((w, kd("getwindowname", w), tuple(round(float(v)) for v in (*p.groups(), *s_.groups()))))
+    return sonuc
+
+
 def kimlik_yap(uuid: str) -> str:
     return f"{ARKA_ONEK}{uuid}"
 

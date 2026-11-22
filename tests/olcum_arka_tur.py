@@ -86,6 +86,10 @@ au.baslat([sys.executable, PENCERE], {"LOG": LOG, "BASLIK": "olcum ANA"})
 k = bekle(lambda: next((w for w, b, _ in au.pencereler("olcum ANA")), None), 20, 0.05)
 bekle(lambda: "hazir" in loglar(), 10)
 time.sleep(0.5)
+if sonuc["tur"] == "kwin":  # GPU kanıtı: KWin'in ve Wayland istemcisinin (dmabuf geri bildirimi) kullandığı aygıt
+    from deskhand import kwin_oturum
+    sonuc["kwin_gpu_pci"] = kwin_oturum.surec_gpu_pci(d["pid"]["kwin"])
+    sonuc["qt_istemci_gpu_pci"] = kwin_oturum.surec_gpu_pci(au.pid(k))
 
 # ekran görüntüsü + pencere listesi
 s = []
