@@ -168,11 +168,14 @@ Kapsamı da daha dar: yalnız KDE Plasma, tek arka plan masaüstü, orada GPU yo
 
 ## Gereksinimler
 
-- Ön plan (kendi ekranınız) için **Wayland üzerinde KDE Plasma 6**. Arka plan masaüstü bir
-  X sunucusudur (Xvfb); **X11** desteği olan uygulamaları çalıştırır (çoğunda var).
+- Ön plan (kendi ekranınız) için **Wayland üzerinde KDE Plasma 6**. Arka plan masaüstü, yardımcılar
+  derlenmişse GPU'lu yalıtık bir **KWin** oturumudur (`kwin_wayland`); derlenmemişse ya da
+  KWin kullanılamıyorsa **Xvfb** ile açılır ve yalnız **X11** desteği olan uygulamaları çalıştırır.
 - Python **3.11+**
 - Ön plan: `kdotool`, `dotool`, `spectacle`, `/dev/uinput` erişimi
 - İkisi de: Türkçe ve İngilizce verisiyle `tesseract`
+- Arka plan (**zorunlu**): `bubblewrap` (`bwrap`): arka plandaki her uygulama onunla yalıtılır;
+  yoksa arka planda hiçbir uygulama açılmaz
 - Arka plan: `Xvfb`, `openbox`, `python-xlib`; önerilen `xdotool`, `pactl` (sessiz ses
   çıkışı; yoksa arka plan uygulamalarının sesi tamamen kesilir), `systemd-run` (bellek sınırı)
 - Python modülleri: PyQt6, python-xlib, numpy, scipy, pillow, jeepney, mcp ≥ 2.3
@@ -181,15 +184,17 @@ Kapsamı da daha dar: yalnız KDE Plasma, tek arka plan masaüstü, orada GPU yo
 - AMD ya da NVIDIA ekran kartı varsa, ekran kartında metin okuma için: kartınıza uygun PyTorch,
   torchvision, OpenCV, scikit-image, shapely, pyclipper ve küçük bir venv'de EasyOCR ile modelleri
   (~100 MB). Ekran kartı yoksa ek bir şey gerekmez. `install.sh` hepsini denetler, komutları yazar
-- Ekran görüntüsü yardımcısını derlemek için (KWin'in ekran görüntüsü arayüzü, görüntü başına
-  ~8 ms): aynı araçlar ve `libsystemd` (systemd'nin parçası). `install.sh` derler ve masaüstü
-  girdisini kaydeder
+- `make -C deskhand/yardimci` üç yardımcıyı derler: `deskhand-etkinlik`, `deskhand-goruntu`
+  (KWin ekran görüntüsü arayüzü, görüntü başına ~8 ms) ve `deskhand-eis` (KWin arka plan
+  masaüstünün girdisi). Sonuncusu için `libei`, `libxkbcommon` ve `libsystemd` geliştirme
+  paketleri gerekir; yoksa arka plan masaüstü Xvfb ile açılır. `install.sh` derler ve masaüstü
+  girdisini kaydeder; `deskhand doctor` ve panelin Sağlık sekmesi hangisinin eksik olduğunu gösterir
 
 Arch / CachyOS:
 
 ```bash
 sudo pacman -S --needed spectacle tesseract tesseract-data-tur tesseract-data-eng \
-    xorg-server-xvfb openbox xdotool libpulse python-pyqt6 python-xlib python-numpy \
+    xorg-server-xvfb openbox xdotool libpulse bubblewrap libei libxkbcommon python-pyqt6 python-xlib python-numpy \
     python-scipy python-pillow python-jeepney python-mcp base-devel wayland
 paru -S kdotool-bin dotool        # AUR (ya da yay, ya da elle)
 
@@ -377,9 +382,10 @@ MCP'de aynı kodlar `[kod] ad: ayrıntı` biçiminde hata olarak döner.
 
 - **Tek başına duran web düğmesi** tam `read` listesinde görünmeyebilir; yazısını aramak
   (`read <pencere> "<yazı>"`, `click-text`) yedek okumaları kullanır ve bulur.
-- **Arka plan masaüstünde GPU yok.** Xvfb yazılımla çizer: WebGL, oyunlar ve video çözme
-  orada yavaştır.
-- **Yalnız Wayland destekleyen uygulamalar arka planda çalışmaz** (orası X11).
+- **Xvfb yedeğinde GPU yok.** KWin arka plan masaüstü kullanılamazsa Xvfb yazılımla çizer:
+  WebGL, oyunlar ve video çözme orada yavaştır.
+- **Xvfb yedeğinde yalnız Wayland destekleyen uygulamalar çalışmaz** (orası X11).
+- **`bubblewrap` olmadan arka planda uygulama açılmaz.**
 - **Şifre deposu isteyen uygulamalar yalnız ön planda.** Chromium ailesi tarayıcılar,
   VS Code ve sırlarını KWallet/Secret Service'te tutan her şey arka plan masaüstünde girişli
   açılmaz.
@@ -389,6 +395,8 @@ MCP'de aynı kodlar `[kod] ad: ayrıntı` biçiminde hata olarak döner.
   bulunamayabilir.
 - **Onaylar için panelin açık olması gerekir.** Kapalıysa her hassas eylem reddedilir.
 - **Ön plan, Wayland üzerinde Plasma 6 ister** (kdotool + KWin betikleri).
+- Daha ayrıntılı ve güncel sınırlar (kart numarası yakalama, panel işareti sahteciliği, sandbox
+  olmaması, örten ögeler vb.): [`CHANGELOG.tr.md`](CHANGELOG.tr.md) içindeki "Bilinen sınırlar".
 - Etkinlik günlüğü Türkçe yazılır (panel çevirerek gösterir); mesajlar, yardım ve panel sistem dilinizi (Türkçe ya da
   İngilizce) ya da Ayarlar'daki seçimi izler.
 

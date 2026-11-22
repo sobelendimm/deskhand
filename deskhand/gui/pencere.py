@@ -29,7 +29,7 @@ from .onizleme import Onizleme, pil_qimage
 from .tepsi import durum_pixmap
 
 ONIZLEME_MS = 500  # ~2 fps
-YESIL, KIRMIZI = "#2f9e44", "#e03131"
+YESIL, KIRMIZI, SARI = "#2f9e44", "#e03131", "#e8a317"
 
 
 class Isci(QThread):
@@ -1042,7 +1042,7 @@ class SimgelerSekmesi(QWidget):
 # =========================================================================== Sağlık
 
 class SaglikSekmesi(QWidget):
-    def __init__(self, parent=None, denetle=S.denetle):
+    def __init__(self, parent=None, denetle=S.tam_denetim):
         super().__init__(parent)
         self.denetle_f = denetle
         self._isci: Isci | None = None
@@ -1098,8 +1098,9 @@ class SaglikSekmesi(QWidget):
         for i, d in enumerate(sonuc):
             ad = QTableWidgetItem(d["ad"])
             ad.setToolTip(_(T.H_TUR[d["tur"]]) if d["tur"] in T.H_TUR else d["tur"])
-            durum = QTableWidgetItem(_(T.H_VAR if d["ok"] else T.H_YOK))
-            durum.setIcon(nokta(YESIL if d["ok"] else KIRMIZI, 6))
+            d_ = d.get("durum", "tamam" if d["ok"] else "eksik")
+            durum = QTableWidgetItem(_(T.H_VAR if d["ok"] else T.H_UYARI if d_ == "uyari" else T.H_YOK))
+            durum.setIcon(nokta(YESIL if d["ok"] else SARI if d_ == "uyari" else KIRMIZI, 6))
             self.tablo.setItem(i, 0, ad)
             self.tablo.setItem(i, 1, durum)
             self.tablo.setItem(i, 2, QTableWidgetItem(_(d["not"])))  # saglik.py notları msgid
@@ -1197,7 +1198,7 @@ class AnaPencere(QMainWindow):
     devam_istendi = pyqtSignal()
 
     def __init__(self, ilk_satirlar: list[dict] | None = None, parent=None, arka_f=_varsayilan_arka,
-                 masaustu_m=None, karar=None, cakisma_f=cakismalar, simge_sor=None, saglik_f=S.denetle):
+                 masaustu_m=None, karar=None, cakisma_f=cakismalar, simge_sor=None, saglik_f=S.tam_denetim):
         super().__init__(parent)
         self.setWindowTitle(onay.PANEL_BASLIK)
         self.setObjectName("deskhandPanel")

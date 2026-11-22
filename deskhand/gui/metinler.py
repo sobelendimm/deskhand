@@ -180,7 +180,8 @@ H_SUTUNLAR = (N_("Bileşen"), N_("Durum"), N_("Not"))
 H_VAR = N_("var")
 H_YOK = N_("yok")
 H_OZET = N_("{ok}/{n} bileşen hazır")
-H_TUR = {"arac": N_("araç"), "dil": N_("OCR dili"), "modul": N_("Python modülü")}
+H_UYARI = N_("uyarı")
+H_TUR = {"ek": N_("kurulum/oturum durumu"), "arac": N_("araç"), "dil": N_("OCR dili"), "modul": N_("Python modülü")}
 
 # ---- genel
 EVET = N_("Evet")
