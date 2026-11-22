@@ -274,16 +274,20 @@ async def on_plan_testleri():
         r = await c.call_tool("click", {"window": "Sahte", "text": "Kaydet", "x": 3, "desktop": "foreground"})
         kontrol("ön: iki hedef birden → hata, girdi yok", r.is_error and len(au.satirlar) == n0)
 
-        from deskhand import uygulama
-        eski_dizinler = uygulama.UYGULAMA_DIZINLERI
+        from deskhand import onay, uygulama
+        eski_dizinler, eski_iste = uygulama.UYGULAMA_DIZINLERI, onay.iste_sonuc
         uygulama.UYGULAMA_DIZINLERI = (UYG_DIZIN,)
+        onaylar = []
+        # geçici dizin = kullanıcının yazabildiği dizin: girdi insan onayı ister (sahte panel: izin)
+        onay.iste_sonuc = lambda *a, **k: onaylar.append(a) or onay.OnaySonucu(True, "izin")
         try:
             test_uygulamasi("deskhand-on-pencere", "Deskhand Ön Pencere", {})
             r = await c.call_tool("open_app", {"app": "deskhand-on-pencere", "args": ["https://example.com/?q=a=b"],
                                                "desktop": "foreground"})
             kontrol("ön: open_app (masaüstü girdisi + URL) yeni pencereyi bekler", not r.is_error and
                     yapi(r).get("status") == "opened" and yapi(r)["window"]["id"] == "{sahte-2}" and
-                    au.baslatilan and au.baslatilan[-1][0][:2] == ["gio", "launch"] and
+                    au.baslatilan and au.baslatilan[-1][0][:2] == ["gio", "launch"] and len(onaylar) == 1 and
+                    "/uygulama/" in au.baslatilan[-1][0][2] and
                     au.baslatilan[-1][0][3:] == ["https://example.com/?q=a=b"] and au.baslatilan[-1][1] == {},
                     metin(r)[:300] + str(au.baslatilan[-1:]))
             au.pen.pop("{sahte-2}", None)
@@ -292,7 +296,7 @@ async def on_plan_testleri():
             kontrol("ön: open_app ham yorumlayıcı yolu → [10], hiçbir şey başlatılmadı",
                     r.is_error and "[10]" in metin(r) and len(au.baslatilan) == n0, metin(r)[:300])
         finally:
-            uygulama.UYGULAMA_DIZINLERI = eski_dizinler
+            uygulama.UYGULAMA_DIZINLERI, onay.iste_sonuc = eski_dizinler, eski_iste
 
         r = await c.call_tool("click", {"window": "Sahte", "text": "Kaydet", "desktop": "auto"})
         kontrol("ön: auto + karar 'on' → foreground", not r.is_error and yapi(r).get("desktop") == "foreground",
@@ -436,6 +440,11 @@ async def stdio_testleri():
                           ("deskhand-mcp-ana", ["-c", "true"]), ("deskhand-mcp-ana", ["LOG=/tmp/x"])):
             r = await c.call_tool("open_app", {"app": ad_, "args": arg_, "desktop": "background", "wait_s": 2})
             kontrol(f"stdio: open_app({ad_!r}, {arg_!r}) → [10]", r.is_error and "[10]" in metin(r), metin(r)[:200])
+        sahte("sahte-onay", "red")  # test girdileri kullanıcının yazabildiği dizinde: başlatmak insan onayı ister
+        r2 = await c.call_tool("open_app", {"app": "deskhand-mcp-ana", "desktop": "background", "wait_s": 2})
+        kontrol("stdio: kullanıcı dizinindeki girdi + kullanıcı reddetti → [10], başlatılmadı",
+                r2.is_error and "[10]" in metin(r2) and "onay" in metin(r2), metin(r2)[:200])
+        sahte("sahte-onay", "izin")
         sahte("sahte-oturum", "yok")
         r2 = await c.call_tool("open_app", {"app": "deskhand-mcp-ana", "desktop": "background", "wait_s": 2})
         kontrol("stdio: oturum köprüsü yok → görünmez masaüstünde hiçbir uygulama başlatılmaz",
@@ -448,6 +457,7 @@ async def stdio_testleri():
                 yapi(r).get("status") == "opened" and w.startswith("arka:"), metin(r)[:400])
         kontrol("stdio: oturum politikası notu", any("oturum" in n for n in yapi(r).get("notes", [])),
                 str(yapi(r).get("notes")))
+        sahte("sahte-onay", None)
 
         r = await c.call_tool("read_text", {"window": w, "query": "Hazır", "wait_s": 8, "desktop": "background"})
         kontrol("stdio: read_text query+wait ('Hazır')", not r.is_error and yapi(r).get("items"), metin(r)[:300])
@@ -560,8 +570,10 @@ async def stdio_testleri():
                 metin(r)[:200])
 
         # yasak pencere: maske + OCR'dan çıkarma + girdi yok
+        sahte("sahte-onay", "izin")
         r = await c.call_tool("open_app", {"app": "deskhand-ikinci", "title": "gizli", "desktop": "background",
                                            "wait_s": 20})
+        sahte("sahte-onay", None)
         gw = (yapi(r).get("window") or {})
         kontrol("stdio: yasak pencere açıldı, başlığı gizli", not r.is_error and gw.get("forbidden") is True and
                 gw.get("title") == "(yasak pencere)", metin(r)[:300])

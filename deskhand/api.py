@@ -505,7 +505,8 @@ def surukle(k, x1, y1, x2, y2, dugme="left", sure=0.4, baslik=None, onayli=False
 def uygulama_komutu(uygulama: str, argumanlar: list[str] | None = None) -> tuple[list[str], str, list[str], dict]:
     """MCP open_app: → (argv, görünen ad, yasak denetimi için metinler, masaüstü girdisi). YALNIZ kurulu bir .desktop
     girdisi (uygulama.mcp_uygulama): ham yol/komut, yorumlayıcı/kabuk/uçbirim girdisi ve belge olmayan argüman
-    reddedilir (Dur 10). argv = `gio launch GIRDI.desktop [belgeler…]`; ortam değişkeni ajandan alınmaz."""
+    reddedilir (Dur 10); izin listesi dışındaki (kullanıcının yazabildiği) girdi insan onayı ister ve onaylı özel
+    kopyasından başlar. argv = `gio launch GIRDI.desktop [belgeler…]`; ortam değişkeni ajandan alınmaz."""
     from .uygulama import mcp_uygulama
     g, belgeler = mcp_uygulama(uygulama, argumanlar)
     return (["gio", "launch", g["yol"], *belgeler], f"{g['ad']} ({g['kimlik']})",

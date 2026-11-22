@@ -4,8 +4,11 @@ from __future__ import annotations
 import inspect
 import os
 import re
+import shutil
+import stat
 import sys
 import time
+import uuid
 
 from . import yollar
 from .arka_uc import sec
@@ -122,6 +125,14 @@ YASAK_PROGRAMLAR = frozenset({
     "umu-run", "qemu", "vim", "nvim", "vi", "ex", "emacs", "emacsclient",
     # Deskhand'in kendisi (CLI --approved ile kendi kendini onaylama)
     "deskhand", "ekran", "deskhand-bg", "deskhand-mcp",
+    # alt komut/seçenekle başka program çalıştıranlar (git -c alias.x=!…, flock -c, tmux new '…', setpriv KOMUT…)
+    "git", "flock", "tmux", "screen", "byobu", "dtach", "abduco", "setpriv", "capsh", "runuser", "chpst", "daemonize",
+    "start-stop-daemon", "ssh-agent", "xvfb-run", "xinit", "startx", "torsocks", "proxychains", "proxychains4",
+    "systemd-cat", "systemd-inhibit", "systemctl", "loginctl", "uwsm", "rlwrap", "perf", "catchsegv", "eatmydata",
+    "fakeroot", "fakechroot", "kioexec", "kde-inhibit", "kdeinit5", "kdeinit6", "klauncher", "nsjail", "minijail0",
+    "ld.so", *"xdotool ydotool dotool dotoold wtype".split(),  # girdi enjeksiyon araçları (tek dizede: ham çağrı değil)
+    "kwriteconfig5", "kwriteconfig6", "dconf",
+    "gsettings", "crontab", "dbus-update-activation-environment",
 })
 _YORUMLAYICI_KOK = ("python", "pypy", "perl", "ruby", "lua", "luajit", "php", "node", "tclsh", "wish", "guile", "java",
                     "wine", "pwsh", "julia")
@@ -155,7 +166,7 @@ def program_yasak_mi(yol: str) -> str | None:
     ad = _ad(yol)
     if not ad:
         return None
-    if ad in YASAK_PROGRAMLAR or _yorumlayici_adi(ad):
+    if ad in YASAK_PROGRAMLAR or _yorumlayici_adi(ad) or ad.startswith("ld-linux"):
         return _("'{ad}' bir yorumlayıcı/kabuk/sarmalayıcı/başlatıcı (keyfi kod çalıştırır)").format(ad=ad)
     if ad in UCBIRIM_PROGRAMLARI or ucbirim_mi(ad):
         return _("'{ad}' bir uçbirim öykünücüsü (uçbirim = kabuk)").format(ad=ad)
@@ -175,6 +186,7 @@ def _guclu_yasak(parca: str) -> str | None:
     return None
 
 
+_KABUK_METAKARAKTER = re.compile(r"[;|&`$<>]|\$\(")
 _KABUKLAR = frozenset({"sh", "bash", "rbash", "zsh", "fish", "dash", "ksh", "mksh", "csh", "tcsh", "busybox"})
 _YETKI = frozenset({"sudo", "doas", "pkexec", "su", "run0", "kdesu"})
 
@@ -185,7 +197,16 @@ def _exec_denetle(argv: list[str]) -> str | None:
     kabuk/yorumlayıcı adıysa yine yasak. Flatpak: yalnız `flatpak run KIMLIK`; kimlik ve --command denetlenir."""
     if not argv:
         return _("Exec satırı boş ya da çözümlenemedi")
-    for parca in argv:
+    for j, parca in enumerate(argv):
+        # Exec = program + sabit seçenekler + alan kodları: kabuk metakarakteri / gömülü komut taşıyan öğe yok
+        if _KABUK_METAKARAKTER.search(parca) or parca.startswith("!") or "=!" in parca:
+            return _("Exec öğesi gömülü komut taşıyor: {parca}").format(parca=repr(parca)[:120])
+        if any(c.isspace() for c in parca) and not os.path.exists(parca):
+            return _("Exec öğesi boşluklu bir komut metni: {parca}").format(parca=repr(parca)[:120])
+        if parca == "--" and j + 1 < len(argv) and _ad(argv[0]) not in _GECIRGEN:
+            sonraki = argv[j + 1]
+            if os.path.isabs(sonraki) or shutil.which(sonraki):
+                return _("Exec'te '--' sonrasında başka bir program: {p}").format(p=repr(sonraki)[:120])
         for aday in (parca, parca.split("=", 1)[1] if parca.startswith("-") and "=" in parca else ""):
             neden = _guclu_yasak(aday) if aday else None
             if neden:
@@ -281,9 +302,127 @@ def belge_argumanlari(args) -> list[str]:
     return sonuc
 
 
+# İzin listesi: ROOT sahipli, kullanıcının yazamadığı sistem dizinleri. Buradaki girdi + root sahipli ikili program =
+# onaysız. Kullanıcının yazabildiği dizinlerdeki (~/.local/share/applications, kullanıcı Flatpak'ı) girdiler ya da
+# programı kullanıcıya ait / betik olan girdiler insan onayı ister (bir eylem = bir onay; gözetimsiz kipte ret).
+SISTEM_UYGULAMA_DIZINLERI = ("/usr/share/applications", "/usr/local/share/applications",
+                             "/var/lib/flatpak/exports/share/applications")
+
+
+def _root_yazilamaz(yol: str) -> bool:
+    """Yol (sembolik bağlar çözülerek) ve TÜM üst dizinleri root sahipli ve grup/diğerleri yazamıyor mu?"""
+    try:
+        for p in {os.path.realpath(yol), os.path.join(os.path.realpath(os.path.dirname(os.path.abspath(yol))),
+                                                       os.path.basename(yol))}:
+            while True:
+                st = os.stat(p)
+                if st.st_uid != 0 or st.st_mode & 0o022:
+                    return False
+                if p == "/":
+                    break
+                p = os.path.dirname(p)
+    except OSError:
+        return False
+    return True
+
+
+def program_guvenilir(program: str) -> str | None:
+    """Exec'in programı onaysız başlatılabilir mi? → None | neden. Yol çözülür (PATH'te kullanıcının önce gelen bir
+    dizinindeki aynı adlı dosya bulunursa o denetlenir); root sahipli, yazılamaz, çalıştırılabilir bir İKİLİ (ELF)
+    olmalı: çalıştırılabilir metin dosyası (#! betik) kabul edilmez."""
+    yol = program if os.path.isabs(program) else shutil.which(program)
+    if not yol:
+        return _("program bulunamadı: {p}").format(p=program)
+    gercek = os.path.realpath(yol)
+    if not _root_yazilamaz(yol):
+        return _("program root sahipli/yazılamaz değil: {p}").format(p=gercek)
+    try:
+        st = os.stat(gercek)
+        with open(gercek, "rb") as f:
+            imza = f.read(4)
+    except OSError:
+        return _("program okunamadı: {p}").format(p=gercek)
+    if not stat.S_ISREG(st.st_mode) or not os.access(gercek, os.X_OK):
+        return _("program çalıştırılabilir bir dosya değil: {p}").format(p=gercek)
+    if imza != b"\x7fELF":
+        return _("program bir betik (#!) ya da ikili olmayan dosya: {p}").format(p=gercek)
+    return None
+
+
+def _exec_programlari(argv: list[str]) -> list[str]:
+    """Exec'te çalışacak programlar: geçirgen sarmalayıcılar + asıl program (Flatpak'ta flatpak'ın kendisi)."""
+    sonuc, i = [], 0
+    while i < len(argv):
+        sonuc.append(argv[i])
+        if _ad(argv[i]) not in _GECIRGEN:
+            break
+        i += 1
+        while i < len(argv) and (argv[i].startswith("-") or argv[i].isdigit() or argv[i] == "--"):
+            i += 1
+    return sonuc
+
+
+def girdi_guvenilir(g: dict) -> str | None:
+    """Masaüstü girdisi ONAYSIZ başlatılabilir mi (izin listesi)? → None | neden (insan onayı gerekir).
+    Girdi dosyası SISTEM_UYGULAMA_DIZINLERI'nde, root sahipli ve yazılamaz (üst dizinleriyle); Exec'teki her program
+    root sahipli, yazılamaz bir ikili."""
+    yol = os.path.abspath(g.get("yol") or "")
+    if not any(yol.startswith(d.rstrip("/") + "/") for d in SISTEM_UYGULAMA_DIZINLERI):
+        return _("girdi kullanıcının yazabildiği bir dizinde: {yol}").format(yol=yol)
+    if not _root_yazilamaz(yol):
+        return _("girdi dosyası root sahipli/yazılamaz değil: {yol}").format(yol=yol)
+    from .oturum.cozum import exec_argv
+    programlar = _exec_programlari(exec_argv(g.get("exec", "")))
+    if not programlar:
+        return _("Exec satırı çözümlenemedi")
+    for p in programlar:
+        neden = program_guvenilir(p)
+        if neden:
+            return neden
+    return None
+
+
+def _ozel_kopya(g: dict) -> dict:
+    """Onaylı (kullanıcı dizinindeki) girdi: içerik BİR KEZ okunur, onaylanan Exec ile aynı olduğu doğrulanır ve
+    RUNTIME_DIR/uygulama/ altına 0600 kopyası yazılır; başlatma kopyadan yapılır (onaydan sonra dosyayı değiştirmek
+    işe yaramaz). → kopyayı gösteren girdi."""
+    from .oturum.cozum import exec_argv
+    try:
+        with open(g["yol"], "rb") as f:
+            ham = f.read(256 * 1024)
+    except OSError as e:
+        raise Dur(10, _("girdi okunamadı: {hata}").format(hata=e)) from None
+    exec_ = None
+    bolum = None
+    for satir in ham.decode("utf-8", "replace").splitlines():
+        satir = satir.strip()
+        if satir.startswith("["):
+            bolum = satir
+        elif bolum == "[Desktop Entry]" and satir.startswith("Exec=") and exec_ is None:
+            exec_ = satir[5:].strip()
+    if exec_ is None or exec_argv(exec_) != exec_argv(g.get("exec", "")):
+        raise Dur(10, _("girdi onay sırasında değişti; başlatılmadı"))
+    d = os.path.join(yollar.runtime_dir(), "uygulama")
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    simdi = time.time()
+    for ad in os.listdir(d):  # eski kopyalar
+        try:
+            if simdi - os.lstat(os.path.join(d, ad)).st_mtime > 3600:
+                os.remove(os.path.join(d, ad))
+        except OSError:
+            pass
+    kopya = os.path.join(d, f"{re.sub(r'[^A-Za-z0-9._-]', '_', g['kimlik'])[:80]}-{uuid.uuid4().hex[:8]}.desktop")
+    fd = os.open(kopya, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(ham)
+    return dict(g, yol=kopya, kaynak_yol=g["yol"])
+
+
 def mcp_uygulama(ad: str, args=None) -> tuple[dict, list[str]]:
     """MCP open_app'in TEK giriş noktası: `ad` kurulu bir masaüstü girdisine çözülür (ham yol/komut YOK), girdi ve
-    argümanlar denetlenir. → (girdi, doğrulanmış argümanlar). Uymazsa Dur (1/5/6 çözüm, 10 güvenlik)."""
+    argümanlar denetlenir (kara liste → 10). İzin listesi dışındaki girdi (kullanıcı dizini, kullanıcıya ait ya da
+    betik program) insan onayı ister: red/panel yok/gözetimsiz → 10 (tur "hassas"); izinde girdinin özel kopyası
+    döner. → (girdi, doğrulanmış argümanlar). Uymazsa Dur (1/5/6 çözüm, 10 güvenlik)."""
     ad = (ad or "").strip()
     if "/" in ad:
         raise Dur(10, _("open_app yalnız kurulu bir uygulamanın adını alır (.desktop girdisi); yol ya da komut "
@@ -293,6 +432,20 @@ def mcp_uygulama(ad: str, args=None) -> tuple[dict, list[str]]:
     neden = girdi_denetle(g)
     if neden:
         raise Dur(10, _("'{ad}' MCP'den başlatılamaz: {neden}").format(ad=g.get("kimlik") or ad, neden=neden))
+    guvensiz = girdi_guvenilir(g)
+    if guvensiz:
+        from . import guvenlik
+        guvenlik.eylem_basladi()  # bu başlatma kendi eylemi: önceki eylemin onayı taşınmaz
+        ayrinti = (_("Doğrulanmamış uygulama girdisi ({neden})").format(neden=guvensiz) + "\n"
+                   + _("girdi: {yol}").format(yol=g["yol"]) + "\n" + _("Exec: {exec_}").format(exec_=g.get("exec", ""))
+                   + ("\n" + _("belgeler: {b}").format(b=" ".join(belgeler))[:600] if belgeler else ""))
+        izin, onay_neden = guvenlik._panelden_onay(
+            _("Uygulama başlat: {ad}").format(ad=g.get("ad") or g.get("kimlik")), g.get("kimlik") or ad, ayrinti)
+        if not izin:
+            raise Dur(10, _("'{ad}' doğrulanmamış bir girdi ({neden}); başlatmak kullanıcının onayını ister ({onay}). "
+                            "Başlatılmadı; kullanıcıya bildir.").format(ad=g.get("kimlik") or ad, neden=guvensiz,
+                                                                       onay=onay_neden), tur="hassas")
+        g = _ozel_kopya(g)
     return g, belgeler
 
 

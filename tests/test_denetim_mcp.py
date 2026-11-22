@@ -118,19 +118,156 @@ for arg in (["-c", "print(1)"], ["--new-instance"], ["FOO=bar"], ["javascript:al
             [os.path.join(UYG, "firefox.desktop")], ["https://ex.com/\nrm"], ["http://"], [" -c"], ["/usr/bin/python3"]):
     kontrol(f"A: firefox argümanı {arg!r} → 10", kod_al(uygulama.mcp_uygulama, "firefox", arg) == 10)
 kontrol("A: en çok 16 argüman", kod_al(uygulama.mcp_uygulama, "firefox", ["https://a.b"] * 17) == 10)
+# geçici dizin = kullanıcının yazabildiği dizin: kara listeden geçen girdi insan onayı ister (sahte panel: izin)
+ISTEKLER = []
+KARAR = {"v": "izin"}
+gercek_iste = onay.iste_sonuc
+
+
+def sahte_iste(eylem, hedef, ayrinti="", masaustu="ekran", sure=120, goruntu=None, gunluge_yaz=True):
+    ISTEKLER.append((eylem, hedef, ayrinti))
+    if KARAR.get("degistir"):  # insan bakarken girdi dosyası değiştirilir (TOCTOU denemesi)
+        open(KARAR["degistir"], "a").write("")
+        icerik = open(KARAR["degistir"]).read().replace("Exec=", "Exec=/usr/bin/true #", 1)
+        open(KARAR["degistir"], "w").write(icerik)
+    return onay.OnaySonucu(KARAR["v"] == "izin", KARAR["v"])
+
+
+onay.iste_sonuc = sahte_iste
 g, b = uygulama.mcp_uygulama("firefox", ["https://example.com/ara?q=a=b&x=1", f"file://{BELGE}"])
-kontrol("A: meşru firefox + https URL (= sorgu içinde) + file:// belge", g["kimlik"] == "firefox" and len(b) == 2)
+kontrol("A: meşru firefox + https URL (= sorgu içinde) + file:// belge (kullanıcı dizini → bir onay)",
+        g["kimlik"] == "firefox" and len(b) == 2 and len(ISTEKLER) == 1)
 g, b = uygulama.mcp_uygulama("kate", [BELGE, G])
 kontrol("A: meşru kate + var olan dosya ve klasör", g["kimlik"] == "org.kde.kate" and b == [BELGE, G])
-kontrol("A: Flatpak firefox (--command=firefox, @@u) başlatılabilir",
+kontrol("A: Flatpak firefox (--command=firefox, @@u) başlatılabilir (onayla)",
         kod_al(uygulama.mcp_uygulama, "org.mozilla.firefox-flatpak") == 0)
-kontrol("A: gamemoderun sarmalı oyun başlatılabilir (geçirgen sarmalayıcı)", kod_al(uygulama.mcp_uygulama, "oyun") == 0)
+kontrol("A: gamemoderun sarmalı oyun başlatılabilir (geçirgen sarmalayıcı, onayla)",
+        kod_al(uygulama.mcp_uygulama, "oyun") == 0)
 from deskhand import api  # noqa: E402
 
 argv, _ad, _y, _g = api.uygulama_komutu("kate", [BELGE])
-kontrol("A: api.uygulama_komutu → gio launch GIRDI.desktop BELGE (ortam yok)",
-        argv == ["gio", "launch", os.path.join(UYG, "org.kde.kate.desktop"), BELGE], str(argv))
+kopya = argv[2] if len(argv) > 2 else ""
+kontrol("A: onaylı kullanıcı girdisi ÖZEL KOPYADAN başlar: gio launch RUNTIME/uygulama/…desktop BELGE (ortam yok)",
+        argv[:2] == ["gio", "launch"] and kopya.startswith(os.path.join(yollar.runtime_dir(), "uygulama") + "/")
+        and argv[3:] == [BELGE] and oct(os.stat(kopya).st_mode & 0o777) == "0o600" and
+        open(kopya).read() == open(os.path.join(UYG, "org.kde.kate.desktop")).read(), str(argv))
+
+# ---------------------------------------------------------------- YB2: kullanıcının yazabildiği .desktop girdileri
+# denetim2_birim.py madde 2: kara liste dışı kod çalıştıran Exec'ler
+YB2 = {"gitalias": "git -c alias.x=!touch\\s/tmp/p x", "flockc": "flock /tmp/l -c 'touch /tmp/p'",
+       "tmuxyeni": "tmux new-session -d 'touch /tmp/p'", "setprivb": f"setpriv --reset-env {CALISIR}",
+       "betikexec": CALISIR, "kabukmeta": "/usr/bin/kate x;touch /tmp/p", "ciftcizgi": "/usr/bin/kate -- /usr/bin/sh"}
+for kimlik, ex in YB2.items():
+    with open(os.path.join(UYG, kimlik + ".desktop"), "w") as f:
+        f.write(f"[Desktop Entry]\nType=Application\nName={kimlik}\nExec={ex}\n")
+for kimlik in ("gitalias", "flockc", "tmuxyeni", "setprivb", "kabukmeta", "ciftcizgi"):
+    ISTEKLER.clear()
+    KARAR["v"] = "izin"
+    kontrol(f"YB2: '{kimlik}' (Exec={YB2[kimlik]!r}) → 10, onay bile SORULMAZ (kara liste)",
+            kod_al(uygulama.mcp_uygulama, kimlik) == 10 and not ISTEKLER)
+ISTEKLER.clear()
+onay.iste_sonuc = gercek_iste  # panel yok
+kontrol("YB2: kullanıcı dizinindeki betik girdisi onaysız (panel kapalı) → 10", kod_al(uygulama.mcp_uygulama, "betikexec") == 10)
+onay.iste_sonuc = sahte_iste
+KARAR["v"] = "red"
+kontrol("YB2: kullanıcı reddederse → 10", kod_al(uygulama.mcp_uygulama, "betikexec") == 10 and len(ISTEKLER) == 1)
+ISTEKLER.clear()
+KARAR["v"] = "izin"
+g, _b = uygulama.mcp_uygulama("betikexec")
+kontrol("YB2: kullanıcı onaylarsa BİR kez başlatılabilir; istek girdi yolunu ve Exec'i gösterir",
+        len(ISTEKLER) == 1 and CALISIR in ISTEKLER[0][2] and "betikexec.desktop" in ISTEKLER[0][2] and
+        g["yol"] != os.path.join(UYG, "betikexec.desktop"), str(ISTEKLER))
+ISTEKLER.clear()
+KARAR["degistir"] = os.path.join(UYG, "betikexec.desktop")
+kontrol("YB2: onay beklenirken girdi dosyası değiştirildi → 10 (başlatılmaz)",
+        kod_al(uygulama.mcp_uygulama, "betikexec") == 10 and len(ISTEKLER) == 1)
+KARAR.pop("degistir")
+os.environ["DESKHAND_GOZETIMSIZ"] = "1"
+onay.iste_sonuc = gercek_iste
+kontrol("YB2: gözetimsiz kipte kullanıcı girdisi → 10 (sorulmadan)", kod_al(uygulama.mcp_uygulama, "kate") == 10)
+os.environ.pop("DESKHAND_GOZETIMSIZ")
+onay.iste_sonuc = sahte_iste
+
+# izin listesi birimleri: program ve girdi
+ISTEKLER.clear()
+benim = os.path.join(G, "benim-ikili")
+import shutil  # noqa: E402
+
+shutil.copy("/usr/bin/true", benim)
+kontrol("YB2: kullanıcıya ait ikili program → güvenilir değil", uygulama.program_guvenilir(benim) is not None)
+betik_root = next((p for p in ("/usr/bin/ldd", "/usr/bin/xdg-open", "/usr/bin/gettext.sh", "/usr/bin/zcat")
+                   if os.path.exists(p) and open(p, "rb").read(2) == b"#!"), None)
+kontrol(f"YB2: root sahipli #! betik ({betik_root}) → güvenilir değil (betik kabul edilmez)",
+        betik_root is None or "betik" in (uygulama.program_guvenilir(betik_root) or ""))
+kontrol("YB2: root sahipli ELF (/usr/bin/true) → güvenilir", uygulama.program_guvenilir("/usr/bin/true") is None)
+kontrol("YB2: /tmp (herkes yazabilir) altındaki girdi → güvenilir değil",
+        uygulama.girdi_guvenilir({"yol": "/tmp/x.desktop", "exec": "/usr/bin/true"}) is not None)
+os.makedirs(os.path.join(G, "bin"), exist_ok=True)
+sahte_true = os.path.join(G, "bin", "true")
+shutil.copy("/usr/bin/true", sahte_true)
+eski_path = os.environ["PATH"]
+os.environ["PATH"] = os.path.join(G, "bin") + os.pathsep + eski_path
+kontrol("YB2: PATH'te önce gelen kullanıcı dizinindeki aynı adlı program → güvenilir değil",
+        uygulama.program_guvenilir("true") is not None)
+os.environ["PATH"] = eski_path
 uygulama.UYGULAMA_DIZINLERI = eski_dizinler
+
+# ---------------------------------------------------------------- K4: pano sahibi DoS (bağlantı başına süre, boyut)
+import socket  # noqa: E402
+
+from deskhand import pano_sahibi  # noqa: E402
+
+a_, b_ = socket.socketpair()
+a_.sendall(f"YAZ {pano_sahibi.AZAMI_VERI + 1}\n".encode())  # veri hiç gönderilmez
+t0 = time.monotonic()
+kontrol("K4: YAZ n > AZAMI_VERI → veri OKUNMADAN 'BUYUK' (beklemez)",
+        pano_sahibi.istek_oku(b_, sure=3.0) == ("BUYUK", b"") and time.monotonic() - t0 < 0.5)
+a_.close(); b_.close()
+a_, b_ = socket.socketpair()
+a_.sendall(b"YAZ 1000\n")
+
+
+def damla():
+    try:
+        for _i in range(40):
+            a_.sendall(b"x")
+            time.sleep(0.1)
+    except OSError:
+        pass
+
+
+threading.Thread(target=damla, daemon=True).start()
+t0 = time.monotonic()
+try:
+    pano_sahibi.istek_oku(b_, sure=1.0)
+    damla_sonuc = "okundu"
+except socket.timeout:
+    damla_sonuc = "zaman-asimi"
+kontrol("K4: damla damla veren istemci toplam süre sınırında kesilir (bayt başına süre yenilenmez)",
+        damla_sonuc == "zaman-asimi" and time.monotonic() - t0 < 1.5, f"{damla_sonuc} {time.monotonic() - t0:.2f}")
+a_.close(); b_.close()
+a_, b_ = socket.socketpair()
+a_.sendall(b"Y" * 500)
+kontrol("K4: satır sonu olmayan uzun başlık → reddedilir (sınırsız tampon yok)", pano_sahibi.istek_oku(b_, 2.0) == ("", b""))
+a_.close(); b_.close()
+a_, b_ = socket.socketpair()
+a_.sendall(b"YAZ %d\n" % len("çok".encode()) + "çok".encode())
+kontrol("K4: meşru YAZ okunur", pano_sahibi.istek_oku(b_, 2.0) == ("YAZ", "çok".encode()))
+a_.close(); b_.close()
+
+# sistem girdileri (yalnız OKUNUR, BAŞLATILMAZ): firefox, kate, dolphin… onaysız
+sistem = {x["kimlik"]: x for x in uygulama.masaustu_girdileri()
+          if x["yol"].startswith(uygulama.SISTEM_UYGULAMA_DIZINLERI)}
+for kimlik in ("firefox", "org.kde.kate", "org.kde.dolphin", "org.kde.gwenview", "mpv", "org.kde.okular"):
+    x = sistem.get(kimlik)
+    if x is None:
+        continue
+    ISTEKLER.clear()
+    g, _b = uygulama.mcp_uygulama(kimlik)
+    kontrol(f"YB2: sistem girdisi '{kimlik}' (Exec={x['exec']!r}) onaysız ve kendi yolundan",
+            uygulama.girdi_guvenilir(x) is None and not ISTEKLER and g["yol"] == x["yol"],
+            str(uygulama.girdi_guvenilir(x)))
+onay.iste_sonuc = gercek_iste
 
 # sistemdeki gerçek girdiler (yalnız OKUNUR, başlatılmaz): yorumlayıcı/uçbirim olanlar reddedilir
 gercek = uygulama.masaustu_girdileri()
