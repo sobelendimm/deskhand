@@ -1924,6 +1924,29 @@ def tus_metni(kombinasyon):
     return "".join(parca)
 
 
+# Yazı OLMAYAN tuşlar (parola alanında bir karakter eklemez): gezinme, düzenleme, işlev, kilit tuşları
+_YAZI_DISI_TUSLAR = ({"enter", "kpenter", "linefeed", "esc", "tab", "backspace", "delete", "insert", "home", "end", "pageup",
+                      "pagedown", "up", "down", "left", "right", "capslock", "numlock", "scrolllock", "sysrq", "pause",
+                      "menu", "compose", "super", "ctrl", "alt", "shift", "altgr"}
+                     | {f"f{i}" for i in range(1, 25)})
+
+
+def yazi_tusu_sayisi(kombinasyon):
+    """tus/bas kombinasyonunda alana KARAKTER yazan akor sayısı: değiştiricisiz (ya da yalnız shift/altgr) tek karakterli
+    tuş (harf, rakam, noktalama, space, kp_rakam…). ctrl/alt/super'li akorlar, Enter/Tab/gezinme/işlev tuşları sayılmaz.
+    Tanınmayan x:/k: tuşu yazı sayılır (güvenli taraf)."""
+    n = 0
+    for kume, bilinmeyen in _akor_kumeleri(kombinasyon):
+        if kume & {"ctrl", "alt", "super"}:
+            continue
+        tuslar = kume - {"shift", "altgr"}
+        if bilinmeyen:
+            n += 1
+        elif tuslar and not (tuslar & _YAZI_DISI_TUSLAR):
+            n += 1
+    return n
+
+
 def pano_yazma_engel(metin):
     """Onay kapsamı "kart": panoya YAZILAN metinde Luhn'dan geçen kart numarası varsa onay (ajan numarayı panoya yazıp
     Ctrl+V ile yapıştırmasın; kart_bilgisi_engel yolu: CLI --onayli yok sayılır, gözetimsiz → ret; iletide yalnız son 4

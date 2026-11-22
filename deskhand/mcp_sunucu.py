@@ -48,7 +48,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 
-from . import __version__, api, dinleme, dongu, fark, gonderim, gozlem, guvenlik, hata, masaustu, onay_hedef
+from . import __version__, api, desen as desen_denetimi, dinleme, dongu, fark, gonderim, gozlem, guvenlik, hata, masaustu, onay_hedef
 from .arka_uc import EKRAN
 from .i18n import N_, _
 
@@ -710,7 +710,7 @@ def baslik_kilidi(arg: str | None, k: str, ref_baslik: str | None = None) -> str
     if k == EKRAN:
         return None
     if arg and not _kimlik_mi(arg, k):
-        return arg
+        return desen_denetimi.denetle(arg)  # ajanın deseni: ReDoS sınırı (aşağıdaki üretilmiş kalıplara uygulanmaz)
     if ref_baslik is not None:
         return "^" + re.escape(ref_baslik) + "$"
     return degisiklik_toleransli(api.arka().baslik(k))
@@ -2309,6 +2309,10 @@ def wait_for(
             re.compile(value)
         except re.error as e:
             raise ToolError("[1] " + _("geçersiz başlık deseni: {hata}").format(hata=e)) from None
+        try:
+            desen_denetimi.denetle(value)  # ReDoS sınırı (uzunluk, iç içe niceleyici)
+        except hata.Dur as e:
+            raise dur_hatasi(e) from None
     with baglam(desktop, _("bekleme: {kosul}").format(kosul=condition)) as bilgi:
         t0 = time.monotonic()
         bitis = t0 + timeout_s

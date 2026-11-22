@@ -346,46 +346,53 @@ try:
             son["ozet"] == "Rapor indir" and son["karar"] == r["karar"] and son["nedenler"] == ["tam_ekran"])
 
     # ---------------------------------------------------------------- 8) bildirim yolu (özel veri yolu, sahte sunucu)
-    kontrol("bildirim testi gerçek veri yoluna gitmiyor", os.environ["DBUS_SESSION_BUS_ADDRESS"] == ADRES)
+    if os.environ["DBUS_SESSION_BUS_ADDRESS"] != ADRES:
+        # kilit açılmadan ÖNCE: bildirimler gerçek oturum veri yoluna gidebilirdi → test hemen durur
+        print("KALDI  bildirim testi gerçek veri yoluna gidiyor: gerçek ekran kilidi açılmadan test durduruldu")
+        sys.exit(2)
+    kontrol("bildirim testi gerçek veri yoluna gitmiyor", True)
     # gerçek ekran kilidi (_yalitim: kapali) yalnız bu bölümde açılır: bildirimler ÖZEL veri yolundaki sahte sunucuya gider
     # (yukarıdaki sağlama: DBUS_SESSION_BUS_ADDRESS özel adres); bölüm sonunda kilit geri konur.
     os.environ["DESKHAND_GERCEK_EKRAN"] = "acik"
-    for senaryo, beklenen in (("arka", "arka"), ("on", "on"), ("sonra", "sonra"), ("kapat", "sonra")):
-        p, kayit = sahte_baslat(senaryo)
-        cevap, aciklama = mesgul.sor("Raporu <indir> & kaydet", 5, kritik=(senaryo == "on"))
-        olaylar = kayit_oku(kayit)
-        kontrol(f"sor: sunucu '{senaryo}' → {beklenen}", cevap == beklenen, f"{cevap} {aciklama}")
-        if senaryo in ("arka", "on"):
-            n = olaylar[0] if olaylar else {}
-            govde = n.get("govde", [])
-            kontrol(f"sor ({senaryo}): Notify içeriği (uygulama, başlık, kaçışlı gövde, 3 eylem, sessiz, süre)",
-                    govde[:1] == ["Deskhand"] and govde[3] == mesgul.BILDIRIM_BASLIK and govde[4] == "Raporu &lt;indir&gt; &amp; kaydet"
-                    and govde[5] == ["arka", "Arka planda yap", "on", "Ekranımda yap", "sonra", "Sonra"]
-                    and n["ipucu"].get("suppress-sound") is True and n["sure"] == 5000, str(n))
-            kontrol(f"sor ({senaryo}): aciliyet {'kritik (2)' if senaryo == 'on' else 'normal (1)'}",
-                    n.get("ipucu", {}).get("urgency") == (2 if senaryo == "on" else 1))
+    try:
+        for senaryo, beklenen in (("arka", "arka"), ("on", "on"), ("sonra", "sonra"), ("kapat", "sonra")):
+            p, kayit = sahte_baslat(senaryo)
+            cevap, aciklama = mesgul.sor("Raporu <indir> & kaydet", 5, kritik=(senaryo == "on"))
+            olaylar = kayit_oku(kayit)
+            kontrol(f"sor: sunucu '{senaryo}' → {beklenen}", cevap == beklenen, f"{cevap} {aciklama}")
+            if senaryo in ("arka", "on"):
+                n = olaylar[0] if olaylar else {}
+                govde = n.get("govde", [])
+                kontrol(f"sor ({senaryo}): Notify içeriği (uygulama, başlık, kaçışlı gövde, 3 eylem, sessiz, süre)",
+                        govde[:1] == ["Deskhand"] and govde[3] == mesgul.BILDIRIM_BASLIK and govde[4] == "Raporu &lt;indir&gt; &amp; kaydet"
+                        and govde[5] == ["arka", "Arka planda yap", "on", "Ekranımda yap", "sonra", "Sonra"]
+                        and n["ipucu"].get("suppress-sound") is True and n["sure"] == 5000, str(n))
+                kontrol(f"sor ({senaryo}): aciliyet {'kritik (2)' if senaryo == 'on' else 'normal (1)'}",
+                        n.get("ipucu", {}).get("urgency") == (2 if senaryo == "on" else 1))
+            sahte_durdur(p)
+        p, kayit = sahte_baslat("sessiz")
+        t0 = time.monotonic()
+        cevap, aciklama = mesgul.sor("x", 0.6)
+        gecen_sure = time.monotonic() - t0
+        time.sleep(0.1)
+        kontrol("sor: yanıt yok → None, süre kadar bekler, bildirim geri çekilir (CloseNotification)",
+                cevap is None and 0.55 <= gecen_sure < 2 and any(o["olay"] == "CloseNotification" and o["id"] == 7 for o in kayit_oku(kayit)),
+                f"{cevap} {gecen_sure:.2f} {kayit_oku(kayit)}")
         sahte_durdur(p)
-    p, kayit = sahte_baslat("sessiz")
-    t0 = time.monotonic()
-    cevap, aciklama = mesgul.sor("x", 0.6)
-    gecen_sure = time.monotonic() - t0
-    time.sleep(0.1)
-    kontrol("sor: yanıt yok → None, süre kadar bekler, bildirim geri çekilir (CloseNotification)",
-            cevap is None and 0.55 <= gecen_sure < 2 and any(o["olay"] == "CloseNotification" and o["id"] == 7 for o in kayit_oku(kayit)),
-            f"{cevap} {gecen_sure:.2f} {kayit_oku(kayit)}")
-    sahte_durdur(p)
-    p, _ = sahte_baslat("sahte_once")
-    cevap, _a = mesgul.sor("x", 5)
-    kontrol("sor: başka bağlantıdan gelen taklit ActionInvoked yok sayılır", cevap == "arka", str(cevap))
-    sahte_durdur(p)
-    cevap, aciklama = mesgul.sor("x", 1)
-    kontrol("sor: bildirim hizmeti yok → None (kilitlenmez)", cevap is None and "yok" in aciklama, aciklama)
-    p, _ = sahte_baslat("arka")
-    r = mesgul.karar_ayrintili("Arka plan deneme", sahte_d(), ayar())
-    kontrol("karar + gerçek sor() yolu: sahte sunucu 'arka' → arka", r["karar"] == "arka" and r["soruldu"], str(r["neden"]))
-    sahte_durdur(p)
-    os.environ["DESKHAND_GERCEK_EKRAN"] = "kapali"
-    mesgul.plasma_rc_yolu = eski_rc
+        p, _ = sahte_baslat("sahte_once")
+        cevap, _a = mesgul.sor("x", 5)
+        kontrol("sor: başka bağlantıdan gelen taklit ActionInvoked yok sayılır", cevap == "arka", str(cevap))
+        sahte_durdur(p)
+        cevap, aciklama = mesgul.sor("x", 1)
+        kontrol("sor: bildirim hizmeti yok → None (kilitlenmez)", cevap is None and "yok" in aciklama, aciklama)
+        p, _ = sahte_baslat("arka")
+        r = mesgul.karar_ayrintili("Arka plan deneme", sahte_d(), ayar())
+        kontrol("karar + gerçek sor() yolu: sahte sunucu 'arka' → arka", r["karar"] == "arka" and r["soruldu"], str(r["neden"]))
+        sahte_durdur(p)
+        os.environ["DESKHAND_GERCEK_EKRAN"] = "kapali"
+    finally:
+        os.environ["DESKHAND_GERCEK_EKRAN"] = "kapali"
+        mesgul.plasma_rc_yolu = eski_rc
 
     # ---------------------------------------------------------------- 9) CLI (sahte kdotool/loginctl/etkinlik, özel veri yolu)
     sbin = os.path.join(GECICI, "bin")
