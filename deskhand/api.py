@@ -427,9 +427,12 @@ def pano_oku() -> str | None:
 
 def pano_yaz(metin: str) -> None:
     """Geçerli hedefin panosunu `metin` yapar ("" = temizle); pano yöneticisi geçmişine yazılmaz. DUR (13) ve
-    ön plan koruması (15) arka uçta."""
+    ön plan koruması (15) arka uçta; kde'de (kullanıcının panosu) önce insan önceliği (12, CLI `pano yaz` ile aynı)."""
     from .gunluk import gunluk
+    from . import guvenlik
     au = arka()
+    if au.ad == "kde":
+        guvenlik.insan_onceligi(_("pano yazma"))
     au.pano_yaz(metin, hassas=True)
     gunluk(f"pano yaz | {au.ad} | {len(metin)} karakter")  # içerik günlüğe yazılmaz
 

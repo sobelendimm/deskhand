@@ -697,6 +697,41 @@ with arka_uc.hedef_sabit("sanal"):
     kontrol("K5: gizli yazı kesildi → iletide harf yok, yalnız sayılar", e is not None and "'d'" not in e.mesaj and
             "de" not in e.mesaj.split("(")[-1] and "5/10" in e.mesaj, str(e))
 
+# ================================================================ A8b) bekleyen onay kapısı (CLI girdisi + AT-SPI eylemi)
+print("A8b) bekleyen onay kapısı")
+
+
+def bekleyen_yaz(masaustu_, pid):
+    k_ = os.urandom(16).hex()
+    onay._dizin_hazirla()
+    onay._yaz_atomik(onay.istek_yolu(k_), {"id": k_, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": masaustu_,
+                                           "zaman": time.time(), "son_zaman": time.time() + 60, "pid": pid})
+    return k_
+
+
+kontrol("bekleyen_var arka uç adını da kabul eder (sanal→arka, kde→ekran)",
+        (lambda k_: (onay.bekleyen_var("sanal") and not onay.bekleyen_var("kde"),
+                     onay._sil(onay.istek_yolu(k_)))[0])(bekleyen_yaz("arka", os.getppid())))
+for ad_, md_, diger in (("kde", "ekran", "arka"), ("sanal", "arka", "ekran")):
+    au = kur(ad_)
+    au.pen["{w}"][1] = "kwrite"
+    with arka_uc.hedef_sabit(ad_):
+        k_ = bekleyen_yaz(md_, os.getppid())  # başka (canlı) bir Deskhand süreci bu masaüstü için onay bekliyor
+        n0 = len(au.satirlar)
+        kontrol(f"[{ad_}] CLI tıklama, başka sürecin onayı beklenirken → 7, girdi YOK",
+                kod_al(eylem.k_tikla, ns(x=50, y=50)) == 7 and len(au.satirlar) == n0, str(au.satirlar[n0:]))
+        kontrol(f"[{ad_}] CLI tuş da → 7", kod_al(eylem.k_tus, ns(kombinasyon="a")) == 7 and len(au.satirlar) == n0)
+        kontrol(f"[{ad_}] AT-SPI eylem korumaları da → 7", kod_al(erisim._atspi_korumalari, "{w}", None) == 7)
+        onay._sil(onay.istek_yolu(k_))
+        k_ = bekleyen_yaz(md_, os.getpid())
+        kontrol(f"[{ad_}] bu sürecin KENDİ onay isteği kapıyı kapatmaz",
+                kod_al(eylem.k_tikla, ns(x=50, y=50)) == 0)
+        onay._sil(onay.istek_yolu(k_))
+        k_ = bekleyen_yaz(diger, os.getppid())
+        kontrol(f"[{ad_}] öbür masaüstündeki onay bu masaüstünü kilitlemez",
+                kod_al(eylem.k_tikla, ns(x=50, y=50)) == 0)
+        onay._sil(onay.istek_yolu(k_))
+
 # ================================================================ A9) AT-SPI çerçevesi yalnız PID'den
 print("A9) AT-SPI çerçevesi")
 

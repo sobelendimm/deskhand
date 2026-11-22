@@ -32,7 +32,7 @@ import sys
 import threading
 import time
 import uuid
-from collections import OrderedDict, deque
+from collections import OrderedDict
 from contextlib import contextmanager
 from typing import Annotated, Any, Literal
 
@@ -1000,13 +1000,9 @@ def type_text(
         return {**bilgi, "status": "typed", "message": mesaj, "approved_by_user": onaylandi}
 
 
-_KENDI_PANO: "deque[str]" = deque(maxlen=32)  # bu oturumda clipboard(write) ile yazılan metinlerin özeti (içerik tutulmaz)
 PANO_OKUMA_SINIRI = 20000  # clipboard(read) en çok bu kadar karakter döndürür
-
-
-def _pano_ozeti(metin: str) -> str:
-    import hashlib
-    return hashlib.sha256(metin.encode()).hexdigest()
+# Deskhand'in yazdığı pano metinlerinin özeti TEK kaynakta: guvenlik.kendi_pano_ekle / kendi_pano_mu (süreç belleği +
+# RUNTIME_DIR/pano-ozetleri; CLI `pano yaz`, MCP clipboard(write) ve yapıştırma onayı aynı listeyi görür).
 
 
 @mcp.tool(title="Clipboard", annotations=EYLEM)
@@ -1026,15 +1022,14 @@ def clipboard(
                 raise ToolError("[1] " + _("write için text gerekli ('' panoyu temizler)"))
             with kilitli(girdi=True):
                 api.pano_yaz(text)
-            if text:
-                _KENDI_PANO.append(_pano_ozeti(text))
+            guvenlik.kendi_pano_ekle(text)  # boş metin eklenmez; içerik değil özet tutulur
             return {**bilgi, "status": "written" if text else "cleared", "length": len(text)}
         with kilitli():
             icerik = api.pano_oku()
         if icerik is None:
             return {**bilgi, "status": "empty", "text": None, "length": 0}
         onaylandi = False
-        if api.arka().ad == "kde" and _pano_ozeti(icerik) not in _KENDI_PANO:
+        if api.arka().ad == "kde" and not guvenlik.kendi_pano_mu(icerik):
             # kullanıcının gerçek panosu parola/özel veri taşıyabilir: içerik ajana yalnız insan onayıyla gider
             izin, neden = _onay_iste("clipboard", _("kullanıcının panosu"),
                                      _("Ajan panonun metnini okumak istiyor ({n} karakter)").format(n=len(icerik)),

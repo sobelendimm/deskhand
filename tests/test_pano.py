@@ -617,9 +617,35 @@ async def mcp_testleri():
             kontrol("MCP: kendi yazdığımız metni okumak onay istemez", not r.is_error and
                     (r.structured_content or {}).get("text") == "ajanın yazdığı 😀" and len(onaylar) == n0 and
                     (r.structured_content or {}).get("approved_by_user") is False, metin(r)[:200])
+            kontrol("MCP: clipboard(write) özeti TEK kaynakta (guvenlik.kendi_pano_mu: CLI/yapıştırma onayı da görür)",
+                    guvenlik.kendi_pano_mu("ajanın yazdığı 😀") and not hasattr(s, "_KENDI_PANO"))
             on_.pano = "kullanıcı başka şey kopyaladı"
             r = await c.call_tool("clipboard", {"action": "read", "desktop": "foreground"})
             kontrol("MCP: kullanıcı panoyu değiştirdi → yine onay gerekir (red)", r.is_error and len(onaylar) == n0 + 1)
+            guvenlik.kendi_pano_ekle("CLI pano yaz ile konan metin")  # başka süreç (CLI) yazdı: özet dosyası paylaşılır
+            on_.pano = "CLI pano yaz ile konan metin"
+            n0 = len(onaylar)
+            r = await c.call_tool("clipboard", {"action": "read", "desktop": "foreground"})
+            kontrol("MCP: Deskhand'in CLI'den yazdığı metni okumak da onay istemez (ortak özet listesi)",
+                    not r.is_error and (r.structured_content or {}).get("text") == "CLI pano yaz ile konan metin" and
+                    len(onaylar) == n0, metin(r)[:200])
+            # insan önceliği: kde'de (kullanıcının panosu) pano yazmadan önce; arka planda çağrılmaz
+            asil_io = guvenlik.insan_onceligi
+            io_cagri = []
+            guvenlik.insan_onceligi = lambda ne, azami=8.0: io_cagri.append(ne)
+            try:
+                await c.call_tool("clipboard", {"action": "write", "text": "io", "desktop": "foreground"})
+                await c.call_tool("clipboard", {"action": "write", "text": "io", "desktop": "background"})
+                kontrol("MCP: clipboard(write) kde'de insan önceliğinden geçer, arka planda geçmez", len(io_cagri) == 1,
+                        str(io_cagri))
+                guvenlik.insan_onceligi = lambda ne, azami=8.0: (_ for _ in ()).throw(Dur(12, "kullanıcı kullanıyor"))
+                n1 = len(on_.olaylar)
+                r = await c.call_tool("clipboard", {"action": "write", "text": "y", "desktop": "foreground"})
+                kontrol("MCP: kullanıcı klavye/fare kullanıyor → [12], pano yazılmadı",
+                        r.is_error and "[12]" in metin(r) and len(on_.olaylar) == n1, metin(r)[:200])
+            finally:
+                guvenlik.insan_onceligi = asil_io
+            on_.pano, arka_.pano = "kullanıcı başka şey kopyaladı", "arka plan panosu"
             # arka plan: serbest
             n0 = len(onaylar)
             r = await c.call_tool("clipboard", {"action": "read", "desktop": "background"})
