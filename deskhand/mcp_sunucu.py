@@ -207,9 +207,47 @@ def _hata_kodu(e: ToolError) -> int | None:
     return int(m.group(1)) if m else None
 
 
+# Çekirdek (CLI) iletilerindeki seçenek adları → MCP parametre adları (ajan CLI bayrağı aramasın)
+_CLI_MCP_ADLARI = {"--region": "region", "--bolge": "region", "--sira": "nth", "--nth": "nth", "--role": "role",
+                   "--rol": "role", "--secret": "secret", "--gizli": "secret", "--threshold": "threshold",
+                   "--timeout": "timeout", "--background": "desktop='background'", "--arka": "desktop='background'"}
+_CLI_SECENEK = re.compile(r"(?<![\w-])(" + "|".join(re.escape(x) for x in sorted(_CLI_MCP_ADLARI, key=len, reverse=True))
+                          + r")(?![\w-])")
+
+
+def mcp_adlari(mesaj: str) -> str:
+    """Hata iletisindeki CLI seçenek adlarını (--region, --sira…) MCP parametre adlarına çevirir."""
+    return _CLI_SECENEK.sub(lambda m: _CLI_MCP_ADLARI[m.group(1)], mesaj)
+
+
+def beklenmeyen_hata(arac_adi: str, e: BaseException) -> CallToolResult:
+    """ToolError OLMAYAN istisna → yine sözleşmeli hata sonucu ([9], sent: girdi gönderilmiş olabilir → maybe_partial)."""
+    log.exception("araç %s: beklenmeyen hata", arac_adi)
+    return hata_sonucu(AracHatasi("[9] " + _("beklenmeyen hata: {hata}").format(hata=f"{type(e).__name__}: {e}"), 9))
+
+
+def okuma_araci(**kayit):
+    """Okuma/yönetim araçları (outputSchema çekirdek işlevin dönüş türünden): ToolError ve beklenmeyen istisna da
+    yapılandırılmış hata sonucuna (status/sent/next) çevrilir; başarılı sonuç aynen döner. Modüldeki ad çekirdekte kalır."""
+    def dekor(fn):
+        @functools.wraps(fn)
+        def sarili(*a, **k):
+            gonderim.sifirla()
+            try:
+                return fn(*a, **k)
+            except ToolError as e:
+                return hata_sonucu(e)
+            except Exception as e:  # noqa: BLE001 - sözleşme: her hata yapılandırılmış döner
+                return beklenmeyen_hata(fn.__name__, e)
+        mcp.add_tool(sarili, name=fn.__name__, **kayit)
+        fn.mcp_sarili = sarili
+        return fn
+    return dekor
+
+
 def hata_sonucu(e: ToolError) -> CallToolResult:
     """ToolError → hata sonucu: ileti + `sent` (gönderildi mi) + `next` (ne yapmalı); aynı bilgi yapılandırılmış."""
-    mesaj = str(e)
+    mesaj = mcp_adlari(str(e))
     kod = _hata_kodu(e)
     sent = gonderim.durum()
     etki = "refused" if sent == "nothing_sent" else "unverifiable"
@@ -245,6 +283,8 @@ def arac(sema, **kayit):
                 r = fn(*a, **k)
             except ToolError as e:
                 return hata_sonucu(e)
+            except Exception as e:  # noqa: BLE001 - sözleşme: beklenmeyen hata da sent/next ile döner
+                return beklenmeyen_hata(fn.__name__, e)
             if sema is None:
                 if isinstance(r, CallToolResult):
                     return CallToolResult(content=r.content, is_error=r.is_error)
@@ -1298,7 +1338,7 @@ def _yazi_goruldu(metin: str, after: dict | None) -> bool:
 
 # ================================================================ ARAÇLAR
 
-@mcp.tool(title="Status", annotations=OKUMA, meta=HEP_YUKLE)
+@okuma_araci(title="Status", annotations=OKUMA, meta=HEP_YUKLE)
 def get_status(
     windows: Annotated[bool, Field(description="Also list windows (id, title, geometry)")] = False,
     desktop: Masaustu = "auto",
@@ -1346,7 +1386,7 @@ def get_status(
     return s
 
 
-@mcp.tool(title="Choose desktop", annotations=SECIM)
+@okuma_araci(title="Choose desktop", annotations=SECIM)
 def choose_desktop(
     task: Annotated[str, Field(description="Short task summary shown to the user (max 120 chars)", max_length=120)],
 ) -> dict[str, Any]:
@@ -1375,7 +1415,7 @@ def choose_desktop(
     return {"status": "chosen", "choice": DIS_AD[secim], "reason": neden}
 
 
-@mcp.tool(title="Background desktop", annotations=YONETIM)
+@okuma_araci(title="Background desktop", annotations=YONETIM)
 def manage_desktop(
     action: Literal["start", "stop", "status"],
     size: Annotated[str | None, Field(description="WIDTHxHEIGHT for start, e.g. 1920x1080")] = None,
@@ -1571,7 +1611,7 @@ def observe(
         return CallToolResult(content=icerik, structured_content=s)
 
 
-@mcp.tool(title="Screenshot", annotations=OKUMA, meta=HEP_YUKLE)
+@okuma_araci(title="Screenshot", annotations=OKUMA, meta=HEP_YUKLE)
 def screenshot(
     window: Pencere = None,
     max_edge: Annotated[int, Field(ge=320, le=1568, description="Long edge of the returned image, px")] = 1280,
@@ -1627,7 +1667,7 @@ def screenshot(
         ], structured_content=meta)
 
 
-@mcp.tool(title="Read text", annotations=OKUMA)
+@okuma_araci(title="Read text", annotations=OKUMA)
 def read_text(
     window: Pencere = None,
     query: Annotated[str | None, Field(description="Only return matches of this text (Turkish-aware, fuzzy)")] = None,
@@ -1679,7 +1719,7 @@ def read_text(
         return sonuc
 
 
-@mcp.tool(title="Listen", annotations=OKUMA)
+@okuma_araci(title="Listen", annotations=OKUMA)
 def listen(
     seconds: Annotated[float | None, Field(ge=1, le=120, description="Record this many seconds (default 10; with "
                                                                      "until_silence: the maximum)")] = None,
@@ -1734,7 +1774,7 @@ def dinleme_ses_eksik() -> list[str]:
     return ses.eksik_araclar()
 
 
-@mcp.tool(title="Find icon/colour", annotations=OKUMA)
+@okuma_araci(title="Find icon/colour", annotations=OKUMA)
 def find(
     kind: Literal["icon", "color"],
     window: Pencere = None,
