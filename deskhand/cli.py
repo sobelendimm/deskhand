@@ -204,6 +204,7 @@ def k_pano(a):
             if sys.stdin.isatty():
                 raise Dur(1, _("yazılacak metin yok: pano yaz <metin> ya da metni stdin'den ver"))
             metin = sys.stdin.read()
+        guvenlik.pano_yazma_engel(metin)  # kart kipi: panoya yazılan Luhn'lu kart numarası onay ister
         if au.ad == "kde":  # kullanıcının panosu: kullanıcı klavye/fare kullanıyorsa bekle, sonra 12
             guvenlik.insan_onceligi(_("pano yazma"))
         au.pano_yaz(metin, hassas=True)

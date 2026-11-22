@@ -271,8 +271,11 @@ def a11y_dizini_hazirla(dizin: str, kalinti_sil: bool = False) -> list[int]:
 def a11y_bagi(dizin: str, kimlik=None) -> tuple[str, bool]:
     """Korumalı başlatmada a11y dizininin SALT OKUNUR bağı (fail-closed: bağ kurulamıyorsa uygulama BAŞLATILMAZ,
     Dur 14). kimlik kayıtlıysa dizin yoksa/başka dizinse reddedilir; kimlik yoksa (eski sürümle açılmış masaüstü)
-    dizin yoksa şimdi, uygulama başlamadan önce 0700 oluşturulur."""
-    if kimlik is None and not os.path.lexists(dizin):
+    dizin yoksa şimdi, uygulama başlamadan önce 0700 oluşturulur; dizin ZATEN varsa reddedilir (Dur 14: yeniden açın)."""
+    if kimlik is None:
+        if os.path.lexists(dizin):  # kimliksiz ama dizin ZATEN var: eski masaüstünde uygulama/başkası yaratmış olabilir
+            raise Dur(14, _("erişilebilirlik dizini zaten var ama masaüstünün kaydında kimliği yok ({dizin}); arka plan "
+                            "masaüstünü yeniden açın").format(dizin=dizin))
         a11y_dizini_hazirla(dizin)
     _a11y_dizin_denetle(dizin, kimlik)
     return dizin, True
