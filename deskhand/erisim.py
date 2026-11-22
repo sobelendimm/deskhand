@@ -654,6 +654,8 @@ def _atspi_is(istek):
         return _odakli_parola(Atspi, cerceve)
     if islem == "odak_kart":
         return _odakli_kart(Atspi, cerceve)
+    if islem == "odak_bilgi":
+        return _odak_bilgi(Atspi, cerceve)
     if islem == "tara":
         r = _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"],
                   bool(istek.get("kimlik_ver")), bool(istek.get("ayrinti")), int(istek.get("olcek") or 1))
@@ -739,6 +741,40 @@ def _odakli_parola(Atspi, cerceve):
         return False
 
 
+_DUZENLENEBILIR_ROLLER = ("entry", "text", "password text", "terminal", "spin button", "combo box")
+_BELGE_ROLLERI = ("document web", "document frame", "embedded", "internal frame")
+
+
+def _odak_bilgi(Atspi, cerceve):
+    """Çerçevede ODAKTAKİ öge: {"rol", "belge_ici", "duzenlenebilir"} | None (bulunamadı). Değeri OKUNMAZ. belge_ici:
+    odak web sayfasının (belge) içinde mi (adres çubuğu / araç çubuğu: False); duzenlenebilir: yazı alanı."""
+    o = _uclar(Atspi, cerceve, lambda o, rol, ss, S: o is not cerceve and ss.contains(S.FOCUSED), en_cok=6000, sure=0.6)
+    if o is None:
+        return None
+    S = Atspi.StateType
+    try:
+        rol = o.get_role_name()
+        ss = o.get_state_set()
+        duzenlenebilir = rol in _DUZENLENEBILIR_ROLLER or ss.contains(S.EDITABLE)
+    except Exception:  # noqa: BLE001
+        return None
+    belge_ici, x = rol in _BELGE_ROLLERI, o
+    for _i in range(80):
+        if belge_ici:
+            break
+        try:
+            x = x.get_parent()
+        except Exception:  # noqa: BLE001 - üst zincir okunamadı: bilinmiyor
+            return None
+        if x is None or x == cerceve:
+            break
+        try:
+            belge_ici = x.get_role_name() in _BELGE_ROLLERI
+        except Exception:  # noqa: BLE001
+            return None
+    return {"rol": rol, "belge_ici": bool(belge_ici), "duzenlenebilir": bool(duzenlenebilir)}
+
+
 def _oge_nitelikleri(oge) -> str:
     """Web ögesinin autocomplete/id/placeholder/xml-roles gibi nitelik DEĞERLERİ (boşlukla birleşik; yoksa "")."""
     try:
@@ -757,6 +793,18 @@ def _odakli_kart(Atspi, cerceve):
         return bool(o is not None and guvenlik.kart_alani_mi(o.get_name(), o.get_description(), _oge_nitelikleri(o)))
     except Exception:  # noqa: BLE001
         return False
+
+
+def odak_bilgisi(k):
+    """Pencerede odaktaki ögenin {"rol", "belge_ici", "duzenlenebilir"} bilgisi (ucuz: tek sınırlı DFS, değer okunmaz)
+    | None (bilinmiyor: erişilebilirlik kapalı/yanıtsız ya da odak bulunamadı). Erişilebilirliği AÇMAZ."""
+    try:
+        if not erisim_acik():
+            return None
+        r = _atspi_calistir(_pencere_istegi(k, "odak_bilgi"))
+    except Exception:  # noqa: BLE001 - Dur dahil: bilinmiyor
+        return None
+    return r if isinstance(r, dict) else None
 
 
 def imlec_satirlari(k):

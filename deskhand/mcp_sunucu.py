@@ -1926,7 +1926,8 @@ def type_text(
             k = _pencere_zorunlu(window)
         _SON.k = k
         _sinama_kapisi(k, oge=ref_o, ad=element, klavye=not ref and not element,
-                       rol=(ref_o or {}).get("rol"), dizi=dogrulama_sinamasi.metin_dizisi(text))
+                       rol=(ref_o or {}).get("rol"),
+                       dizi=dogrulama_sinamasi.metin_dizisi(text + ("\n" if submit else "")))  # submit'in Enter'ı da
         desen = baslik_kilidi(window if not ref else None, k, ref_b)
         if element and submit:
             raise ToolError("[1] " + _("submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)"))

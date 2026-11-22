@@ -304,8 +304,8 @@ try:
     api.tus, api.yaz = sahte_tus, sahte_yaz
     gezin.web.tarayici_mi = lambda k: k != "{kate}"
     r = gezin.adrese_git("{ff}", "https://example.com/a b".replace(" ", "%20"), baslik="Excel", onayli=False)
-    kontrol("goto: adım sırası ctrl+l → adres (tek parça) → Return",
-            [(x[0], x[2]) for x in adimlar] == [("tus", "ctrl+l"), ("yaz", "https://example.com/a%20b"), ("tus", "Return")],
+    kontrol("goto: adım sırası ctrl+l → adres + Enter (TEK yazı eylemi: kapı Enter'ı adresle birlikte görür)",
+            [(x[0], x[2]) for x in adimlar] == [("tus", "ctrl+l"), ("yaz", "https://example.com/a%20b\n")],
             str(adimlar))
     kontrol("goto: başlık kilidi (-b) her adıma iletilir", all(x[3] == "Excel" for x in adimlar), str(adimlar))
     adimlar.clear()
@@ -325,7 +325,7 @@ try:
         raise Dur(4, "başlık uymadı")
     api.yaz = yaz_engel
     kod = dur_kodu(gezin.adrese_git, "{ff}", "https://example.com", baslik="X")
-    kontrol("goto: yazı adımında denetim reddederse (4) Return GÖNDERİLMEZ",
+    kontrol("goto: yazı adımında denetim reddederse (4) başka adım YOK",
             kod == 4 and [x[0] for x in adimlar] == ["tus", "yaz"], f"{kod} {adimlar}")
     # görev kipi: yabancı pencere → pencere_denetle Dur(10), girdi yok
     adimlar.clear()

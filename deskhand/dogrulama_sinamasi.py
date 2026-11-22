@@ -940,14 +940,14 @@ def tab_sonrasi_girdi(dizi) -> bool:
     return False
 
 
-def klavye_engeli(k: str, odak_sorgu=None, dizi=None) -> dict | None:
+def klavye_engeli(k: str, odak_sorgu=None, dizi=None, odak_bilgi_sorgu=None) -> dict | None:
     """ÇEKİRDEK klavye kapısı (tuş / yazı / bas): sayfanın tamamı sınamaysa ya da ODAK sınama kutusundaysa (onay kutusu,
     kaydırıcı, sınama çerçevesi içi, resimli güvenlik kodu giriş alanı) → sonuç. odak_sorgu: çağıranın verdiği, odaktaki
     ögenin {"kutu": [x,y,w,h]} bilgisini döndüren işlev (AT-SPI; yalnız sınama durumu VARKEN çağrılır: durum yoksa ek maliyet
     yok). dizi: gönderilecek tuş/metin parçaları (tuş akorları; yazı için metin_dizisi): sayfada sınama durumu varken Tab/
     Shift+Tab'dan sonra başka tuş ya da yazı da içeriyorsa ret (Tab odağı sınama kutusuna taşıyıp devamı ona gönderirdi).
     FAIL-OPEN YOK: (1) sayfa OKUNAMAYAN tarayıcı penceresinde (erişilebilirlik kapalı/yanıtsız, kirli kayıt yeniden okunamadı)
-    Tab'dan sonra gelen girdi ve tek başına Boşluk/Enter reddedilir; (2) sınama durumu VARKEN odak bilinemiyorsa (sorgu hata
+    okunamayan_klavye_engeli (odak sorgusu; odak bilinmiyorsa dizinin HERHANGİ yerindeki Boşluk/Enter reddedilir); (2) sınama durumu VARKEN odak bilinemiyorsa (sorgu hata
     verdi / odakta kutulu öge yok) Boşluk/Enter/yazı içeren dizi reddedilir."""
     from .arka_uc import EKRAN
     if not k or k == EKRAN:
@@ -956,12 +956,12 @@ def klavye_engeli(k: str, odak_sorgu=None, dizi=None) -> dict | None:
     d, okundu = hazir_oku(k, baslik)
     if d is None:
         if not okundu and tarayici_mi(k):
-            return okunamayan_klavye_engeli(dizi, baslik)
+            return okunamayan_klavye_engeli(dizi, baslik, k=k, odak_bilgi_sorgu=odak_bilgi_sorgu)
         return None
     if d.get("page_wide"):
         return girdi_engeli(k, klavye=True, baslik=baslik, kayit=d)
     if d.get("kirli"):  # girdiden sonra yeniden okunamadı: odak/kutular bilinmiyor
-        return okunamayan_klavye_engeli(dizi, baslik, d)
+        return okunamayan_klavye_engeli(dizi, baslik, d, k=k, odak_bilgi_sorgu=odak_bilgi_sorgu)
     if dizi and tab_sonrasi_girdi(dizi):
         return _sonuc_d(d, baslik)
     kutu = None
@@ -1011,16 +1011,45 @@ def tek_basina_bosluk_enter(dizi) -> bool:
     return dizi_bosluk_enter(parcalar)
 
 
-IPUCU_OKUNAMADI = _("Sayfa okunamadı, bu yüzden CAPTCHA olmadığı doğrulanamıyor (olmayabilir): Boşluk, Enter ve Tab'dan sonra "
-                    "gelen girdi reddedildi. Belirli bir öğeye tıkla ya da tarayıcıyı erişilebilirlik açıkken yeniden başlat "
-                    "(ac --arka); kullanıcıya devir gerekmez.")
+IPUCU_OKUNAMADI = _("Sayfa okunamadı, bu yüzden CAPTCHA olmadığı doğrulanamıyor (olmayabilir) ve odak sayfa içinde ya da "
+                    "bilinmiyor: Enter/Boşluk içeren girdi ve Tab'dan sonra gelen girdi reddedildi. Yapılacak: önce hedef "
+                    "yazı alanına tıkla, sonra yaz (odak yazı alanındaysa izin verilir); adrese gitmek için goto kullan; "
+                    "ya da tarayıcıyı erişilebilirlik açıkken yeniden başlat (ac --arka). Kullanıcıya devir gerekmez.")
 
 
-def okunamayan_klavye_engeli(dizi, baslik: str | None = None, d: dict | None = None, bosluk: bool = True) -> dict | None:
-    """Sayfası OKUNAMAYAN tarayıcı penceresinde klavye kuralı: Tab'dan sonra gelen girdi ve (bosluk=True) tek başına Boşluk/
-    Enter reddedilir (odak sınama kutusunda olabilir; doğrulanamıyor). d: bilinen (kirli) sınama kaydı."""
-    if not dizi or not (tab_sonrasi_girdi(dizi) or (bosluk and tek_basina_bosluk_enter(dizi))):
+def _odak_guvenli(odak, d) -> bool:
+    """Okunamayan sayfada odak bilgisi Enter/Boşluk'a izin veriyor mu: odak belge DIŞINDA (adres/araç çubuğu) ya da
+    (bilinen sınama kaydı yokken) düzenlenebilir yazı alanında."""
+    if not isinstance(odak, dict):
+        return False
+    return not odak.get("belge_ici") or bool(odak.get("duzenlenebilir"))
+
+
+def okunamayan_klavye_engeli(dizi, baslik: str | None = None, d: dict | None = None, bosluk: bool = True,
+                             k: str | None = None, odak_bilgi_sorgu=None) -> dict | None:
+    """Sayfası OKUNAMAYAN tarayıcı penceresinde klavye kuralı. Tab'dan sonra gelen girdi HER ZAMAN reddedilir (odak sınama
+    kutusuna taşınabilir). bosluk=True: dizinin HERHANGİ yerinde Boşluk/Enter (['a','enter'], 'metin:abc\\n' dahil) varsa
+    ucuz odak sorgusu (erisim.odak_bilgisi; k verildiyse) yapılır: odak belge dışında (adres çubuğu) ya da düzenlenebilir
+    yazı alanındaysa izin, odak sayfa içinde başka bir ögedeyse ya da bilinmiyorsa ret. d: bilinen (kirli) sınama kaydı
+    (ret sonucu onun türüyle döner)."""
+    if not dizi:
         return None
+    tab = tab_sonrasi_girdi(dizi)
+    if not tab:
+        if not (bosluk and dizi_bosluk_enter(dizi)):
+            return None
+        odak = None
+        if k is not None:
+            try:
+                if odak_bilgi_sorgu is not None:
+                    odak = odak_bilgi_sorgu()
+                else:
+                    from .erisim import odak_bilgisi
+                    odak = odak_bilgisi(k)
+            except Exception:  # noqa: BLE001 - bilinmiyor
+                odak = None
+        if _odak_guvenli(odak, d):
+            return None
     if d is not None:
         return _sonuc_d(d, baslik)
     return acik_sonuc({"kind": "captcha", "window": baslik or "", "hint": IPUCU_OKUNAMADI, "confidence": "low",
@@ -1053,7 +1082,9 @@ def red_metni(s: dict) -> str:
     önerilmez."""
     if s.get("unreadable"):
         from .web import IPUCU_ERISIM
-        return _("sayfa okunamadı (CAPTCHA olmayabilir): öğeye tıkla ya da tarayıcıyı erişilebilirlik açıkken yeniden "
-                 "başlat (`ac --arka`); girdi gönderilmedi") + "\n" + IPUCU_ERISIM
+        return _("sayfa okunamadı (CAPTCHA olmayabilir) ve odak sayfa içinde ya da bilinmiyor: Enter/Boşluk ve Tab "
+                 "sonrası girdi gönderilmedi. Önce hedef yazı alanına tıkla, sonra yaz (odak yazı alanındaysa izin "
+                 "verilir); adres için goto; ya da tarayıcıyı erişilebilirlik açıkken yeniden başlat (`ac --arka`)"
+                 ) + "\n" + IPUCU_ERISIM
     return _("insan doğrulaması ({kind}): kullanıcıya devret — request_human kullan; girdi gönderilmedi").format(
         kind=s["kind"])

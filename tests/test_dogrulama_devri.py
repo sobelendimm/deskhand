@@ -626,6 +626,48 @@ try:
             "ac --arka" in ds.red_metni(r_ok) and "request_human" not in ds.IPUCU_OKUNAMADI, ds.red_metni(r_ok))
     kontrol("R1a: bilinen sınama reddi hâlâ request_human der", "request_human" in ds.red_metni(r_bilinen) and
             not r_bilinen.get("unreadable"), ds.red_metni(r_bilinen))
+    # R1 yeniden tasarım: okunamayan sayfada odak sorgusu; odak bilinmiyorsa dizinin HERHANGİ yerindeki Enter/Boşluk ret
+    ds.okunamadi_kaydet("arka:51", "x")
+    ADRES = {"rol": "entry", "belge_ici": False, "duzenlenebilir": True}
+    ALAN = {"rol": "entry", "belge_ici": True, "duzenlenebilir": True}
+    DUGME = {"rol": "push button", "belge_ici": True, "duzenlenebilir": False}
+    KUTU = {"rol": "check box", "belge_ici": True, "duzenlenebilir": False}
+    BELGE = {"rol": "document web", "belge_ici": True, "duzenlenebilir": False}
+
+    def _hata_sorgu():
+        raise RuntimeError("a11y yanıtsız")
+    sorgular_ = []
+    TABLO = [  # (ad, dizi, odak sorgusu, ret mi)
+        ("['a','enter'] odak bilinmiyor", ["a", "enter"], lambda: None, True),
+        ("'metin:abc\\n' odak bilinmiyor", ["metin:abc\n"], lambda: None, True),
+        ("'metin:a b' odak bilinmiyor", ["metin:a b"], lambda: None, True),
+        ("['enter'] sorgu hata verdi", ["enter"], _hata_sorgu, True),
+        ("['ctrl+a','space'] düğmede", ["ctrl+a", "space"], lambda: DUGME, True),
+        ("['enter'] onay kutusunda", ["enter"], lambda: KUTU, True),
+        ("['enter'] belgenin kendisinde", ["enter"], lambda: BELGE, True),
+        ("['enter'] adres çubuğunda (belge dışı)", ["enter"], lambda: ADRES, False),
+        ("'metin:https://x.org\\n' adres çubuğunda", ["metin:https://x.org\n"], lambda: ADRES, False),
+        ("'metin:merhaba dünya\\n' sayfadaki yazı alanında", ["metin:merhaba dünya\n"], lambda: ALAN, False),
+        ("['tab','metin:a'] adres çubuğunda bile (Tab odağı sayfaya taşır)", ["tab", "metin:a"], lambda: ADRES, True),
+        ("['a','b'] (Enter/Boşluk yok): sorgu yapılmaz", ["a", "b"], lambda: sorgular_.append(1), False),
+        ("'metin:abc' (boşluksuz yazı)", ["metin:abc"], lambda: sorgular_.append(1), False),
+    ]
+    for ad_, dizi_, sorgu_, ret_bekle in TABLO:
+        r_ = ds.klavye_engeli("arka:51", dizi=dizi_, odak_bilgi_sorgu=sorgu_)
+        kontrol(f"R1: okunamayan sayfa {ad_} → {'RET' if ret_bekle else 'izin'}", (r_ is not None) == ret_bekle, str(r_))
+    kontrol("R1: Enter/Boşluk içermeyen dizide odak sorgusu YAPILMAZ (ek maliyet yok)", not sorgular_, str(sorgular_))
+    r_ = ds.klavye_engeli("arka:51", dizi=["a", "enter"], odak_bilgi_sorgu=lambda: None)
+    kontrol("R1: ret iletisi ajana ne yapacağını söyler (tıkla, sonra yaz; goto; ac --arka)",
+            r_ is not None and all(x in ds.red_metni(r_) for x in ("tıkla", "goto", "ac --arka")), ds.red_metni(r_ or {}))
+    kontrol("R1: k verilmeyen eski çağrı (MCP ref yolu, bosluk=False) yalnız Tab sonrası girdiyi reddeder",
+            ds.okunamayan_klavye_engeli(["metin:a b\n"], "x", bosluk=False) is None and
+            ds.okunamayan_klavye_engeli(["tab", "a"], "x", bosluk=False) is not None)
+    kontrol("R1: k verilmeyen çağrıda odak bilinmez → Enter reddedilir",
+            ds.okunamayan_klavye_engeli(["a", "enter"], "x") is not None)
+    from deskhand import mcp_sunucu as _mcp_r1
+    import inspect as _insp_r1
+    kontrol("R1: MCP type_text kapısı submit=True'nun eklediği Enter'ı da görür",
+            'metin_dizisi(text + ("\\n" if submit else ""))' in _insp_r1.getsource(_mcp_r1))
 finally:
     ds.tara, ds.tarayici_mi, ds.baslik_simdi = _t0_, _tm0_, _bs0_
     ds.temizle()

@@ -14,7 +14,7 @@ from .uygulama import web_adresi_denetle
 
 def adrese_git(k: str, adres: str, baslik: str | None = None, onayli: bool = False) -> str:
     """Tarayıcı penceresi `k`'de adres çubuğundan `adres`e git → gidilen adres. Pencere tarayıcı değilse Dur(1);
-    adres http(s) değilse Dur(10). Yazdığı üç adım (tuş, yazı, tuş) ayrı ayrı tüm girdi denetimlerinden geçer."""
+    adres http(s) değilse Dur(10). Yazdığı iki adım (ctrl+l, adres+Enter) ayrı ayrı tüm girdi denetimlerinden geçer."""
     adres = web_adresi_denetle(adres)  # hiçbir girdi gönderilmeden ÖNCE
     if not k or k == EKRAN:
         raise Dur(1, _("goto bir tarayıcı penceresi ister (tüm ekran değil)"))
@@ -23,8 +23,9 @@ def adrese_git(k: str, adres: str, baslik: str | None = None, onayli: bool = Fal
     if gorev_kipi.etkin():  # GÖREV KİPİ: yalnız görev tarayıcısının penceresi (MCP araçlarıyla aynı denetim)
         gorev_kipi.pencere_denetle(api.arka(), k)
     api.tus(k, "ctrl+l", baslik=baslik, onayli=onayli)   # adres çubuğuna odaklan + seç
-    api.yaz(k, adres, baslik=baslik, onayli=onayli)       # boşluksuz tek parça: Enter/Tab yok → yazı onayı tetiklenmez
-    api.tus(k, "Return", baslik=baslik, onayli=onayli)    # hassas sayfada onay/CAPTCHA kapısı burada
+    # adres + Enter TEK yazı eylemi: CAPTCHA kapısı ve (ödeme sayfasında) onay Enter'ı adresle birlikte BİR kez görür;
+    # okunamayan sayfada odak sorgusu adres çubuğunu (belge dışı) görür → izin
+    api.yaz(k, adres + "\n", baslik=baslik, onayli=onayli)
     gunluk(f"goto | {k} | {adres[:200]}")
     return adres
 
