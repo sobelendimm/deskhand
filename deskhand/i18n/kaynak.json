@@ -159,19 +159,19 @@
   "mesgul.py:667"
  ],
  "  {ad} (pid {pid}, {sayi} pencere)": [
-  "erisim.py:866"
+  "erisim.py:868"
  ],
  " (başlık {x},{y})": [
   "akis.py:236"
  ],
  "# '{ad}' için {sayi} öge:": [
-  "erisim.py:958"
+  "erisim.py:960"
  ],
  "# '{desen}': {sayi} eşleşme ({sn} sn)": [
   "ocr.py:587"
  ],
  "# '{desen}': {sayi} öge ({kademe} eşleşme, {sn} sn)": [
-  "erisim.py:878"
+  "erisim.py:880"
  ],
  "# '{metin}' için {sayi} eşleşme:": [
   "eylem.py:1224"
@@ -210,7 +210,7 @@
   "ocr.py:595"
  ],
  "# {sayi} öge ({gorunen} görünen, {sn} sn); (merkez x,y) rol: ad": [
-  "erisim.py:887"
+  "erisim.py:889"
  ],
  "'=' içeren argüman verilemez (ortam değişkeni/seçenek)": [
   "uygulama.py:309"
@@ -235,18 +235,18 @@
   "uygulama.py:171"
  ],
  "'{ad}' devre dışı (tıklanamaz)": [
-  "erisim.py:948",
-  "erisim.py:967",
-  "erisim.py:1117"
+  "erisim.py:950",
+  "erisim.py:969",
+  "erisim.py:1119"
  ],
  "'{ad}' doğrulanmamış bir girdi ({neden}); başlatmak kullanıcının onayını ister ({onay}). Başlatılmadı; kullanıcıya bildir.": [
   "uygulama.py:546"
  ],
  "'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `ekran agac {kimlik}`": [
-  "erisim.py:955"
+  "erisim.py:957"
  ],
  "'{ad}' görüş alanında ama görünmüyor (gizli ya da üstü örtülü)": [
-  "erisim.py:1166"
+  "erisim.py:1168"
  ],
  "'{ad}' için {sayi} öge; sira ile seç (CLI --sira, MCP nth):\n{liste}": [
   "web.py:537"
@@ -255,10 +255,10 @@
   "web.py:534"
  ],
  "'{ad}' sayfada var ama görünmüyor (kutusu yok: gizli ya da kapalı bir bölümde)": [
-  "erisim.py:1150"
+  "erisim.py:1152"
  ],
  "'{ad}' sayfada var ama görüş alanına getirilemedi ({tur} kaydırma)": [
-  "erisim.py:1177"
+  "erisim.py:1179"
  ],
  "'{ad}' {sayi} pencereye uyuyor; kimlik ver:\n{liste}": [
   "arka_uc/kde.py:181",
@@ -281,8 +281,8 @@
   "akis.py:256"
  ],
  "'{eylem}' eylemi yok; ögenin eylemleri: {liste}": [
-  "erisim.py:507",
-  "erisim.py:1295",
+  "erisim.py:509",
+  "erisim.py:1297",
   "web.py:654"
  ],
  "'{metin}' artık ({x},{y}) noktasında değil (ekran değişti); tıklanmadı": [
@@ -316,7 +316,7 @@
   "web.py:682"
  ],
  "(boş komut)": [
-  "kwin_oturum.py:1020",
+  "kwin_oturum.py:1051",
   "masaustu.py:959"
  ],
  "(gömülü uçbirim)": [
@@ -348,7 +348,7 @@
   "eylem.py:1244"
  ],
  ", doğrulandı": [
-  "erisim.py:1360"
+  "erisim.py:1362"
  ],
  ", sayfa {n}/{t}": [
   "web.py:683"
@@ -366,10 +366,10 @@
   "gorsel.py:244"
  ],
  "--eylem ile değiştirici tuş (--mod) birlikte kullanılamaz": [
-  "erisim.py:982"
+  "erisim.py:984"
  ],
  "--eylem ile fare düğmesi (sağ/çift/orta) birlikte kullanılamaz": [
-  "erisim.py:980"
+  "erisim.py:982"
  ],
  "--foto: pencere fotoğraftan sonra taşındı/boyut değişti; yeniden foto al": [
   "eylem.py:643"
@@ -387,7 +387,7 @@
   "eylem.py:1193"
  ],
  "--sira 1..{en_cok} olmalı": [
-  "erisim.py:964",
+  "erisim.py:966",
   "eylem.py:1168",
   "eylem.py:1229"
  ],
@@ -667,7 +667,7 @@
   "cli.py:241"
  ],
  "DURDURULDU ({kod}): {mesaj}": [
-  "masaustu.py:1065"
+  "masaustu.py:1069"
  ],
  "DURDURULDU: {mesaj}": [
   "cli.py:515"
@@ -734,7 +734,7 @@
   "guvenlik.py:1375"
  ],
  "EIS bölgesi {boyut} ≠ oturum {hedef}": [
-  "kwin_oturum.py:610"
+  "kwin_oturum.py:641"
  ],
  "EasyOCR/torch yok": [
   "doktor.py:220"
@@ -797,7 +797,7 @@
   "erisim.py:234"
  ],
  "GENxYÜK[xDERİNLİK] (varsayılan $DESKHAND_SANAL_BOYUT ya da {boyut})": [
-  "masaustu.py:1034"
+  "masaustu.py:1038"
  ],
  "GPU metin okuma (OCR)": [
   "doktor.py:214"
@@ -881,67 +881,67 @@
   "doktor.py:89"
  ],
  "KWin HOME'u kullanıcının gerçek ev dizini; verilmedi": [
-  "kwin_oturum.py:118"
+  "kwin_oturum.py:149"
  ],
  "KWin ScreenShot2 arayüzü hazır olmadı": [
-  "kwin_oturum.py:592"
+  "kwin_oturum.py:623"
  ],
  "KWin arka plan oturumu kapalı": [
-  "kwin_oturum.py:737"
+  "kwin_oturum.py:768"
  ],
  "KWin arka plan oturumu zorlandı ama kullanılamıyor: {neden}": [
   "masaustu.py:564"
  ],
  "KWin açılmadı: {hata}": [
-  "kwin_oturum.py:894"
+  "kwin_oturum.py:925"
  ],
  "KWin donanım hızlandırması yok ({gpu}): yazılım çizimi": [
-  "kwin_oturum.py:615"
+  "kwin_oturum.py:646"
  ],
  "KWin düşük önceliğe alınamadı (iş parçacığı, nice, politika): {kalan}": [
-  "kwin_oturum.py:654"
+  "kwin_oturum.py:685"
  ],
  "KWin hazırlanırken kapandı: {hata}": [
-  "kwin_oturum.py:582"
+  "kwin_oturum.py:613"
  ],
  "KWin oturum dizini güvensiz: {dizin}": [
-  "kwin_oturum.py:150"
+  "kwin_oturum.py:181"
  ],
  "KWin oturum dizini yok: {dizin}": [
-  "kwin_oturum.py:147"
+  "kwin_oturum.py:178"
  ],
  "KWin oturum kaydı geçersiz (XWayland ekranı): {x}": [
-  "kwin_oturum.py:158"
+  "kwin_oturum.py:189"
  ],
  "KWin oturum kaydı geçersiz (kafes): {kafes}": [
-  "kwin_oturum.py:168"
+  "kwin_oturum.py:199"
  ],
  "KWin oturum kaydı geçersiz (kimlik): {kimlik}": [
-  "kwin_oturum.py:140"
+  "kwin_oturum.py:171"
  ],
  "KWin oturum kaydında dbus-daemon PID'i yok: girdi yardımcısı başlatılmadı": [
-  "kwin_oturum.py:1143"
+  "kwin_oturum.py:1174"
  ],
  "KWin oturumu açılamadı ({hata}); Xvfb kullanılıyor": [
   "masaustu.py:594"
  ],
  "KWin oturumundan kare alınamadı: {hata}": [
-  "kwin_oturum.py:606"
+  "kwin_oturum.py:637"
  ],
  "KWin süreci doğrulanamadı (pid {pid})": [
-  "kwin_oturum.py:898"
+  "kwin_oturum.py:929"
  ],
  "KWin yapılandırma dizini kullanıcının gerçek yapılandırma dizini (~/.config); yazılmadı: {dizin}": [
-  "kwin_oturum.py:115"
+  "kwin_oturum.py:146"
  ],
  "KWin {surum} < 6.8 (EIS/ScreenShot2 yetkisi için 6.8 gerekir)": [
-  "kwin_oturum.py:326"
+  "kwin_oturum.py:357"
  ],
  "KWin çalışma dizini kullanıcının gerçek XDG_RUNTIME_DIR'i; verilmedi": [
-  "kwin_oturum.py:120"
+  "kwin_oturum.py:151"
  ],
  "KWin özel veri yoluna bağlanmadı: {hata}": [
-  "kwin_oturum.py:896"
+  "kwin_oturum.py:927"
  ],
  "Kalan": [
   "gui/metinler.py:96"
@@ -1170,8 +1170,8 @@
  "UYARI: {uyari}": [
   "eylem.py:372",
   "eylem.py:1145",
-  "masaustu.py:1026",
-  "masaustu.py:1053"
+  "masaustu.py:1030",
+  "masaustu.py:1057"
  ],
  "UYGULAMA SEVİYESİ (erişilebilirlik çerçevesi): {baslik} ({uygulama}) bu eylemi kabul etmiyor": [
   "erisim.py:335"
@@ -1204,16 +1204,16 @@
   "gui/metinler.py:162"
  ],
  "Wayland soket adı kullanıcının gerçek oturumuyla aynı ({ad}); bağlanılmadı": [
-  "kwin_oturum.py:112"
+  "kwin_oturum.py:143"
  ],
  "Wayland soketi kullanıcının gerçek soketi; bağlanılmadı": [
-  "kwin_oturum.py:220"
+  "kwin_oturum.py:251"
  ],
  "Web sayfası ögeleri için: `web {kimlik} '{ad}'`": [
-  "erisim.py:953"
+  "erisim.py:955"
  ],
  "XWayland ekran adı geçersiz ya da kullanıcının gerçek ekranıyla aynı: {ekran}": [
-  "kwin_oturum.py:125"
+  "kwin_oturum.py:156"
  ],
  "Xvfb + openbox (KWin oturumu kullanılamıyor: {neden})": [
   "doktor.py:201"
@@ -1260,7 +1260,7 @@
   "ucbirim.py:382"
  ],
  "YOK": [
-  "masaustu.py:1011"
+  "masaustu.py:1015"
  ],
  "Yalnız DUR": [
   "gui/metinler.py:59"
@@ -1292,7 +1292,7 @@
   "akis.py:235"
  ],
  "adı değişti": [
-  "erisim.py:930"
+  "erisim.py:932"
  ],
  "adım {i} ({arac}): geçersiz argüman: {alanlar}": [
   "mcp_sunucu.py:1999"
@@ -1380,7 +1380,7 @@
   "doktor.py:155"
  ],
  "at-spi2-registryd başlamadı: {hata}": [
-  "kwin_oturum.py:1107"
+  "kwin_oturum.py:1138"
  ],
  "aynı eylem {sayi} kez üst üste ekranı DEĞİŞTİRMEDİ: tekrarlama. Ekran görüntüsü ya da metin okuyup başka bir yol dene (başka öğe/koordinat, başka tuş, önce odağı ya da bir açılır pencereyi kontrol et).": [
   "mcp_sunucu.py:851"
@@ -1440,10 +1440,10 @@
  ],
  "başlatılamadı: {hata}": [
   "insan.py:57",
-  "masaustu.py:976"
+  "masaustu.py:980"
  ],
  "başlatılamadı: {komut} bulunamadı": [
-  "kwin_oturum.py:1020",
+  "kwin_oturum.py:1051",
   "masaustu.py:959"
  ],
  "başlatıldı: {ad}": [
@@ -1496,7 +1496,7 @@
   "uygulama.py:542"
  ],
  "bellek kafesi KAPALI (DESKHAND_SANAL_BELLEK=0)": [
-  "kwin_oturum.py:831",
+  "kwin_oturum.py:862",
   "masaustu.py:687"
  ],
  "bellek kafesi yok: öncelik bekçisi çalışmıyor (ad tabanlı sistem kuralları önceliği yükseltebilir)": [
@@ -1540,7 +1540,7 @@
   "masaustu.py:784"
  ],
  "bileşenler: {bilesenler}": [
-  "masaustu.py:1023"
+  "masaustu.py:1027"
  ],
  "bilinmeyen ayar yok sayıldı: {ayar}": [
   "ayarlar.py:108"
@@ -1592,11 +1592,11 @@
   "eylem.py:1226"
  ],
  "birden çok öge; --sira N ile seç": [
-  "erisim.py:961"
+  "erisim.py:963"
  ],
  "birincil eylem yok (click/press/activate/toggle); ögenin eylemleri: {liste}; --eylem ADI ile seç": [
-  "erisim.py:511",
-  "erisim.py:1300"
+  "erisim.py:513",
+  "erisim.py:1302"
  ],
  "birincil eylem yok; ögenin eylemleri: {liste}": [
   "web.py:659"
@@ -1618,7 +1618,7 @@
   "eylem.py:1091"
  ],
  "boş X ekran numarası bulunamadı": [
-  "kwin_oturum.py:534",
+  "kwin_oturum.py:565",
   "masaustu.py:243"
  ],
  "boş argüman": [
@@ -1650,10 +1650,10 @@
   "mcp_sunucu.py:356"
  ],
  "bu öge sayısal değer ister ({n} karakterlik metin sayı değil)": [
-  "erisim.py:539"
+  "erisim.py:541"
  ],
  "bulunamadı": [
-  "erisim.py:883",
+  "erisim.py:885",
   "gorsel.py:262",
   "gorsel.py:272",
   "mcp_sunucu.py:136",
@@ -1670,10 +1670,10 @@
   "eylem.py:1172"
  ],
  "bulundu: web {rol} '{ad}' ({x},{y}) {konum}, {sn} sn": [
-  "erisim.py:1232"
+  "erisim.py:1234"
  ],
  "bulundu: {rol} '{ad}' ({x},{y}) {kademe} eşleşme, {sn} sn": [
-  "erisim.py:1005"
+  "erisim.py:1007"
  ],
  "bwrap (bubblewrap) yok: arka plan uygulaması yalıtılamaz, başlatılmadı": [
   "arka_ortak.py:778"
@@ -1697,7 +1697,7 @@
   "guvenlik.py:740"
  ],
  "dbus-daemon bellek kafesinde değil: {cgroup}": [
-  "kwin_oturum.py:842"
+  "kwin_oturum.py:873"
  ],
  "dd of=/dev/…: aygıtın üzerine yazar": [
   "guvenlik.py:904"
@@ -1725,16 +1725,16 @@
   "doktor.py:139"
  ],
  "deskhand-eis yok (make -C deskhand/yardimci deskhand-eis)": [
-  "kwin_oturum.py:1133"
+  "kwin_oturum.py:1164"
  ],
  "deskhand-eis yok (make -C deskhand/yardimci deskhand-eis; libei + libxkbcommon gerekir)": [
-  "kwin_oturum.py:335"
+  "kwin_oturum.py:366"
  ],
  "deskhand-etkinlik yok: insan önceliği yalnız fareye bakar": [
   "doktor.py:134"
  ],
  "deskhand-goruntu yok (make -C deskhand/yardimci deskhand-goruntu)": [
-  "kwin_oturum.py:337"
+  "kwin_oturum.py:368"
  ],
  "deskhand-goruntu yok: ekran görüntüsü yavaş yedek yolla alınır; KWin arka planı kullanılamaz, Xvfb kullanılacak": [
   "doktor.py:136"
@@ -1743,15 +1743,15 @@
   "arka_uc/kde_goruntu.py:74"
  ],
  "değer aralık dışı ({en_az}..{en_cok})": [
-  "erisim.py:542"
+  "erisim.py:544"
  ],
  "değer yazma": [
-  "erisim.py:1068",
-  "erisim.py:1335",
-  "erisim.py:1341"
+  "erisim.py:1070",
+  "erisim.py:1337",
+  "erisim.py:1343"
  ],
  "değer yazılamadı (öge salt okunur ya da devre dışı)": [
-  "erisim.py:544"
+  "erisim.py:546"
  ],
  "değiştirici tuşlar: {mod}": [
   "eylem.py:233"
@@ -1816,15 +1816,15 @@
  ],
  "ekran görüntüsü yardımcısı başarısız (kod {kod}): {ayrinti}": [
   "arka_uc/kde_goruntu.py:95",
-  "kwin_oturum.py:1049"
+  "kwin_oturum.py:1080"
  ],
  "ekran görüntüsü yardımcısı yok (make -C deskhand/yardimci deskhand-goruntu)": [
   "arka_uc/kde_goruntu.py:83",
-  "kwin_oturum.py:1042"
+  "kwin_oturum.py:1073"
  ],
  "ekran görüntüsü yardımcısı çalışmadı: {hata}": [
   "arka_uc/kde_goruntu.py:92",
-  "kwin_oturum.py:1047"
+  "kwin_oturum.py:1078"
  ],
  "ekran görüntüsü yardımcısının çıktısı anlaşılamadı": [
   "arka_uc/kde_goruntu.py:53",
@@ -1858,13 +1858,13 @@
   "uygulama.py:287"
  ],
  "erişilebilir render aygıtı yok (/dev/dri/renderD*)": [
-  "kwin_oturum.py:333"
+  "kwin_oturum.py:364"
  ],
  "erişilebilirlik adresi oturumun at-spi dizini dışında ya da geçersiz: {adres}; bağlanılmadı": [
   "arka_ortak.py:290"
  ],
  "erişilebilirlik ağacı pencere ister (masaüstü kipi değil)": [
-  "erisim.py:775"
+  "erisim.py:777"
  ],
  "erişilebilirlik ağacı yanıt vermedi ({sayi} istek bekliyor: {hata})": [
   "web.py:113"
@@ -1885,15 +1885,15 @@
   "arka_ortak.py:265"
  ],
  "erişilebilirlik eylemi": [
-  "erisim.py:1021",
-  "erisim.py:1033",
-  "erisim.py:1068",
-  "erisim.py:1247",
-  "erisim.py:1281"
+  "erisim.py:1023",
+  "erisim.py:1035",
+  "erisim.py:1070",
+  "erisim.py:1249",
+  "erisim.py:1283"
  ],
  "erişilebilirlik eylemi pencere ister (masaüstü kipi değil)": [
-  "erisim.py:1065",
-  "erisim.py:1279"
+  "erisim.py:1067",
+  "erisim.py:1281"
  ],
  "erişilebilirlik görünmez masaüstünde hazırlanamadı (at-spi2-core): `agac` / `ogeye-tikla` / `--eylem` arka planda çalışmaz": [
   "masaustu.py:822",
@@ -1924,19 +1924,19 @@
   "erisim.py:181"
  ],
  "erişilebilirlik yardımcı süreci yanıt vermedi (çıkış {kod}): {hata}": [
-  "erisim.py:756"
+  "erisim.py:758"
  ],
  "erişilebilirlik yardımcı süreci zaman aşımına uğradı": [
-  "erisim.py:747"
+  "erisim.py:749"
  ],
  "erişilebilirlik çerçevesi tarandıktan sonra değişti (başka nesne): yeniden ara": [
-  "erisim.py:583"
+  "erisim.py:585"
  ],
  "erişilebilirlik: AÇIK": [
-  "erisim.py:858"
+  "erisim.py:860"
  ],
  "erişilebilirlik: KAPALI": [
-  "erisim.py:858"
+  "erisim.py:860"
  ],
  "eski pano içeriği ({tur}) çok büyük olduğu için geri yüklenemedi": [
   "arka_uc/kde.py:732",
@@ -1978,14 +1978,14 @@
   "mesgul.py:638"
  ],
  "eylem yapıldı: web {rol} '{ad}' → {eylem} (eylemler: {liste}), {sn} sn": [
-  "erisim.py:1271"
+  "erisim.py:1273"
  ],
  "eylem yapıldı: {rol} '{ad}' → {eylem} (eylemler: {liste}), {kademe} eşleşme, {sn} sn": [
-  "erisim.py:1317"
+  "erisim.py:1319"
  ],
  "eylem çalışmadı: '{eylem}' (öge reddetti)": [
-  "erisim.py:1270",
-  "erisim.py:1316"
+  "erisim.py:1272",
+  "erisim.py:1318"
  ],
  "fare": [
   "guvenlik.py:1118"
@@ -2031,7 +2031,7 @@
   "uygulama.py:302"
  ],
  "geçersiz Wayland soket adı: {ad}": [
-  "kwin_oturum.py:110"
+  "kwin_oturum.py:141"
  ],
  "geçersiz arka plan pencere kimliği: {kimlik}": [
   "arka_uc/kwin.py:86"
@@ -2040,7 +2040,7 @@
   "mcp_sunucu.py:2174"
  ],
  "geçersiz ekran boyutu: {boyut}": [
-  "kwin_oturum.py:765"
+  "kwin_oturum.py:796"
  ],
  "geçersiz girdi satırı": [
   "girdi_merkezi.py:471"
@@ -2121,14 +2121,14 @@
   "uygulama.py:500"
  ],
  "girdi satırında satır sonu olamaz": [
-  "kwin_oturum.py:1180"
+  "kwin_oturum.py:1211"
  ],
  "girdi yardımcısı hazır olmadı: {yanit}": [
-  "kwin_oturum.py:1157"
+  "kwin_oturum.py:1188"
  ],
  "girdi yardımcısı kapandı (çıkış {kod})": [
-  "kwin_oturum.py:1172",
-  "kwin_oturum.py:1185"
+  "kwin_oturum.py:1203",
+  "kwin_oturum.py:1216"
  ],
  "girdi yardımcısı koptu ({hata}); basılı düğmeler bırakıldı: {liste}": [
   "arka_uc/kwin.py:383"
@@ -2137,10 +2137,10 @@
   "arka_uc/kwin.py:612"
  ],
  "girdi yardımcısı {sn} sn içinde yanıt vermedi": [
-  "kwin_oturum.py:1166"
+  "kwin_oturum.py:1197"
  ],
  "girdi yardımcısı: {neden}": [
-  "kwin_oturum.py:1118"
+  "kwin_oturum.py:1149"
  ],
  "girdi: {yol}": [
   "uygulama.py:541"
@@ -2170,7 +2170,7 @@
   "cli.py:449"
  ],
  "görünmez ikinci masaüstü (arka plan kipi)": [
-  "masaustu.py:1030"
+  "masaustu.py:1034"
  ],
  "görünmez ikinci masaüstünde (sanal arka uç)": [
   "cli.py:334",
@@ -2295,7 +2295,7 @@
  ],
  "kapalı": [
   "cli.py:245",
-  "masaustu.py:1013",
+  "masaustu.py:1017",
   "oturum/cli.py:90"
  ],
  "kapalı (gerektiğinde açılır: deskhand desktop start)": [
@@ -2305,7 +2305,7 @@
   "doktor.py:162"
  ],
  "kapanmayan süreçler: {surecler}": [
-  "kwin_oturum.py:951"
+  "kwin_oturum.py:982"
  ],
  "kapanmayan süreçler: {surecler}; boş ses çıkışı bu yüzden KALDIRILMADI": [
   "masaustu.py:907"
@@ -2329,7 +2329,7 @@
   "oturum/cli.py:66"
  ],
  "kare boyutu {boyut} ≠ oturum {hedef} (ölçek 1 değil?)": [
-  "kwin_oturum.py:601"
+  "kwin_oturum.py:632"
  ],
  "kart bilgisi alanı, {n} karakter": [
   "guvenlik.py:1754"
@@ -2350,7 +2350,7 @@
   "mcp_sunucu.py:1694"
  ],
  "kaydırıldı: {yon} ({adim} adım)": [
-  "erisim.py:1175"
+  "erisim.py:1177"
  ],
  "kaydırıldı: {yon} {adim}": [
   "eylem.py:833"
@@ -2520,7 +2520,7 @@
   "doktor.py:222"
  ],
  "kwin_wayland yok": [
-  "kwin_oturum.py:324"
+  "kwin_oturum.py:355"
  ],
  "küçültme": [
   "arka_uc/__init__.py:144",
@@ -2568,7 +2568,7 @@
   "arka_uc/sanal.py:816"
  ],
  "metin yazılamadı (alan salt okunur ya da devre dışı)": [
-  "erisim.py:524"
+  "erisim.py:526"
  ],
  "meşgul ({nedenler}); ayar mesgulken=arka": [
   "mesgul.py:542"
@@ -2621,7 +2621,7 @@
   "eylem.py:1198"
  ],
  "not: Firefox ve Chromium/Electron çalışırken ağaca girmez; yeniden başlat": [
-  "erisim.py:871"
+  "erisim.py:873"
  ],
  "okunamadı ({hata}); varsayılanlar kullanılıyor": [
   "ayarlar.py:64"
@@ -2658,10 +2658,10 @@
   "eylem.py:626"
  ],
  "onay verilen hedef değişti: öge '{ad}' artık aynı yerde/aynı değil; eylem yapılmadı": [
-  "erisim.py:1263"
+  "erisim.py:1265"
  ],
  "onay verilen hedef değişti: öge '{ad}' artık aynı yerde/aynı değil; tıklanmadı": [
-  "erisim.py:1210"
+  "erisim.py:1212"
  ],
  "onay verilen hedef değişti; yeniden onay gerekir ({neden}). Eylem yapılmadı.": [
   "onay_hedef.py:105"
@@ -2706,10 +2706,10 @@
   "mcp_sunucu.py:1863"
  ],
  "oturum soketi kullanıcının gerçek soketinin sert bağı: {yol}; bağlanılmadı": [
-  "kwin_oturum.py:196"
+  "kwin_oturum.py:227"
  ],
  "oturum soketinin karşı tarafı bu oturumun {ad} süreci değil ({karsi}); bağlanılmadı": [
-  "kwin_oturum.py:200"
+  "kwin_oturum.py:231"
  ],
  "oturum veri yolu açılamadı": [
   "mesgul.py:479"
@@ -2866,7 +2866,7 @@
   "mcp_sunucu.py:136"
  ],
  "pencere yöneticisi başlatma": [
-  "masaustu.py:1037"
+  "masaustu.py:1041"
  ],
  "pencere yöneticisi istenenden farklı bir geometri verdi: istenen {istenen}, olan {olan}": [
   "eylem.py:1118"
@@ -2968,14 +2968,14 @@
   "mcp_sunucu.py:959"
  ],
  "ref'teki öge artık görüş alanında değil: eylem yapılmadı; observe çağırıp yeni ref kullan": [
-  "erisim.py:1099",
+  "erisim.py:1101",
   "mcp_sunucu.py:991"
  ],
  "ref'teki öge artık yok (arayüz değişti): eylem yapılmadı; observe çağırıp yeni ref kullan": [
-  "erisim.py:923"
+  "erisim.py:925"
  ],
  "ref'teki öge farklı ({neden}): eylem yapılmadı; observe çağırıp yeni ref kullan": [
-  "erisim.py:936"
+  "erisim.py:938"
  ],
  "renk alanı: {renk} ({x},{y}) {alan} piksel": [
   "eylem.py:1200"
@@ -2990,7 +2990,7 @@
   "mcp_sunucu.py:1447"
  ],
  "rolü değişti": [
-  "erisim.py:932"
+  "erisim.py:934"
  ],
  "rsync --delete kök/ev dizininde: eşleşmeyen her şeyi siler": [
   "guvenlik.py:738"
@@ -3013,13 +3013,13 @@
   "arka_uc/sanal.py:1305"
  ],
  "sanal masaüstü AÇIK (KWin {surum}): {ekran} {genislik}x{yukseklik} | kafes {kafes} (bellek {bellek}) | ses {ses} | XWayland {xwayland} | GPU {gpu}": [
-  "masaustu.py:1015"
+  "masaustu.py:1019"
  ],
  "sanal masaüstü AÇIK: {ekran} {genislik}x{yukseklik} | kafes {kafes} (bellek {bellek}) | ses {ses} | openbox {openbox}": [
-  "masaustu.py:1020"
+  "masaustu.py:1024"
  ],
  "sanal masaüstü KAPALI": [
-  "masaustu.py:1060"
+  "masaustu.py:1064"
  ],
  "sanal masaüstü bağlantısı koptu: {hata}": [
   "arka_uc/sanal.py:516"
@@ -3043,7 +3043,7 @@
   "mcp_sunucu.py:139"
  ],
  "sanal masaüstü kapatıldı": [
-  "masaustu.py:1054"
+  "masaustu.py:1058"
  ],
  "sanal masaüstü kaydı geçersiz (ekran no): {no}": [
   "masaustu.py:327"
@@ -3055,7 +3055,7 @@
   "cli.py:181"
  ],
  "sanal masaüstü zaten kapalı": [
-  "masaustu.py:1054"
+  "masaustu.py:1058"
  ],
  "sanal masaüstünde pencere yöneticisi yok: pencere durumu değiştirilemez": [
   "arka_uc/sanal.py:329"
@@ -3151,7 +3151,7 @@
   "guvenlik.py:772"
  ],
  "systemd-run yok: bellek kafesi kurulamaz (bilerek kapatmak için DESKHAND_SANAL_BELLEK=0)": [
-  "kwin_oturum.py:769",
+  "kwin_oturum.py:800",
   "masaustu.py:643"
  ],
  "süre 0-30 sn olmalı": [
@@ -3188,7 +3188,7 @@
   "doktor.py:89"
  ],
  "sınırsız": [
-  "masaustu.py:1012"
+  "masaustu.py:1016"
  ],
  "tam ekran": [
   "mesgul.py:551"
@@ -3251,7 +3251,7 @@
   "oturum/cli.py:75"
  ],
  "tümleşik GPU ({dugum}) ile açılamadı ({hata}); varsayılan GPU kullanılıyor": [
-  "kwin_oturum.py:754"
+  "kwin_oturum.py:785"
  ],
  "tümleşik {dugum}": [
   "doktor.py:204"
@@ -3260,8 +3260,8 @@
   "cli.py:359"
  ],
  "tıklama": [
-  "erisim.py:997",
-  "erisim.py:1229",
+  "erisim.py:999",
+  "erisim.py:1231",
   "eylem.py:198",
   "eylem.py:575",
   "eylem.py:653",
@@ -3270,8 +3270,8 @@
   "eylem.py:1237"
  ],
  "tıklama (erişilebilirlik eylemi)": [
-  "erisim.py:1248",
-  "erisim.py:1304"
+  "erisim.py:1250",
+  "erisim.py:1306"
  ],
  "tıklama: {hedef} @ {pencere}": [
   "mcp_sunucu.py:1448"
@@ -3324,7 +3324,7 @@
  ],
  "var": [
   "gui/metinler.py:180",
-  "masaustu.py:1021"
+  "masaustu.py:1025"
  ],
  "var (panel hazır girdi sunuyor)": [
   "doktor.py:119"
@@ -3389,7 +3389,7 @@
  "yanıt yok": [
   "arka_ortak.py:888",
   "arka_uc/sanal.py:782",
-  "kwin_oturum.py:1157",
+  "kwin_oturum.py:1188",
   "masaustu.py:785"
  ],
  "yardımcı süreç kapandı": [
@@ -3444,18 +3444,18 @@
   "eylem.py:373"
  ],
  "yazıldı: {rol} '{ad}' ← {karakter} karakter ({yontem}){dogrulandi}, {kademe} eşleşme": [
-  "erisim.py:1358"
+  "erisim.py:1360"
  ],
  "yeri/boyutu değişti": [
-  "erisim.py:934"
+  "erisim.py:936"
  ],
  "yetki/kabuk programına bağlantı (adını gizler)": [
   "guvenlik.py:725"
  ],
  "yok": [
   "gui/metinler.py:181",
-  "masaustu.py:1017",
   "masaustu.py:1021",
+  "masaustu.py:1025",
   "mcp_sunucu.py:1083",
   "oturum/cli.py:89"
  ],
@@ -3476,7 +3476,7 @@
   "mcp_sunucu.py:136"
  ],
  "zaten açık": [
-  "masaustu.py:1047"
+  "masaustu.py:1051"
  ],
  "zaten açıktı, öne geldi ({sn} sn)": [
   "uygulama.py:774"
@@ -3526,7 +3526,7 @@
   "arka_uc/kwin.py:460"
  ],
  "{arac} yok (ya da güvenli dizinde değil: /usr/bin, /bin)": [
-  "kwin_oturum.py:331"
+  "kwin_oturum.py:362"
  ],
  "{arac} {sn} sn içinde bitmedi": [
   "arka_uc/kde.py:642",
@@ -3666,7 +3666,7 @@
   "oturum/cli.py:129"
  ],
  "{sayi} süreç SIGKILL ile kapatıldı": [
-  "kwin_oturum.py:948",
+  "kwin_oturum.py:979",
   "masaustu.py:904"
  ],
  "{sn} sn içinde bitmedi; adımlar: {adimlar}": [
@@ -3760,7 +3760,7 @@
   "arka_ortak.py:353"
  ],
  "çalışma dizini yolu çok uzun (soket yolu 108 bayt sınırı): {dizin}": [
-  "kwin_oturum.py:783"
+  "kwin_oturum.py:814"
  ],
  "çalışmıyor: hassas eylem onayı ve DUR/Devral düğmeleri yok": [
   "doktor.py:97"
@@ -3794,31 +3794,31 @@
   "cli.py:388"
  ],
  "öge artık yok ya da değişti (arayüz güncellendi): yeniden ara": [
-  "erisim.py:458"
+  "erisim.py:460"
  ],
  "öge eylem arayüzü sunmuyor (Action yok)": [
-  "erisim.py:503"
+  "erisim.py:505"
  ],
  "öge eylem arayüzü sunmuyor (Action yok): fare ile tıkla": [
   "web.py:650"
  ],
  "öge eylem arayüzü sunmuyor (Action yok): fare ile tıkla (--eylem olmadan)": [
-  "erisim.py:1290"
+  "erisim.py:1292"
  ],
  "öge kimliği yok (yol_ver)": [
   "web.py:636"
  ],
  "öge konumu doğrulanamadı (erişilebilirlik çerçeve sınırı pencere geometrisine uymuyor); tıklanmadı. OCR ile metne tıklamayı dene (click-text)": [
-  "erisim.py:1114"
+  "erisim.py:1116"
  ],
  "öge konumu doğrulanamadı; tıklanmadı": [
-  "erisim.py:1173"
+  "erisim.py:1175"
  ],
  "öge yazılabilir değil (EditableText ya da Value arayüzü yok)": [
-  "erisim.py:546"
+  "erisim.py:548"
  ],
  "öge yazılabilir değil (EditableText ya da Value arayüzü yok): '{ad}'": [
-  "erisim.py:1330"
+  "erisim.py:1332"
  ],
  "ölçek {olcek}": [
   "gorsel.py:234"
@@ -3839,16 +3839,16 @@
   "masaustu.py:743"
  ],
  "özel D-Bus (dbus-daemon) açılmadı: {hata}": [
-  "kwin_oturum.py:838"
+  "kwin_oturum.py:869"
  ],
  "özel veri yolu adresi beklenenden farklı: {adres}": [
-  "kwin_oturum.py:817"
+  "kwin_oturum.py:848"
  ],
  "özel veri yolu adresi kullanıcının gerçek oturum adresiyle aynı ({adres}); bağlanılmadı": [
-  "kwin_oturum.py:107"
+  "kwin_oturum.py:138"
  ],
  "özel veri yolu adresi unix:path= biçiminde olmalı: {adres}": [
-  "kwin_oturum.py:102"
+  "kwin_oturum.py:133"
  ],
  "özel veri yolu kancası {kanca} başarısız: {hata}": [
   "masaustu.py:625",
@@ -3858,7 +3858,7 @@
   "masaustu.py:367"
  ],
  "özel veri yolu süreci bu oturumun yapılandırmasıyla çalışmıyor; bağlanılmadı": [
-  "kwin_oturum.py:203"
+  "kwin_oturum.py:234"
  ],
  "İNSAN ÖNCELİĞİ: kullanıcı fareyi YA DA klavyeyi kullanıyorsa (Wayland boşta bildirimi, yetkisiz) girdi\ngönderilmez: 1,5 sn sessizlik beklenir (en çok 8 sn), olmazsa 12. Basılı tutarken insan girdisi → hemen bırakır.": [
   "cli.py:43"

@@ -396,7 +396,9 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
     """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi, çerçeveden çocuk-sıra yolu. Wayland'de
     ekran koordinatı yok → çerçeveye göre (WINDOW) konum + pencere dekorasyonu payı (pencere boyutu − AT-SPI boyutu).
     kimlik_ver: her ögeye `kimlik` = [veri yolu adı, nesne yolu] (MCP ref doğrulaması); ayrinti: + durumlar, eylemler,
-    değer (observe). Parola alanının (`password text`) değeri hiçbir koşulda okunmaz."""
+    değer (observe). Parola alanının (`password text`) değeri hiçbir koşulda okunmaz.
+    etkin = SENSITIVE: GTK4 (zenity, Nautilus…) ENABLED durumunu HİÇ bildirmez (ölçüldü: tüm düğmeler 'devre dışı'
+    görünüp tıklama reddediliyordu); Qt/GTK3 devre dışı ögede SENSITIVE'i de kaldırır."""
     X, Y, W, H = geo
     WIN = Atspi.CoordType.WINDOW
     fe = cerceve.get_extents(WIN)
@@ -424,7 +426,7 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
         if d > 0 and kutu_ and kutu_[2] > 0 and kutu_[3] > 0:
             oge = {"rol": rol, "ad": ad, "x": kutu_[0], "y": kutu_[1], "w": kutu_[2], "h": kutu_[3],
                    "cx": kutu_[0] + kutu_[2] / 2, "cy": kutu_[1] + kutu_[3] / 2,
-                   "etkin": ss.contains(S.ENABLED) and ss.contains(S.SENSITIVE), "derinlik": d, "yol": yol}
+                   "etkin": ss.contains(S.SENSITIVE), "derinlik": d, "yol": yol}
             if kimlik_ver or ayrinti:
                 oge["kimlik"] = _hizli_kimlik(o)
             if ayrinti:

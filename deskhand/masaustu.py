@@ -971,7 +971,8 @@ def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, g
         argv.insert(argv.index("run") + 1, "--nosocket=pulseaudio")
     if tur(d) == "kwin":  # Gecko (Firefox…) XWayland'den: yerel Wayland'de erişilebilirlik koordinatları mutlak değil
         from . import kwin_oturum
-        env = {**kwin_oturum.gecko_ipuclari(argv), **(env or {})} or None
+        argv, chromium_env = kwin_oturum.chromium_x11(argv)  # Chromium/Electron: aynı gerekçe (--ozone-platform=x11)
+        env = {**kwin_oturum.gecko_ipuclari(argv), **chromium_env, **(env or {})} or None
     try:
         return korumali_baslat(d, argv, uygulama_ortami(d, env), uygulama_baglari(d), kopya=kopya, girdi=girdi,
                                **popen)
