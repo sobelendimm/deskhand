@@ -513,7 +513,7 @@ from PyQt6.QtGui import QKeyEvent  # noqa: E402
 
 for tus, metin in ((Qt.Key.Key_A, "a"), (Qt.Key.Key_unknown, "ş")):  # QTest.keyClicks Latin-1 dışını kabul etmiyor
     QApplication.sendEvent(on, QKeyEvent(QEvent.Type.KeyPress, tus, Qt.KeyboardModifier.NoModifier, metin))
-kontrol("Türkçe karakter: key a, key ş", g.satirlar == ["key a", "key ş"], str(g.satirlar))
+kontrol("Türkçe karakter: type a, type ş (karakter olarak)", g.satirlar == ["type a", "type ş"], str(g.satirlar))
 g.satirlar.clear()
 QTest.keyClick(on, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
 QTest.keyClick(on, Qt.Key.Key_Return)
@@ -524,7 +524,7 @@ g.satirlar.clear()
 QTest.keyClick(on, Qt.Key.Key_Space)
 QTest.keyClick(on, Qt.Key.Key_Plus, Qt.KeyboardModifier.NoModifier)
 kontrol("boşluk ve + doğru adla", g.satirlar[:1] == ["key space"] and (len(g.satirlar) == 1 or
-                                                                      g.satirlar[1] in ("key x:plus",)), str(g.satirlar))
+                                                                      g.satirlar[1] in ("type +",)), str(g.satirlar))
 g.satirlar.clear()
 guvenlik.dur_ac("kullanici")
 QTest.keyClick(on, Qt.Key.Key_A)
@@ -566,7 +566,15 @@ from deskhand.gui.onizleme import tus_satirlari  # noqa: E402
 
 M = Qt.KeyboardModifier
 kontrol("tuş: Shift tek başına → yok", tus_satirlari(Qt.Key.Key_Shift, "", M.ShiftModifier) == [])
-kontrol("tuş: büyük Ç → key Ç", tus_satirlari(Qt.Key.Key_Ccedilla, "Ç", M.ShiftModifier) == ["key Ç"])
+kontrol("tuş: büyük Ç → type Ç", tus_satirlari(Qt.Key.Key_Ccedilla, "Ç", M.ShiftModifier) == ["type Ç"])
+# Devral yazısı KARAKTER olarak gider (`key i` KEY_I'ydi → Türkçe Q düzeninde "ı" çıkıyordu; parola girişinde hata)
+for _k, _m, _beklenen in ((Qt.Key.Key_I, "i", "type i"), (Qt.Key.Key_I, "ı", "type ı"), (Qt.Key.Key_I, "İ", "type İ"),
+                          (Qt.Key.Key_At, "@", "type @"), (Qt.Key.Key_Period, ".", "type ."),
+                          (Qt.Key.Key_Plus, "+", "type +"), (Qt.Key.Key_Q, "q", "type q")):
+    kontrol(f"tuş: {_m!r} → {_beklenen!r} (düzenden bağımsız)", tus_satirlari(_k, _m, M.NoModifier) == [_beklenen],
+            str(tus_satirlari(_k, _m, M.NoModifier)))
+kontrol("tuş: boşluk → key space", tus_satirlari(Qt.Key.Key_Space, " ", M.NoModifier) == ["key space"])
+kontrol("tuş: ctrl+i kısayolu yine tuş adıyla (key ctrl+i)", tus_satirlari(Qt.Key.Key_I, "\t", M.ControlModifier) == ["key ctrl+i"])
 kontrol("tuş: ctrl+shift+t", tus_satirlari(Qt.Key.Key_T, "\x14", M.ControlModifier | M.ShiftModifier) ==
         ["key ctrl+shift+t"])
 kontrol("tuş: alt+F4", tus_satirlari(Qt.Key.Key_F4, "", M.AltModifier) == ["key alt+f4"])

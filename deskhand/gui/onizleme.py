@@ -53,7 +53,9 @@ def tus_satirlari(tus: int, metin: str, mods: Qt.KeyboardModifier) -> list[str]:
     meta = bool(mods & Qt.KeyboardModifier.MetaModifier)
     shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
     if not (ctrl or alt or meta) and metin and tus not in TUS_ADLARI and all(c.isprintable() for c in metin):
-        return [f"key {_karakter_tusu(c)}" for c in metin]  # Türkçe/büyük harf: sanal arka uç keysym ile (Shift dahil)
+        # Yazı KARAKTER olarak gider (`type`): arka uç kendi klavye haritasında karakteri üreten tuşu (+Shift/AltGr)
+        # bulur. `key i` tuş ADI olarak KEY_I'ye gidiyordu → Türkçe Q düzeninde "ı" çıkıyordu (Devral'da parola!).
+        return ["key space" if c == " " else f"type {c}" for c in metin]
     ad = TUS_ADLARI.get(tus)
     if ad is None:
         v = int(tus.value)
