@@ -9,7 +9,7 @@ import re
 import os
 import sys
 
-from . import __version__, guvenlik, yollar
+from . import __version__, desen, guvenlik, yollar
 from .akis import k_akis
 from .arka_uc import ARKA_ONEK, hedef_ad, sec
 from .doktor import k_doktor
@@ -502,6 +502,9 @@ def main(argv=None):
     guvenlik.SINIF_DESEN = a.sinif
     onceki = au = None
     try:
+        for alan in ("baslik", "sinif", "kimlik", "desen"):  # ajanın verdiği düzenli ifadeler: ReDoS sınırı (desen.py)
+            if isinstance(getattr(a, alan, None), str):
+                desen.denetle(getattr(a, alan))
         if a.komut in GIRDI_KOMUTLARI or a.komut == "ac":
             dur_denetle()  # DUR anahtarı açıkken hiçbir şeye başlama
         if a.komut not in KOMUTSUZ_ARKA_UC:

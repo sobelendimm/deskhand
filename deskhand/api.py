@@ -28,6 +28,7 @@ from PIL import Image, ImageDraw
 
 from . import yollar
 from .arka_uc import ARKA_ONEK, EKRAN, hedef_sabit, sec
+from . import desen as _desen
 from .hata import Dur
 from .i18n import _
 
@@ -188,6 +189,7 @@ def pencere(arg: str | None) -> str:
     """Pencere kimliği (başlık deseni / kimlik / None = tüm ekran)."""
     if arg is None or str(arg).strip().lower() in ("", "ekran", "screen", "desktop", "masaustu", "masaüstü"):
         return EKRAN
+    _desen.denetle(str(arg))  # ajanın deseni: ReDoS sınırı (kimlikler uzunluk/kalıp denetiminden etkilenmez)
     au = arka()
     if au.ad == "kde" and str(arg).startswith(ARKA_ONEK):
         raise Dur(8, _("'{pencere}' görünmez masaüstünün penceresi; desktop='background' ile kullan").format(pencere=arg))
@@ -222,6 +224,7 @@ def yasak_mi(k: str) -> str | None:
 
 
 def pencereler(desen: str | None = None) -> list[dict]:
+    _desen.denetle(desen)
     au = arka()
     sonuc = []
     for k, b, geo in au.pencereler(desen):
@@ -557,6 +560,7 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     from .gunluk import gunluk
     from .guvenlik import baslatma_komut_engel, baslatma_yasak_denetle
     from .uygulama import onayli_program_denetle, tum_pencereler
+    _desen.denetle(baslik)  # ajanın başlık deseni: uygulama başlatılmadan ÖNCE
     baslatma_yasak_denetle(*yasak_metinleri, *argv)
     baslatma_komut_engel(shlex.join(argv))  # yıkıcı kalıp: insan onayı (MCP yüzeyinde onaylı bayrağı yok)
     au = arka()
