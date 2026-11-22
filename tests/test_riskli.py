@@ -218,6 +218,23 @@ kontrol("riskli tuş: bas alt+sysrq+b birlikte → riskli", guvenlik.riskli_tus(
 for ham, beklenen in (("control+alt+del", True), ("meta+l", True), ("ctrl+alt+f4", True), ("ctrl+s", False)):
     kontrol(f"tus_coz → riskli_tus: {ham!r} → {beklenen}", (guvenlik.riskli_tus(eylem.tus_coz(ham)) is not None) == beklenen)
 
+# güç / uyku / kilit / oturum kapatma tuşları: değiştiricisiz TEK tuş da riskli; KDE onaysız kapatma kısayolları
+GUC_TUSLARI = ["power", "sleep", "wakeup", "coffee", "suspend", "k:116", "k:142", "k:143", "k:152", "k:205",
+               "x:XF86PowerOff", "x:XF86PowerDown", "x:XF86Sleep", "x:XF86Suspend", "x:XF86Hibernate",
+               "x:XF86ScreenSaver", "x:XF86LogOff", "x:XF86WakeUp", "x:0x1008ff2a", "shift+power", "a power",
+               "ctrl+alt+shift+delete", "ctrl+alt+shift+pageup", "ctrl+alt+shift+pagedown", "ctrl+alt+shift+page_down",
+               "ctrl+alt+shift+next", "ctrl+alt+shift+x:Prior", "ctrl+alt+shift+k:109", "ctrl+alt+shift+k:104"]
+for t in GUC_TUSLARI:
+    kontrol(f"güç/kilit tuşu: riskli_tus(tus_coz({t!r})) → neden", guvenlik.riskli_tus(eylem.tus_coz(t)) is not None,
+            str(guvenlik.riskli_tus(eylem.tus_coz(t))))
+for t in ("pagedown", "pageup", "ctrl+pagedown", "ctrl+shift+pageup", "ctrl+alt+pagedown", "shift+delete", "homepage"):
+    kontrol(f"güç/kilit tuşu değil: {t!r}", guvenlik.riskli_tus(eylem.tus_coz(t)) is None)
+kontrol("güç tuşu: bas (birlikte) 'ctrl alt shift pagedown' aynı anda → riskli",
+        guvenlik.riskli_tus("ctrl alt shift pagedown", birlikte=True) is not None)
+for t in ("power", "k:116", "suspend", "k:205"):
+    kontrol(f"güç tuşu: bas {t!r} birlikte=True → riskli", guvenlik.riskli_tus(eylem.tus_coz(t, ayri_tuslar=True),
+                                                                          birlikte=True) is not None)
+
 # ================================================================ 2. uçbirim komutları
 POZITIF_KOMUT = [
     "rm -rf /", "rm -rf ~", "rm -rf $HOME", "rm -rf *", "rm -rf ./*", "rm -r build", "rm -Rf x", "rm -fr x", "rm -f -r x",
@@ -341,6 +358,13 @@ for ad_ in ("kde", "sanal"):
         kontrol(f"[{ad_}] bas ctrl+alt+delete: red → 10", kod == 10)
         kod = kod_al(eylem.k_bas, ns(tuslar="w+d", sure=0.05))
         kontrol(f"[{ad_}] bas w+d (sıradan) → serbest", kod == 0)
+        for tus in ("power", "k:116", "sleep", "x:XF86Suspend", "ctrl+alt+shift+pagedown"):
+            for f_, a_ in ((eylem.k_tus, ns(kombinasyon=tus)), (eylem.k_bas, ns(tuslar=tus, sure=0.05))):
+                ISTEKLER.clear()
+                n0 = len(au.satirlar)
+                kod = kod_al(f_, a_)
+                kontrol(f"[{ad_}] {f_.__name__} {tus!r}: güç/kilit tuşu onay ister, red → 10, girdi yok",
+                        kod == 10 and len(ISTEKLER) == 1 and len(au.satirlar) == n0, f"{kod} {len(ISTEKLER)}")
         # ---- dizi / akış adımları aynı yoldan
         a_ = argparse.Namespace(kimlik="{w}", kimlik_ham="{w}", baslik=None, onayli_izin=False)
         n0 = len(au.satirlar)

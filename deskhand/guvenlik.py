@@ -137,11 +137,24 @@ _TUS_ESANLAM.update({"kpinsert": "insert", "xf86paste": "paste", "apps": "menu",
                      "return": "enter", "kp_enter": "kpenter", "iso_enter": "enter", "3270_enter": "enter",
                      "leftshift": "shift", "rightshift": "shift", "shift_l": "shift", "shift_r": "shift",
                      "escape": "esc", "ins": "insert", "kp_insert": "insert"})
+# Güç / uyku / kilit / oturum kapatma tuşları (dotool adları, XF86 keysym adları; değiştiricisiz tek tuş da riskli)
+_TUS_ESANLAM.update({"pgup": "pageup", "pgdown": "pagedown", "page_up": "pageup", "page_down": "pagedown",
+                     "prior": "pageup", "next": "pagedown", "kp_prior": "pageup", "kp_next": "pagedown",
+                     "poweroff": "power", "xf86poweroff": "power", "powerdown": "power", "xf86powerdown": "power",
+                     "xf86sleep": "sleep", "standby": "sleep", "xf86standby": "sleep",
+                     "xf86wakeup": "wakeup", "wake": "wakeup",
+                     "coffee": "screenlock", "screensaver": "screenlock", "xf86screensaver": "screenlock",
+                     "xf86coffee": "screenlock", "lock": "screenlock",
+                     "xf86suspend": "suspend", "xf86hibernate": "hibernate", "hibernate": "hibernate",
+                     "logoff": "logoff", "xf86logoff": "logoff", "logout": "logoff"})
+_GUC_TUSLARI = {"power", "sleep", "wakeup", "screenlock", "suspend", "hibernate", "logoff"}
 _EVDEV_AD = {29: "ctrl", 97: "ctrl", 56: "alt", 100: "alt", 125: "super", 126: "super", 111: "delete", 14: "backspace",
              99: "sysrq", 38: "l", **{59 + i: f"f{i + 1}" for i in range(10)}, 87: "f11", 88: "f12",
              28: "enter", 96: "kpenter", 101: "linefeed", 47: "v", 110: "insert", 36: "j", 50: "m", 24: "o",
              42: "shift", 54: "shift", 1: "esc", 46: "c", 22: "u", 15: "tab", 207: "paste", 127: "menu",
-             139: "menu", 25: "p", 21: "y", 18: "e", 41: "grave", 20: "t", 62: "f4"}
+             139: "menu", 25: "p", 21: "y", 18: "e", 41: "grave", 20: "t", 62: "f4",
+             104: "pageup", 109: "pagedown", 116: "power", 142: "sleep", 143: "wakeup", 152: "screenlock",
+             205: "suspend"}
 _KEYSYM_AD = {0xffe3: "ctrl", 0xffe4: "ctrl", 0xffe9: "alt", 0xffea: "alt", 0xfe03: "alt", 0xffe7: "super",
               0xffe8: "super", 0xffeb: "super", 0xffec: "super", 0xffff: "delete", 0xff08: "backspace",
               0xff15: "sysrq", 0x6c: "l", 0x4c: "l", **{0xffbe + i: f"f{i + 1}" for i in range(12)},
@@ -149,7 +162,11 @@ _KEYSYM_AD = {0xffe3: "ctrl", 0xffe4: "ctrl", 0xffe9: "alt", 0xffea: "alt", 0xfe
               0x76: "v", 0x56: "v", 0xff63: "insert", 0xff9e: "insert", 0x6a: "j", 0x4a: "j", 0x6d: "m", 0x4d: "m",
               0x6f: "o", 0x4f: "o", 0xffe1: "shift", 0xffe2: "shift", 0xff1b: "esc", 0x63: "c", 0x43: "c",
               0x75: "u", 0x55: "u", 0xff09: "tab", 0x1008ff6d: "paste", 0xff67: "menu", 0xff20: "compose",
-              0x70: "p", 0x50: "p", 0x79: "y", 0x59: "y", 0x65: "e", 0x45: "e", 0xffc7: "f10", 0x60: "grave"}
+              0x70: "p", 0x50: "p", 0x79: "y", 0x59: "y", 0x65: "e", 0x45: "e", 0xffc7: "f10", 0x60: "grave",
+              0xff55: "pageup", 0xff56: "pagedown", 0xff9a: "pageup", 0xff9b: "pagedown",
+              0x1008ff2a: "power", 0x1008ff21: "power", 0x1008ff2f: "sleep", 0x1008ff10: "sleep",
+              0x1008ff2b: "wakeup", 0x1008ff2d: "screenlock", 0x1008ff2c: "screenlock", 0x1008ffa7: "suspend",
+              0x1008ffa8: "hibernate", 0x1008ff61: "logoff"}
 _FTUS = re.compile(r"f([1-9]|1[0-2])")
 
 
@@ -174,6 +191,12 @@ def _tus_kanonik(t):
 def _akor_riski(tuslar):
     """Birlikte basılan kanonik tuş kümesi → neden | None."""
     ctrl, alt, ust = "ctrl" in tuslar, "alt" in tuslar, "super" in tuslar
+    guc = sorted(tuslar & _GUC_TUSLARI)
+    if guc:  # değiştiricisiz tek tuş da: kapatır/uyutur/kilitler/oturumu kapatır
+        return _("{tus} tuşu: bilgisayarı kapatabilir, uyutabilir, ekranı kilitleyebilir ya da oturumu kapatabilir").format(
+            tus=guc[0].capitalize())
+    if ctrl and alt and "shift" in tuslar and tuslar & {"delete", "pageup", "pagedown"}:
+        return _("Ctrl+Alt+Shift+Delete/PageUp/PageDown: onaysız oturum kapatma / yeniden başlatma / kapatma")
     if ctrl and alt:
         if "delete" in tuslar:
             return _("Ctrl+Alt+Delete: oturum/güç menüsünü açar")
@@ -251,7 +274,9 @@ def riskli_tus(kombinasyon, birlikte=False):
     Yasak DEĞİL: çağıran insan onayı ister (riskli_tus_engel). kombinasyon: eylem.tus_coz çıktısı ya da ham metin
     ('ctrl+alt+delete', 'x:Delete', 'k:111', boşlukla ayrılmış akorlar).
     Dar kapsam: ctrl+alt+delete, ctrl+alt+backspace, ctrl+alt+f1…f12 (sanal uçbirim), meta+l ve ctrl+alt+l (ekran
-    kilidi), alt+sysrq+tuş. birlikte=True (bas: boşlukla ayrılmış tuşlar AYNI ANDA basılı kalır): tek küme sayılır."""
+    kilidi), alt+sysrq+tuş, ctrl+alt+shift+delete/pageup/pagedown (KDE: onaysız oturum kapatma/yeniden başlatma/
+    kapatma) ve değiştiricisiz tek başına güç/uyku/uyandırma/kilit/askıya alma/hazırda bekletme/oturum kapatma tuşları
+    (power, sleep, wakeup, coffee/screensaver, suspend, XF86PowerOff…, k:116/142/143/152/205). birlikte=True (bas: boşlukla ayrılmış tuşlar AYNI ANDA basılı kalır): tek küme sayılır."""
     akorlar = [[_tus_kanonik(t) for t in akor.split("+") if t] for akor in (kombinasyon or "").split()]
     kumeler = [set(a) for a in akorlar]
     if birlikte and len(akorlar) > 1:
