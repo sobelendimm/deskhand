@@ -519,7 +519,7 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     Yasak uygulama başlatılmaz (10)."""
     from .gunluk import gunluk
     from .guvenlik import baslatma_komut_engel, baslatma_yasak_denetle
-    from .uygulama import tum_pencereler
+    from .uygulama import onayli_program_denetle, tum_pencereler
     baslatma_yasak_denetle(*yasak_metinleri, *argv)
     baslatma_komut_engel(shlex.join(argv))  # yıkıcı kalıp: insan onayı (MCP yüzeyinde onaylı bayrağı yok)
     au = arka()
@@ -530,6 +530,7 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     os.makedirs(yollar.cikti(), exist_ok=True)
     log = os.path.join(yollar.cikti(), f"ac-{time.strftime('%H%M%S')}-{os.getpid()}.log")
     with open(log, "w") as fp:
+        onayli_program_denetle()  # onaylı kullanıcı girdisinin programı onaydan sonra değiştiyse başlatılmaz (10)
         try:
             au.baslat(argv, env=env, cikti=fp)
         except TypeError:  # cikti desteklemeyen arka uç

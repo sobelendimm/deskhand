@@ -51,6 +51,7 @@ deskhand/
   mesgul.py        kullanıcı meşgul mü (oyun / film) koruması
   onay.py          insan onayı protokolü (§8): istek dosyası + panelin doğrulanmış onay kanalı (Unix soketi)
   onay_hedef.py    onay verilen hedefin özeti (kimlik, başlık, geometri, bölge görüntüsü) + onay sonrası doğrulama (§8)
+  liste_koruma.py  yasak/seviye listeleri: panel yetkili kaynak (bellek, geri yazma, işaret, kanaldan okuma; §4)
   girdi_merkezi.py panelin içinde hazır bekleyen tek dotool + RUNTIME_DIR/girdi.sock (Qt'siz; §2, §4)
   gui/             panel, tepsi, onay diyaloğu
   fark.py          eylem öncesi/sonrası ekran farkı (changed, changed_region, changed_ratio; NumPy, imleç dayanıklı)
@@ -283,7 +284,28 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   olan dosya/klasörün MUTLAK yolu; `-` ile başlayan, `=` içeren (URL dışı), başka şemalı, denetim karakterli,
   çalıştırılabilir dosya ya da `.desktop` gösteren argüman → 10 (en çok 16). Başlatılan sürecin ortamına ajan
   değişken veremez (yalnız oturum politikasının `env_ek`'i). Görünmez masaüstünde oturum köprüsü yoksa hiçbir
-  uygulama başlatılmaz (10). GUI içinden kabuk açan uygulamalar (dosya yöneticisinin gömülü uçbirimi, IDE konsolu) bu denetimin kapsamı dışındadır.
+  uygulama başlatılmaz (10). **Kod barındıran uygulamalar** (`uygulama.KOD_BARINDIRAN`, tek sabit liste; .desktop
+  kimliğinin parçaları, Exec programları ve Flatpak kimliği sürüm ekleri atılarak karşılaştırılır: lutris,
+  protontricks, winetricks, wine, steam, heroic, gameconqueror/scanmem, libreoffice, gimp, blender, krita, inkscape,
+  godot, IDE'ler (code/codium/kdevelop/qtcreator/JetBrains…), jupyter, IDLE, obs, darktable…) sistem girdisi olsalar
+  da insan onayı ister (belgeyi kod olarak işler ya da arayüzünden kod çalıştırır). Belge argümanında yürütülebilir
+  türler (`YURUTULEBILIR_TURLER`: .bat .cmd .exe .msi .ps1 .py .sh .bash .lua .pl .rb .js .jar .AppImage .desktop
+  .yml/.yaml .docm .xlsm .pptm …; yol ve file:// URL'si) her uygulama için 10. Onaylı kullanıcı girdisinde Exec
+  programı kullanıcıya aitse içeriğinin sha256'sı onay anında alınır ve başlatmadan hemen önce (`api.uygulama_ac` →
+  `uygulama.onayli_program_denetle`) karşılaştırılır; değiştiyse 10. **Sınır:** MCP-yalnız ajan kod çalıştıramaz;
+  GUI betik konsolları (makro düzenleyici, Python konsolu, IDE uçbirimi) yalnız insanın onayladığı uygulamaların
+  içindedir. Gömülü uçbirimli uygulamalar (dosya yöneticisi, kate) onaysız açılır; uçbirim panellerine yazı Enter
+  kuralıyla korunur.
+- **Ayar dosyaları: panel yetkili kaynak** (`liste_koruma.py`). Yasak listesi ve seviye dosyası ajanın kendi
+  araçlarıyla (uçbirimde `rm`, dosya yöneticisinde silme, düzenleyicide boşaltma) kaldırılamaz: panel açılışta iki
+  dosyayı okuyup BELLEKTE tutar; dosyayı yalnız kendi Kaydet'i yazar; dosya dışarıdan değişir ya da silinirse
+  (QFileSystemWatcher + 2 sn yoklama) panel kendi içeriğini korur, dosyayı geri yazar ve uyarır (günlük satırı +
+  tepsi bildirimi). Panel her yazışta `STATE_DIR/liste-<tur>.isaret` {sha256, icerik} bırakır; açılırken dosya
+  işaretle uyuşmuyorsa işaretteki kayıt geri yüklenir. CLI ve MCP listeleri onay kanalından alır (`liste
+  yasak|seviye` → `icerik <n>` + metin | `yok`; kanal doğrulaması §8 ile aynı; istemci 0,3 sn önbellek). Panel
+  kapalıysa dosyadan okunur; işaret VAR ama dosya yok ya da işaretle uyuşmuyorsa Dur 10 ("Deskhand ayar dosyası kayıp
+  ya da panel dışında değişti; … paneli açın"), hiçbir girdi gönderilmez. İşaret yoksa (ilk kurulum) eski davranış.
+  Dosyayı elle düzenlemek desteklenmez: değişiklikler panelin Ayarlar'ından yapılır.
 - **Bekleyen onay = girdi yok (MCP).** Bir masaüstünde (kde/sanal) insan onayı beklenirken O masaüstüne giden her
   girdi aracı (click, type_text, press_key, scroll, drag, manage_window, clipboard write, run_flow, open_app) kilidi
   alır almaz beklemeden `[7] onay bekleniyor` ile reddedilir (`mcp_sunucu.kilitli(girdi=True)`); kayıt kilit
@@ -408,7 +430,8 @@ Hassas eylem (hassas düğme, ödeme sayfası, yasak dışı ama riskli `ac`, ot
   **Onay kanalı:** panel `RUNTIME_DIR/onay/kanal.sock` Unix soketini dinler (0600, dizin 0700; `panel_kaydet` açar,
   `panel_sil` kapatır; Qt'siz iş parçacıklı sunucu). İsteyen ÖNCE kanala bağlanır ve karşı tarafı doğrular: soket
   dosyası ve dizin kendisinin ve başkalarına kapalı; SO_PEERCRED uid = kendi uid, pid = panel.pid'deki pid, aynı
-  başlangıç zamanı, aynı exe ve kayıttakiyle BİREBİR aynı cmdline. Doğrulanamazsa red ("onay kanalı doğrulanamadı", günlüğe neden).
+  başlangıç zamanı, aynı exe, kayıttakiyle BİREBİR aynı cmdline ve cwd, panelin yüklediği deskhand paket dizini
+  (kayıtta `paket`) isteyeninkiyle aynı. Doğrulanamazsa red ("onay kanalı doğrulanamadı", günlüğe neden).
   İstek: `RUNTIME_DIR/onay/istek-<uuid>.json` {id, eylem, hedef, ayrinti, masaustu, zaman, son_zaman, pid, goruntu};
   ardından kanala `bekle <uuid>`. Panel bağlananın SO_PEERCRED pid'ini isteğin `pid` alanıyla karşılaştırır (başka
   süreç başkasının kararını alamaz). Panel (QFileSystemWatcher) diyalog açar: **Bir kez izin ver / Reddet** (+ hedefin
