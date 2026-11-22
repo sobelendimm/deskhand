@@ -523,7 +523,9 @@ kontrol("çökme: KWin ölünce durum() None (bayat kayıt bağlanmaz)", masaust
         dur_kodu(sec(arka_bayragi=True).goruntu) == 14)
 d3_ = masaustu.masaustu_baslat("800x600")
 kalinti = {"dizin": os.path.exists(d2_["calisma"]),
-           "kilit": [n for n in (d2_["x_ana"], d2_["x_ana"] + 1) if os.path.exists(f"/tmp/.X{n}-lock")],
+           # eski oturumun kilidi kalmadı (aynı numarayı yeni oturum yeniden almış olabilir: onunki sayılmaz)
+           "kilit": [n for n in (d2_["x_ana"], d2_["x_ana"] + 1) if os.path.exists(f"/tmp/.X{n}-lock")
+                     and n not in (d3_["x_ana"], d3_["x_ana"] + 1)],
            "surec": [a for a, p in d2_["pid"].items() if masaustu._canli(p)]}
 kontrol("çökme: yeni başlatma eskisinin kalıntılarını temizledi (dizin, X kilitleri, süreçler)",
         not kalinti["dizin"] and not kalinti["kilit"] and not kalinti["surec"] and masaustu.tur(d3_) == "kwin",

@@ -1,6 +1,10 @@
-"""Görünmez ikinci masaüstü (sanal arka uç) yaşam döngüsü: `deskhand masaustu baslat|durdur|durum`.
+"""Görünmez ikinci masaüstü (arka plan) yaşam döngüsü: `deskhand masaustu baslat|durdur|durum`. TEK giriş noktası, iki
+tür: koşullar uygunsa yalıtık KWin oturumu (kwin_oturum.py; ek güvenceler burada: kancalar, erişilebilirlik kayıt
+defteri, bildirim yakalayıcı), değilse aşağıdaki Xvfb masaüstü (secilen_tur; test/tanılama: DESKHAND_ARKA_TUR).
+durum() tek durum kaynağıdır (d["tur"]); _kapat_ic / uygulama_ortami / erisim türe göre dağıtır. Ortak yapı taşları
+(kafes, ses, ortam tabanı, özel D-Bus, öncelik bekçisi) arka_ortak.py'dedir.
 
-Bileşenler (hepsi TEK bellek kafesinde: systemd-run --user --scope -p MemoryMax=… + nice 10 + ionice idle):
+Xvfb türünün bileşenleri (hepsi TEK bellek kafesinde: systemd-run --user --scope -p MemoryMax=… + nice 10 + ionice idle):
   Xvfb :N          görünmez X ekranı (-nolisten tcp, -noreset, -auth: yalnız erişim anahtarını bilen bağlanır),
                    kök zemin düz gri (OCR ön işlemesi siyahta bozuluyor)
   openbox          küçük pencere yöneticisi (akıllı yerleşim, yeni pencere odak alır, menü yok); yoksa uyarıyla çalışır

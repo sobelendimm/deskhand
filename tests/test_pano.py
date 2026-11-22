@@ -842,7 +842,9 @@ alinan = au.pano_oku()
 olcum["sanal pano_oku (Qt'nin sahip olduğu 600 KB, INCR)"] = f"{(time.perf_counter() - t) * 1000:.0f} ms"
 kontrol("sanal pano: BAĞIMSIZ sahip (Qt) 600 KB metni INCR ile birebir okunur", alinan == beklenen, f"{len(alinan or '')} / {len(beklenen)}")
 yedek = au.pano_yedekle()
-kontrol("sanal pano_yedekle: Qt sahibinden metin alınır", yedek["metin"] == beklenen and not yedek["metin_disi"])
+kontrol("sanal pano_yedekle: Qt sahibinden metin alınır (yedek biçimi arka uca özgü, opak)",
+        (yedek.get("metin") is True and yedek.get("veri", b"").decode() == beklenen) if KW else
+        (yedek["metin"] == beklenen and not yedek["metin_disi"]))
 au.pano_geri_yukle(yedek)
 kontrol("sanal pano_geri_yukle: 600 KB sahip yardımcıya devredilir, birebir okunur (yardımcı INCR sunar)", au.pano_oku() == beklenen)
 p2.terminate()
