@@ -4,6 +4,7 @@
    Sahte Yol.toplu ile (D-Bus yok) + GERÇEK Firefox (görünmez Xvfb masaüstü, geçici profil; firefox/Xvfb yoksa atlanır).
    Sınır (ölçüldü, Firefox): HTML autocomplete belirteci AT-SPI niteliklerinde YOK (yalnız id, placeholder-text,
    text-input-type); yalnız autocomplete ile işaretli, adı/id'si sıradan alan maskelenemez (BİLGİ satırı).
+2) tarayici_mi sınıf deseni sınırlı: zenity, hedgewars, knowledge-base, citizen, operator, chromatic tarayıcı DEĞİL.
 Kullanıcının ekranına girdi gitmez; Firefox kısmı kullanıcının profil kökünü önce/sonra karşılaştırır.
 
 Çalıştır:  python3 tests/test_web_maske.py"""
@@ -108,7 +109,33 @@ web._ayrinti_ekle(IlkBosYol(veri3), ":1.5", o3, [{"_yol": "/q", "ad": "Kod"}])
 kontrol("maske (sahte): nitelikler ilk sorguda boş (Firefox) → bir kez daha sorulur, id=otp-input maskeler",
         o3[0].get("deger") == "***", repr(o3[0]))
 
-# ---------------------------------------------------------------- 2) GERÇEK Firefox (görünmez masaüstü, geçici profil)
+# ---------------------------------------------------------------- 2) tarayıcı sınıf deseni (tablo)
+class SahteAU:
+    def __init__(self, sinif):
+        self._s = sinif
+
+    def sinif(self, k):
+        return self._s
+
+
+eski_sec = web.sec
+EVET = ["firefox", "org.mozilla.firefox", "firefoxdeveloperedition", "firefox-esr", "librewolf",
+        "io.gitlab.librewolf-community", "waterfox", "one.ablaze.floorp", "zen", "zen-alpha", "app.zen_browser.zen",
+        "chromium", "Chromium-browser", "google-chrome", "chrome-abcdefgh-Default", "brave-browser", "vivaldi-stable",
+        "opera", "microsoft-edge-dev", "msedge", "thorium-browser", "org.gnome.Epiphany", "org.kde.falkon", "electron",
+        "electron25", "code", "discord"]
+HAYIR = ["zenity", "hedgewars", "knowledge-base", "citizen", "operator", "chromatic", "org.kde.konsole",
+         "org.kde.dolphin", "kwrite", "steam", ""]
+try:
+    for sinif in EVET + HAYIR:
+        web.sec = lambda k, _s=sinif: SahteAU(_s)
+        beklenen = sinif in EVET
+        kontrol(f"tarayici_mi({sinif!r}) = {beklenen}", web.tarayici_mi("{1234}") is beklenen)
+finally:
+    web.sec = eski_sec
+
+
+# ---------------------------------------------------------------- 3) GERÇEK Firefox (görünmez masaüstü, geçici profil)
 def firefox_bolumu():
     if not (shutil.which("firefox") and shutil.which("Xvfb")):
         print("atlandı (Firefox bölümü): firefox ya da Xvfb yok")

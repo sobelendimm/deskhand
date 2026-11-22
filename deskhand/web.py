@@ -639,7 +639,11 @@ def ogeleri_yaz(ogeler, dosya=None) -> None:
 
 # Tarayıcı / Electron pencere sınıfları: click-element önce sayfa ögelerine bakar (başka pencerelerde ağaç taraması
 # yapılmaz). Sınıf listede yoksa `web` okuma komutu / read_text(source="web") yine çalışır.
-_TARAYICI_SINIFI = r"firefox|mozilla|librewolf|waterfox|floorp|zen|chrom|brave|vivaldi|opera|edge|thorium|epiphany|falkon|electron"
+# Eşleşme SINIRLI: sınıf . - _ boşluk ile parçalanır ve tarayıcı adı tam bir parça olmalı ("org.mozilla.firefox",
+# "microsoft-edge-dev", "app.zen_browser.zen", "chrome-<uygulama>-Default" evet; zenity, hedgewars, knowledge-base,
+# citizen, operator, chromatic HAYIR — tarayıcı sanılırsa tıklamalar sayfa ağacına yönlenir).
+_TARAYICI_SINIFI = (r"(?:^|[.\-_ ])(?:firefox\w*|mozilla\w*|librewolf|waterfox\w*|floorp|zen|chrom(?:e|ium)\w*|brave|"
+                    r"vivaldi|opera|edge|msedge|thorium|epiphany|falkon|electron\d*)(?=$|[.\-_ ])")
 
 
 def tarayici_mi(k) -> bool:
