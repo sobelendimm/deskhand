@@ -316,8 +316,8 @@ class _Kanal:
             c.settimeout(KANAL_ZAMAN_ASIMI)
             satir = _satir_oku(c)
             parca = (satir or "").split()
-            if len(parca) == 2 and parca[0] == "liste" and parca[1] in ("yasak", "seviye"):
-                c.sendall(_liste_yaniti(parca[1]))  # panelin bellekteki yetkili kopyası (liste_koruma)
+            if len(parca) == 2 and parca[0] == "liste" and parca[1] in ("yasak", "seviye", "onaylar"):
+                c.sendall(_liste_yaniti(parca[1]))  # panelin bellekteki yetkili kopyası (liste_koruma; onaylar=kapsam)
                 return
             if len(parca) != 2 or parca[0] != "bekle" or not _gecerli_id(parca[1]):
                 return

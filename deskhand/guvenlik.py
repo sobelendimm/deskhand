@@ -1473,15 +1473,16 @@ KAPSAM_ONBELLEK_SN = 1.0
 
 def onay_kapsami(taze=False) -> str:
     """Hangi eylemler insan onayı ister: "hepsi" (VARSAYILAN: ARCHITECTURE §4'teki tüm onaylar) | "kart"
-    (yalnız kartla ödeme: para düğmesi/ödeme sayfası ve kart bilgisi yazma). Kipi okuyan TEK yer: ayarlar.toml
-    [guvenlik] onaylar, süreç içinde kısa önbellek. Okunamayan/geçersiz değer → "hepsi" (güvenli taraf)."""
+    (yalnız kartla ödeme: para düğmesi/ödeme sayfası ve kart bilgisi yazma). Kipi okuyan TEK yer. Değer PANEL
+    YETKİLİDİR (liste_koruma.kapsam): panelin doğrulanmış onay kanalından alınır, ayarlar.toml'a elle yazılmış `kart`
+    geçmez; panel kapalı / kanal doğrulanamıyor → "hepsi" (güvenli taraf). Süreç içinde kısa önbellek."""
     import time as _t
     if not taze and _t.monotonic() - _KAPSAM["zaman"] < KAPSAM_ONBELLEK_SN:
         return _KAPSAM["deger"]
     try:
-        from . import ayarlar
-        d = ayarlar.al("guvenlik", "onaylar")
-    except Exception:  # noqa: BLE001 - ayar okunamadı: güvenli taraf
+        from . import liste_koruma
+        d = liste_koruma.kapsam()
+    except Exception:  # noqa: BLE001 - doğrulanamadı: güvenli taraf
         d = "hepsi"
     if d not in ONAY_KAPSAMLARI:
         d = "hepsi"

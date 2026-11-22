@@ -559,7 +559,11 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   içinde nice >= 10, gerçek zamanlı olmayan zamanlama ve idle G/Ç'ye geri düşürür. XWayland takma adla
   (`deskhand-xwayland`) çalışır.
 - **Onay kapsamı** (`ayarlar.toml` `[guvenlik] onaylar`; panel Ayarlar → "Onay soruları"; `guvenlik.onay_kapsami()` kipi
-  okuyan TEK yer, ~1 sn önbellek; okunamayan/geçersiz değer = `hepsi`). Varsayılan **`hepsi`**: yukarıdaki TÜM onaylar
+  okuyan TEK yer, ~1 sn önbellek; okunamayan/geçersiz değer = `hepsi`). PANEL YETKİLİDİR (`liste_koruma.kapsam`): CLI/MCP
+  değeri dosyadan değil, panelin doğrulanmış onay kanalından alır (`liste onaylar`); panel kapalı / kanal doğrulanamıyor /
+  eski panel → `hepsi`. Panel açılışta dosyadaki `kart`'ı yalnız kendi işareti (`liste-onaylar.isaret`) da `kart` ise
+  kabul eder; işaretsiz `kart` → `hepsi` + dosya geri yazılır + uyarı. Panel açıkken dosya elle değişirse panelin değeri
+  korunur. Tek değiştirme yolu panelin Ayarlar'ı (ajan girdisi panel penceresine gidemez). Varsayılan **`hepsi`**: yukarıdaki TÜM onaylar
   aynen (bugünkü davranış). **`kart`** (kullanıcının kendi bilgisayarı için bilinçli tercih: "yalnız kartla ödeme")
   yalnız şu iki sınıfta onay sorar: (1) para düğmeleri (`guvenlik.PARA_DUGMESI`: satın al, hemen al, öde, ödemeyi
   tamamla, siparişi onayla/tamamla, buy now, pay, place order, complete purchase, confirm payment… — HASSAS'ın para alt
@@ -580,7 +584,8 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   onayı. DEĞİŞMEYENLER (onay değil, ret/koruma): ajanın kendi istemcisi, `open_app` kara listesi, panel/onay penceresi
   yasağı, liste koruma, yasak pencere listesi ve erişim seviyeleri, DUR, insan önceliği, oyun/film koruması (15), oturum
   kilidi, parola alanı DEĞERİNİ okuma reddi, bekleyen onay kapısı, onay sonrası hedef doğrulaması, arka plan yalıtımı.
-  Sınır: ayar dosyasını kabuğu olan bir ajan değiştirebilir (liste koruması bu ayarı kapsamaz); tek tuşla/ayrı alanlara
+  Sınır: liste korumasındaki gibi, panel KAPALIYKEN hem ayar dosyasını hem işareti tutarlı biçimde sahteleyen (sha256
+  hesaplayıp STATE_DIR'e yazan) bir süreç panelin bir sonraki açılışında `kart`'ı geçirebilir; tek tuşla/ayrı alanlara
   parça parça yazılan ya da panodan yapıştırılan kart numarası ve kart alanı olarak işaretlenmemiş bir alan yakalanamaz;
   `run_flow` önceden onaylı (`--onayli`) adım onayı bu ayardan etkilenmez.
 
