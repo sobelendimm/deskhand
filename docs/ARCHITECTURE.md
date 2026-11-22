@@ -799,7 +799,8 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   Claude oturumu → 14; sahibi ölen adlı `cli` masaüstü `oto` gibi süpürülür (`masaustu.oto_temizle`). `desktop stop`
   adlı masaüstünün `masa/<ad>` dizinini siler (canlı MCP sahibi yoksa).
 - MCP otomatik bağlanma: varsayılan masaüstü sahipsiz ama canlı ve kafesinde uygulama (en üst `bwrap` süreci,
-  `masaustu.uygulama_pidleri`) varsa DOLU sayılır → `oturum-N`.
+  `masaustu.uygulama_pidleri`) varsa DOLU sayılır → `oturum-N` (masaüstünü aynı Claude oturumu açtıysa — durum
+  kaydındaki `baslatan_ajan` ata zincirinde — paylaşılır).
 - CLI: `--desktop-name AD` komut adına kadar her konumda ve komuttan sonra kabul; verilmişse (ya da
   `DESKHAND_MASAUSTU`) hedef kendiliğinden arka plandır. zsh notu: boşluklu değişken bölünmez —
   `export DESKHAND_HEDEF=arka DESKHAND_MASAUSTU=ad` ya da dizi kullanın (`ENV="A=1 B=2"; $ENV komut` çalışmaz).

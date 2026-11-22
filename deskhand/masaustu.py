@@ -709,6 +709,9 @@ def _baslat_sinirli(ad: str, boyut: str | None, openbox: bool, oto: bool, olcek:
     d["ad"] = ad
     if oto:
         d["oto"] = True
+    ajan = masalar.ajan_pid()  # masaüstünü açan Claude oturumu (dolu_mu: aynı oturumun MCP'si paylaşır)
+    if ajan is not None:
+        d["baslatan_ajan"] = [ajan, masalar._baslangic(ajan)]
     _durum_yaz(d)
     return d
 
@@ -754,7 +757,13 @@ def dolu_mu(ad: str) -> bool:
     """Sahibi yok ama masaüstü canlı ve kafesinde uygulama çalışıyor (CLI ya da eski oturum kullanıyor): MCP otomatik
     bağlanırken bu masaüstünü SEÇMEZ (başkasının açık işini bozmasın)."""
     d = durum_oku(ad)
-    return bool(d) and canli_mi(d) and bool(uygulama_pidleri(ad))
+    if not d or not canli_mi(d):
+        return False
+    ba = d.get("baslatan_ajan")
+    if isinstance(ba, list) and len(ba) == 2 and any(p == ba[0] and b == ba[1] for p, b in masalar._atalar()):
+        return False  # masaüstünü bu Claude oturumu açtı (CLI/test): onun işinin parçası, paylaşılır
+    # bu sürecin KENDİ başlattığı uygulamalar (bwrap'in ebeveyni biziz: aynı süreçteki testler, panel) sayılmaz
+    return any(masalar._ebeveyn(p) != os.getpid() for p in uygulama_pidleri(ad))
 
 
 def oto_mu(ad: str) -> bool:
