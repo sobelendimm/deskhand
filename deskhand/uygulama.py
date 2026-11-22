@@ -7,6 +7,7 @@ import re
 import shutil
 import stat
 import sys
+import threading
 import time
 import uuid
 
@@ -257,9 +258,23 @@ def _belge_yolu_denetle(yol: str) -> str | None:
     gercek = os.path.realpath(yol)
     if os.path.isfile(gercek) and os.access(gercek, os.X_OK):
         return _("çalıştırılabilir dosya belge olarak verilemez")
-    if gercek.lower().endswith((".desktop", ".service", ".lnk")):
-        return _("başlatıcı dosyası belge olarak verilemez")
+    for ad in {os.path.basename(yol).lower(), os.path.basename(gercek).lower()}:
+        if ad.endswith(YURUTULEBILIR_TURLER):
+            return _("yürütülebilir içerik türü belge olarak verilemez ({tur})").format(
+                tur=next(t for t in YURUTULEBILIR_TURLER if ad.endswith(t)))
     return None
+
+
+# Belge olarak verildiğinde uygulamanın KOD olarak işleyebileceği türler (her uygulama için ret, kod 10): betikler,
+# Windows yürütülebilirleri (wine ilişkisi), paketler, başlatıcılar, lutris kurulum betikleri (.yml/.yaml), makrolu
+# ofis belgeleri, defterler.
+YURUTULEBILIR_TURLER = (
+    ".bat", ".cmd", ".exe", ".msi", ".msp", ".com", ".scr", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".mjs",
+    ".cjs", ".wsf", ".wsh", ".hta", ".reg", ".lnk", ".py", ".pyw", ".pyc", ".sh", ".bash", ".zsh", ".fish", ".csh",
+    ".ksh", ".command", ".lua", ".pl", ".pm", ".rb", ".php", ".tcl", ".jar", ".class", ".appimage", ".run", ".bin",
+    ".desktop", ".service", ".flatpakref", ".flatpak", ".snap", ".deb", ".rpm", ".pkg.tar.zst", ".yml", ".yaml",
+    ".docm", ".dotm", ".xlsm", ".xltm", ".xlam", ".pptm", ".potm", ".ppam", ".ipynb", ".blend", ".applescript",
+)
 
 
 def belge_argumanlari(args) -> list[str]:
@@ -395,11 +410,59 @@ def _exec_programlari(argv: list[str]) -> list[str]:
     return sonuc
 
 
+# Kod barındıran uygulamalar: belgeyi yürütülebilir içerik olarak işleyen ya da arayüzünden doğrudan kod çalıştıran
+# (betik konsolu, makro, kurulum betiği, bellek düzenleyici) uygulamalar sistem girdisi olsalar da insan onayı ister.
+# TEK sabit liste; .desktop kimliğinin parçaları ve Exec programlarının adları (sürüm ekleri atılarak) karşılaştırılır.
+# (Uçbirimler/kabuklar kara listededir; kate'in uçbirim paneli Enter kuralıyla korunur → listede değil.)
+KOD_BARINDIRAN = frozenset({
+    "lutris", "protontricks", "protontricks-launch", "winetricks", "wine", "wine64", "winecfg", "wine-stable",
+    "bottles", "heroic", "steam", "gameconqueror", "scanmem", "libreoffice", "soffice", "localc", "lowriter",
+    "loimpress", "lodraw", "lobase", "lomath", "gimp", "blender", "krita", "inkscape", "godot", "godot4", "code",
+    "code-oss", "codium", "vscodium", "visual-studio-code", "cursor", "zed", "zeditor", "kdevelop", "qtcreator",
+    "pycharm", "pycharm-community", "pycharm-professional", "idea", "intellij-idea-community", "clion", "webstorm",
+    "goland", "rider", "phpstorm", "rustrover", "android-studio", "eclipse", "netbeans", "spyder", "thonny", "idle",
+    "idle3", "jupyter", "jupyter-lab", "jupyter-notebook", "jupyterlab", "geany", "gnome-builder", "sublime_text",
+    "sublime-text", "lazarus", "arduino", "arduino-ide", "octave", "rstudio", "scilab", "freecad", "kicad", "qgis",
+    "obs", "darktable", "audacity", "emacs", "gvim", "nvim-qt", "neovide",
+})
+
+
+def _kod_adi(ad: str) -> str:
+    ad = os.path.basename(ad or "").lower()
+    for ek in (".desktop", ".exe", ".py", ".sh", ".appimage"):
+        if ad.endswith(ek):
+            ad = ad[: -len(ek)]
+    return re.sub(r"[-_.]?\d[\d.]*$", "", ad)  # sürüm eki: idle3.12, godot4, gimp-2.10
+
+
+def kod_barindiran_mi(g: dict) -> str | None:
+    """Girdi KOD_BARINDIRAN listesindeki bir uygulama mı (kimlik parçaları, Exec programları, Flatpak kimliği)? →
+    neden | None."""
+    from .oturum.cozum import _flatpak_kimligi, exec_argv
+    argv = exec_argv(g.get("exec", ""))
+    adaylar = set()
+    kimlik = (g.get("kimlik") or "").lower()
+    adaylar.update({kimlik, *kimlik.split("."), *kimlik.split("-")})
+    for p in _exec_programlari(argv):
+        adaylar.add(os.path.basename(p).lower())
+    fk, komut = _flatpak_kimligi(argv) if argv else (None, None)
+    for x in (fk or "", komut or ""):
+        if x:
+            adaylar.update({x.lower(), *x.lower().split(".")})
+    for a in adaylar:
+        if a and (a in KOD_BARINDIRAN or _kod_adi(a) in KOD_BARINDIRAN):
+            return _("kod barındıran uygulama ({ad}: betik/makro/konsol çalıştırabilir)").format(ad=a)
+    return None
+
+
 def girdi_guvenilir(g: dict) -> str | None:
     """Masaüstü girdisi ONAYSIZ başlatılabilir mi (izin listesi)? → None | neden (insan onayı gerekir).
     Girdi dosyası SISTEM_UYGULAMA_DIZINLERI'nde, root sahipli ve yazılamaz (üst dizinleriyle); Exec'teki her program
     root sahipli, yazılamaz bir ikili."""
     yol = os.path.abspath(g.get("yol") or "")
+    kod = kod_barindiran_mi(g)
+    if kod:
+        return kod
     if not any(yol.startswith(d.rstrip("/") + "/") for d in SISTEM_UYGULAMA_DIZINLERI):
         return _("girdi kullanıcının yazabildiği bir dizinde: {yol}").format(yol=yol)
     if not _root_yazilamaz(yol):
@@ -460,6 +523,7 @@ def mcp_uygulama(ad: str, args=None) -> tuple[dict, list[str]]:
     if "/" in ad:
         raise Dur(10, _("open_app yalnız kurulu bir uygulamanın adını alır (.desktop girdisi); yol ya da komut "
                         "verilemez: {ad}").format(ad=repr(ad)[:200]))
+    _ONAYLI.ozetler = None  # önceki (başlatılamamış) onayın kaydı taşınmaz
     belgeler = belge_argumanlari(args)  # girdi aranmadan önce: ret ucuz ve ayrıntısız
     g = uygulama_bul(ad)
     neden = girdi_denetle(g)
@@ -479,7 +543,48 @@ def mcp_uygulama(ad: str, args=None) -> tuple[dict, list[str]]:
                             "Başlatılmadı; kullanıcıya bildir.").format(ad=g.get("kimlik") or ad, neden=guvensiz,
                                                                        onay=onay_neden), tur="hassas")
         g = _ozel_kopya(g)
+        _ONAYLI.ozetler = _program_ozetleri(g)  # onay anındaki program içerikleri: başlatmadan hemen önce denetlenir
     return g, belgeler
+
+
+# ---------------------------------------------------------------- onaylı girdinin programları (YN5)
+
+_ONAYLI = threading.local()  # mcp_uygulama → (aynı iş parçacığında) api.uygulama_ac: [(yol, sha256)]
+
+
+def _sha256(yol: str) -> str | None:
+    import hashlib
+    h = hashlib.sha256()
+    try:
+        with open(yol, "rb") as f:
+            for parca in iter(lambda: f.read(1 << 20), b""):
+                h.update(parca)
+    except OSError:
+        return None
+    return h.hexdigest()
+
+
+def _program_ozetleri(g: dict) -> list[tuple[str, str | None]]:
+    """Onaylı girdinin Exec'indeki root sahipli/yazılamaz OLMAYAN (kullanıcıya ait) programların içerik özeti."""
+    from .oturum.cozum import exec_argv
+    sonuc = []
+    for p in _exec_programlari(exec_argv(g.get("exec", ""))):
+        yol = p if os.path.isabs(p) else shutil.which(p)
+        if yol and not _root_yazilamaz(yol):
+            gercek = os.path.realpath(yol)
+            sonuc.append((gercek, _sha256(gercek)))
+    return sonuc
+
+
+def onayli_program_denetle() -> None:
+    """Başlatmadan HEMEN önce (api.uygulama_ac): bu iş parçacığında onaylanan girdinin kullanıcıya ait programları onay
+    anındaki içerikle aynı mı? Değiştiyse Dur 10 (onay geçersiz). Kayıt tek kullanımlıktır."""
+    ozetler = getattr(_ONAYLI, "ozetler", None) or []
+    _ONAYLI.ozetler = None
+    for yol, ozet in ozetler:
+        if ozet is None or _sha256(yol) != ozet:
+            raise Dur(10, _("onaylanan programın içeriği onaydan sonra değişti ({yol}); başlatılmadı, yeniden onay "
+                            "gerekir").format(yol=yol), tur="hassas")
 
 
 # ---------------------------------------------------------------- Chromium/Electron: erişilebilirlik bayrağı

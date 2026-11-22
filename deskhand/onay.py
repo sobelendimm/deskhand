@@ -189,6 +189,20 @@ def _komut_satiri(pid: int) -> list[str] | None:
     return [p.decode("utf-8", "surrogateescape") for p in ham.split(b"\0") if p] or None
 
 
+def _cwd(pid: int) -> str | None:
+    try:
+        return os.readlink(f"/proc/{int(pid)}/cwd")
+    except (OSError, ValueError):
+        return None
+
+
+def paket_yolu() -> str:
+    """Bu süreçte yüklü deskhand paketinin dizini (gerçek yol): panel kaydına yazılır, isteyen kendisininkiyle
+    karşılaştırır (panel BAŞKA bir kopyadan — ör. ajanın değiştirdiği bir dizinden — çalışıyorsa red)."""
+    from . import __file__ as paket_dosyasi
+    return os.path.dirname(os.path.realpath(paket_dosyasi))
+
+
 def panel_kaydet(pid: int | None = None) -> str:
     """Panel açılışında: onay kanalını aç (yalnız kendi PID'i için) + RUNTIME_DIR/panel.pid
     {pid, baslangic, exe, cmdline}. → yol."""
@@ -198,7 +212,8 @@ def panel_kaydet(pid: int | None = None) -> str:
     if pid == os.getpid():
         kanal_ac()
     _yaz_atomik(panel_pid_yolu(), {"pid": pid, "baslangic": _baslangic(pid), "exe": _exe(pid),
-                                   "cmdline": _komut_satiri(pid), "zaman": time.time()})
+                                   "cmdline": _komut_satiri(pid), "cwd": _cwd(pid),
+                                   "paket": paket_yolu() if pid == os.getpid() else None, "zaman": time.time()})
     return panel_pid_yolu()
 
 
@@ -301,6 +316,9 @@ class _Kanal:
             c.settimeout(KANAL_ZAMAN_ASIMI)
             satir = _satir_oku(c)
             parca = (satir or "").split()
+            if len(parca) == 2 and parca[0] == "liste" and parca[1] in ("yasak", "seviye"):
+                c.sendall(_liste_yaniti(parca[1]))  # panelin bellekteki yetkili kopyası (liste_koruma)
+                return
             if len(parca) != 2 or parca[0] != "bekle" or not _gecerli_id(parca[1]):
                 return
             d = istek_oku(istek_yolu(parca[1]))
@@ -377,6 +395,66 @@ class _Kanal:
                 pass
 
 
+liste_saglayici = None  # panel: liste_koruma.Koruyucu.metin (tur → metin | None)
+LISTE_SINIRI = 1024 * 1024
+
+
+def _liste_yaniti(tur: str) -> bytes:
+    f = liste_saglayici
+    if f is None:
+        return b"saglayici-yok\n"
+    try:
+        metin = f(tur)
+    except Exception:  # noqa: BLE001
+        return b"saglayici-yok\n"
+    if metin is None:
+        return b"yok\n"
+    veri = metin.encode("utf-8", "surrogateescape")[:LISTE_SINIRI]
+    return f"icerik {len(veri)}\n".encode() + veri
+
+
+class _ListeYok(Exception):
+    pass
+
+
+def liste_iste(tur: str) -> str | None:
+    """İstemci (CLI/MCP): panelin bellekteki yasak/seviye listesi, doğrulanmış onay kanalından. → metin | None (dosya
+    yok = kısıt yok). Panel yok / kanal doğrulanamadı / panel liste sunmuyor → _ListeYok (çağıran dosyaya düşer)."""
+    kayit = _panel_kaydi()
+    if kayit is None:
+        raise _ListeYok("panel yok")
+    try:
+        s = _kanala_baglan(kayit)
+    except _KanalHatasi as e:
+        raise _ListeYok(str(e)) from None
+    try:
+        s.settimeout(KANAL_ZAMAN_ASIMI)
+        s.sendall(f"liste {tur}\n".encode())
+        tampon = b""
+        while b"\n" not in tampon and len(tampon) < 64:
+            parca = s.recv(64 - len(tampon))
+            if not parca:
+                break
+            tampon += parca
+        baslik, _a, veri = tampon.partition(b"\n")
+        k = baslik.decode("ascii", "replace").split()
+        if k == ["yok"]:
+            return None
+        if len(k) != 2 or k[0] != "icerik" or not k[1].isdigit() or int(k[1]) > LISTE_SINIRI:
+            raise _ListeYok(baslik.decode("ascii", "replace")[:40])
+        n = int(k[1])
+        while len(veri) < n:
+            parca = s.recv(min(65536, n - len(veri)))
+            if not parca:
+                raise _ListeYok("eksik yanıt")
+            veri += parca
+        return veri[:n].decode("utf-8", "surrogateescape")
+    except OSError as e:
+        raise _ListeYok(str(e)) from None
+    finally:
+        s.close()
+
+
 _KANAL: _Kanal | None = None
 _KANAL_KILIT = threading.Lock()
 
@@ -431,6 +509,10 @@ def _kanala_baglan(kayit: dict) -> socket.socket:
             raise _KanalHatasi("panel sürecinin kimliği (başlangıç zamanı / exe) uymuyor")
         if not kayit.get("cmdline") or _komut_satiri(pid) != kayit.get("cmdline"):
             raise _KanalHatasi("panel sürecinin komut satırı (modül yolu / giriş noktası) kayıttakiyle aynı değil")
+        if not kayit.get("cwd") or _cwd(pid) != kayit.get("cwd"):
+            raise _KanalHatasi("panel sürecinin çalışma dizini kayıttakiyle aynı değil")
+        if kayit.get("paket") != paket_yolu():
+            raise _KanalHatasi(f"panelin deskhand paketi ({kayit.get('paket')}) bu kurulumunki değil ({paket_yolu()})")
         s.settimeout(None)
         return s
     except (OSError, _KanalHatasi) as e:

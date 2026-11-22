@@ -281,7 +281,7 @@ a_.close(); b_.close()
 sistem = {x["kimlik"]: x for x in uygulama.masaustu_girdileri()
           if x["yol"].startswith(uygulama.SISTEM_UYGULAMA_DIZINLERI)}
 for kimlik in ("firefox", "org.kde.kate", "org.kde.dolphin", "org.kde.gwenview", "mpv", "org.kde.okular",
-               "libreoffice-writer", "steam", "vivaldi-stable"):  # son üçü root sahipli #! sarmalayıcı
+               "vivaldi-stable"):  # vivaldi: root sahipli #! sarmalayıcı (libreoffice/steam kod barındırır: onaylı)
     x = sistem.get(kimlik)
     if x is None:
         continue
