@@ -1002,7 +1002,7 @@ def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
     korumali_baslat'ta (politikanın kararından, kopya=) eklenir."""
     c = g["calisma"]
     b = [(ao.uygulama_runtime(c), False), (os.path.join(c, "bus"), False), (g["wayland_yol"], False),
-         (os.path.join(c, "at-spi"), False)]
+         (os.path.join(c, "at-spi"), True)]  # a11y dizini SALT OKUNUR: uygulama soketin yerine sembolik bağ koyamaz
     if g.get("x_ana") is not None:
         b += [(f"{X_DIZIN}/X{g['x_ana']}", False), (g["xauth"], True)]
     return b  # oturum kopyası: yalnız politikanın verdiği (arka_ortak.korumali_baslat, kopya=)
@@ -1134,7 +1134,10 @@ class Eis:
         self._log = _gunluk(d["calisma"], "eis")
         # ortam: asgari; veri yolu YALNIZ --bus argümanıyla (yardımcı ortamdan devralmaz). --dbus-pid: yardımcı
         # bağlandıktan sonra karşı tarafı (SO_PEERCRED) bu PID'e karşı doğrular (sert bağ ile gerçek veri yoluna değil)
-        ek = ["--dbus-pid", str((d.get("pid") or {})["dbus"])] if (d.get("pid") or {}).get("dbus") else []
+        dpid = (d.get("pid") or {}).get("dbus")
+        if not dpid:  # kayıtta dbus-daemon PID'i yoksa karşı taraf doğrulanamaz → bağlanma
+            raise Dur(SANAL_KAPALI, _("KWin oturum kaydında dbus-daemon PID'i yok: girdi yardımcısı başlatılmadı"))
+        ek = ["--dbus-pid", str(dpid)]
         self.p = subprocess.Popen([yol, "--bus", d["dbus_adres"], *ek], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=self._log, env={"PATH": ASGARI_PATH}, start_new_session=True)
         self.pid = self.p.pid

@@ -1,5 +1,7 @@
 # deskhand-etkinlik: Wayland klavye/fare etkinliği yardımcısı (insan önceliği). Yetki gerekmez.
-# Derleme:  make -C deskhand/yardimci            (gereken: gcc, pkg-config, wayland istemci kitaplığı)
+# Derleme:  make -C deskhand/yardimci            (varsayılan hedef `all`: ÜÇ yardımcı da derlenir)
+#           (gereken: gcc, pkg-config, wayland istemci kitaplığı, libsystemd; deskhand-eis için ayrıca libei +
+#           libxkbcommon — yoksa YALNIZ deskhand-eis açık bir iletiyle atlanır, çıkış 0)
 #           → deskhand/yardimci/deskhand-etkinlik (yollar.etkinlik_bin() burada da arar)
 # Protokol dosyalarını yeniden üret:  make -C deskhand/yardimci protokol   (wayland-scanner + wayland-protocols)
 # Kurulum (isteğe bağlı): make -C deskhand/yardimci kur  → $(DATA_DIR)/etkinlik/deskhand-etkinlik
@@ -13,11 +15,20 @@ CFLAGS ?= -O2 -Wall
 DATA_DIR ?= $(or $(DESKHAND_DATA_DIR),$(HOME)/.local/share/deskhand)
 PROTOKOL_XML ?= $(shell pkg-config --variable=pkgdatadir wayland-protocols 2>/dev/null)/staging/ext-idle-notify/ext-idle-notify-v1.xml
 
+# VARSAYILAN hedef: üçü de (deskhand-eis'in kitaplıkları yoksa o atlanır, diğerleri derlenir). İlk hedef olmalı.
+all: deskhand-etkinlik deskhand-goruntu deskhand-eis
+
 deskhand-etkinlik: deskhand-etkinlik.c ext-idle-notify-v1-protocol.c ext-idle-notify-v1-client-protocol.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ deskhand-etkinlik.c ext-idle-notify-v1-protocol.c $$(pkg-config --cflags --libs wayland-client)
 
+# libsystemd geliştirme dosyası yoksa (derlenemez) açık bir iletiyle atlanır; çıkış 0
 deskhand-goruntu: deskhand-goruntu.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ deskhand-goruntu.c $$(pkg-config --cflags --libs libsystemd)
+	@if pkg-config --exists libsystemd 2>/dev/null; then \
+	  $(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ deskhand-goruntu.c $$(pkg-config --cflags --libs libsystemd) \
+	  || exit 1; \
+	else \
+	  echo "deskhand-goruntu ATLANDI: libsystemd geliştirme dosyaları yok (pkg-config libsystemd)" >&2; \
+	fi
 
 EIS_PAKETLER = libei-1.0 xkbcommon libsystemd
 
@@ -46,4 +57,4 @@ kur: deskhand-etkinlik
 temizle:
 	$(RM) deskhand-etkinlik deskhand-goruntu deskhand-eis
 
-.PHONY: protokol tuslar kur temizle
+.PHONY: all protokol tuslar kur temizle

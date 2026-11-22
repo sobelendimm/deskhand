@@ -117,16 +117,21 @@ def _calistirilabilir(yol):
 
 
 def satir_yardimcilar():
-    etkinlik, goruntu = yollar.etkinlik_bin(), yollar.goruntu_bin()
+    """Üç C yardımcısı (deskhand-etkinlik, deskhand-goruntu, deskhand-eis): eksik her biri SONUCUYLA anılır."""
+    etkinlik, goruntu, eis = yollar.etkinlik_bin(), yollar.goruntu_bin(), yollar.eis_bin()
     eksik = []
     if not _calistirilabilir(etkinlik):
-        eksik.append(_("klavye etkinliği (insan önceliği yalnız fareye bakar)"))
+        eksik.append(_("deskhand-etkinlik yok: insan önceliği yalnız fareye bakar"))
     if not _calistirilabilir(goruntu):
-        eksik.append(_("ekran görüntüsü (yavaş yedek yol kullanılır)"))
+        eksik.append(_("deskhand-goruntu yok: ekran görüntüsü yavaş yedek yolla alınır; KWin arka planı kullanılamaz, "
+                       "Xvfb kullanılacak"))
+    if not _calistirilabilir(eis):
+        eksik.append(_("deskhand-eis yok (libei + libxkbcommon + libsystemd geliştirme dosyaları gerekir): KWin arka "
+                       "planı kullanılamaz, Xvfb kullanılacak"))
     if not eksik:
-        return _satir(_("C yardımcıları"), "tamam", _("derli (etkinlik, ekran görüntüsü)"))
+        return _satir(_("C yardımcıları"), "tamam", _("derli (etkinlik, ekran görüntüsü, girdi/EIS)"))
     return _satir(_("C yardımcıları"), "uyari", _("derli değil: {liste}").format(liste="; ".join(eksik)),
-                  _("./install.sh derler (make -C deskhand/yardimci)"))
+                  _("./install.sh derler (make -C deskhand/yardimci; kitaplıklar kurulunca yeniden çalıştır)"))
 
 
 def satir_erisim():

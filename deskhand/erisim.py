@@ -118,18 +118,22 @@ def erisim_ac_garanti():
 
 
 def _a11y_adresi():
-    """libatspi'nin bağlanacağı ERİŞİLEBİLİRLİK veri yolu: '' = kullanıcının oturumu (kde); sanal → özel adres."""
+    """libatspi'nin bağlanacağı ERİŞİLEBİLİRLİK veri yolu: '' = kullanıcının oturumu (kde); sanal → özel adres.
+    Kayıt GÜVENLİ kayıt (masaustu.durum: adres oturum dizininden kurulur) ve bağlanmadan önce soket denetlenir
+    (sembolik bağ / sert bağ / karşı taraf: masaustu.a11y_denetle) → Dur(14)."""
     if sec().ad != "sanal":
         return ""
     from . import masaustu
-    d = masaustu.durum_oku() or {}
+    d = masaustu.durum(saglik=False) or {}
     adres, p = d.get("a11y_adres"), (d.get("pid") or {}).get("a11y")
     yol = (re.search(r"unix:path=([^,]+)", adres or "") or [None, ""])[1]
     if adres and p and masaustu._canli(p) and os.path.exists(yol):
+        masaustu.a11y_denetle(adres, d)
         return adres
     adres = masaustu.erisim_hazirla()  # eski sürümle açılmış masaüstü ya da kayıt defteri ölmüş: hazırla
     if not adres:
         raise Dur(9, _("görünmez masaüstünde erişilebilirlik hazırlanamadı (at-spi2-core kurulu mu?)"))
+    masaustu.a11y_denetle(adres)
     return adres
 
 
@@ -137,6 +141,12 @@ def _atspi_veri_yolu_saglam(a11y=""):
     """Erişilebilirlik veri yolunun soketine gerçekten bağlanılabiliyor mu? libatspi bağlanamayınca süreci
     abort() ile ÖLDÜRÜYOR (kod -6) — önce biz denetleyip anlaşılır bir hata verelim. → (tamam, ayrıntı)."""
     import socket
+    if a11y:  # özel (sanal) veri yolu: soket oturumun kendisi mi (sembolik bağ/sert bağ/sahte soket reddedilir)
+        from . import masaustu
+        try:
+            masaustu.a11y_denetle(a11y)
+        except Dur as e:
+            return False, str(e)
     adres = a11y or calis("busctl", "--user", "call", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress")
     m = re.search(r'unix:path=([^,"]+)', adres or "")
     if not m:

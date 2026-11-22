@@ -43,6 +43,7 @@ from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYIL
                          pid_kaydet, runtime_denetle, ses_kaldir, ses_kur, soket_karsi_pid, soket_kimligi,
                          gercek_soket_kimlikleri, GUVENLI_PATH, python_yolu,
                          ses_ortami_uygula, uygulama_runtime)
+from .arka_ortak import a11y_soket_denetle
 from .arka_ortak import arac as _arac
 from .hata import ARAC_EKSIK, SANAL_KAPALI, Dur
 from .i18n import _, h_
@@ -373,6 +374,17 @@ def baglanti_denetle(d: dict) -> dict:
     g = guvenli_kayit(d)
     xvfb_karsi_denetle(g)
     return g
+
+
+def a11y_denetle(adres: str, d: dict | None = None) -> str:
+    """Erişilebilirlik veri yolu soketine bağlanmadan önce karşı taraf denetimi (arka_ortak.a11y_soket_denetle): soket
+    yalnız oturumun at-spi dizininde (kwin: <çalışma>/at-spi; xvfb: <çalışma>/run/at-spi). Dur(14) → bağlanılmaz."""
+    d = d or durum(saglik=False)
+    if d is None:
+        raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+    g = guvenli_kayit(d)
+    dizin = os.path.join(g["calisma"], "at-spi" if tur(g) == "kwin" else os.path.join("run", "at-spi"))
+    return a11y_soket_denetle(adres, dizin, g.get("cgroup") or "")
 
 
 def durum(dogrula: bool = True, saglik: bool = True) -> dict | None:
@@ -971,8 +983,11 @@ def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
         return kwin_oturum.uygulama_baglari(g)
     from .arka_ortak import uygulama_runtime
     c = g["calisma"]
-    return [(uygulama_runtime(c), False), (os.path.join(c, "bus"), False), (f"/tmp/.X11-unix/X{g['no']}", False),
-            (os.path.join(c, XAUTH_DOSYA), True)]  # oturum kopyası: yalnız KENDİSİNİNKİ (korumali_baslat)
+    rt = uygulama_runtime(c)
+    # <çalışma>/run/at-spi: yazılabilir runtime'ın ALTINDA salt okunur yeniden bağ (soket'e connect salt okunur bağda
+    # çalışır; uygulama a11y soketinin yerine sembolik bağ/sahte soket koyamaz: denetim 6 sonrası ORTA-1)
+    return [(rt, False), (os.path.join(rt, "at-spi"), True), (os.path.join(c, "bus"), False),
+            (f"/tmp/.X11-unix/X{g['no']}", False), (os.path.join(c, XAUTH_DOSYA), True)]  # oturum kopyası: yalnız KENDİSİNİNKİ (korumali_baslat)
 
 
 def _flatpak_run_mi(argv: list[str]) -> bool:

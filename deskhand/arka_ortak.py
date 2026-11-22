@@ -221,6 +221,40 @@ def soket_karsi_pid(yol: str) -> int | None:
         s.close()
 
 
+def a11y_soket_denetle(adres: str, dizin: str, cgroup: str = "") -> str:
+    """Erişilebilirlik (at-spi) veri yolu soketi bağlanmadan önce (_karsi_denetle deseninin a11y'ye genişlemesi):
+    adres TEK `unix:path=<dizin>/bus[_N][,guid=…]`; dizin gerçek dizin (sembolik bağ değil, kullanıcının); soket
+    sembolik bağ DEĞİL, S_ISSOCK, kullanıcının; (st_dev, st_ino) kullanıcının gerçek soketlerinden biri değil
+    (sert bağ); SO_PEERCRED PID'i Deskhand ile AYNI PID ad alanında (bwrap'teki uygulamanın kendi açtığı sahte soket
+    değil) ve (kayıtlıysa) oturum kafesinin cgroup'unda. Değilse Dur(14). → soket yolu."""
+    import stat as _stat
+    yol = bus_yolu_kati(adres)
+    if not yol or os.path.dirname(yol) != dizin or not re.fullmatch(r"bus(_\d+)?", os.path.basename(yol)):
+        raise Dur(14, _("erişilebilirlik adresi oturumun at-spi dizini dışında ya da geçersiz: {adres}; "
+                        "bağlanılmadı").format(adres=repr(adres)))
+    try:
+        sd, ss = os.lstat(dizin), os.lstat(yol)
+    except OSError as e:
+        raise Dur(14, _("erişilebilirlik soketi yok: {hata}").format(hata=e))
+    if not _stat.S_ISDIR(sd.st_mode) or sd.st_uid != os.getuid():
+        raise Dur(14, _("erişilebilirlik dizini güvensiz: {dizin}").format(dizin=dizin))
+    if _stat.S_ISLNK(ss.st_mode) or not _stat.S_ISSOCK(ss.st_mode) or ss.st_uid != os.getuid():
+        raise Dur(14, _("erişilebilirlik soketi güvensiz (sembolik bağ / soket değil / başkasının): {yol}; "
+                        "bağlanılmadı").format(yol=yol))
+    if (ss.st_dev, ss.st_ino) in gercek_soket_kimlikleri():
+        raise Dur(14, _("erişilebilirlik soketi kullanıcının gerçek soketinin sert bağı: {yol}; "
+                        "bağlanılmadı").format(yol=yol))
+    karsi = soket_karsi_pid(yol)
+    try:
+        ayni_ad_alani = bool(karsi) and os.stat(f"/proc/{karsi}/ns/pid").st_ino == os.stat("/proc/self/ns/pid").st_ino
+    except OSError:
+        ayni_ad_alani = False
+    if not karsi or not ayni_ad_alani or (cgroup and _cgroup(karsi) != cgroup):
+        raise Dur(14, _("erişilebilirlik soketinin karşı tarafı bu oturumun süreci değil ({karsi}); "
+                        "bağlanılmadı").format(karsi=karsi))
+    return yol
+
+
 def soket_kimligi(yol: str) -> tuple[int, int] | None:
     try:
         st = os.stat(yol)

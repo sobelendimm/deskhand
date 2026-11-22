@@ -824,6 +824,8 @@ else:
     import importlib  # A bölümünün sahte yamaları (erisim.*) temizlensin: B gerçek işlevlerle çalışır
     importlib.reload(erisim)
 
+    os.makedirs(yollar.runtime_dir(), mode=0o700, exist_ok=True)  # runtime_denetle: 0700 şart (tmp varsayılanı 0755)
+    os.chmod(yollar.runtime_dir(), 0o700)
     d = masaustu.masaustu_baslat()
     try:
         kontrol("sanal: masaüstü açılırken erişilebilirlik hazırlandı (uyarı yok, adres var, kayıt defteri canlı)",

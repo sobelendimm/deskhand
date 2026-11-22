@@ -158,15 +158,21 @@ kontrol("girdi merkezi: aynı adlı sıradan dosya soket sayılmaz → uyarı", 
 os.remove(girdi_merkezi.soket_yolu())
 
 # C yardımcıları
-asil_e, asil_g = yollar.etkinlik_bin, yollar.goruntu_bin
-yollar.etkinlik_bin, yollar.goruntu_bin = lambda: "/yok/etkinlik", lambda: None
+asil_e, asil_g, asil_i = yollar.etkinlik_bin, yollar.goruntu_bin, yollar.eis_bin
+yollar.etkinlik_bin, yollar.goruntu_bin, yollar.eis_bin = lambda: "/yok/etkinlik", lambda: None, lambda: None
 s = doktor.satir_yardimcilar()
-kontrol("C yardımcıları: ikisi de yok → uyarı, ikisi de anılır", s["durum"] == "uyari" and "etkinliği" in s["ayrinti"] and
-        "görüntüsü" in s["ayrinti"], str(s))
+kontrol("C yardımcıları: üçü de yok → uyarı, üçü de anılır", s["durum"] == "uyari" and "deskhand-etkinlik" in s["ayrinti"] and
+        "deskhand-goruntu" in s["ayrinti"] and "deskhand-eis" in s["ayrinti"], str(s))
+kontrol("C yardımcıları: sonuç da söylenir (Xvfb kullanılacak)", "Xvfb kullanılacak" in s["ayrinti"], str(s))
 sh = sys.executable  # çalıştırılabilir bir dosya
-yollar.etkinlik_bin, yollar.goruntu_bin = lambda: sh, lambda: sh
-kontrol("C yardımcıları: ikisi de çalıştırılabilir → tamam", doktor.satir_yardimcilar()["durum"] == "tamam")
-yollar.etkinlik_bin, yollar.goruntu_bin = asil_e, asil_g
+yollar.etkinlik_bin, yollar.goruntu_bin, yollar.eis_bin = lambda: sh, lambda: sh, lambda: None
+s = doktor.satir_yardimcilar()
+kontrol("C yardımcıları: yalnız deskhand-eis yok → uyarı, yalnız o anılır", s["durum"] == "uyari" and
+        "deskhand-eis" in s["ayrinti"] and "deskhand-etkinlik" not in s["ayrinti"] and
+        "deskhand-goruntu" not in s["ayrinti"], str(s))
+yollar.etkinlik_bin, yollar.goruntu_bin, yollar.eis_bin = lambda: sh, lambda: sh, lambda: sh
+kontrol("C yardımcıları: üçü de çalıştırılabilir → tamam", doktor.satir_yardimcilar()["durum"] == "tamam")
+yollar.etkinlik_bin, yollar.goruntu_bin, yollar.eis_bin = asil_e, asil_g, asil_i
 
 # arka plan masaüstü
 asil_durum = masaustu.durum
