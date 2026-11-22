@@ -303,6 +303,11 @@ try:
     g2.zorla("keyup w")
     kontrol("Girdi.zorla: DUR açıkken bile bırakır", g2.p.stdin.getvalue() == "keyup w\n")
     guvenlik.dur_kapat()
+    g3 = sahte_girdi([])
+    g3.gonder("{a}", None, "mouseto 0.5 0.5", "wheel -3", "hwheel 2", "wheel 1", "wheel 500")
+    kontrol("Girdi: 'wheel N' dotool'a N ayrı çentik (XWayland Chromium/CEF ilk olayı yutar); büyük N olduğu gibi",
+            g3.p.stdin.getvalue() == "mouseto 0.5 0.5\n" + "wheel -1\n" * 3 + "hwheel 1\n" * 2 + "wheel 1\nwheel 500\n",
+            repr(g3.p.stdin.getvalue()))
 finally:
     guvenlik.dur_kapat()
     if eski_kde is None:

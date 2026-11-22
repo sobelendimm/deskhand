@@ -379,6 +379,26 @@ def dotool_var():
     return shutil.which("dotool") is not None
 
 
+TEKERLEK_BOL_AZAMI = 50  # 'wheel N' en çok bu kadar çentikse tek tek gönderilir (daha büyüğü olduğu gibi)
+_TEKERLEK_RE = re.compile(r"(h?wheel) (-?\d+)")
+
+
+def tekerlek_bol(satirlar):
+    """'wheel N' → N kez 'wheel ±1' (her biri ayrı olay). dotool 'wheel N'i TEK olay (REL_WHEEL=N) olarak yollar;
+    XWayland'deki Chromium/CEF (Steam istemcisi, Electron) XI2 kaydırma değerinin ilk olayını yalnız taban alır ve
+    yok sayar → tek olaylık kaydırmanın TAMAMI kayboluyordu (MCP scroll: no_change; End tuşu çalışıyordu). Ayrı
+    olaylarla en çok ilk çentik kaybolur; öbür uygulamalarda toplam aynıdır. Günlük/denetim satırları değişmez."""
+    cikti = []
+    for s in satirlar:
+        m = _TEKERLEK_RE.fullmatch(s)
+        n = int(m.group(2)) if m else 0
+        if m and 1 < abs(n) <= TEKERLEK_BOL_AZAMI:
+            cikti += [f"{m.group(1)} {1 if n > 0 else -1}"] * abs(n)
+        else:
+            cikti.append(s)
+    return cikti
+
+
 class Girdi:
     """Satırları panelin GİRDİ MERKEZİ'ndeki hazır dotool'a gönderir (girdi_merkezi.py: kurulum beklemesi yok);
     merkez yoksa ya da el sıkışma başarısızsa kendi dotool'unu açar (~0,66 sn kurulum görüntü alma/OCR ile örtüşür).
@@ -452,6 +472,7 @@ class Girdi:
     def _yaz(self, satirlar):
         """Satırları TEK seferde dotool'a ver (merkez ya da kendi dotool'umuz). Merkezde başka komutun girdisi
         sürüyorsa _gm.Mesgul: çağıran denetimlerini yeniden yapıp tekrar dener."""
+        satirlar = tekerlek_bol(satirlar)
         m = getattr(self, "merkez", None)
         if m is None:
             self.p.stdin.write("".join(s + "\n" for s in satirlar))
