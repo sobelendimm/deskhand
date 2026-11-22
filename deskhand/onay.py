@@ -428,7 +428,9 @@ def _kanala_baglan(kayit: dict) -> socket.socket:
 def bekleyen_var(masaustu: str, haric_pid: int | None = None, simdi: float | None = None) -> bool:
     """Bu masaüstü ("ekran" | "arka") için canlı bir süreçten bekleyen onay isteği var mı? (MCP girdi kapısı.)
     haric_pid: bu sürecin kendi istekleri sayılmaz (süreç içi kayıt ayrıca tutulur). Ömrü olağandışı uzun
-    (sahte/bozuk) istek sayılmaz: girdiyi süresiz kilitleyemez."""
+    (sahte/bozuk) istek sayılmaz: girdiyi süresiz kilitleyemez. Arka uç adı da kabul edilir ("sanal" → "arka",
+    "kde" → "ekran"; iste_sonuc ile aynı eşleme): eylem.girdi_al arka uç adıyla çağırır."""
+    masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
     for d in bekleyenler(simdi):
         if d["masaustu"] != masaustu or d["pid"] <= 0 or d["pid"] == haric_pid:
             continue

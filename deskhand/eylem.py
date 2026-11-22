@@ -93,7 +93,7 @@ def _bekleyen_onay_kapisi():
     if f is None:
         return
     import os
-    if f(_au().ad, haric_pid=os.getpid()):
+    if f("arka" if _au().ad == "sanal" else "ekran", haric_pid=os.getpid()):
         raise Dur(7, _("onay bekleniyor: başka bir Deskhand sürecinin insan onayı sürerken girdi gönderilmez"))
 
 

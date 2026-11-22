@@ -21,7 +21,7 @@ import types
 
 from .arka_uc import EKRAN, sec
 from . import guvenlik, ucbirim
-from .eylem import _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, tikla_ic
+from .eylem import _bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, tikla_ic
 from .gunluk import gunluk
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, seviye_denetle,
                        yazi_onay_ister_mi)
@@ -822,11 +822,12 @@ def _insan_onceligi():
 
 
 def _atspi_korumalari(k, desen, tur="fare"):
-    """Fare/klavye yolundaki Girdi.gonder'in denetimleri, odak şartı olmadan: DUR 13 → yasak pencere 10 / başlık 4 /
-    sınıf 4 → uygulama erişim seviyesi (tur: "fare" = eylem/tık, "klavye" = değer yazma; goruntule'de ikisi de 10,
+    """Fare/klavye yolundaki Girdi.gonder'in denetimleri, odak şartı olmadan: DUR 13 → bekleyen onay 7 → yasak
+    pencere 10 / başlık 4 / sınıf 4 → uygulama erişim seviyesi (tur: "fare" = eylem/tık, "klavye" = değer yazma; goruntule'de ikisi de 10,
     tikla'da yalnız klavye 10) → (kde) oyun/film ya da karar bildirimi 15/12 → insan önceliği 12. Eylemden HEMEN önce
     ve her bekleyen adımdan (onay) sonra çağrılır."""
     dur_denetle()
+    _bekleyen_onay_kapisi()  # başka bir Deskhand sürecinin insan onayı sürerken bu masaüstüne eylem yok (7)
     pencere_denetle(k, desen)
     seviye_denetle(k, tur)
     sec().ekran_korumasi(_("erişilebilirlik eylemi"))
