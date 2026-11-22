@@ -92,8 +92,10 @@ def x_soketleri():
 
 
 def kwin_pidleri():
+    """KULLANICININ kwin_wayland'i (komut satırında kendi Wayland soketi): eşzamanlı başka test oturumları sayılmaz."""
     r = subprocess.run(["pgrep", "-x", "kwin_wayland"], capture_output=True, text=True).stdout.split()
-    return set(int(p) for p in r)
+    gw = os.environ.get("WAYLAND_DISPLAY", "")
+    return set(int(p) for p in r if gw and gw in masaustu._komut_satiri(p)[1:])
 
 
 sha0 = {y: sha1(y) for y in GERCEK_DOSYALAR}

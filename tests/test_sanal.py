@@ -201,10 +201,14 @@ kontrol("masaüstü: kafes MemorySwapMax = 0 (takasa taşmaz)", r.stdout.strip()
 kontrol("masaüstü: ses bekçisi çalışıyor (kafeste)", masaustu._canli(d["pid"].get("ses_bekcisi")) and
         masaustu._cgroup(d["pid"]["ses_bekcisi"]) == d["cgroup"], str(d.get("uyarilar")))
 xpid = d["pid"]["kwin" if KW else "xvfb"]
-kontrol("masaüstü: ekran sunucusu nice 10", os.getpriority(os.PRIO_PROCESS, xpid) >= 10,
-        str(os.getpriority(os.PRIO_PROCESS, xpid)))
-r = subprocess.run(["ionice", "-p", str(xpid)], capture_output=True, text=True)
-kontrol("masaüstü: ekran sunucusu ionice idle", "idle" in r.stdout, r.stdout)
+# ad tabanlı sistem kuralları (ör. ananicy: kwin_wayland → nice -12) exec anında yükseltebilir: kafesin öncelik
+# bekçisi en çok ~0,5 sn'de geri düşürür
+kontrol("masaüstü: ekran sunucusu nice 10 (öncelik bekçisi ≤ 2 sn)",
+        bekle(lambda: os.getpriority(os.PRIO_PROCESS, xpid) >= 10, 2, 0.1), str(os.getpriority(os.PRIO_PROCESS, xpid)))
+kontrol("masaüstü: ekran sunucusu ionice idle", bekle(lambda: "idle" in subprocess.run(
+    ["ionice", "-p", str(xpid)], capture_output=True, text=True).stdout, 2, 0.1))
+kontrol("masaüstü: öncelik bekçisi kafeste çalışıyor", masaustu._canli(d["pid"].get("oncelik_bekcisi")) and
+        masaustu._cgroup(d["pid"]["oncelik_bekcisi"]) == d["cgroup"])
 ses = d.get("ses") or {}
 kontrol("masaüstü: kendi boş çıkışı (deskhand-sessiz-<no>) yüklü", ses.get("sink", "").startswith("deskhand-sessiz-") and
         masaustu._sink_modulu(ses.get("sink")) == ses.get("modul"))

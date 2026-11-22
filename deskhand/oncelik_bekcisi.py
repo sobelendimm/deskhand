@@ -95,7 +95,7 @@ def main(argv: list[str]) -> int:
         print("kullanım: oncelik_bekcisi.py CGROUP_YOLU [ARALIK_SN]", file=sys.stderr)
         return 2
     cg = argv[0]
-    aralik = float(argv[1]) if len(argv) > 1 else 1.0
+    aralik = float(argv[1]) if len(argv) > 1 else 0.5
     gorulen: set = set()
     tur(cg, gorulen)
     print("hazir", flush=True)

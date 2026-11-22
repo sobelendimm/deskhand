@@ -40,16 +40,19 @@ def pano_doldur():
 
 if buyuk:
     if app.platformName() == "wayland":
-        # Wayland: istemci panoyu yalnız klavye odağı varken (geçerli bir olay seri numarasıyla) ayarlayabilir →
-        # pencere etkinleşince doldur (KWin oturumunda yeni pencere odak alır)
-        from PyQt6.QtCore import QTimer
+        # Wayland: istemci panoyu yalnız GERÇEK bir girdi olayının seri numarasıyla ayarlayabilir → ilk fare
+        # tıklamasından sonra doldur (test pencereye bir kez tıklar)
+        from PyQt6.QtCore import QEvent, QObject, QTimer
 
-        def etkin_olunca():
-            if kutu.isActiveWindow():
-                pano_doldur()
-            else:
-                QTimer.singleShot(50, etkin_olunca)
-        QTimer.singleShot(50, etkin_olunca)
+        class IlkTik(QObject):
+            def eventFilter(self, o, e):
+                if e.type() == QEvent.Type.MouseButtonRelease and not getattr(self, "oldu", False):
+                    self.oldu = True
+                    QTimer.singleShot(50, pano_doldur)
+                return False
+        suzgec = IlkTik()
+        app.installEventFilter(suzgec)
+        log("pano tik bekliyor")
     else:
         pano_doldur()
 sys.exit(app.exec())

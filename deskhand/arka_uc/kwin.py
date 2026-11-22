@@ -76,6 +76,7 @@ class KwinArkaUc(ArkaUc):
         self._kilit = threading.RLock()   # paylaşılan EIS bağlantısı
         self._eis = None
         self._eis_imza = None
+        self.kopma = 0  # EIS yardımcısı kaç kez koptu (kurtarıldı): basılı tutan Girdi'ler bunu görüp durur
         self._yazilabilir: dict[str, bool] = {}
         self._yazilabilir_imza = None
 
@@ -315,6 +316,7 @@ class KwinArkaUc(ArkaUc):
         e = self._eis
         if e is not None and (self._eis_imza != imza or e.p.poll() is not None):
             if self._eis_imza == imza and e.p.poll() is not None:
+                self.kopma += 1
                 try:
                     e.kurtar()
                 except Exception:  # noqa: BLE001 - kurtarma en iyi çaba
@@ -341,6 +343,7 @@ class KwinArkaUc(ArkaUc):
             except Dur as h:
                 if e.p.poll() is None:
                     raise
+                self.kopma += 1
                 try:
                     kurtarilan = e.kurtar()
                 except Exception:  # noqa: BLE001
@@ -536,6 +539,7 @@ class KwinGirdi:
         self._basili_tus: list[str] = []
         self._basili_dugme: list[str] = []
         self._b_kilit = threading.Lock()
+        self._kopma = arka.kopma
         self._izleyici = None
         self._izle_dur = threading.Event()
 
@@ -564,6 +568,17 @@ class KwinGirdi:
         if not s.strip():
             return
         k = s.strip().split(" ", 1)[0].lower()
+        with self.arka._kilit:
+            self.arka._eis_al()  # yardımcı öldüyse: basılı düğme kurtarması + yeni bağlantı (kopma sayacı artar)
+            if self.arka.kopma != self._kopma:
+                self._kopma = self.arka.kopma
+                with self._b_kilit:
+                    basiliydi = bool(self._basili_tus or self._basili_dugme)
+                    self._basili_tus.clear()
+                    self._basili_dugme.clear()
+                if basiliydi and k not in ("keyup", "buttonup"):  # sürükleme/basılı tutma ortasında: sessizce sürmez
+                    raise Dur(ARAC_EKSIK, _("girdi yardımcısı koptu; basılı tuş/düğmeler bırakıldı (kurtarıldı), "
+                                            "girdi gönderilmedi"))
         if k in ("keydown", "buttondown"):
             self._izle_satir(s)  # gönderimden ÖNCE: yarım kalsa bile bırakılsın
         self.arka.eis_satir(s)

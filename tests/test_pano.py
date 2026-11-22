@@ -828,6 +828,12 @@ kontrol("sanal pano: 64 MB üstü → Dur 1", kod_al(au.pano_yaz, "x" * (65 * 10
 au.pano_yaz("eski içerik ğüşİ 😀")
 
 p2 = au.baslat([sys.executable, PANO_PENCERE], env={"LOG": LOG2, "BASLIK": "pano-buyuk", "PANO_BUYUK": "600000"})
+if KW:  # Wayland: Qt panoyu ancak bir girdi olayından sonra ayarlayabilir → pencereye bir kez tıkla
+    bekle(lambda: "pano tik bekliyor" in (open(LOG2).read() if os.path.exists(LOG2) else ""), 20, 0.05)
+    kb_ = bekle(lambda: next((w for w, b_, _ in au.pencereler("pano-buyuk")), None), 10, 0.05)
+    arka_uc._ORNEKLER["sanal"] = au
+    with api.hedef("sanal"):
+        api.tikla(kb_, 100, 100)
 bekle(lambda: "pano hazir" in (open(LOG2).read() if os.path.exists(LOG2) else ""), 20, 0.05)
 time.sleep(0.3)
 beklenen = ("büyük ğüş İÇ 😀 " * (600000 // 14 + 1))[:600000]

@@ -91,7 +91,8 @@ GERCEK_DOSYALAR = ["~/.config/kwinrc", "~/.config/kwinoutputconfig.json", "~/.co
                    "~/.config/dconf/user"]
 sha0 = {y: sha1(y) for y in GERCEK_DOSYALAR}
 fare0 = gercek_fare()
-kwin0 = sorted(pidler("kwin_wayland"))
+KWIN0 = sorted(p for p in pidler("kwin_wayland") if os.environ.get("WAYLAND_DISPLAY", "-") in
+               subprocess.run(["cat", f"/proc/{p}/cmdline"], capture_output=True, text=True).stdout.replace("\0", " "))
 x0 = set(os.listdir("/tmp/.X11-unix"))
 gercek_bus = os.environ.get("DBUS_SESSION_BUS_ADDRESS") or f"unix:path={os.environ.get('XDG_RUNTIME_DIR')}/bus"
 
@@ -197,9 +198,17 @@ kontrol("kafes: KWin + dbus + bildirim + kayıt defteri + ses bekçisi aynı bel
         str({a: masaustu._cgroup(d["pid"].get(a)) for a in d["pid"]}))
 onc = ko.oncelik_durumu(d["pid"]["kwin"])
 io_ = subprocess.run(["ionice", "-p", str(d["pid"]["kwin"])], capture_output=True, text=True).stdout.strip()
-kontrol("öncelik: KWin'in TÜM iş parçacıkları nice >= 10, gerçek zamanlı zamanlama yok (cap_sys_nice verilmedi), "
-        "ionice idle", onc and all(n >= 10 and p not in (1, 2, 6) for _t, n, p in onc) and "idle" in io_,
-        f"{[x for x in onc if x[1] < 10 or x[2] in (1, 2, 6)][:5]} {io_}")
+def oncelik_iyi():
+    o_ = ko.oncelik_durumu(d["pid"]["kwin"])
+    i_ = subprocess.run(["ionice", "-p", str(d["pid"]["kwin"])], capture_output=True, text=True).stdout
+    return o_ and all(n >= 10 and p not in (1, 2, 6) for _t, n, p in o_) and "idle" in i_
+
+
+# ad tabanlı sistem kuralları (ananicy) exec anında yükseltebilir: öncelik bekçisi en çok ~1 sn'de düşürür
+kontrol("öncelik: KWin'in TÜM iş parçacıkları nice >= 10, gerçek zamanlı yok, ionice idle (bekçi ≤ 2 sn içinde)",
+        bekle(oncelik_iyi, 2, 0.1), f"{[x for x in onc if x[1] < 10 or x[2] in (1, 2, 6)][:5]} {io_}")
+with open(os.path.join(d["calisma"], "oncelik-bekcisi.log"), errors="replace") as f_:
+    olcum["öncelik bekçisinin düzelttikleri (açılışta)"] = len(f_.read().splitlines())
 kontrol("ses: kendi boş çıkışı yüklü", masaustu._sink_modulu(d["ses"]["sink"]) == d["ses"]["modul"])
 kontrol("hazırlık: oturumun erişilebilirlik veri yolu, kullanıcınınkinden FARKLI ve oturum dizininde",
         d.get("a11y_adres") and d["calisma"] in d["a11y_adres"] and d["a11y_adres"] not in subprocess.run(
@@ -513,10 +522,12 @@ bekle(lambda: not masaustu._canli(d2_["pid"]["kwin"]), 3)
 kontrol("çökme: KWin ölünce durum() None (bayat kayıt bağlanmaz)", masaustu.durum() is None and
         dur_kodu(sec(arka_bayragi=True).goruntu) == 14)
 d3_ = masaustu.masaustu_baslat("800x600")
+kalinti = {"dizin": os.path.exists(d2_["calisma"]),
+           "kilit": [n for n in (d2_["x_ana"], d2_["x_ana"] + 1) if os.path.exists(f"/tmp/.X{n}-lock")],
+           "surec": [a for a, p in d2_["pid"].items() if masaustu._canli(p)]}
 kontrol("çökme: yeni başlatma eskisinin kalıntılarını temizledi (dizin, X kilitleri, süreçler)",
-        not os.path.exists(d2_["calisma"]) and not any(os.path.exists(f"/tmp/.X{n}-lock") for n in
-                                                       (d2_["x_ana"], d2_["x_ana"] + 1)) and
-        not any(masaustu._canli(p) for a, p in d2_["pid"].items()) and masaustu.tur(d3_) == "kwin")
+        not kalinti["dizin"] and not kalinti["kilit"] and not kalinti["surec"] and masaustu.tur(d3_) == "kwin",
+        str(kalinti))
 masaustu.masaustu_durdur()
 
 # ---------------------------------------------------------------- 11) gerçek oturum değişmedi
@@ -526,7 +537,12 @@ for y in GERCEK_DOSYALAR:
 fare1 = gercek_fare()
 sizdi = fare1 is not None and any(abs(fare1[0] - a) <= 2 and abs(fare1[1] - b) <= 2 for a, b in GONDERILEN)
 kontrol("gerçek fare bizim gönderdiğimiz bir noktaya gitmedi", not sizdi, f"{fare0} → {fare1}")
-kontrol("gerçek kwin_wayland süreçleri aynı", sorted(pidler("kwin_wayland")) == kwin0)
+def kullanici_kwin():  # yalnız KULLANICININ KWin'i (kendi Wayland soketiyle); başka test oturumları sayılmaz
+    gw_ = os.environ.get("WAYLAND_DISPLAY", "")
+    return sorted(p for p in pidler("kwin_wayland") if gw_ and gw_ in masaustu._komut_satiri(p))
+
+
+kontrol("kullanıcının kwin_wayland süreci aynı (yeniden başlamadı)", kullanici_kwin() == KWIN0)
 kontrol("/tmp/.X11-unix: bizden kalan soket yok", not (set(os.listdir("/tmp/.X11-unix")) - x0 - {
     f"X{n}" for n in range(90, 400)} ) and True)
 
