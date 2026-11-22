@@ -53,6 +53,26 @@ kontrol("hiç yazılabilir öge yok: [5] (tahmin yok)",
 kontrol("parola alanı + etiket → parola alanı seçilir",
         sec([oge("label", "Parola", no=1), oge("password text", "Parola", no=2)], "Parola", tercih=True)
         == ("ok", "password text", [2]))
+# bulanık kademeler (içerir/benzer): tek yazılabilir alanı KENDİLİĞİNDEN seçme yok → eski davranış [5]
+B = [oge("label", "E-posta adresiniz", no=1), oge("entry", "E-posta adresi", no=2), oge("button", "Gönder", no=3)]
+kontrol("bulanık (içerir) eşleşme: yazma tercihi olsa da [5] belirsiz (tam eşleşme yok)",
+        sec(B, "posta adres", tercih=True) == ("dur", 5) and sec(B, "posta adres") == ("dur", 5))
+kontrol("bulanık (benzer) eşleşme: [5] belirsiz",
+        sec([oge("label", "Kullanici adiniz", no=1), oge("entry", "Kullanici adinzi", no=2)], "Kullanici adinizi",
+            tercih=True) == ("dur", 5))
+kontrol("bulanık eşleşmede nth ile seçim sürer", sec(B, "posta adres", sira=2, tercih=True) == ("ok", "entry", [2]))
+kontrol("tam eşleşme kademesi hâlâ tercihle çözülür (kademe tam)",
+        sec([oge("label", "Ad", no=1), oge("entry", "AD", no=2)], "ad", tercih=True) == ("ok", "entry", [2]))
+# role süzgeci: yazma yolunda TAM eşleşme ("text" parola alanını ("password text") kapsamasın); tıklama yolu aynen
+P = [oge("text", "Gizli", no=1), oge("password text", "Gizli", no=2)]
+kontrol("yazma yolu role=text → YALNIZ text (parola alanı alt dizge olarak girmez)",
+        sec(P, "Gizli", rol="text", tercih=True) == ("ok", "text", [1]))
+kontrol("yazma yolu role=password text → parola alanı", sec(P, "Gizli", rol="password text", tercih=True)
+        == ("ok", "password text", [2]))
+kontrol("yazma yolu role büyük/küçük duyarsız", sec(P, "Gizli", rol="Password Text", tercih=True)
+        == ("ok", "password text", [2]))
+kontrol("tıklama yolu (tercihsiz) role=text eski alt dizge davranışı: iki öge → [5]",
+        sec(P, "Gizli", rol="text") == ("dur", 5))
 kontrol("tek eşleşme etkilenmez", sec([oge("entry", "Ad", no=1)], "Ad", tercih=True) == ("ok", "entry", [1]))
 
 p = inspect.signature(api.ogeye_yaz).parameters

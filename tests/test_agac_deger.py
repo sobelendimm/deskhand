@@ -61,6 +61,87 @@ finally:
     erisim.erisim_ogeleri = gercek
     api.yasak_mi = gercek_yasak
 
+# ---------------------------------------------------------------- A2) değer maskesi (erisim._ayrinti: observe + read_text ortak)
+import types  # noqa: E402
+
+
+class SahteMetin:
+    def __init__(self, metin):
+        self.metin = metin
+
+
+class SahteAtspi:
+    class Text:
+        @staticmethod
+        def get_text(ti, bas, son):
+            return ti.metin[:son]
+
+
+class SahteOge:
+    def __init__(self, deger, ad="", aciklama="", nitelik=None):
+        self._d, self._ad, self._ac, self._n = deger, ad, aciklama, nitelik or {}
+
+    def get_text_iface(self):
+        return SahteMetin(self._d)
+
+    def get_name(self):
+        return self._ad
+
+    def get_description(self):
+        return self._ac
+
+    def get_attributes(self):
+        return self._n
+
+    def get_value_iface(self):
+        return None
+
+
+def _deger(deger, rol="entry", **kw):
+    ss = types.SimpleNamespace(contains=lambda _x: False)
+    return erisim._ayrinti(SahteAtspi, SahteOge(deger, **kw), rol, ss, types.SimpleNamespace()).get("deger")
+
+
+kontrol("maske: sıradan alan değeri aynen", _deger("merhaba", ad="Ad") == "merhaba")
+kontrol("maske: ad 'Parola'/'Şifre'/'Sifre'/'PIN'/'OTP'/'CVV'/'CVC'/'Güvenlik kodu' → ***",
+        all(_deger("abc123", ad=a) == "***" for a in ("Parola", "Şifre", "SİFRE", "Password", "PIN", "Pin kodu", "OTP",
+                                                       "CVV", "CVC2", "Güvenlik Kodu", "Passcode")))
+kontrol("maske: kart alanı (kart numarası, son kullanma, cc-number) → ***",
+        all(_deger("4111", ad=a) == "***" for a in ("Kart Numarası", "Son kullanma tarihi", "Card number", "CVC")))
+kontrol("maske: açıklama ya da nitelik (autocomplete/id/placeholder) gizli alanı gösteriyorsa → ***",
+        _deger("x", ad="Alan", aciklama="Yeni parolanız") == "***" and
+        _deger("x", ad="Alan", nitelik={"autocomplete": "one-time-code otp"}) == "***" and
+        _deger("x", ad="Alan", nitelik={"autocomplete": "cc-number"}) == "***" and
+        _deger("x", ad="Alan", nitelik={"id": "login-password"}) == "***" and
+        _deger("x", ad="Alan", nitelik={"placeholder": "Şifrenizi girin"}) == "***" and
+        _deger("x", ad="Alan", nitelik={"text-input-type": "password"}) == "***")
+kontrol("maske: kısa kısaltmalar kelime sınırlı (spin/shipping/hotpot maskelenmez)",
+        all(_deger("v", ad=a) == "v" for a in ("Spinner", "Shipping address", "Hotpot", "Optional note", "Typing")))
+kontrol("maske: yalnız •●* karakterlerinden oluşan değer atlanır (değer yok)",
+        _deger("••••••", ad="Alan") is None and _deger("●●●", ad="Alan") is None and _deger("***", ad="Alan") is None
+        and _deger("• • •", ad="Alan") is None)
+kontrol("maske: maske karakteri + gerçek metin atlanmaz", _deger("a*b", ad="Alan") == "a*b")
+kontrol("denetim karakterleri ayıklanır (NUL/ESC/RLO/sıfır genişlik); satır sonu/sekme boşluk",
+        _deger("a\x00b\x1b[31mc\u202ed\u200be\n f\tg", ad="Alan") == "ab[31mcde  f g",
+        repr(_deger("a\x00b\x1b[31mc\u202ed\u200be\n f\tg", ad="Alan")))
+kontrol("yalnız denetim karakteri olan değer atlanır", _deger("\x00\x01\u200b", ad="Alan") is None)
+kontrol("parola rolü değeri zaten okunmaz", _deger("gizli", rol="password text", ad="Alan") is None)
+kontrol("maskelenen değer uzunluğu/ipucu sızdırmaz (sabit ***)",
+        _deger("a" * 150, ad="Parola") == _deger("b", ad="Parola") == "***")
+
+# ağaç yolu da aynı üretici: `deger` maskeli gelir (erisim_ogeleri çıktısına api.agac_oku dokunmaz)
+SAHTE2 = [oge("entry", "Parola", "***", 1), oge("entry", "Ad", "x", 2)]
+erisim.erisim_ogeleri = lambda k, *a, **kw: (SAHTE2, 0.01)
+api.yasak_mi = lambda k: False
+try:
+    r = api.agac_oku("{w}", None, hepsi=True)
+    kontrol("read_text(tree): maskeli değer *** olarak döner", [i.get("value") for i in r["items"]] == ["***", "x"])
+    r = api.agac_oku("{w}", "gizli-metin")
+    kontrol("read_text(tree): sorgu maskeli ham değeri aratmaz", r["items"] == [])
+finally:
+    erisim.erisim_ogeleri = gercek
+    api.yasak_mi = gercek_yasak
+
 # ---------------------------------------------------------------- B) gerçek KWrite (görünmez masaüstü)
 if not (shutil.which("kwrite") and shutil.which("bwrap")):
     print("B) atlandı: kwrite ya da bwrap yok")

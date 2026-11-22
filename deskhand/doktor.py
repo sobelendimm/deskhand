@@ -27,11 +27,13 @@ def _satir(ad, durum, ayrinti, oneri="", zorunlu=False):
 
 
 def _komut_ciktisi(*argv, sure=3.0):
-    """Salt okunur sürüm sorgusu: ilk satır, yoksa ""."""
+    """Salt okunur sürüm sorgusu: ilk satır, yoksa "". Alt süreç QT_QPA_PLATFORM=offscreen ile çalışır (yalnız onda):
+    ekransız ortamda `plasmashell --version` Qt platform eklentisi bulamayıp SIGABRT ile çöküyor ve coredump bırakıyor."""
     if not shutil.which(argv[0]):
         return ""
     try:
-        r = subprocess.run(list(argv), capture_output=True, text=True, timeout=sure)
+        r = subprocess.run(list(argv), capture_output=True, text=True, timeout=sure,
+                           env={**os.environ, "QT_QPA_PLATFORM": "offscreen"})
     except (OSError, subprocess.SubprocessError):
         return ""
     satirlar = (r.stdout or "").strip().splitlines()

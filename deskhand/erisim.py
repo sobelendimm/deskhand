@@ -388,8 +388,48 @@ def _ayrinti(Atspi, o, rol, ss, S):
         except Exception:  # noqa: BLE001
             deger = None
         if deger:
+            deger = _deger_temizle(deger, *_deger_ipuclari(o))
+        if deger:
             e["deger"] = deger if len(deger) <= DEGER_SINIRI else deger[:DEGER_SINIRI - 1] + "…"
     return e
+
+
+# Alan adı/açıklaması/niteliği (autocomplete, id, placeholder) gizli bir alanı gösteriyorsa değer ASLA döndürülmez
+# (observe ve read_text(tree) ortak; yalnız `password text` rolüne güvenilmez: web/Electron parola alanları `entry` olabilir).
+# Metin ocr.katla ile katlanır (Türkçe harf/büyük-küçük duyarsız); kısa kısaltmalar kelime sınırlı (spin, shipping, otp≠hotpot).
+_GIZLI_ALAN = re.compile(r"parola|sifre|pass|\b(?:pin|otp|cvv\d?|cvc\d?)\b|guvenlik kodu")
+_DEGER_NITELIKLERI = ("autocomplete", "id", "placeholder", "placeholder-text")
+_DENETIM = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060-\u2064\ufeff]")
+_MASKE_KARAKTERI = frozenset("•●*·∗⁎")  # parola maskesi: yalnız bunlardan oluşan değer anlamsız (atlanır)
+
+
+def _deger_ipuclari(o) -> tuple[str, ...]:
+    """Ögenin ad/açıklama/nitelik (autocomplete, id, placeholder) metinleri (okunamayan boş)."""
+    ipucu = []
+    for al in ("get_name", "get_description"):
+        try:
+            ipucu.append(getattr(o, al)() or "")
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        nit = o.get_attributes() or {}
+        ipucu += [str(nit[k]) for k in _DEGER_NITELIKLERI if nit.get(k)]
+        if str(nit.get("text-input-type", "")).lower() == "password":
+            ipucu.append("parola")
+    except Exception:  # noqa: BLE001
+        pass
+    return tuple(ipucu)
+
+
+def _deger_temizle(deger: str, *ipuclari: str) -> str | None:
+    """Alan değerini döndürmeden önce: kart/parola/PIN/OTP/CVV alanıysa "***"; yalnız parola maskesi karakterlerinden
+    oluşuyorsa None (değer yok); denetim/biçim karakterleri ayıklanır (satır sonu/sekme boşluğa çevrilir)."""
+    if any(c in _MASKE_KARAKTERI for c in deger) and all(c in _MASKE_KARAKTERI or c.isspace() for c in deger):
+        return None
+    if guvenlik.kart_alani_mi(*ipuclari) or any(_GIZLI_ALAN.search(katla(i)) for i in ipuclari if i):
+        return "***"
+    deger = _DENETIM.sub("", deger.replace("\r", " ").replace("\n", " ").replace("\t", " "))
+    return deger or None
 
 
 def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayrinti=False):
@@ -814,10 +854,12 @@ def _oge_istegi(k, o, islem, **ek):
     return _pencere_istegi(k, islem, yol=o["yol"], rol=o["rol"], ad=o["ad"], cerceve_kimlik=o.get("cerceve"), **ek)
 
 
-def erisim_ara(ogeler, ad, rol=None):
-    """Ada göre: tam (Türkçe harf/büyük-küçük duyarsız) > içerir > benzer (≥0,85). Yalnız en iyi kademe döner."""
+def erisim_ara(ogeler, ad, rol=None, rol_tam=False):
+    """Ada göre: tam (Türkçe harf/büyük-küçük duyarsız) > içerir > benzer (≥0,85). Yalnız en iyi kademe döner.
+    rol süzgeci varsayılan olarak ALT DİZGE (`role="text"` → "password text" da); rol_tam=True: yalnız TAM eşleşme
+    (değer yazma yolu: `text` parola alanını kapsamasın)."""
     q = norm(ad)
-    aday = [o for o in ogeler if o["ad"] and (not rol or rol.lower() in o["rol"])]
+    aday = [o for o in ogeler if o["ad"] and (not rol or (rol.lower() == o["rol"] if rol_tam else rol.lower() in o["rol"]))]
     tam = [o for o in aday if norm(o["ad"]) == q]
     if tam:
         return tam, "tam"
@@ -946,22 +988,25 @@ YAZILABILIR_ROLLER = ("entry", "text", "password text", "spin button")  # değer
 def _oge_secimi(a, ogeler, sure):
     """Ada göre ögeyi seç (fare ve eylem yolu AYNI): bulunamadı 6, birden çok 5, --sira, devre dışı 6. → (öge, kademe).
     a.ref_oge varsa ad aranmaz: kimlikle seçilip doğrulanır (ref_oge_sec). a.yazilabilir_tercih (değer yazma): ad
-    birden çok ögeye uyup yalnız biri yazılabilirse (YAZILABILIR_ROLLER) belirsizlik sorulmadan o seçilir."""
+    birden çok ögeye TAM ad eşleşmesiyle uyup yalnız biri yazılabilirse (YAZILABILIR_ROLLER) belirsizlik sorulmadan o
+    seçilir (bulanık kademelerde değil); rol süzgeci de TAM eşleşmedir."""
     ref = getattr(a, "ref_oge", None)
     if ref:
         o = ref_oge_sec(ogeler, ref)
         if not o["etkin"]:
             raise Dur(6, _("'{ad}' devre dışı (tıklanamaz)").format(ad=o["ad"]))
         return o, "ref"
-    bulunan, kademe = erisim_ara(ogeler, a.ad, a.rol)
+    tercih = bool(getattr(a, "yazilabilir_tercih", False))
+    bulunan, kademe = erisim_ara(ogeler, a.ad, a.rol, rol_tam=tercih)
     if not bulunan:
         from . import web
         ipucu = ("\n" + _("Web sayfası ögeleri için: `web {kimlik} '{ad}'`").format(kimlik=a.kimlik, ad=a.ad)
                  if web.tarayici_mi(a.kimlik) else "")
         raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `ekran agac {kimlik}`"
                        ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", kimlik=a.kimlik) + ipucu)
-    if a.sira is None and len(bulunan) > 1 and getattr(a, "yazilabilir_tercih", False):
-        # değer yazma: etiket (label) ile giriş alanı aynı adı taşırsa yalnız BİRİ yazılabilirse (entry/text…) o seçilir
+    if a.sira is None and len(bulunan) > 1 and tercih and kademe == "tam":
+        # değer yazma: etiket (label) ile giriş alanı aynı ADI (TAM eşleşme) taşırsa yalnız BİRİ yazılabilirse
+        # (entry/text…) o seçilir; bulanık (içerir/benzer) eşleşmede eski davranış: belirsizlik (5) sorulur
         yazilabilir = [o for o in bulunan if o["rol"] in YAZILABILIR_ROLLER]
         if len(yazilabilir) == 1:
             bulunan = yazilabilir

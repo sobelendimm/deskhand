@@ -586,27 +586,45 @@ SIR_YOLLARI = (
 )
 
 
-def sir_yollari(ev: str | None = None) -> list[str]:
-    """SIR_YOLLARI'nın ev dizininde VAR olanları (glob açılmış, sıralı). Sembolik bağsa (ör. profile-sync-daemon
-    profili tmpfs'e taşır) HEDEFİ örtülür (bwrap bağ üstüne bağlayamaz); hedef ad alanında zaten boş olan yerdeyse
-    (/run/user/UID, /tmp) gerek yok."""
+def _sir_ham(ev: str) -> tuple[list[str], list[str]]:
+    """SIR_YOLLARI'nın ev dizininde VAR olanları (glob açılmış) → (örtülecek yollar, ad alanında BOŞ hedefler).
+    Sembolik bağsa (ör. profile-sync-daemon profili /run/user/UID/psd/…'ye taşır) HEDEFİ örtülür (bwrap bağ üstüne
+    bağlayamaz). Hedef ad alanında zaten boş olan yerdeyse (/run/user/UID, /tmp) örtülecek gerçek bir şey yok, ama bağ
+    boşta asılı kalırdı (Chromium: crashpad `--database is required`, çıkış 133): bu hedefler ikinci listede döner,
+    ev_baglari oraya ad alanına ÖZEL boş dizin açar (gerçek psd verisi görünmez, yalıtım aynı)."""
     import glob
-    ev = ev or gercek_ev()
     gizli = (f"/run/user/{os.getuid()}", "/tmp")
     sonuc: list[str] = []
+    bos: list[str] = []
     for d in SIR_YOLLARI:
         for y in sorted(glob.glob(os.path.join(glob.escape(ev), d))):
             if os.path.islink(y):
                 y = os.path.realpath(y)
-                if not os.path.exists(y) or y in ("/", ev) or \
-                        (any(_ic_ice(y, g) for g in gizli) and not _ic_ice(y, ev)):
+                if not os.path.exists(y) or y in ("/", ev):
+                    continue
+                if any(_ic_ice(y, g) for g in gizli) and not _ic_ice(y, ev):
+                    if not any(y == g for g in gizli) and y not in bos:
+                        bos.append(y)
                     continue
             elif not os.path.lexists(y) or not _ic_ice(y, ev) or y == ev:
                 continue
             if y not in sonuc:
                 sonuc.append(y)
-    # zaten örtülen bir dizinin İÇİNDEKİ yol ayrıca bağlanmaz (ör. .var/app altındaki bir uygulama): üst örtü yeter
+    return sonuc, bos
+
+
+def sir_yollari(ev: str | None = None) -> list[str]:
+    """SIR_YOLLARI'nın örtülecek yolları (sıralı; bkz. _sir_ham). Zaten örtülen bir dizinin İÇİNDEKİ yol ayrıca
+    bağlanmaz (ör. .var/app altındaki bir uygulama): üst örtü yeter."""
+    sonuc = _sir_ham(ev or gercek_ev())[0]
     return [y for y in sonuc if not any(u != y and _ic_ice(y, u) for u in sonuc)]
+
+
+def sir_bos_hedefler(ev: str | None = None) -> list[str]:
+    """Sır yolu sembolik bağlarının, ad alanında boş /run/user/UID ya da /tmp altına giden HEDEFLERİ (gerçek yol; başka
+    hedefin içindekiler elenir). Çıkarımı ev_baglari yapar: bwrap `--dir` ile ad alanına özel, boş, yazılabilir dizin."""
+    bos = _sir_ham(ev or gercek_ev())[1]
+    return sorted(y for y in bos if not any(u != y and _ic_ice(y, u) for u in bos))
 
 
 _KATMAN: dict[str, bool] = {}
@@ -670,6 +688,10 @@ def ev_baglari(ev: str | None = None) -> tuple[list[str], dict]:
     for y in sir_yollari(ev):  # EN SON: veri klasörü bağlarının da üstüne (oturum kopyası bundan SONRA bağlanır)
         a += ["--tmpfs", y] if os.path.isdir(y) else ["--ro-bind", "/dev/null", y]
         bilgi["sir"].append(y)
+    bilgi["bos_dizin"] = []
+    for y in sir_bos_hedefler(ev):  # boşta asılı bağ olmasın (korumali_argv: /run/user/UID ve /tmp bu noktada boş tmpfs)
+        a += ["--perms", "0700", "--dir", y] if os.path.isdir(y) else ["--ro-bind", "/dev/null", y]
+        bilgi["bos_dizin"].append(y)
     return a, bilgi
 
 
@@ -702,6 +724,22 @@ def test_paylasimi() -> str | None:
 SON_KOMUT_ORTAMI = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT")
 
 
+RUN_USER_BOYUT = 1 << 30   # ad alanındaki /run/user/UID tmpfs'inin boyut sınırı (1 GiB)
+_SIZE: list[bool] = []
+
+
+def bwrap_size_var() -> bool:
+    """bwrap `--size` (tmpfs boyutu; bubblewrap >= 0.9) destekliyor mu (süreç başına bir kez ölçülür)."""
+    if not _SIZE:
+        try:
+            r = subprocess.run([arac("bwrap"), "--help"], capture_output=True, timeout=10, text=True,
+                               env={"PATH": GUVENLI_PATH}, stdin=subprocess.DEVNULL)
+            _SIZE.append("--size" in (r.stdout + r.stderr))
+        except (OSError, subprocess.TimeoutExpired):
+            _SIZE.append(False)
+    return _SIZE[0]
+
+
 def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, bool]], env: dict | None = None,
                   ev: str | None = None) -> list[str]:
     """Arka plan UYGULAMASININ komutu bwrap ad alanında (denetim 12c: Y1 aygıtlar, Y3 süreçler, HOME, Y4 IPC):
@@ -720,7 +758,10 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
     a = [arac("bwrap"), "--unshare-user", "--unshare-pid", "--ro-bind", "/", "/", "--dev", "/dev"]
     if os.path.isdir("/dev/dri"):
         a += ["--dev-bind", "/dev/dri", "/dev/dri"]
-    a += ["--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", f"/run/user/{uid}"]
+    a += ["--proc", "/proc", "--tmpfs", "/tmp"]
+    if bwrap_size_var():  # /run/user/UID'ye profil/önbellek yazan uygulama (sembolik bağ → --dir) belleği şişirmesin
+        a += ["--size", str(RUN_USER_BOYUT)]
+    a += ["--tmpfs", f"/run/user/{uid}"]
     a += ev_baglari(ev)[0]
     rk = os.path.realpath(runtime_kok)
     if not (_ic_ice(rk, f"/run/user/{uid}") or _ic_ice(rk, "/tmp")):
@@ -770,24 +811,6 @@ def girdi_kopyasi_bagi(yol: str | None) -> list[tuple[str, bool]]:
     return [(os.path.realpath(yol), True)]
 
 
-def chromium_ortami(argv: list[str], env: dict) -> dict:
-    """Chromium/Electron ailesi için yazılabilir XDG_CONFIG_HOME (ölçüldü: ad alanında gizlenen ~/.config/chromium —
-    profile-sync-daemon'da /run/user/UID altına giden sembolik bağ, ad alanında BOŞ tmpfs'in altında kalır ve boşta
-    asılı bağ olur — varsayılan yapılandırma dizini kullanılamaz; crashpad veritabanı yolunu oradan türetir ve
-    `chrome_crashpad_handler: --database is required` ile 133 (SIGTRAP) çıkışı verir. --user-data-dir /
-    --crash-dumps-dir / --disable-crash-reporter bunu ÇÖZMEZ). Çözüm yalıtımı gevşetmez: uygulamanın KENDİ
-    XDG_RUNTIME_DIR'inin (masaüstü klasörü, zaten yazılabilir bağ) altında boş bir dizin; kullanıcının gerçek
-    ~/.config/chromium'una hâlâ erişilmez. Flatpak sandbox'ı kendi XDG_*'ini kurar (dokunulmaz). → env (yeni sözlük)."""
-    from .uygulama import chromium_ailesi_mi
-    rt = env.get("XDG_RUNTIME_DIR")
-    if not rt or not argv or not chromium_ailesi_mi(argv) or \
-            any(os.path.basename(x) in ("flatpak", "flatpak_ornek.py") for x in argv[:4]):
-        return env
-    yol = os.path.join(rt, "xdg-yapilandirma")
-    os.makedirs(yol, mode=0o700, exist_ok=True)
-    return {**env, "XDG_CONFIG_HOME": yol}
-
-
 def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str, bool]], kopya: str | None = None,
                     girdi: str | None = None, **popen) -> subprocess.Popen:
     """Arka plan UYGULAMASINI başlatmanın TEK yolu (iki tür): bwrap ad alanı (korumali_argv) + bellek kafesi + düşük
@@ -801,7 +824,6 @@ def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str,
     from .oturum import politika
     baglar = [*baglar, *kopya_bagi(kopya, politika.kopya_dizini()), *girdi_kopyasi_bagi(girdi)]
     popen.setdefault("stdin", subprocess.DEVNULL)
-    env = chromium_ortami(argv, env)
     dis = {k: v for k, v in env.items() if k not in SON_KOMUT_ORTAMI}
     dis["PATH"] = GUVENLI_PATH
     return kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar, env), dis, **popen)
