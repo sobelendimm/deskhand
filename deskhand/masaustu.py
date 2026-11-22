@@ -43,7 +43,7 @@ from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYIL
                          pid_kaydet, runtime_denetle, ses_kaldir, ses_kur, soket_karsi_pid, soket_kimligi,
                          gercek_soket_kimlikleri, GUVENLI_PATH, python_yolu,
                          ses_ortami_uygula, uygulama_runtime)
-from .arka_ortak import a11y_soket_denetle
+from .arka_ortak import a11y_bagi, a11y_dizini_hazirla, a11y_kimlik_temizle, a11y_soket_denetle
 from .arka_ortak import arac as _arac
 from .hata import ARAC_EKSIK, SANAL_KAPALI, Dur
 from .i18n import _, h_
@@ -341,6 +341,7 @@ def guvenli_kayit(d: dict) -> dict:
     if a11y and not re.fullmatch(re.escape(f"unix:path={cdir}/run/at-spi/bus") + r"(_\d+)?(,guid=[0-9a-f]{32})?",
                                  a11y):
         g["a11y_adres"] = None
+    g["a11y_dizin_kimlik"] = a11y_kimlik_temizle(d)
     kafes = d.get("kafes")
     if kafes and not re.fullmatch(rf"deskhand-sanal-{no}-\d+\.scope", str(kafes)):
         raise Dur(SANAL_KAPALI, _("sanal masaüstü kaydı geçersiz (kafes): {kafes}").format(kafes=repr(kafes)))
@@ -384,7 +385,7 @@ def a11y_denetle(adres: str, d: dict | None = None) -> str:
         raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
     g = guvenli_kayit(d)
     dizin = os.path.join(g["calisma"], "at-spi" if tur(g) == "kwin" else os.path.join("run", "at-spi"))
-    return a11y_soket_denetle(adres, dizin, g.get("cgroup") or "")
+    return a11y_soket_denetle(adres, dizin, g.get("cgroup") or "", g.get("a11y_dizin_kimlik"))
 
 
 def durum(dogrula: bool = True, saglik: bool = True) -> dict | None:
@@ -649,6 +650,10 @@ def _xvfb_baslat(boyut: str | None, openbox: bool) -> dict:
          "bellek": bellek, "takas": takas, "pid": {}, "dbus_adres": "", "ses": None, "openbox": False,
          "baslangic": time.time(), "kimlik": secrets.token_hex(8), "calisma": cdir, "uyarilar": []}
     try:
+        # a11y dizinini Deskhand kendisi yaratır, HİÇBİR uygulama başlamadan önce (erisim_hazirla başarısız olsa bile
+        # uygulama <run>/at-spi'yi yaratıp sahte soket koyamasın); kimliği kayıtta, her denetimde karşılaştırılır
+        d["a11y_dizin_kimlik"] = a11y_dizini_hazirla(os.path.join(uygulama_runtime(cdir), "at-spi"),
+                                                      kalinti_sil=True)
         _baslat_ic(d, cdir, openbox)
     except BaseException:
         try:
@@ -985,8 +990,11 @@ def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
     c = g["calisma"]
     rt = uygulama_runtime(c)
     # <çalışma>/run/at-spi: yazılabilir runtime'ın ALTINDA salt okunur yeniden bağ (soket'e connect salt okunur bağda
-    # çalışır; uygulama a11y soketinin yerine sembolik bağ/sahte soket koyamaz: denetim 6 sonrası ORTA-1)
-    return [(rt, False), (os.path.join(rt, "at-spi"), True), (os.path.join(c, "bus"), False),
+    # çalışır; uygulama a11y soketinin yerine sembolik bağ/sahte soket koyamaz: denetim 6 sonrası ORTA-1). FAIL-CLOSED:
+    # dizin yok/başka dizin/sembolik bağ ise Dur(14), uygulama başlatılmaz (yoksa uygulama <run>/at-spi'yi kendisi
+    # yaratırdı)
+    a11y = a11y_bagi(os.path.join(rt, "at-spi"), a11y_kimlik_temizle(g))
+    return [(rt, False), a11y, (os.path.join(c, "bus"), False),
             (f"/tmp/.X11-unix/X{g['no']}", False), (os.path.join(c, XAUTH_DOSYA), True)]  # oturum kopyası: yalnız KENDİSİNİNKİ (korumali_baslat)
 
 
