@@ -947,7 +947,8 @@ eşleşen ögeler + ADI OLAN ataları (çocuk-sıra yolu öneki). `max_elements`
 `since=<snapshot_id>` (aynı pencere): yalnız `+` eklenen, `~` değişen (ad, değer, durum, kutu > 3 px), `-` kaybolan.
 `include_screenshot`: maskeli pencere görüntüsüne öge kutuları + numaraları çizilir (Set-of-Marks) ve `shot_id` kaydedilir.
 **Anlık görüntü önbelleği.** `snapshot_id` = sunucu (süreç) başına rastgele 4 hex önek + sayaç; pencere başına en çok 4,
-toplam 16, ömür 120 sn. Öge kimliği: erişilebilirlik ögesinde veri yolu adı + nesne yolu (BİRLİKTE; `_tara` libatspi
+toplam 16 FARKLI içerik, ömür 120 sn (içeriği bir öncekiyle aynı gözlem, ör. sayfalı `observe(offset=…)`, aynı gruba
+katılır: ilk sayfanın ref'leri düşmez). Öge kimliği: erişilebilirlik ögesinde veri yolu adı + nesne yolu (BİRLİKTE; `_tara` libatspi
 nesnesinin alanlarından okur, okunamazsa çocuk-sıra yolu) + pencere; OCR satırında metin + kutu.
 **`ref` ile eylem.** `click(ref)`, `type_text(ref)` (önce alan tıklanır, sonra klavye yolu), `scroll(ref)`,
 `drag(from_ref, to_ref)`. Bayatlık üç ayrı nedenle, HİÇBİR girdi gönderilmeden reddedilir (`[8]`, `error.reason`):

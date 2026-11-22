@@ -950,8 +950,8 @@ def _dongu_kapisi(arac: str, k: str, hedef: tuple, once: fark.Once | None) -> No
         _DONGU.kontrol(arac, k, hedef, lambda: once if once is not None else _once(k))
     except dongu.DonguReddi as e:
         raise ToolError("[7] " + _("aynı eylem {sayi} kez üst üste ekranı değiştirmedi; özdeş çağrı yapılmadı. "
-                                   "screenshot/read_text ile ekranı oku ve FARKLI bir yol dene (ekran değişince ya "
-                                   "da başka bir eylem yapılınca bu kısıt kalkar)").format(sayi=e.sayi)) from None
+                                   "observe ile ekranı yeniden oku ve FARKLI bir yol dene (ekran değişince ya da başka "
+                                   "bir eylem yapılınca bu kısıt kalkar)").format(sayi=e.sayi)) from None
 
 
 def _dongu_sonrasi(arac: str, k: str, hedef: tuple, once: fark.Once | None, sonra: dict) -> str | None:
@@ -959,7 +959,7 @@ def _dongu_sonrasi(arac: str, k: str, hedef: tuple, once: fark.Once | None, sonr
     Ölçüm yoksa (verify=False, pencere kapandı) sayaç artmaz."""
     n = _DONGU.kaydet(arac, k, hedef, once, sonra.get("changed"))
     if n >= dongu.UYARI_ESIK:
-        return _("aynı eylem {sayi} kez üst üste ekranı DEĞİŞTİRMEDİ: tekrarlama. Ekran görüntüsü ya da metin okuyup "
+        return _("aynı eylem {sayi} kez üst üste ekranı DEĞİŞTİRMEDİ: tekrarlama. observe ile ekranı yeniden okuyup "
                  "başka bir yol dene (başka öğe/koordinat, başka tuş, önce odağı ya da bir açılır pencereyi kontrol "
                  "et).").format(sayi=n)
     return None
@@ -1150,8 +1150,9 @@ def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str | None]:
         if durum == "expired":
             raise _ref_hatasi("snapshot", _("ref bayat: {sid} anlık görüntüsünün süresi doldu (120 sn); eylem "
                                             "yapılmadı. observe çağırıp yeni ref kullan").format(sid=sid))
-        raise _ref_hatasi("snapshot", _("ref bayat: {sid} anlık görüntüsü bilinmiyor (eskidi ya da başka bir sunucu "
-                                        "oturumunun); eylem yapılmadı. observe çağırıp yeni ref kullan").format(sid=sid))
+        raise _ref_hatasi("snapshot", _("ref bayat: {sid} anlık görüntüsü bilinmiyor (düşürüldü: pencere başına en "
+                                        "çok 4 farklı anlık görüntü tutulur; ya da başka bir sunucu oturumunun); eylem "
+                                        "yapılmadı. observe çağırıp yeni ref kullan").format(sid=sid))
     au = api.arka()
     if an.masaustu != au.ad:
         raise _ref_hatasi("window", _("ref başka masaüstüne ait; eylem yapılmadı. Aynı desktop değeriyle observe çağır"))
