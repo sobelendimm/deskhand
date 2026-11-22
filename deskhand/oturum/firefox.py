@@ -74,6 +74,8 @@ user_pref("permissions.default.microphone", 2);
 user_pref("permissions.default.desktop-notification", 2);
 user_pref("permissions.default.geo", 2);
 user_pref("permissions.default.xr", 2);
+user_pref("browser.cache.disk.smart_size.enabled", false);
+user_pref("browser.cache.disk.capacity", 65536);
 """
 
 
@@ -88,7 +90,6 @@ user_pref("signon.generation.enabled", false);
 user_pref("signon.management.page.breach-alerts.enabled", false);
 user_pref("devtools.policy.disabled", true);
 user_pref("browser.download.useDownloadDir", true);
-user_pref("browser.download.folderList", 1);
 user_pref("extensions.enabledScopes", 0);
 """
 
@@ -238,11 +239,75 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
 
     bilgi["argv"] = ["firefox", "--profile", hedef, "--no-remote", "--new-instance"]
     # Kopya Firefox kullanıcının profil kökünü (~/.config/mozilla/firefox: profiles.ini, installs.ini, Profile Groups)
-    # HİÇ görmesin: kendi boş yapılandırma kökü + eski tip profil yönetimi (kuruluma özel varsayılan yazmaz).
+    # HİÇ görmesin: kendi yapılandırma kökü + eski tip profil yönetimi (kuruluma özel varsayılan yazmaz). Kökte
+    # kullanıcının XDG klasör adları + GTK/yazı tipi görünümü OLMALI: yoksa GTK "Masaüstü" = var olmayan ~/Desktop,
+    # İndirilenler çözülmez ve Firefox ad alanındaki geçici ~/Downloads'a indirir (kapanınca kaybolur; gerçek olay).
     xdg = os.path.join(hedef, ".xdg-config")
-    os.makedirs(xdg, mode=0o700, exist_ok=True)
+    bilgi["indirme_dizini"] = xdg_yapilandirma_kur(xdg, gorev)
+    _indirme_prefleri_yaz(hedef, bilgi["indirme_dizini"])
     bilgi["env_ek"] = {"XDG_CONFIG_HOME": xdg, "MOZ_LEGACY_PROFILES": "1"}
+    kopya_mod.izinleri_daralt(hedef)
     return bilgi
+
+
+# Kopyanın kendi XDG_CONFIG_HOME'una alınan kullanıcı ayarları (yalnız GÖRÜNÜM + klasör adları; ev beyaz listesinin
+# alt kümesi, arka_ortak.EV_BEYAZ_LISTE): sembolik bağlar izlenmez, dizin başına boyut sınırı.
+_XDG_DOSYALAR = ("user-dirs.dirs", "user-dirs.locale", "mimeapps.list")
+_XDG_DIZINLER = ("gtk-3.0", "gtk-4.0", "fontconfig")
+_XDG_DIZIN_AZAMI = 4 * 1024 * 1024
+
+
+def indirme_dizini(gorev: bool = False, ev: str | None = None) -> str | None:
+    """Arka plan tarayıcısının indirme klasörü (ad alanında göründüğü yol): görev kipinde görevin indirme klasörü
+    (gorev_kipi.indirme_hedefi; ad alanında oraya bağlıdır), değilse kullanıcının XDG_DOWNLOAD_DIR'i — YALNIZ ad
+    alanında yazılabilir gerçek bir veri klasörüyse (arka_ortak.veri_klasorleri); yoksa None (tercih yazılmaz)."""
+    from .. import gorev_kipi
+    from ..arka_ortak import gercek_ev, veri_klasorleri
+    ev = os.path.realpath(ev or gercek_ev())
+    yol = gorev_kipi.indirme_hedefi(ev)
+    if gorev:
+        return yol
+    return yol if os.path.realpath(yol) in veri_klasorleri(ev) else None
+
+
+def xdg_yapilandirma_kur(xdg: str, gorev: bool = False, ev: str | None = None) -> str | None:
+    """Kopyanın XDG_CONFIG_HOME'unu (0700) kur: kullanıcının user-dirs.dirs / user-dirs.locale / mimeapps.list ve
+    gtk-3.0 / gtk-4.0 / fontconfig görünüm ayarları (0600 kopya). Görev kipinde user-dirs.dirs'teki XDG_DOWNLOAD_DIR
+    görevin indirme klasörünü gösterir. Kaynak yazılmaz. → indirme_dizini()."""
+    from ..arka_ortak import gercek_ev
+    ev = os.path.realpath(ev or gercek_ev())
+    os.makedirs(xdg, mode=0o700, exist_ok=True)
+    kaynak = os.path.join(ev, ".config")
+    for ad in _XDG_DOSYALAR:
+        k = os.path.join(kaynak, ad)
+        if not os.path.islink(k):
+            kopya_mod.dosya_kopyala(k, os.path.join(xdg, ad))
+    for d in _XDG_DIZINLER:
+        k = os.path.join(kaynak, d)
+        if os.path.isdir(k) and not os.path.islink(k):
+            kopya_mod.dizin_kopyala(os.path.dirname(k), xdg, yalnizca={d}, boyut_siniri=_XDG_DIZIN_AZAMI)
+    indir = indirme_dizini(gorev, ev)
+    if gorev and indir and not re.search(r'["\\\n$`]', indir):
+        yol = os.path.join(xdg, "user-dirs.dirs")
+        try:
+            with open(yol, encoding="utf-8", errors="replace") as f:
+                satirlar = [s for s in f if not re.match(r"\s*XDG_DOWNLOAD_DIR=", s)]
+        except OSError:
+            satirlar = []
+        satirlar.append(f'XDG_DOWNLOAD_DIR="{indir}"\n')
+        with open(yol, "w", encoding="utf-8") as f:
+            f.writelines(satirlar)
+    kopya_mod.izinleri_daralt(xdg)
+    return indir
+
+
+def _indirme_prefleri_yaz(hedef: str, indir: str | None) -> None:
+    """user.js'e indirme klasörü: browser.download.folderList=2 + browser.download.dir (XDG indirme klasörü)."""
+    if not indir:
+        return
+    with open(os.path.join(hedef, "user.js"), "a", encoding="utf-8") as f:
+        f.write('user_pref("browser.download.folderList", 2);\n'
+                f'user_pref("browser.download.dir", {json.dumps(indir, ensure_ascii=False)});\n')
 
 
 def _kimlik_sahibi(orijinal: Politika, saglayici: str):
@@ -377,16 +442,27 @@ def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, g
     eklenen = 0
     alanlar: set[str] = set()
     try:
+        import time
+        # Oturum çerezi kopyada kalıcı yazılır (kopya zaten oturumluk): bitiş = şimdi + 1 gün, birim mevcut satırlardan
+        # (Firefox ≥ ~130 ms yazar; satır yoksa ms — saniye beklenen eski sürümde de yalnız uzun ömür demek). 0 yazmak
+        # "süresi geçmiş" demekti: Firefox çerezi açılışta atıyordu (oturum girişleri aktarılmıyordu).
+        (enbuyuk,) = con.execute("SELECT MAX(expiry) FROM moz_cookies").fetchone()
+        ms = not enbuyuk or enbuyuk > 1e11
+        simdi = time.time()
+        bitis = int((simdi + 86400) * (1000 if ms else 1))
+        mikro = int(simdi * 1e6)
         for c in cerezler:
+            if not isinstance(c, dict):
+                continue
             host = c.get("host", "")
             alan = _alan(host)
             if not alan or politika.cerez_reddedildi(host) or not politika.site_izinli(alan, gorev_siteleri):
                 continue
             if gorev and not gorev_izinli(politika, alan, gorev_siteleri):
                 continue
-            oa = c.get("originAttributes", "")
-            if isinstance(oa, dict):
-                oa = ""  # basit: varsayılan bağlam
+            oa = oa_soneki(c.get("originAttributes", ""))
+            if oa is None:  # çevrilemeyen bağlam (gizli pencere, bilinmeyen alan): yanlış kaba yazmaktansa atla
+                continue
             try:
                 cur = con.execute(
                     "INSERT OR IGNORE INTO moz_cookies "
@@ -394,17 +470,59 @@ def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, g
                     "isSecure,isHttpOnly,sameSite,schemeMap) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (oa, c.get("name", ""), c.get("value", ""), host, c.get("path", "/"),
-                     0, 0, 0, int(bool(c.get("secure"))), int(bool(c.get("httponly"))),
+                     bitis, mikro, mikro, int(bool(c.get("secure"))), int(bool(c.get("httponly"))),
                      int(c.get("sameSite", 0) or 0), int(c.get("schemeMap", 0) or 0)))
                 if cur.rowcount > 0:  # IGNORE ile atlanan (zaten var) sayılmaz
                     eklenen += 1
                     alanlar.add(alan)
-            except sqlite3.Error:
+            except (sqlite3.Error, ValueError, TypeError):
                 pass
         con.commit()
     finally:
         con.close()
     return eklenen, alanlar
+
+
+_OA_BILINEN = {"userContextId", "privateBrowsingId", "firstPartyDomain", "geckoViewSessionContextId", "partitionKey",
+               "inIsolatedMozBrowser", "appId"}
+
+
+def _oa_kodla(deger: str) -> str:
+    """Firefox URLParams::Serialize (application/x-www-form-urlencoded): harf/rakam ve *-._ aynen, boşluk +, gerisi %XX."""
+    return "".join(chr(b) if (chr(b).isascii() and chr(b).isalnum()) or b in b"*-._" else ("+" if b == 0x20 else f"%{b:02X}")
+                   for b in deger.encode("utf-8"))
+
+
+def oa_soneki(oa) -> str | None:
+    """sessionstore originAttributes (sözlük ya da sonek metni) → cookies.sqlite sütunu (Firefox OriginAttributes::
+    CreateSuffix: '^userContextId=2&partitionKey=%28https%2Cexample.com%29', varsayılan bağlam ''). Gizli pencere,
+    GeckoView bağlamı ya da bilinmeyen dolu alan → None (çerez atlanır)."""
+    if isinstance(oa, str):
+        return oa if oa == "" or oa.startswith("^") else None
+    if not isinstance(oa, dict):
+        return None
+    if any(k not in _OA_BILINEN and v not in (None, "", 0, False) for k, v in oa.items()):
+        return None
+    if oa.get("privateBrowsingId") or oa.get("geckoViewSessionContextId") or oa.get("inIsolatedMozBrowser") or \
+            oa.get("appId"):
+        return None
+    parcalar = []
+    try:
+        uc = int(oa.get("userContextId") or 0)
+    except (TypeError, ValueError):
+        return None
+    if uc < 0:
+        return None
+    if uc:
+        parcalar.append(f"userContextId={uc}")
+    fpd, pk = oa.get("firstPartyDomain") or "", oa.get("partitionKey") or ""
+    if not isinstance(fpd, str) or not isinstance(pk, str):
+        return None
+    if fpd:
+        parcalar.append("firstPartyDomain=" + _oa_kodla(fpd.replace(":", "+")))
+    if pk:
+        parcalar.append("partitionKey=" + _oa_kodla(pk.replace("/", "+")))
+    return ("^" + "&".join(parcalar)) if parcalar else ""
 
 
 def _url_konak(url) -> str:

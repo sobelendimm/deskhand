@@ -27,6 +27,9 @@ _HARIC = {"Singleton", "SingletonLock", "SingletonSocket", "SingletonCookie", "C
           "Dictionaries", "discord_asset_cache", "Service Worker", "CacheStorage", "LOCK",
           "GraphiteDawnCache", "ShaderCache"}
 
+# Kopya RUNTIME_DIR'da (tmpfs, bellek): disk önbelleği 64 MB ile sınırlı (Firefox: browser.cache.disk.capacity)
+DISK_CACHE_BAYT = 64 * 1024 * 1024
+
 # Flatpak Electron: kimlik → (userData alt dizini [XDG_CONFIG_HOME altında], sandbox içi komut)
 _FLATPAK_ELECTRON = {
     "com.discordapp.Discord": ("discord", "com.discordapp.Discord"),
@@ -51,6 +54,7 @@ def veri_dizini_kopyala(kaynak: str, hedef: str, profil: str = "Default") -> dic
     kp = os.path.join(kaynak, profil)
     if os.path.isdir(kp):
         sayac += kopya_mod.dizin_kopyala(kp, os.path.join(hedef, profil), disla=_HARIC)
+    kopya_mod.izinleri_daralt(hedef)
     return {"kopyalanan": sayac}
 
 
@@ -59,7 +63,8 @@ def chromium_argv(uygulama: str, hedef: str, ek=None) -> list[str]:
     exe = {"chromium": "chromium", "vivaldi": "vivaldi", "chrome": "google-chrome-stable",
            "brave": "brave"}.get(uygulama, uygulama)
     return [exe, f"--user-data-dir={hedef}", f"--password-store={anahtar_deposu(uygulama)}",
-            "--disable-sync", "--no-first-run", "--no-default-browser-check", *(ek or [])]
+            "--disable-sync", "--no-first-run", "--no-default-browser-check",
+            f"--disk-cache-size={DISK_CACHE_BAYT}", *(ek or [])]
 
 
 # ------------------------------------------------------------------ (B) Flatpak Electron (köprüsüz)
@@ -81,6 +86,11 @@ def flatpak_electron_hazirla(politika: Politika, uygulama: str, ek_argv=None) ->
         kopyalanan = kopya_mod.dizin_kopyala(kaynak, config_hedef, disla=_HARIC)
     for d in ("cache", "data", "config"):
         os.makedirs(os.path.join(hedef, d), mode=0o700, exist_ok=True)
+    # sandbox içinde XDG_CONFIG_HOME = <hedef>/config: kullanıcının XDG klasör adları + GTK görünümü orada olmalı
+    # (yoksa indirilenler sandbox'ın geçici ~/Downloads'ına gider; Firefox kopyasıyla aynı sorun)
+    from .firefox import xdg_yapilandirma_kur
+    xdg_yapilandirma_kur(os.path.join(hedef, "config"))
+    kopya_mod.izinleri_daralt(hedef)
     argv = flatpak_argv(fk, komut, hedef, ek_argv)
     return {"kopya_yolu": hedef, "argv": argv, "env_ek": {}, "kopyalanan": kopyalanan,
             "durum": None if kopyalanan or os.path.isdir(kaynak) else _("{uygulama} userData yok (hiç açılmamış)").format(
