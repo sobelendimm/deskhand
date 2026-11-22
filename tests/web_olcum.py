@@ -172,7 +172,7 @@ atexit.register(kapat_hepsi)
 
 
 def firefox(url, **kw):
-    ff = wt.Firefox(au, _yalitim.GECICI, url, **kw)
+    ff = wt.Firefox(au, _yalitim.PAYLASIM, url, **kw)
     acik.append(ff)
     profil_denetle("Firefox açıldı")
     return ff

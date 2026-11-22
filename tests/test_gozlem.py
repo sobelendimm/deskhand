@@ -258,8 +258,8 @@ def log_bekle(yol, desen, bas=0, sure=4.0):
 
 async def sanal_testleri():
     from mcp import Client
-    LOG = os.path.join(GECICI, "a11y.log")
-    LOG2 = os.path.join(GECICI, "pencere.log")
+    LOG = os.path.join(_yalitim.PAYLASIM, "a11y.log")  # bwrap ad alanında yalnız PAYLASIM görünür
+    LOG2 = os.path.join(_yalitim.PAYLASIM, "pencere.log")
     masaustu.masaustu_baslat()
     masaustu.baslat([sys.executable, os.path.join(KOK, "tests/yardimci/a11y_pencere.py")],
                     {"LOG": LOG, "PENCERE_BASLIK": "gozlem-a11y"})
@@ -444,7 +444,7 @@ async def web_testleri():
     B = {"desktop": "background"}
     try:
         async with Client(s.mcp) as c:
-            ff = wt.Firefox(au, GECICI, srv.url("form.html"), erisilebilirlik=False)
+            ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("form.html"), erisilebilirlik=False)
             acik.append(ff)
             profil()
             k = ff.k
@@ -472,7 +472,7 @@ async def web_testleri():
             acik.remove(ff)
             profil()
 
-            ff = wt.Firefox(au, GECICI, srv.url("odeme.html"), erisilebilirlik=False)
+            ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("odeme.html"), erisilebilirlik=False)
             acik.append(ff)
             profil()
             k = ff.k
@@ -496,7 +496,7 @@ async def web_testleri():
             acik.remove(ff)
             profil()
 
-            ff = wt.Firefox(au, GECICI, srv.url("liste.html"), erisilebilirlik=False)
+            ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("liste.html"), erisilebilirlik=False)
             acik.append(ff)
             profil()
             k = ff.k

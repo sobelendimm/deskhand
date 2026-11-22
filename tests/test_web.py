@@ -141,7 +141,7 @@ srv = wt.Sunucu()
 tiklamalar = [0, 0]
 try:
     t0 = time.monotonic()
-    ff = wt.Firefox(au, _yalitim.GECICI, srv.url("form.html"))
+    ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("form.html"))
     acik_firefoxlar.append(ff)
     olcum["Firefox açılışı (geçici profil)"] = f"{time.monotonic() - t0:.1f} sn"
     k = ff.k
@@ -224,7 +224,7 @@ try:
     profil_denetle("form sayfası kapandı")
 
     # ---------------------------------------------------------------- 3) uzun liste: süre + kapsama + kaydırma
-    ff = wt.Firefox(au, _yalitim.GECICI, srv.url("liste.html"))
+    ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("liste.html"))
     acik_firefoxlar.append(ff)
     k = ff.k
     bekle(lambda: web.sayfa_bilgisi(k)["baslik"] == "Deskhand Liste Testi", 10)
@@ -271,7 +271,7 @@ try:
     acik_firefoxlar.remove(ff)
     profil_denetle("liste kapandı")
 
-    ff = wt.Firefox(au, _yalitim.GECICI, srv.url("liste.html?n=200"))
+    ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("liste.html?n=200"))
     acik_firefoxlar.append(ff)
     k = ff.k
     bekle(lambda: web.oku(k, gorunur=False, en_cok=1)["toplam"] >= 201, 10)
@@ -286,7 +286,7 @@ try:
     profil_denetle("liste-200 kapandı")
 
     # ---------------------------------------------------------------- 4) bileşenler: sekme, menü, iframe, sonradan
-    ff = wt.Firefox(au, _yalitim.GECICI, srv.url("bilesen.html"))
+    ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("bilesen.html"))
     acik_firefoxlar.append(ff)
     k = ff.k
     bekle(lambda: web.sayfa_bilgisi(k)["baslik"] == "Deskhand Bileşen Testi", 10)
@@ -335,7 +335,7 @@ try:
     profil_denetle("bileşen kapandı")
 
     # ---------------------------------------------------------------- 5) satın alma sayfası: hassas işareti
-    ff = wt.Firefox(au, _yalitim.GECICI, srv.url("satin.html"))
+    ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("satin.html"))
     acik_firefoxlar.append(ff)
     k = ff.k
     bekle(lambda: web.sayfa_bilgisi(k)["baslik"] == "Deskhand Mağaza Testi", 10)
