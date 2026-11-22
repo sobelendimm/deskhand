@@ -23,6 +23,16 @@ kapsamı"); `kart` onayların çoğunu kapattığından model GEVŞETMEYE karş�
 - CLI/MCP değeri dosyadan OKUMAZ: panelden onay kanalıyla alır (`liste onaylar`). Panel kapalı / kanal
   doğrulanamıyor / eski panel → `hepsi` (Dur 10 değil: onay sorulur, panel yoksa zaten ret).
 
+Hesap oturumu izni (`ayarlar.toml` [guvenlik] hesap_oturumlari = virgüllü microsoft/google/edevlet alt kümesi; KIMLIK;
+ARCHITECTURE §4 "Hesap oturumları") da panel yetkilidir; izin GEVŞETME yönündedir (görünmez masaüstündeki Firefox
+kopyasına o kimlik sağlayıcının oturum çerezleri girer), aynı tek yönlü model:
+- Panel açılışta dosyadaki sağlayıcılardan YALNIZ panelin kendi işaretinde (liste-kimlik.isaret) de olanları kabul eder;
+  işaretsiz/uyuşmayan sağlayıcı (panel dışında yazılmış) → bellekte yok, dosya geri yazılır, uyarılır.
+- Açmayı yalnız panelin Ayarlar'ı yazar (`panel_kimlik_kaydet`, onay diyaloğundan sonra); panel açıkken dosyaya elle
+  eklenen sağlayıcı geri alınır (`denetle`); dosyadan sağlayıcı çıkarmak / dosyayı silmek kabul (sıkılaştırma).
+- CLI/MCP (Firefox kopyasını hazırlayan süreç) değeri dosyadan OKUMAZ: panelden kanalla alır (`liste kimlik`). Panel
+  kapalı / kanal doğrulanamıyor / eski panel → izin YOK (kimlik çerezleri süzülür).
+
 Qt'siz (CLI/MCP hafif kalsın); panel tarafının Qt izleyicisi deskhand/gui/panel.py'de.
 """
 from __future__ import annotations
@@ -40,6 +50,8 @@ from .i18n import N_, _
 TURLER = ("yasak", "seviye")
 KAPSAM = "onaylar"  # kanal türü + işaret adı (liste-onaylar.isaret); dosya: ayarlar.toml [guvenlik] onaylar
 KAPSAMLAR = ("hepsi", "kart")
+KIMLIK = "kimlik"  # kanal türü + işaret adı (liste-kimlik.isaret); dosya: ayarlar.toml [guvenlik] hesap_oturumlari
+KIMLIK_SAGLAYICILARI = ("microsoft", "google", "edevlet")  # sıra = kanonik yazım sırası (ayarlar.KUME ile aynı)
 ONBELLEK_SN = 0.3  # istemci: panelden alınan listeyi bu kadar süre yeniden sormaz (pencere listesinde her pencere
 #                   için denetim); panelin Kaydet'i en geç bu kadar sonra geçerli. Dosya yolu önbelleksiz.
 MESAJ_KAYIP = N_("Deskhand ayar dosyası ({dosya}) kayıp ya da panel dışında değişti; güvenli tarafta hiçbir girdi "
@@ -108,6 +120,7 @@ class Koruyucu:
         for tur in TURLER:
             self._ac(tur)
         self._kapsam_ac()
+        self._kimlik_ac()
 
     def _ac(self, tur: str) -> None:
         mevcut = _oku(dosya(tur))
@@ -158,6 +171,36 @@ class Koruyucu:
             self.bellek[KAPSAM] = deger
             self._kapsam_dosyaya()
 
+    def _kimlik_ac(self) -> None:
+        d = kimlik_ayristir(_kimlik_dosyadan())
+        isaret = isaret_oku(KIMLIK)
+        onayli = (kimlik_ayristir(isaret.get("icerik")) if isaret is not None and isinstance(isaret.get("icerik"), str)
+                  and isaret["sha256"] == _ozet(isaret["icerik"]) else frozenset())
+        kabul = d & onayli  # yalnız panelin kendi kaydında da açık olanlar (dosyadan kapatmak = sıkılaştırma, kabul)
+        self.bellek[KIMLIK] = kimlik_metni(kabul)
+        if kabul != d:
+            self._kimlik_dosyaya()
+            self.uyari(_("Hesap oturumu izni ({saglayici}) panel dışında açılmış; geçerli sayılmadı, kimlik çerezleri "
+                         "süzülmeye devam ediyor. Açmak için panelde Ayarlar → Hesap oturumları.").format(
+                             saglayici=", ".join(sorted(d - kabul))))
+            return
+        _isaret_yaz(KIMLIK, self.bellek[KIMLIK])
+
+    def _kimlik_dosyaya(self) -> None:
+        from . import ayarlar
+        try:
+            ayarlar.ayarla("guvenlik", "hesap_oturumlari", self.bellek[KIMLIK])
+        except Exception:  # noqa: BLE001 - dosya yazılamadı: yetkili değer bellekte (istemciler panelden alır)
+            pass
+        _isaret_yaz(KIMLIK, self.bellek[KIMLIK])
+
+    def kimlik_kaydet(self, deger: str) -> None:
+        """Panelin Ayarlar'ı: hesap oturumu izni (tek yetkili yazar; açarken onay diyaloğu gui'de)."""
+        k = kimlik_ayristir(deger, kati=True)
+        with self._kilit:
+            self.bellek[KIMLIK] = kimlik_metni(k)
+            self._kimlik_dosyaya()
+
     def _dosyaya(self, tur: str) -> None:
         icerik = self.bellek.get(tur)
         if icerik is None:
@@ -200,6 +243,19 @@ class Koruyucu:
                 uyarilar.append(_("Onay kapsamı ayar dosyasında panel dışında değiştirildi; panelin değeri ('{deger}') "
                                   "korundu ve dosya geri yazıldı (değişiklikleri Ayarlar'dan yapın).").format(
                                       deger=self.bellek.get(KAPSAM)))
+            dosyada_k = kimlik_ayristir(_kimlik_dosyadan())
+            bellekte_k = kimlik_ayristir(self.bellek.get(KIMLIK))
+            if dosyada_k != bellekte_k:
+                if dosyada_k < bellekte_k:  # dosyadan kapatıldı / dosya silindi: SIKI taraf, kabul
+                    self.bellek[KIMLIK] = kimlik_metni(dosyada_k)
+                    _isaret_yaz(KIMLIK, self.bellek[KIMLIK])
+                    uyarilar.append(_("Hesap oturumu izni ayar dosyasında panel dışında kapatıldı ya da silindi; "
+                                      "kimlik çerezleri yeniden süzülüyor."))
+                else:
+                    self._kimlik_dosyaya()
+                    uyarilar.append(_("Hesap oturumu izni ayar dosyasında panel dışında açılmaya çalışıldı; geçerli "
+                                      "sayılmadı, panelin değeri korundu ve dosya geri yazıldı (açmak için panelde "
+                                      "Ayarlar → Hesap oturumları)."))
         for u in uyarilar:
             self.uyari(u)
         return uyarilar
@@ -242,6 +298,58 @@ def panel_kapsam_kaydet(deger: str) -> None:
     from . import ayarlar
     ayarlar.ayarla("guvenlik", "onaylar", deger)
     _isaret_yaz(KAPSAM, deger)
+
+
+def panel_kimlik_kaydet(deger: str) -> None:
+    """gui/ayar.py Hesap oturumları: panel koruyucusu varsa onun üzerinden (yoksa dosya + işaret)."""
+    if AKTIF is not None:
+        AKTIF.kimlik_kaydet(deger)
+        return
+    metin_ = kimlik_metni(kimlik_ayristir(deger, kati=True))
+    from . import ayarlar
+    ayarlar.ayarla("guvenlik", "hesap_oturumlari", metin_)
+    _isaret_yaz(KIMLIK, metin_)
+
+
+def kimlik_ayristir(deger, kati: bool = False) -> frozenset:
+    """"microsoft,google" → {"microsoft", "google"}. Bilinmeyen ad atılır (kati=True: ValueError)."""
+    if not isinstance(deger, str):
+        if kati:
+            raise ValueError(repr(deger))
+        return frozenset()
+    parcalar = {p.strip().lower() for p in deger.replace(" ", ",").split(",") if p.strip()}
+    if kati and parcalar - set(KIMLIK_SAGLAYICILARI):
+        raise ValueError(deger)
+    return frozenset(p for p in parcalar if p in KIMLIK_SAGLAYICILARI)
+
+
+def kimlik_metni(saglayicilar) -> str:
+    return ",".join(k for k in KIMLIK_SAGLAYICILARI if k in set(saglayicilar))
+
+
+def _kimlik_dosyadan() -> str:
+    from . import ayarlar
+    try:
+        d = ayarlar.al("guvenlik", "hesap_oturumlari")
+    except Exception:  # noqa: BLE001 - okunamadı: güvenli taraf (izin yok)
+        return ""
+    return d if isinstance(d, str) else ""
+
+
+def kimlik_dosyada() -> frozenset:
+    """Ayar dosyasında YAZAN (doğrulanmamış) sağlayıcılar: yalnız bilgi (doctor); karar için kimlik_izinleri()."""
+    return kimlik_ayristir(_kimlik_dosyadan())
+
+
+def kimlik_izinleri() -> frozenset:
+    """Kullanıcının panelden açtığı hesap oturumu izinleri ({"microsoft", "google"} alt kümesi). Panel sürecinde
+    bellekteki yetkili değer; başka süreçte YALNIZ panelin doğrulanmış kanalından (`liste kimlik`). Panel kapalı /
+    doğrulanamadı / eski panel / tanınmayan yanıt → boş küme (izin yok). Dosyaya bakılmaz: dosya yazabilen bir süreç
+    (ajan) izni açamaz. Görev kipinde izin hiç uygulanmaz (çağıran: oturum/firefox.hazirla)."""
+    if AKTIF is not None:
+        return kimlik_ayristir(AKTIF.metin(KIMLIK))
+    d = _panelden(KIMLIK)
+    return kimlik_ayristir(d) if isinstance(d, str) else frozenset()
 
 
 def _kapsam_dosyadan() -> str:

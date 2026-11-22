@@ -145,7 +145,8 @@ def hazirla(uygulama: str, gorev_siteleri=None, ham_komut: bool = False) -> Hazi
     ayrinti.update({k: v for k, v in b.items() if k not in ("argv", "env_ek", "kopya_yolu", "durum")})
     return Hazirlik(karar="kopya", argv=b.get("argv", []), env_ek=b.get("env_ek", {}),
                     kopya_yolu=b.get("kopya_yolu"), gerekli_keyring=pol.keyring,
-                    aciklama=_("{ad} kopyası hazır").format(ad=ad), ayrinti=ayrinti, ev=pol.ev)
+                    aciklama=_("{ad} kopyası hazır").format(ad=ad) + (f"; {b['kimlik_metni']}" if b.get("kimlik_metni")
+                                                                     else ""), ayrinti=ayrinti, ev=pol.ev)
 
 
 def temizle(kopya_yolu: str) -> None:

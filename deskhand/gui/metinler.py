@@ -165,6 +165,29 @@ Y_ONAY_NOT = N_("Hepsi: bugünkü davranış; tüm riskli eylemler (uçbirimde E
                 "kart bilgisi yazma sorar; diğerleri sormadan yapılır (günlüğe yazılır). Yasaklar, erişim "
                 "seviyeleri ve DUR bundan etkilenmez.")
 Y_ONAY_HATA = N_("Onay ayarı kaydedilemedi: {hata}")
+Y_HESAP = N_("Hesap oturumları")
+Y_HESAP_HEPSI = N_("Giriş yaptığım hesaplar görünmez masaüstünde de açık olsun (banka ve ödeme siteleri hariç)")
+Y_HESAP_SECENEK = {
+    "microsoft": N_("Microsoft hesabım (Outlook/Hotmail, OneDrive, Office) görünmez masaüstünde oturum açık "
+                    "kullanılabilir"),
+    "google": N_("Google hesabım (Gmail, Drive, Dokümanlar) görünmez masaüstünde oturum açık kullanılabilir"),
+    "edevlet": N_("e-Devlet ve devlet siteleri (turkiye.gov.tr, gib.gov.tr, sgk.gov.tr…) görünmez masaüstünde oturum "
+                  "açık kullanılabilir"),
+}
+Y_HESAP_AD = {"microsoft": N_("Microsoft hesabı"), "google": N_("Google hesabı"),
+              "edevlet": N_("e-Devlet ve devlet siteleri"), "hepsi": N_("Microsoft, Google ve e-Devlet oturumları")}
+Y_HESAP_UYARI = N_("Açarsanız arka plandaki tarayıcı bu hesabın e-postalarına ve dosyalarına erişebilir; güvenilmeyen "
+                   "bir sayfa ajanı kandırabilir. Yalnız gerektiğinde açın.")
+Y_HESAP_NOT = N_("Kapalıyken (varsayılan) bu hesapların giriş çerezleri ve kayıtlı parolaları görünmez masaüstündeki "
+                 "Firefox kopyasına alınmaz; her seferinde şifre gerekir. Açıkken kayıtlı parolayı Firefox kendisi "
+                 "doldurur (ajan parolayı görmez). Görev kipinde (Görev sekmesi) bu izin hiç uygulanmaz. Banka ve "
+                 "ödeme siteleri hiçbir ayarla açılmaz. Yalnız bu panelden açılabilir; ayar dosyasına elle yazılan "
+                 "değer geçmez.")
+Y_HESAP_SORU_BASLIK = N_("{hesap}: oturum izni açılsın mı?")
+Y_HESAP_SORU = N_("{hesap} görünmez masaüstündeki tarayıcıda oturum açık kullanılabilecek.\n\n"
+                  "Arka plandaki tarayıcı bu hesabın e-postalarına ve dosyalarına erişebilir; güvenilmeyen bir sayfa "
+                  "ajanı kandırabilir. Yalnız gerektiğinde açın, işiniz bitince kapatın.\n\nAçılsın mı?")
+Y_HESAP_HATA = N_("Hesap oturumu ayarı kaydedilemedi: {hata}")
 Y_DIL = N_("Dil")
 Y_DIL_OTOMATIK = N_("Otomatik (sistem dili: {dil})")
 Y_DIL_NOT = N_("Arayüzün dili. Panel ve tepsi menüsü hemen değişir; komut satırı ve ajanın (MCP) iletileri yeni "

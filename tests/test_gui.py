@@ -679,9 +679,9 @@ kontrol("sağlık: araç/dil/modül denetimi", ok_["kdotool"] and ok_["Xvfb"] an
 
 ek = S.ek_satirlar()
 adlar_ = [r["ad"] for r in ek]
-kontrol("sağlık: yardımcılar + arka plan türü + onay kapsamı satırları (doctor'dan)",
-        len(ek) == 3 and "C yardımcıları" in adlar_ and "Arka plan masaüstü türü" in adlar_ and
-        "Onay kapsamı" in adlar_ and all(r["tur"] == "ek" and r["durum"] in ("tamam", "uyari", "eksik") for r in ek), str(adlar_))
+kontrol("sağlık: yardımcılar + arka plan türü + onay kapsamı + hesap oturumları satırları (doctor'dan)",
+        len(ek) == 4 and "C yardımcıları" in adlar_ and "Arka plan masaüstü türü" in adlar_ and
+        "Onay kapsamı" in adlar_ and "Hesap oturumları" in adlar_ and all(r["tur"] == "ek" and r["durum"] in ("tamam", "uyari", "eksik") for r in ek), str(adlar_))
 kontrol("sağlık: bwrap zorunlu (kırmızı), kwin_wayland bilgi (sarı)",
         {d["ad"]: d["durum"] for d in S.denetle(which=lambda a: False, find_spec=lambda m: None,
                                                 diller_f=lambda: set())}["bwrap"] == "eksik" and

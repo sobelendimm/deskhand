@@ -2,6 +2,20 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
+## Yayımlanmamış
+
+- **Hesap oturumları: görünmez masaüstünde girişli Microsoft / Google / e-Devlet (isteğe bağlı).** Firefox kopyası
+  güvenlik için merkezi giriş (Microsoft, Google) ve devlet sitelerinin çerezlerini süzdüğünden Excel Online gibi
+  sayfalar her seferinde şifre istiyordu. Panel → Ayarlar → **Hesap oturumları**'ndan tek ana anahtarla ("Giriş
+  yaptığım hesaplar görünmez masaüstünde de açık olsun — banka ve ödeme siteleri hariç") ya da tek tek
+  (Microsoft, Google, e-Devlet ve devlet siteleri) izin verilebilir: o hesabın çerezleri, kayıtlı girişleri (parolayı
+  Firefox doldurur) ve deposu kopyaya girer. Varsayılan **kapalı**; açarken onay sorulur ve uyarı gösterilir
+  ("arka plandaki tarayıcı bu hesabın e-postalarına ve dosyalarına erişebilir"). Yalnız panelden açılır: ayar
+  dosyasına elle ya da ajanla yazılan değer geçmez, panel geri alır; CLI/MCP değeri yalnız panelden alır. Banka ve
+  ödeme siteleri hiçbir ayarla açılmaz; görev kipinde izin hiç uygulanmaz. `deskhand doctor` ve `open` çıktısı
+  hangi hesabın aktarıldığını ya da neden süzüldüğünü söyler ("kimlik oturumları: Microsoft aktarıldı (5 çerez,
+  1 kayıtlı giriş)").
+
 ## 0.7.0 (22 Kasım 2026)
 
 - **Panelde "Görev" sekmesi: görev ver, o yapsın.** Yazdığınız işi (ör. "şu sitede şunu bul, bana özetle") panel kendi

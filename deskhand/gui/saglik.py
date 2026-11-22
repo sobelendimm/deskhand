@@ -59,11 +59,12 @@ def denetle(which=shutil.which, find_spec=importlib.util.find_spec, diller_f=tes
 
 def ek_satirlar(doktor_f=None) -> list[dict]:
     """Doctor'ın satır işlevlerini yeniden kullanır (yeni denetim mantığı YOK): C yardımcıları (deskhand-eis dahil),
-    arka plan masaüstü türü (kwin|xvfb), onay kapsamı (panelin bellekteki yetkili değeri: liste_koruma).
+    arka plan masaüstü türü (kwin|xvfb), onay kapsamı ve hesap oturumları (panelin bellekteki yetkili değeri: liste_koruma).
     → denetle() ile aynı biçim; tur "ek", not = doctor'ın (zaten çevrilmiş) ayrıntısı."""
     if doktor_f is None:
         from .. import doktor
-        doktor_f = (doktor.satir_yardimcilar, doktor.satir_arka_tur, doktor.satir_onay_kapsami)
+        doktor_f = (doktor.satir_yardimcilar, doktor.satir_arka_tur, doktor.satir_onay_kapsami,
+                    doktor.satir_hesap_oturumlari)
     sonuc = []
     for f in doktor_f:
         try:

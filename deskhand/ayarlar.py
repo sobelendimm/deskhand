@@ -12,6 +12,10 @@ Dosya yoksa varsayılanlar kullanılır; OKUMA dosya oluşturmaz. Bilinmeyen/yan
 
   [guvenlik]
   onaylar = "hepsi"        # hepsi | kart   (hangi eylemler panelden insan onayı ister; ARCHITECTURE §4 "Onay kapsamı")
+  hesap_oturumlari = ""    # virgüllü alt küme: microsoft, google, edevlet ("" = hiçbiri): görünmez masaüstündeki Firefox
+                           # kopyasına bu sağlayıcının oturumu (çerez + kayıtlı giriş + depo) girebilir (banka/ödeme
+                           # asla). PANEL YETKİLİ: yalnız panelin Ayarlar → Hesap oturumları yazar; elle yazılan değer
+                           # geçmez (liste_koruma)
 
   [gorev]
   model = "sonnet"         # sonnet | opus | haiku   (panelin "Görev" sekmesi: görevi yapan Claude modeli)
@@ -45,6 +49,7 @@ VARSAYILAN = {
     },
     "guvenlik": {
         "onaylar": "hepsi",
+        "hesap_oturumlari": "",
     },
     "gorev": {
         "model": "sonnet",
@@ -61,6 +66,8 @@ VARSAYILAN = {
 TAKMA = {("karar", "mesgulken"): {"hep-arka": "arka"}}
 SECENEK = {("karar", "mesgulken"): {"sor", "arka", "bekle"}, ("karar", "cevapsiz"): {"arka", "sonra"},
            ("guvenlik", "onaylar"): {"hepsi", "kart"}, ("gorev", "model"): {"sonnet", "opus", "haiku"}}
+# virgülle ayrılmış alt küme (sıra bu demettedir; tekrar/boşluk atılır): ("guvenlik", "hesap_oturumlari")
+KUME = {("guvenlik", "hesap_oturumlari"): ("microsoft", "google", "edevlet")}
 ARALIK = {("karar", "sor_sure"): (1, 3600), ("karar", "girdi_esik_sn"): (0, 3600),
           ("gorev", "azami_dakika"): (1, 240), ("gorev", "azami_tur"): (1, 500)}
 
@@ -114,6 +121,14 @@ def dogrula(bolum: str, anahtar: str, deger):
     if not isinstance(deger, str):
         raise ValueError(_("{ayar} metin olmalı").format(ayar=f"{bolum}.{anahtar}"))
     deger = TAKMA.get((bolum, anahtar), {}).get(deger, deger)
+    kume = KUME.get((bolum, anahtar))
+    if kume is not None:
+        parcalar = {p.strip().lower() for p in deger.replace(" ", ",").split(",") if p.strip()}
+        bilinmeyen = parcalar - set(kume)
+        if bilinmeyen:
+            raise ValueError(_("{ayar} şunların virgülle ayrılmış alt kümesi olmalı: {secenekler}").format(
+                ayar=f"{bolum}.{anahtar}", secenekler=", ".join(kume)))
+        return ",".join(k for k in kume if k in parcalar)
     secenek = SECENEK.get((bolum, anahtar))
     if secenek and deger not in secenek:
         raise ValueError(_("{ayar} şunlardan biri olmalı: {secenekler}").format(

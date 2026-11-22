@@ -6,7 +6,8 @@ permissions.sqlite, containers.json, pkcs11.txt, yalnız İZİN VERİLEN siteler
 uzantılar. KOPYALANMAZ: signedInUser.json, weave, lock/.parentlock, places*, sessionstore'un kendisi, telemetri.
 
 Oturum çerezleri (yalnız recovery.jsonlz4'te) mozlz4 çözülüp kopyanın cookies.sqlite'ına eklenir (ret hariç).
-Ret listesindeki alanların çerezi (alan çerezi ".google.com" ret listesindeki alt alana da gidiyorsa o da),
+Ret listesindeki alanların çerezi (alan çerezi ".google.com" ret listesindeki alt alana da gidiyorsa o da; kullanıcı
+panelden Hesap oturumları iznini açtıysa o sağlayıcının merkezi kimlik alanları hariç [görev kipinde hiç]),
 deposu ve KAYITLI PAROLALARI (logins.json / logins-backup.json / logins.db aynası aynı kayıtlar; şifreli değerlere
 dokunulmaz, kayıt bütünüyle silinir) kopyadan SİLİNİR. permissions.sqlite'tan kamera/mikrofon/ekran paylaşımı/
 konum/bildirim izinleri silinir (arka planda gerçek kamera açılmasın). user.js: Sync/FxA kapalı, bu izinlerin
@@ -156,12 +157,24 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
     disla = set(politika.disla)
     from .. import gorev_kipi
     gorev = gorev_kipi.etkin()
+    kimlik_izni: frozenset = frozenset()
+    orijinal = politika  # izinsiz ret listesi (kimlik özeti: hangi çerez/giriş izin sayesinde geldi)
     if gorev:  # GÖREV KİPİ: kayıtlı parolalar + anahtar deposu + uzantılar (verileriyle) KOPYALANMAZ; site = görev izni
         disla |= set(GOREV_DISLA)
         gorev_siteleri = gorev_kipi.siteler()
+        # hesap oturumu izni görev kipinde HİÇ uygulanmaz: kimlik çerezleri her zaman süzülür (panel izni olsa bile)
+    else:
+        # Hesap oturumları (panel yetkili; ARCHITECTURE §4): kullanıcı panelden açtıysa o sağlayıcının merkezi kimlik
+        # alanları ret listesinden çıkar (çerez + kayıtlı giriş). Panel kapalı / doğrulanamıyor → izin yok.
+        from .. import liste_koruma
+        try:
+            kimlik_izni = liste_koruma.kimlik_izinleri()
+        except Exception:  # noqa: BLE001 - doğrulanamadı: güvenli taraf (izin yok)
+            kimlik_izni = frozenset()
+        politika = politika.kimlik_izni_uygula(kimlik_izni)
     bilgi = {"kopya_yolu": hedef, "kaynak": kaynak, "durum": None,
              "cerez_sayisi": 0, "oturum_cerez_eklendi": 0, "ret_silindi": 0, "origin_sayisi": 0,
-             "giris_silindi": 0, "izin_silindi": 0}
+             "giris_silindi": 0, "izin_silindi": 0, "kimlik_izni": sorted(kimlik_izni)}
 
     # 1) SQLite dosyaları (tutarlı)
     for ad in _SQLITE_DOSYALAR:
@@ -193,6 +206,7 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
     # 4) ret listesi alanlarını kopya cookies.sqlite'ından sil, izinli alanları/çerez alanlarını topla
     kopya_cookies = os.path.join(hedef, "cookies.sqlite")
     izinli_alanlar: set[str] = set()
+    kimlik_mevcut = _kimlik_cerez_say(kopya_cookies, orijinal) if os.path.isfile(kopya_cookies) else {}
     if os.path.isfile(kopya_cookies):
         bilgi["cerez_sayisi"], bilgi["ret_silindi"], izinli_alanlar = _cookies_suz(
             kopya_cookies, politika, gorev_siteleri)
@@ -207,6 +221,11 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
         eklendi, ek_alanlar = _oturum_cerezleri_ekle(rec, kopya_cookies, politika, gorev_siteleri, gorev)
         bilgi["oturum_cerez_eklendi"] = eklendi
         izinli_alanlar |= ek_alanlar
+
+    # 5b) kimlik oturumu özeti (kullanıcı/ajan neden giriş istendiğini görsün): izinle aktarılan / izinsiz süzülen
+    bilgi["kimlik_ozet"] = _kimlik_ozet(kopya_cookies, hedef, orijinal, kimlik_izni, kimlik_mevcut)
+    bilgi["kimlik_metni"] = kimlik_ozeti_metni(bilgi["kimlik_ozet"], gorev)
+    _kimlik_son_yaz(bilgi["kimlik_ozet"], gorev)
 
     # 6) yalnız izin verilen origin'lerin storage/default/<origin> klasörleri
     # Görev sitesi verilmediyse site deposu kopyalanmaz: ~575 alan × yerel depo yüzlerce MB olabiliyordu;
@@ -224,6 +243,103 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
     os.makedirs(xdg, mode=0o700, exist_ok=True)
     bilgi["env_ek"] = {"XDG_CONFIG_HOME": xdg, "MOZ_LEGACY_PROFILES": "1"}
     return bilgi
+
+
+def _kimlik_sahibi(orijinal: Politika, saglayici: str):
+    """→ f(host) True: host YALNIZ bu sağlayıcının ret girdileri yüzünden reddediliyor (izinle açılan kısım)."""
+    acik = orijinal.kimlik_izni_uygula({saglayici})
+    return lambda h, cerez=True: ((orijinal.cerez_reddedildi(h) and not acik.cerez_reddedildi(h)) if cerez else
+                                  (orijinal.site_reddedildi(h) and not acik.site_reddedildi(h)))
+
+
+def _kimlik_cerez_say(cookies_db: str, orijinal: Politika) -> dict:
+    """Sağlayıcı başına, yalnız o sağlayıcının ret girdileri yüzünden süzülecek çerez satırı sayısı."""
+    try:
+        con = sqlite3.connect(cookies_db)
+        try:
+            satirlar = con.execute("SELECT host, COUNT(*) FROM moz_cookies GROUP BY host").fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    from .politika import KIMLIK_ALANLARI
+    reddedilen = [(h, n) for h, n in satirlar if h and orijinal.cerez_reddedildi(h)]  # önce tek geçiş (yüzlerce konak)
+    sonuc = {}
+    for s in KIMLIK_ALANLARI:
+        acik = orijinal.kimlik_izni_uygula({s})
+        sonuc[s] = sum(n for h, n in reddedilen if not acik.cerez_reddedildi(h))
+    return sonuc
+
+
+def _kimlik_ozet(kopya_cookies: str, hedef: str, orijinal: Politika, izin, mevcut: dict) -> dict:
+    """{sağlayıcı: {izin, cerez, giris}}: izinliyse kopyaya GİREN çerez (oturum çerezleri dahil) + kayıtlı giriş;
+    izinsizse kalıcı çerezlerden SÜZÜLEN sayısı (giris 0). Değer okunmaz; yalnız konak."""
+    from .politika import KIMLIK_ALANLARI
+    sonra = _kimlik_cerez_say(kopya_cookies, orijinal) if os.path.isfile(kopya_cookies) else {}
+    girisler = []
+    try:
+        with open(os.path.join(hedef, "logins.json")) as f:
+            girisler = [g for g in (json.load(f).get("logins") or []) if isinstance(g, dict)]
+    except (OSError, ValueError, AttributeError):
+        pass
+    ozet = {}
+    for s in KIMLIK_ALANLARI:
+        if s in izin:
+            f = _kimlik_sahibi(orijinal, s)
+            giris = sum(1 for g in girisler
+                        if any(k and f(k, cerez=False) for k in (_url_konak(g.get("hostname")),
+                                                                 _url_konak(g.get("formSubmitURL")))))
+            ozet[s] = {"izin": True, "cerez": sonra.get(s, 0), "giris": giris}
+        else:
+            ozet[s] = {"izin": False, "cerez": mevcut.get(s, 0), "giris": 0}
+    return ozet
+
+
+def kimlik_ozeti_metni(ozet: dict, gorev: bool = False) -> str:
+    """'kimlik oturumları: Microsoft aktarıldı (5 çerez, 1 kayıtlı giriş); Google süzüldü (izin kapalı …)' ya da ''."""
+    from .politika import KIMLIK_ADLARI
+    parcalar = []
+    for s, d in (ozet or {}).items():
+        ad = KIMLIK_ADLARI.get(s, s)
+        if gorev:
+            if d.get("cerez"):
+                parcalar.append(_("{ad} süzüldü (görev kipinde aktarılmaz)").format(ad=ad))
+        elif d.get("izin"):
+            parcalar.append(_("{ad} aktarıldı ({cerez} çerez, {giris} kayıtlı giriş)").format(
+                ad=ad, cerez=d.get("cerez", 0), giris=d.get("giris", 0)))
+        elif d.get("cerez"):
+            parcalar.append(_("{ad} süzüldü ({cerez} çerez; izin kapalı: panel → Ayarlar → Hesap oturumları)").format(
+                ad=ad, cerez=d["cerez"]))
+    return _("kimlik oturumları: {ozet}").format(ozet="; ".join(parcalar)) if parcalar else ""
+
+
+def kimlik_son_yolu() -> str:
+    from .politika import kopya_dizini
+    return os.path.join(kopya_dizini(), "kimlik-son.json")
+
+
+def _kimlik_son_yaz(ozet: dict, gorev: bool) -> None:
+    """Son Firefox kopyasının kimlik özeti (yalnız BİLGİ: doctor gösterir; karar için kullanılmaz)."""
+    import time
+    yol = kimlik_son_yolu()
+    try:
+        os.makedirs(os.path.dirname(yol), mode=0o700, exist_ok=True)
+        gecici = f"{yol}.{os.getpid()}"
+        with open(gecici, "w") as f:
+            json.dump({"zaman": time.time(), "gorev": bool(gorev), "ozet": ozet}, f)
+        os.chmod(gecici, 0o600)
+        os.replace(gecici, yol)
+    except OSError:
+        pass
+
+
+def kimlik_son_oku() -> dict | None:
+    try:
+        with open(kimlik_son_yolu()) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) and isinstance(d.get("ozet"), dict) else None
+    except (OSError, ValueError):
+        return None
 
 
 def _cookies_suz(cookies_db: str, politika: Politika, gorev_siteleri) -> tuple[int, int, set]:
