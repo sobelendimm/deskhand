@@ -488,8 +488,9 @@ for senaryo in ("izin", "baslik-degisti"):
                 f"{sonuc} {au.satirlar[n0:]}")
     else:
         e = sonuc.get("hata")
-        kontrol("MCP [başlık değişti]: onay geçersiz → 4, girdi yok",
-                isinstance(e, Dur) and e.kod == 4 and au.satirlar[n0:] == [], f"{sonuc} {au.satirlar[n0:]}")
+        kontrol("MCP [başlık değişti]: onay geçersiz → 10 (yeniden onay gerekir), girdi yok",
+                isinstance(e, Dur) and e.kod == 10 and "yeniden onay" in e.mesaj and au.satirlar[n0:] == [],
+                f"{sonuc} {au.satirlar[n0:]}")
     kontrol(f"MCP [{senaryo}]: eylem bitince kilit serbest", not s.KILIT.locked())
 
 onay.iste_sonuc = gercek_iste_sonuc

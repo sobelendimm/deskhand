@@ -49,7 +49,9 @@ def masaustu_girdileri():
                     continue
                 sonuc.append({"yol": yol, "kimlik": kimlik[:-8], "ad": alan.get("Name[tr]") or alan.get("Name", ""),
                               "ad_en": alan.get("Name", ""), "exec": alan.get("Exec", ""),
-                              "gizli": alan.get("NoDisplay") == "true"})
+                              "gizli": alan.get("NoDisplay") == "true",
+                              "ucbirimde": alan.get("Terminal", "").strip().lower() == "true",
+                              "kategoriler": [k for k in alan.get("Categories", "").split(";") if k]})
     return sonuc
 
 
@@ -85,6 +87,213 @@ def uygulama_bul(ad):
             ad=ad, sayi=len(gorunur), liste=liste))
     raise Dur(6, _("'{ad}' adlı uygulama bulunamadı (.desktop); komutla başlatmak için: ekran ac --komut \"…\""
                    ).format(ad=ad))
+
+
+# ---------------------------------------------------------------- MCP: yalnız masaüstü girdisi + belge argümanı
+# Kabuğu OLMAYAN bir MCP ajanı open_app ile kod çalıştıramamalı (docs/ARCHITECTURE.md §4 "MCP uygulama başlatma"):
+# uygulama yalnız kurulu bir .desktop girdisidir, argümanlar yalnız URL ya da var olan belge yoludur. Yorumlayıcı,
+# kabuk, sarmalayıcı, yetki yükseltici, başlatıcı ve uçbirim öykünücüsü hiçbir biçimde (doğrudan, .desktop Exec'inde,
+# Flatpak --command'ında) başlatılmaz. CLI `ac --komut` bu yoldan GEÇMEZ (kabuğu olan kullanıcı/ajan içindir).
+
+# Tam ad eşleşmesi (küçük harf, yol atılmış); sürüm ekli adlar (python3.12, perl5.38, lua5.4) _yorumlayici_adi ile.
+YASAK_PROGRAMLAR = frozenset({
+    # kabuklar
+    "sh", "bash", "rbash", "zsh", "fish", "dash", "ksh", "mksh", "pdksh", "oksh", "yash", "csh", "tcsh", "nu", "elvish",
+    "xonsh", "busybox", "toybox",
+    # sarmalayıcılar / süreç başlatıcılar (asıl komutu argümanda taşır)
+    "env", "nohup", "setsid", "systemd-run", "run0", "flatpak-spawn", "xargs", "exec", "command", "time", "timeout",
+    "stdbuf", "unbuffer", "script", "expect", "watch", "parallel", "at", "batch", "dbus-run-session", "dbus-launch",
+    "dbus-send", "gdbus", "busctl", "qdbus", "qdbus6", "qdbus-qt5", "qdbus-qt6", "strace", "ltrace", "gdb", "lldb",
+    "valgrind", "bwrap", "unshare", "nsenter", "chroot", "proot", "systemd-nspawn", "toolbox", "distrobox",
+    "distrobox-enter", "podman", "docker", "make", "cmake", "ninja",
+    # yetki yükseltme
+    "sudo", "sudoedit", "doas", "pkexec", "su", "sg", "newgrp", "kdesu", "kdesudo", "gksu", "gksudo",
+    # ağ kabukları / tüneller
+    "socat", "nc", "ncat", "netcat", "telnet", "ssh", "mosh", "rsh",
+    # başlatıcılar (dosyayı/girdiyi kendi seçtiği programla açar ya da çalıştırır)
+    "xdg-open", "gio", "gtk-launch", "kde-open", "kde-open5", "kde-open6", "kioclient", "kioclient5", "kioclient6",
+    "exo-open", "kstart", "kstart5", "kstart6", "krunner", "dex", "open", "mimeopen", "run-mailcap", "see",
+    # yorumlayıcılar / sanal makineler
+    "python", "python2", "python3", "pypy", "pypy3", "ipython", "ipython3", "jupyter", "perl", "ruby", "irb", "node",
+    "nodejs", "deno", "bun", "lua", "luajit", "php", "tclsh", "wish", "gjs", "seed", "osascript", "java", "jshell",
+    "javaw", "mono", "dotnet", "pwsh", "powershell", "r", "rscript", "julia", "guile", "racket", "sbcl", "clisp",
+    "ocaml", "ghci", "runghc", "erl", "elixir", "iex", "scala", "kotlin", "groovy", "swipl", "awk", "gawk", "mawk",
+    "nawk", "sed", "find", "wine", "wine64", "wineconsole", "wine-preloader", "wine64-preloader", "winedbg", "proton",
+    "umu-run", "qemu", "vim", "nvim", "vi", "ex", "emacs", "emacsclient",
+    # Deskhand'in kendisi (CLI --approved ile kendi kendini onaylama)
+    "deskhand", "ekran", "deskhand-bg", "deskhand-mcp",
+})
+_YORUMLAYICI_KOK = ("python", "pypy", "perl", "ruby", "lua", "luajit", "php", "node", "tclsh", "wish", "guile", "java",
+                    "wine", "pwsh", "julia")
+# Uçbirim öykünücüleri (guvenlik.UCBIRIM_SINIFLARI'na ek; ikili adı ve Flatpak kimliği): uçbirim açmak = kabuk
+UCBIRIM_PROGRAMLARI = frozenset({
+    "st", "xfce4-terminal", "lxterminal", "terminology", "deepin-terminal", "cosmic-term", "warp-terminal", "blackbox",
+    "termite", "kmscon", "x-terminal-emulator", "kitten", "org.gnome.console", "com.raggesilver.blackbox",
+    "app.devsuite.ptyxis", "org.wezfurlong.wezterm", "io.elementary.terminal", "com.gexperts.tilix",
+})
+# Asıl programı sarıp başlatan ama kendisi komut yorumlamayan araçlar: arkasındaki program aynen denetlenir
+_GECIRGEN = frozenset({"nice", "ionice", "chrt", "taskset", "prime-run", "primusrun", "optirun", "vglrun",
+                       "gamemoderun", "mangohud", "pw-jack", "padsp", "firejail", "obs-gamecapture", "strangle",
+                       "gamescope", "steam-runtime"})
+ARGUMAN_SINIRI = 16
+ARGUMAN_UZUNLUK = 4096
+URL_SEMALARI = ("http", "https")
+
+
+def _ad(yol: str) -> str:
+    return os.path.basename(yol or "").strip().lower()
+
+
+def _yorumlayici_adi(ad: str) -> bool:
+    """python3.12, perl5.38, lua5.4, php8.3, java17… → True (kök + yalnız rakam/nokta/tire)."""
+    return any(ad.startswith(k) and re.fullmatch(r"[0-9.\-]*", ad[len(k):]) for k in _YORUMLAYICI_KOK)
+
+
+def program_yasak_mi(yol: str) -> str | None:
+    """Program (ikili yolu ya da adı) MCP'den başlatılamayacak türden mi? → neden | None."""
+    from .guvenlik import ucbirim_mi
+    ad = _ad(yol)
+    if not ad:
+        return None
+    if ad in YASAK_PROGRAMLAR or _yorumlayici_adi(ad):
+        return _("'{ad}' bir yorumlayıcı/kabuk/sarmalayıcı/başlatıcı (keyfi kod çalıştırır)").format(ad=ad)
+    if ad in UCBIRIM_PROGRAMLARI or ucbirim_mi(ad):
+        return _("'{ad}' bir uçbirim öykünücüsü (uçbirim = kabuk)").format(ad=ad)
+    return None
+
+
+def _guclu_yasak(parca: str) -> str | None:
+    """Exec'in herhangi bir öğesi için (program konumunda olmasa da): yol olarak yazılmış yasak program
+    (/usr/bin/python3, /bin/sh) ya da yalın kabuk/yorumlayıcı/yetki/Deskhand adı → neden."""
+    ad = _ad(parca)
+    if not ad or parca.startswith("-"):
+        return None
+    if "/" in parca or ad in _KABUKLAR or ad in _YETKI or ad in ("deskhand", "ekran", "env") or _yorumlayici_adi(ad):
+        neden = program_yasak_mi(parca)
+        if neden:
+            return neden
+    return None
+
+
+_KABUKLAR = frozenset({"sh", "bash", "rbash", "zsh", "fish", "dash", "ksh", "mksh", "csh", "tcsh", "busybox"})
+_YETKI = frozenset({"sudo", "doas", "pkexec", "su", "run0", "kdesu"})
+
+
+def _exec_denetle(argv: list[str]) -> str | None:
+    """.desktop Exec argv'si (alan kodları atılmış) → neden | None. Program konumundaki öğe (geçirgen sarmalayıcılar
+    nice/prime-run/gamemoderun… atlanarak) tam listeyle; diğer her öğe (ve `--secenek=DEGER` değeri) yol ya da yalın
+    kabuk/yorumlayıcı adıysa yine yasak. Flatpak: yalnız `flatpak run KIMLIK`; kimlik ve --command denetlenir."""
+    if not argv:
+        return _("Exec satırı boş ya da çözümlenemedi")
+    for parca in argv:
+        for aday in (parca, parca.split("=", 1)[1] if parca.startswith("-") and "=" in parca else ""):
+            neden = _guclu_yasak(aday) if aday else None
+            if neden:
+                return neden
+    i = 0
+    while i < len(argv):
+        neden = program_yasak_mi(argv[i])
+        if neden:
+            return neden
+        if _ad(argv[i]) not in _GECIRGEN:
+            break
+        i += 1  # geçirgen sarmalayıcının seçenekleri: arkasındaki asıl program da program konumunda denetlenir
+        while i < len(argv) and (argv[i].startswith("-") or argv[i].isdigit() or argv[i] == "--"):
+            i += 1
+    asil = argv[i:]
+    if asil and _ad(asil[0]) == "flatpak":
+        alt = next((a for a in asil[1:] if not a.startswith("-")), "")
+        if alt != "run":
+            return _("flatpak yalnız 'run' ile başlatılabilir ('{alt}')").format(alt=alt)
+        from .oturum.cozum import _flatpak_kimligi
+        kimlik, komut = _flatpak_kimligi(asil)
+        for aday in (kimlik or "", komut or ""):
+            neden = program_yasak_mi(aday) if aday else None
+            if neden:
+                return neden
+    return None
+
+
+def girdi_denetle(g: dict) -> str | None:
+    """Masaüstü girdisi MCP'den başlatılabilir mi? → neden (başlatılamaz) | None."""
+    from .guvenlik import ucbirim_mi
+    if g.get("ucbirimde"):
+        return _("girdi bir uçbirimde çalışır (Terminal=true)")
+    if any(k.lower() == "terminalemulator" for k in g.get("kategoriler") or ()):
+        return _("girdi bir uçbirim öykünücüsü (Categories=TerminalEmulator)")
+    kimlik = (g.get("kimlik") or "").lower()
+    if kimlik in UCBIRIM_PROGRAMLARI or ucbirim_mi(kimlik):
+        return _("girdi bir uçbirim öykünücüsü ({kimlik})").format(kimlik=g.get("kimlik"))
+    from .oturum.cozum import exec_argv
+    return _exec_denetle(exec_argv(g.get("exec", "")))
+
+
+def _belge_yolu_denetle(yol: str) -> str | None:
+    if not os.path.isabs(yol):
+        return _("yol mutlak olmalı")
+    if not os.path.exists(yol):
+        return _("dosya/klasör yok")
+    gercek = os.path.realpath(yol)
+    if os.path.isfile(gercek) and os.access(gercek, os.X_OK):
+        return _("çalıştırılabilir dosya belge olarak verilemez")
+    if gercek.lower().endswith((".desktop", ".service", ".lnk")):
+        return _("başlatıcı dosyası belge olarak verilemez")
+    return None
+
+
+def belge_argumanlari(args) -> list[str]:
+    """MCP open_app argümanları: yalnız http(s)/file URL'si ya da var olan bir dosya/klasörün MUTLAK yolu (o
+    uygulamada açılacak belge). `-` ile başlayan (seçenek), `=` içeren (URL dışında), denetim karakterli, başka şemalı
+    (javascript:, data:, steam:…), çalıştırılabilir dosya ya da .desktop gösteren argüman → Dur(10)."""
+    from urllib.parse import unquote, urlsplit
+    args = list(args or [])
+    if len(args) > ARGUMAN_SINIRI:
+        raise Dur(10, _("en çok {n} argüman verilebilir").format(n=ARGUMAN_SINIRI))
+    sonuc = []
+    for a in args:
+        neden = None
+        if not isinstance(a, str) or not a.strip():
+            neden = _("boş argüman")
+        elif len(a) > ARGUMAN_UZUNLUK or any(ord(c) < 32 or ord(c) == 127 for c in a):
+            neden = _("çok uzun ya da denetim karakteri içeriyor")
+        elif a.lstrip().startswith("-"):
+            neden = _("seçenek (- ile başlıyor) verilemez")
+        else:
+            u = urlsplit(a)
+            sema = u.scheme.lower()
+            if sema in URL_SEMALARI:
+                if not u.netloc or any(c.isspace() for c in a):
+                    neden = _("geçersiz URL")
+            elif sema == "file":
+                neden = (_("yalnız yerel file:// URL'si") if u.netloc not in ("", "localhost")
+                         else _belge_yolu_denetle(unquote(u.path)))
+            elif sema:
+                neden = _("yalnız http, https ya da file URL'si ('{sema}:' değil)").format(sema=sema)
+            elif "=" in a:
+                neden = _("'=' içeren argüman verilemez (ortam değişkeni/seçenek)")
+            else:
+                neden = _belge_yolu_denetle(a)
+        if neden:
+            raise Dur(10, _("argüman reddedildi {arg}: {neden}. open_app argümanları yalnız açılacak belge olabilir "
+                            "(http/https/file URL'si ya da var olan dosyanın mutlak yolu)").format(
+                arg=repr(a)[:200], neden=neden))
+        sonuc.append(a)
+    return sonuc
+
+
+def mcp_uygulama(ad: str, args=None) -> tuple[dict, list[str]]:
+    """MCP open_app'in TEK giriş noktası: `ad` kurulu bir masaüstü girdisine çözülür (ham yol/komut YOK), girdi ve
+    argümanlar denetlenir. → (girdi, doğrulanmış argümanlar). Uymazsa Dur (1/5/6 çözüm, 10 güvenlik)."""
+    ad = (ad or "").strip()
+    if "/" in ad:
+        raise Dur(10, _("open_app yalnız kurulu bir uygulamanın adını alır (.desktop girdisi); yol ya da komut "
+                        "verilemez: {ad}").format(ad=repr(ad)[:200]))
+    belgeler = belge_argumanlari(args)  # girdi aranmadan önce: ret ucuz ve ayrıntısız
+    g = uygulama_bul(ad)
+    neden = girdi_denetle(g)
+    if neden:
+        raise Dur(10, _("'{ad}' MCP'den başlatılamaz: {neden}").format(ad=g.get("kimlik") or ad, neden=neden))
+    return g, belgeler
 
 
 # ---------------------------------------------------------------- Chromium/Electron: erişilebilirlik bayrağı
@@ -157,9 +366,9 @@ def erisim_bayragi_ekle(argv):
     argv = list(argv)
     if ERISIM_BAYRAGI in argv:
         return argv
-    if len(argv) == 3 and os.path.basename(argv[0]) == "gio" and argv[1] == "launch" and argv[2].endswith(".desktop"):
-        komut = _desktop_exec(argv[2])
-        return [*komut, ERISIM_BAYRAGI] if komut and chromium_ailesi_mi(komut) else argv
+    if len(argv) >= 3 and os.path.basename(argv[0]) == "gio" and argv[1] == "launch" and argv[2].endswith(".desktop"):
+        komut = _desktop_exec(argv[2])  # ardından gelenler (MCP open_app belge argümanları) aynen sona eklenir
+        return [*komut, ERISIM_BAYRAGI, *argv[3:]] if komut and chromium_ailesi_mi(komut) else argv
     return [*argv, ERISIM_BAYRAGI] if chromium_ailesi_mi(argv) else argv
 
 

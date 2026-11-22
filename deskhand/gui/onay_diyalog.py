@@ -227,7 +227,9 @@ class OnayDiyalog(QDialog):
             return
         if karar == "izin" and (not self.b_izin.isEnabled() or self.kalan() <= 0):
             return
-        self._yanitla(self.istek_id, karar)
+        if karar == "izin" and kapat:
+            self.hide()  # izin isteyene ulaşmadan önce: isteyen onaylanan bölgeyi yeniden görüntülerken diyalog örtmesin
+        self._yanitla(self.istek_id, karar)  # izin YALNIZ onay kanalından gider (onay.yanitla)
         self._bitir(neden or karar, kapat)
 
     def _bitir(self, neden: str, kapat: bool = True):

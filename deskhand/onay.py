@@ -2,22 +2,34 @@
 
 İsteyen taraf (CLI / MCP / akış):  iste(eylem, hedef, ayrinti, masaustu, sure=120) -> bool
   0. Gözetimsiz kip (DESKHAND_GOZETIMSIZ=1 / --unattended): hiçbir diyalog açılmaz, beklenmez → HEMEN red.
-  1. Panel canlı değilse (RUNTIME_DIR/panel.pid + /proc doğrulaması) HEMEN red.
-  2. RUNTIME_DIR/onay/istek-<uuid>.json yazılır (dizin 0700, dosya 0600; geçici adla yazılıp yerine konur).
-  3. yanit-<uuid>.json beklenir. Süre dolarsa, panel kapanırsa ya da DUR açılırsa → red.
-  4. Tek kullanımlık: istek, yanıt ve küçük görüntü kullanılınca silinir.
-Panel tarafı (deskhand/gui):  bekleyenler(), yanitla(id, karar), temizle(), panel_kaydet()/panel_sil().
-Yanıt dosyasını YALNIZ panel yazar; yanıtta panelin PID'i bulunur ve isteyen onu panel.pid ile karşılaştırır.
+  1. Panel canlı değilse (RUNTIME_DIR/panel.pid {pid, baslangic, exe} + /proc doğrulaması) HEMEN red.
+  2. Panelin onay kanalına bağlanılır: RUNTIME_DIR/onay/kanal.sock (Unix soketi, 0600, dizin 0700). Karşı taraf
+     SO_PEERCRED ile doğrulanır: aynı kullanıcı + PID = panel.pid'deki PID + aynı süreç başlangıç zamanı + aynı
+     /proc/<pid>/exe. Doğrulanamazsa → red ("kanal").
+  3. RUNTIME_DIR/onay/istek-<uuid>.json yazılır (diyalog ve bekleyen listesi için; dosya 0600), kanala
+     `bekle <uuid>` gönderilir ve karar AYNI bağlantıdan beklenir (`karar izin|red <uuid>`). Süre dolarsa, panel
+     kapanırsa (bağlantı kopar) ya da DUR açılırsa → red.
+  4. İZİN YALNIZ kanaldan gelir. yanit-<uuid>.json dosyası (eski protokol) yalnız RED sayılır: aynı kullanıcıdaki
+     herhangi bir sürecin (ör. yalnız dosya yazabilen bir ajanın) sahte "izin" yazması işe yaramaz.
+  5. Tek kullanımlık: istek, yanıt ve küçük görüntü kullanılınca silinir.
+Panel tarafı (deskhand/gui):  panel_kaydet() (kanalı da açar) / panel_sil(), bekleyenler(), yanitla(id, karar),
+temizle(). Panel kanalda isteyeni de doğrular: bağlanan sürecin PID'i isteğin pid alanıyla aynı olmalı.
 
 Tehdit modeli: bu, ajanın yanlışlıkla ya da istem enjeksiyonuyla hassas bir şeye "kendi kendine" izin vermesini
-engeller (onay ajanın çağırabileceği hiçbir komutta yok). Aynı kullanıcı kimliğiyle keyfi kabuk çalıştırabilen
-kötü niyetli bir sürece karşı bir sandbox DEĞİLDİR.
+engeller (onay ajanın çağırabileceği hiçbir komutta yok; yalnız dosya yazabilen bir süreç de izin üretemez). Aynı
+kullanıcı kimliğiyle keyfi kabuk çalıştırabilen kötü niyetli bir sürece karşı bir sandbox DEĞİLDİR (paneli
+öldürüp yerine geçebilir, ptrace ile bağlanabilir).
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import select
+import socket
+import stat
+import struct
+import threading
 import time
 import uuid
 from typing import NamedTuple
@@ -50,6 +62,7 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "dur": N_("kullanıcı DUR dedi → red"),
     "hata": N_("onay isteği yazılamadı → red"),
     "gozetimsiz": N_("gözetimsiz çalışmada hassas eylem yapılmaz"),
+    "kanal": N_("onay kanalı doğrulanamadı (yanıtın Deskhand panelinden geldiği kanıtlanamadı) → red"),
 }
 KARARLAR = ("izin", "red")
 _ID = re.compile(r"[0-9a-f]{32}")
@@ -85,6 +98,11 @@ def yanit_yolu(istek_id: str) -> str:
 
 def goruntu_yolu(istek_id: str) -> str:
     return os.path.join(dizin(), f"istek-{istek_id}.png")
+
+
+def kanal_yolu() -> str:
+    """Panelin onay kanalı (Unix soketi; yalnız panel dinler)."""
+    return os.path.join(dizin(), "kanal.sock")
 
 
 def _dizin_hazirla() -> str:
@@ -152,24 +170,38 @@ def _baslangic(pid: int) -> str | None:
         return None
 
 
+def _exe(pid: int) -> str | None:
+    try:
+        return os.readlink(f"/proc/{int(pid)}/exe")
+    except (OSError, ValueError):
+        return None
+
+
 def panel_kaydet(pid: int | None = None) -> str:
-    """Panel açılışında: RUNTIME_DIR/panel.pid {pid, baslangic}. → yol."""
+    """Panel açılışında: onay kanalını aç (yalnız kendi PID'i için) + RUNTIME_DIR/panel.pid {pid, baslangic, exe}.
+    → yol."""
     pid = os.getpid() if pid is None else pid
     os.makedirs(yollar.runtime_dir(), mode=0o700, exist_ok=True)
-    _yaz_atomik(panel_pid_yolu(), {"pid": pid, "baslangic": _baslangic(pid), "zaman": time.time()})
     _dizin_hazirla()
+    if pid == os.getpid():
+        kanal_ac()
+    _yaz_atomik(panel_pid_yolu(), {"pid": pid, "baslangic": _baslangic(pid), "exe": _exe(pid), "zaman": time.time()})
     return panel_pid_yolu()
 
 
 def panel_sil(pid: int | None = None) -> None:
-    """Panel kapanırken: pid dosyası yalnız kendisininse silinir."""
+    """Panel kapanırken: pid dosyası yalnız kendisininse silinir; kendi kanalı kapanır (bekleyenlerin bağlantısı
+    kopar → isteyenler hemen red)."""
+    pid = os.getpid() if pid is None else pid
     d = _json_oku(panel_pid_yolu()) or {}
-    if d.get("pid") == (os.getpid() if pid is None else pid):
+    if d.get("pid") == pid:
         _sil(panel_pid_yolu())
+        if pid == os.getpid():
+            kanal_kapat()
 
 
-def panel_pid() -> int | None:
-    """Canlı panelin PID'i; yoksa / ölmüşse / PID başka sürece geçmişse None."""
+def _panel_kaydi() -> dict | None:
+    """Canlı panelin kaydı {pid, baslangic, exe}; yoksa / ölmüşse / PID başka sürece geçmişse None."""
     d = _json_oku(panel_pid_yolu())
     if not isinstance(d, dict):
         return None
@@ -179,7 +211,231 @@ def panel_pid() -> int | None:
     bas = _baslangic(pid)
     if bas is None or (d.get("baslangic") is not None and bas != d.get("baslangic")):
         return None
-    return pid
+    return d
+
+
+def panel_pid() -> int | None:
+    """Canlı panelin PID'i; yoksa / ölmüşse / PID başka sürece geçmişse None."""
+    d = _panel_kaydi()
+    return None if d is None else d["pid"]
+
+
+# ---------------------------------------------------------------- onay kanalı (Unix soketi + SO_PEERCRED)
+
+_PEERCRED = struct.Struct("3i")  # struct ucred {pid, uid, gid}
+KANAL_ZAMAN_ASIMI = 2.0          # bağlanma / ilk satır en çok bu kadar sn
+
+
+def _karsi_taraf(s: socket.socket) -> tuple[int, int]:
+    """SO_PEERCRED → (pid, uid). Sunucu tarafında: bağlanan istemci; istemci tarafında: listen() eden sunucu."""
+    pid, uid, _gid = _PEERCRED.unpack(s.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, _PEERCRED.size))
+    return pid, uid
+
+
+def _satir_oku(s: socket.socket, sinir: int = 256) -> str | None:
+    tampon = b""
+    while b"\n" not in tampon and len(tampon) < sinir:
+        parca = s.recv(sinir - len(tampon))
+        if not parca:
+            return None
+        tampon += parca
+    return tampon.split(b"\n", 1)[0].decode("ascii", "replace") if b"\n" in tampon else None
+
+
+class _Kanal:
+    """Panel sürecindeki onay kanalı sunucusu (Qt'siz; iş parçacıklı). Bağlantı başına tek istek: istemci
+    `bekle <id>\\n` yazar; isteğin pid alanı SO_PEERCRED PID'iyle aynı değilse bağlantı kapatılır. Karar
+    (`gonder`) o bağlantıya `karar <izin|red> <id>\\n` olarak yazılır; istemci henüz bağlanmadıysa saklanır."""
+
+    def __init__(self):
+        self.yol = kanal_yolu()
+        self._kilit = threading.Lock()
+        self._bekleyen: dict[str, socket.socket] = {}
+        self._kararlar: dict[str, tuple[str, float]] = {}
+        self._yanitlanan: dict[str, float] = {}
+        self._durdu = threading.Event()
+        _dizin_hazirla()
+        try:
+            if stat.S_ISSOCK(os.lstat(self.yol).st_mode):
+                os.unlink(self.yol)  # ölü panelden kalan
+        except FileNotFoundError:
+            pass
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM | socket.SOCK_CLOEXEC)
+        eski = os.umask(0o177)
+        try:
+            s.bind(self.yol)
+        finally:
+            os.umask(eski)
+        os.chmod(self.yol, 0o600)
+        s.listen(16)
+        self._s = s
+        threading.Thread(target=self._kabul, name="onay-kanal", daemon=True).start()
+
+    def _kabul(self):
+        while not self._durdu.is_set():
+            try:
+                c, _a = self._s.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._baglanti, args=(c,), name="onay-kanal-b", daemon=True).start()
+
+    def _baglanti(self, c: socket.socket):
+        istek_id = None
+        try:
+            pid, uid = _karsi_taraf(c)
+            if uid != os.getuid():
+                return
+            c.settimeout(KANAL_ZAMAN_ASIMI)
+            satir = _satir_oku(c)
+            parca = (satir or "").split()
+            if len(parca) != 2 or parca[0] != "bekle" or not _gecerli_id(parca[1]):
+                return
+            d = istek_oku(istek_yolu(parca[1]))
+            if d is None or d["pid"] != pid:  # yalnız isteğin sahibi kararı alır
+                return
+            istek_id = parca[1]
+            with self._kilit:
+                karar = self._kararlar.pop(istek_id, None)
+                if karar is None:
+                    if istek_id in self._bekleyen:
+                        istek_id = None  # aynı isteğe ikinci bağlantı: ilkini ezmesin
+                        return
+                    self._bekleyen[istek_id] = c
+            if karar is not None:
+                c.sendall(f"karar {karar[0]} {istek_id}\n".encode())
+                return
+            c.settimeout(None)
+            while c.recv(64):  # isteyen vazgeçene / karar yazılıp kapatana dek
+                pass
+        except OSError:
+            pass
+        finally:
+            if istek_id is not None:
+                with self._kilit:
+                    if self._bekleyen.get(istek_id) is c:
+                        del self._bekleyen[istek_id]
+            try:
+                c.close()
+            except OSError:
+                pass
+
+    def yanitlandi(self, istek_id: str) -> bool:
+        with self._kilit:
+            return istek_id in self._yanitlanan
+
+    def gonder(self, istek_id: str, karar: str) -> bool:
+        """Kararı isteyene ilet (tek kullanımlık). → kabul edildi mi (bu istek daha önce yanıtlandıysa False)."""
+        simdi = time.monotonic()
+        with self._kilit:
+            if istek_id in self._yanitlanan:
+                return False
+            self._yanitlanan[istek_id] = simdi
+            for k in [k for k, t in self._yanitlanan.items() if simdi - t > 3600]:
+                del self._yanitlanan[k]
+            for k in [k for k, (_kr, t) in self._kararlar.items() if simdi - t > VARSAYILAN_SURE + ESKI_PAY]:
+                del self._kararlar[k]
+            c = self._bekleyen.pop(istek_id, None)
+            if c is None:
+                self._kararlar[istek_id] = (karar, simdi)
+                return True
+        try:
+            c.sendall(f"karar {karar} {istek_id}\n".encode())
+        except OSError:
+            return karar == "red"  # isteyen gitmiş: izin kimseye ulaşmadı
+        return True
+
+    def kapat(self):
+        self._durdu.set()
+        try:
+            self._s.close()
+        except OSError:
+            pass
+        try:
+            if stat.S_ISSOCK(os.lstat(self.yol).st_mode):
+                os.unlink(self.yol)
+        except OSError:
+            pass
+        with self._kilit:
+            bekleyen, self._bekleyen = list(self._bekleyen.values()), {}
+        for c in bekleyen:
+            try:
+                c.shutdown(socket.SHUT_RDWR)  # isteyen EOF görür → panel kapandı → red
+            except OSError:
+                pass
+
+
+_KANAL: _Kanal | None = None
+_KANAL_KILIT = threading.Lock()
+
+
+def kanal_ac() -> None:
+    """Panel: onay kanalını aç (açıksa ve yolu aynıysa dokunma)."""
+    global _KANAL
+    with _KANAL_KILIT:
+        if _KANAL is not None and _KANAL.yol == kanal_yolu() and os.path.exists(_KANAL.yol):
+            return
+        if _KANAL is not None:
+            _KANAL.kapat()
+        _KANAL = _Kanal()
+
+
+def kanal_kapat() -> None:
+    global _KANAL
+    with _KANAL_KILIT:
+        k, _KANAL = _KANAL, None
+    if k is not None:
+        k.kapat()
+
+
+class _KanalHatasi(Exception):
+    pass
+
+
+def _kanala_baglan(kayit: dict) -> socket.socket:
+    """İsteyen: panelin onay kanalına bağlan ve karşı tarafın panel olduğunu doğrula → bağlı soket.
+    Doğrulanamazsa _KanalHatasi (çağıran red döner)."""
+    d = dizin()
+    try:
+        sd = os.lstat(d)
+        sk = os.lstat(kanal_yolu())
+    except OSError as e:
+        raise _KanalHatasi(f"kanal yok: {e}") from None
+    uid = os.getuid()
+    if not stat.S_ISDIR(sd.st_mode) or sd.st_uid != uid or stat.S_IMODE(sd.st_mode) & 0o077:
+        raise _KanalHatasi("onay dizini başkasının ya da izni geniş")
+    if not stat.S_ISSOCK(sk.st_mode) or sk.st_uid != uid or stat.S_IMODE(sk.st_mode) & 0o077:
+        raise _KanalHatasi("kanal soketi değil ya da izni geniş")
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM | socket.SOCK_CLOEXEC)
+    try:
+        s.settimeout(KANAL_ZAMAN_ASIMI)
+        s.connect(kanal_yolu())
+        pid, puid = _karsi_taraf(s)
+        if puid != uid:
+            raise _KanalHatasi("kanalın sahibi başka kullanıcı")
+        if pid != kayit.get("pid"):
+            raise _KanalHatasi(f"kanalı dinleyen süreç ({pid}) panel değil ({kayit.get('pid')})")
+        if _baslangic(pid) != kayit.get("baslangic") or not kayit.get("exe") or _exe(pid) != kayit.get("exe"):
+            raise _KanalHatasi("panel sürecinin kimliği (başlangıç zamanı / exe) uymuyor")
+        s.settimeout(None)
+        return s
+    except (OSError, _KanalHatasi) as e:
+        s.close()
+        if isinstance(e, _KanalHatasi):
+            raise
+        raise _KanalHatasi(f"kanala bağlanılamadı: {e}") from None
+
+
+def bekleyen_var(masaustu: str, haric_pid: int | None = None, simdi: float | None = None) -> bool:
+    """Bu masaüstü ("ekran" | "arka") için canlı bir süreçten bekleyen onay isteği var mı? (MCP girdi kapısı.)
+    haric_pid: bu sürecin kendi istekleri sayılmaz (süreç içi kayıt ayrıca tutulur). Ömrü olağandışı uzun
+    (sahte/bozuk) istek sayılmaz: girdiyi süresiz kilitleyemez."""
+    for d in bekleyenler(simdi):
+        if d["masaustu"] != masaustu or d["pid"] <= 0 or d["pid"] == haric_pid:
+            continue
+        if d["son_zaman"] - d["zaman"] > VARSAYILAN_SURE + ESKI_PAY:
+            continue
+        return True
+    return False
 
 
 def panel_canli() -> bool:
@@ -215,15 +471,22 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
         return bitir(OnaySonucu(False, "gozetimsiz"))
     if _dur_acik():
         return bitir(OnaySonucu(False, "dur"))
-    ppid = panel_pid()
-    if ppid is None:
+    kayit = _panel_kaydi()
+    if kayit is None:
         return bitir(OnaySonucu(False, "panel-yok"))
+    ppid = kayit["pid"]
+    try:
+        _dizin_hazirla()
+        kanal = _kanala_baglan(kayit)  # yanıt YALNIZ bu doğrulanmış bağlantıdan kabul edilir
+    except (OSError, _KanalHatasi) as e:
+        from .gunluk import gunluk
+        gunluk(f"onay kanalı reddedildi: {e}")
+        return bitir(OnaySonucu(False, "kanal"))
     istek_id = uuid.uuid4().hex
     iy, yy, gy = istek_yolu(istek_id), yanit_yolu(istek_id), goruntu_yolu(istek_id)
     simdi = time.time()
     sure = max(1.0, float(sure))
     try:
-        _dizin_hazirla()
         g_yol = None
         if goruntu is not None and hasattr(goruntu, "save"):
             goruntu.save(gy, "PNG")
@@ -235,19 +498,32 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
                  "ayrinti": str(ayrinti or "")[:AYRINTI_SINIR], "masaustu": masaustu, "zaman": simdi,
                  "son_zaman": simdi + sure, "pid": os.getpid(), "goruntu": g_yol}
         _yaz_atomik(iy, istek)
-    except OSError:
+        kanal.sendall(f"bekle {istek_id}\n".encode())
+    except Exception:  # noqa: BLE001 - görüntü/istek yazılamadı: red (soket açık kalmasın)
+        kanal.close()
         _sil(iy, gy)
         return bitir(OnaySonucu(False, "hata", istek_id))
     try:
         son = time.monotonic() + sure
         sonraki_canlilik = time.monotonic() + CANLILIK_ARALIK
+        tampon = b""
         while True:
-            y = _json_oku(yy) if os.path.exists(yy) else None
-            if isinstance(y, dict):
-                if (y.get("id") == istek_id and y.get("kaynak") == "arayuz" and y.get("karar") in KARARLAR
-                        and y.get("panel_pid") == ppid):
-                    return bitir(OnaySonucu(y["karar"] == "izin", y["karar"], istek_id))
-                return bitir(OnaySonucu(False, "red", istek_id))  # biçimsiz/yabancı yanıt = red
+            try:
+                hazir = select.select([kanal], [], [], YOKLAMA)[0]
+                parca = kanal.recv(256) if hazir else None
+            except OSError:
+                parca = b""
+            if parca == b"":  # panel bağlantıyı kapattı (kapandı / isteği reddetti) → red
+                return bitir(OnaySonucu(False, "panel-kapandi", istek_id))
+            if parca:
+                tampon += parca
+                if b"\n" in tampon or len(tampon) > 256:
+                    satir = tampon.split(b"\n", 1)[0].decode("ascii", "replace").split()
+                    if len(satir) == 3 and satir[0] == "karar" and satir[1] in KARARLAR and satir[2] == istek_id:
+                        return bitir(OnaySonucu(satir[1] == "izin", satir[1], istek_id))
+                    return bitir(OnaySonucu(False, "red", istek_id))  # biçimsiz yanıt = red
+            if os.path.exists(yy):  # dosya yanıtı (eski protokol / panel kapanırken): YALNIZ red sayılır
+                return bitir(OnaySonucu(False, "red", istek_id))
             t = time.monotonic()
             if t >= son:
                 return bitir(OnaySonucu(False, "sure", istek_id))
@@ -257,8 +533,11 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
                 sonraki_canlilik = t + CANLILIK_ARALIK
                 if panel_pid() != ppid:
                     return bitir(OnaySonucu(False, "panel-kapandi", istek_id))
-            time.sleep(YOKLAMA)
     finally:
+        try:
+            kanal.close()
+        except OSError:
+            pass
         _sil(iy, yy, gy)
 
 
@@ -310,6 +589,8 @@ def bekleyenler(simdi: float | None = None) -> list[dict]:
         d = istek_oku(os.path.join(dizin(), ad))
         if d is None or d["son_zaman"] <= simdi or os.path.exists(yanit_yolu(d["id"])):
             continue
+        if _KANAL is not None and _KANAL.yanitlandi(d["id"]):  # izin kanaldan gitti (dosya yok): yeniden sorma
+            continue
         if d["pid"] and not _canli(d["pid"]):
             continue
         sonuc.append(d)
@@ -317,20 +598,27 @@ def bekleyenler(simdi: float | None = None) -> list[dict]:
 
 
 def yanitla(istek_id: str, karar: str, simdi: float | None = None) -> bool:
-    """Panel: isteği yanıtla (tek kullanımlık). → yazıldı mı. İstek yoksa/süresi geçtiyse/zaten yanıtlandıysa False."""
+    """Panel: isteği yanıtla (tek kullanımlık). → iletildi mi. İstek yoksa/süresi geçtiyse/zaten yanıtlandıysa False.
+    İZİN yalnız bu süreçteki onay kanalından isteyene gider (kanal yoksa False). RED ayrıca yanıt dosyasına yazılır
+    (isteyen dosyayı yalnız red sayar; kanal kopuksa da red kesin ulaşır)."""
     if not _gecerli_id(istek_id) or karar not in KARARLAR:
         return False
     simdi = time.time() if simdi is None else simdi
     d = istek_oku(istek_yolu(istek_id))
     if d is None or (karar == "izin" and d["son_zaman"] <= simdi):
-        return False  # süresi geçmiş isteğe İZİN yazılmaz (red her zaman yazılabilir)
+        return False  # süresi geçmiş isteğe İZİN verilmez (red her zaman verilebilir)
+    k = _KANAL
+    if (k is not None and k.yanitlandi(istek_id)) or os.path.exists(yanit_yolu(istek_id)):
+        return False  # tek kullanımlık: ilk karar kesin
+    if karar == "izin":
+        return k is not None and k.gonder(istek_id, "izin")
     try:
-        _yaz_atomik(yanit_yolu(istek_id), {"id": istek_id, "karar": karar, "kaynak": "arayuz", "zaman": simdi,
+        _yaz_atomik(yanit_yolu(istek_id), {"id": istek_id, "karar": "red", "kaynak": "arayuz", "zaman": simdi,
                                            "panel_pid": os.getpid()}, ozel=True)
-    except FileExistsError:
+    except OSError:  # FileExistsError dahil: zaten yanıtlanmış
         return False
-    except OSError:
-        return False
+    if k is not None:
+        k.gonder(istek_id, "red")
     return True
 
 

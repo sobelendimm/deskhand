@@ -19,7 +19,7 @@ def kontrol(ad, kosul, ek=""):
 
 def dosyalar():
     try:
-        return sorted(os.listdir(onay.dizin()))
+        return sorted(f for f in os.listdir(onay.dizin()) if f != "kanal.sock")  # kanal: panel yaşadıkça durur
     except OSError:
         return []
 
@@ -228,17 +228,137 @@ kontrol("yanıtlanan istek bekleyenlerden çıkar", [x["id"] for x in onay.bekle
 for k in (a, b):
     onay._sil(onay.istek_yolu(k), onay.yanit_yolu(k))
 
-# 11) yanıt dosyasını panel tarafı yazar: biçim
+# 11) yanıt: İZİN yalnız kanaldan (dosya yazılmaz), RED dosyaya da yazılır (biçim)
 k = "3" * 32
 onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "ekran",
                                     "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getpid()})
-onay.yanitla(k, "izin")
+kontrol("izin yanıtı DOSYAYA yazılmaz (yalnız kanal)", onay.yanitla(k, "izin") is True and
+        not os.path.exists(onay.yanit_yolu(k)))
+kontrol("kanaldan yanıtlanan istek bekleyenlerde görünmez (diyalog yeniden açılmaz)",
+        k not in [x["id"] for x in onay.bekleyenler()])
+kontrol("izinden sonra red yazılamaz (tek kullanım)", onay.yanitla(k, "red") is False)
+onay._sil(onay.istek_yolu(k))
+k = "4" * 32
+onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "ekran",
+                                    "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getpid()})
+onay.yanitla(k, "red")
 y = json.load(open(onay.yanit_yolu(k)))
-kontrol("yanıt biçimi {id, karar, kaynak: arayuz, zaman}", y["id"] == k and y["karar"] == "izin" and
+kontrol("red yanıt biçimi {id, karar: red, kaynak: arayuz, zaman}", y["id"] == k and y["karar"] == "red" and
         y["kaynak"] == "arayuz" and isinstance(y["zaman"], float), str(y))
 kontrol("yanıt dosyası 0600", stat.S_IMODE(os.stat(onay.yanit_yolu(k)).st_mode) == 0o600)
 onay._sil(onay.istek_yolu(k), onay.yanit_yolu(k))
 kontrol("geçici dosya kalmadı", not [f for f in dosyalar() if f.startswith(".")], str(dosyalar()))
+kontrol("kanal soketi 0600", stat.S_IMODE(os.lstat(onay.kanal_yolu()).st_mode) == 0o600 and
+        stat.S_ISSOCK(os.lstat(onay.kanal_yolu()).st_mode))
+
+# 11b) kanal: yanıtın panelden geldiği doğrulanır (sahte yanıt dosyası / sahte kanal / izinli soket → red)
+
+
+def sahte_izin_dosyasi(b):
+    onay._yaz_atomik(onay.yanit_yolu(b["id"]), {"id": b["id"], "karar": "izin", "kaynak": "arayuz",
+                                               "zaman": time.time(), "panel_pid": os.getpid()})
+
+
+t, _ = yanitlayici(None, kontrol_f=sahte_izin_dosyasi)
+s = onay.iste_sonuc("x", "y", sure=5)
+t.join(2)
+kontrol("kusursuz biçimli sahte İZİN dosyası (panel_pid doğru) → red", not s.izin and s.neden == "red", str(s))
+
+SAHTE_SUNUCU = r"""
+import os, socket, sys, time
+yol = sys.argv[1]
+if os.path.exists(yol): os.unlink(yol)
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.bind(yol); os.chmod(yol, 0o600); s.listen(4)
+print("hazir", flush=True)
+while True:
+    c, _ = s.accept()
+    try:
+        satir = c.recv(256).decode().split()
+        c.sendall(f"karar izin {satir[1]}\n".encode())
+    except Exception:
+        pass
+"""
+sahte_p = subprocess.Popen([sys.executable, "-c", SAHTE_SUNUCU, onay.kanal_yolu()], stdout=subprocess.PIPE, text=True)
+sahte_p.stdout.readline()
+t0 = time.monotonic()
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("kanalı panel olmayan süreç dinliyor (PID uymuyor) → hemen red (kanal), istek yazılmadı",
+        not s.izin and s.neden == "kanal" and time.monotonic() - t0 < 1.5 and dosyalar() == [], f"{s} {dosyalar()}")
+kontrol("kanal reddi günlükte", any("onay kanalı reddedildi" in l for l in gunluk_satirlari()))
+d = json.load(open(onay.panel_pid_yolu()))
+d2 = dict(d, pid=sahte_p.pid, baslangic=onay._baslangic(sahte_p.pid), exe=os.readlink(f"/proc/{sahte_p.pid}/exe"))
+json.dump(d2, open(onay.panel_pid_yolu(), "w"))
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("(sınır) panel.pid'i de ezebilen + soket açabilen süreç = kabuklu saldırgan: kapsam dışı, belgelendi",
+        s.izin, str(s))  # tehdit modeli: aynı kullanıcıyla keyfi kod çalıştıran sürece karşı sandbox değil
+sahte_p.kill()
+sahte_p.wait()
+onay.kanal_kapat()
+onay.panel_kaydet()  # kendi kanalı yeniden açılır
+d = json.load(open(onay.panel_pid_yolu()))
+json.dump(dict(d, exe="/usr/bin/baska"), open(onay.panel_pid_yolu(), "w"))
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("panel kaydındaki exe uymuyor → red (kanal)", not s.izin and s.neden == "kanal", str(s))
+json.dump(dict(d, exe=None), open(onay.panel_pid_yolu(), "w"))
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("panel kaydında exe yok (eski panel) → red (kanal)", not s.izin and s.neden == "kanal", str(s))
+onay.panel_kaydet()
+os.chmod(onay.kanal_yolu(), 0o666)
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("kanal soketi başkalarına açık (0666) → red (kanal)", not s.izin and s.neden == "kanal", str(s))
+os.chmod(onay.kanal_yolu(), 0o600)
+onay.kanal_kapat()
+open(onay.kanal_yolu(), "w").write("sahte")
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("kanal yerinde düz dosya (yalnız dosya yazabilen ajan) → red (kanal)", not s.izin and s.neden == "kanal", str(s))
+os.remove(onay.kanal_yolu())
+onay.panel_kaydet()
+
+
+def baskasi_bekle(b):
+    # başka bir süreç aynı isteğin kararını almaya çalışır: panel isteğin pid'i ile bağlananı karşılaştırır
+    kod = ("import socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); "
+           "s.sendall(f'bekle {sys.argv[2]}\\n'.encode()); s.settimeout(3); print(s.recv(100))")
+    r = subprocess.run([sys.executable, "-c", kod, onay.kanal_yolu(), b["id"]], capture_output=True, text=True,
+                       timeout=10)
+    alanlar["baskasi"] = r.stdout.strip()
+    onay.yanitla(b["id"], "izin")
+
+
+alanlar.clear()
+t, _ = yanitlayici(None, kontrol_f=baskasi_bekle)
+s = onay.iste_sonuc("x", "y", sure=8)
+t.join(5)
+kontrol("başka süreç başkasının isteğine bağlanınca karar almaz (bağlantı kapatılır)", alanlar.get("baskasi") == "b''",
+        str(alanlar.get("baskasi")))
+kontrol("asıl isteyen izni kanaldan alır", s.izin and s.neden == "izin", str(s))
+
+# panel karar verdiğinde isteyen henüz bağlanmamışsa karar saklanır ve bağlanınca iletilir (sunucu birimi)
+k = "5" * 32
+onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "ekran",
+                                    "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getpid()})
+onay.yanitla(k, "izin")
+import socket  # noqa: E402
+
+c = socket.socket(socket.AF_UNIX)
+c.connect(onay.kanal_yolu())
+c.sendall(f"bekle {k}\n".encode())
+c.settimeout(3)
+kontrol("önce verilen karar sonradan bağlanan isteyene iletilir", c.recv(100).decode() == f"karar izin {k}\n")
+c.close()
+onay._sil(onay.istek_yolu(k))
+
+# 11c) bekleyen_var (MCP girdi kapısı): masaüstüne göre, kendi PID'i hariç, sahte uzun ömürlü istek sayılmaz
+k = "6" * 32
+onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "arka",
+                                    "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getppid()})
+kontrol("bekleyen_var: başka süreçten 'arka' isteği → arka True, ekran False",
+        onay.bekleyen_var("arka") and not onay.bekleyen_var("ekran"))
+kontrol("bekleyen_var: kendi PID'i hariç tutulabilir", not onay.bekleyen_var("arka", haric_pid=os.getppid()))
+onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "arka",
+                                    "zaman": time.time(), "son_zaman": time.time() + 10 ** 6, "pid": os.getppid()})
+kontrol("bekleyen_var: ömrü olağandışı uzun (sahte) istek girdiyi kilitlemez", not onay.bekleyen_var("arka"))
+onay._sil(onay.istek_yolu(k))
 
 # 12) Qt'siz: onay modülü Qt içe aktarmaz (CLI/MCP hafif kalsın)
 r = subprocess.run([sys.executable, "-c", "import sys, deskhand.onay; print('PyQt6' in sys.modules)"],

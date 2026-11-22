@@ -471,23 +471,14 @@ def surukle(k, x1, y1, x2, y2, dugme="left", sure=0.4, baslik=None, onayli=False
 
 # ---------------------------------------------------------------- uygulama
 
-def uygulama_komutu(uygulama: str, argumanlar: list[str] | None = None) -> tuple[list[str], str, list[str]]:
-    """→ (argv, görünen ad, yasak denetimi için metinler). Önce .desktop girdisi, olmazsa çalıştırılabilir dosya."""
-    from .uygulama import uygulama_bul
-    argumanlar = list(argumanlar or [])
-    if "/" not in uygulama and not argumanlar:
-        try:
-            g = uygulama_bul(uygulama)
-            return ["gio", "launch", g["yol"]], f"{g['ad']} ({g['kimlik']})", [g["ad"], g["ad_en"], g["exec"], g["kimlik"]]
-        except Dur as e:
-            if e.kod != 6 or not shutil.which(uygulama):
-                raise
-    yol = uygulama if os.path.isfile(uygulama) else shutil.which(uygulama)
-    if not yol:
-        raise Dur(6, _("'{uygulama}' bulunamadı (.desktop girdisi ya da çalıştırılabilir dosya değil)").format(
-            uygulama=uygulama))
-    argv = [yol, *argumanlar]
-    return argv, shlex.join(argv), [shlex.join(argv)]
+def uygulama_komutu(uygulama: str, argumanlar: list[str] | None = None) -> tuple[list[str], str, list[str], dict]:
+    """MCP open_app: → (argv, görünen ad, yasak denetimi için metinler, masaüstü girdisi). YALNIZ kurulu bir .desktop
+    girdisi (uygulama.mcp_uygulama): ham yol/komut, yorumlayıcı/kabuk/uçbirim girdisi ve belge olmayan argüman
+    reddedilir (Dur 10). argv = `gio launch GIRDI.desktop [belgeler…]`; ortam değişkeni ajandan alınmaz."""
+    from .uygulama import mcp_uygulama
+    g, belgeler = mcp_uygulama(uygulama, argumanlar)
+    return (["gio", "launch", g["yol"], *belgeler], f"{g['ad']} ({g['kimlik']})",
+            [g["ad"], g["ad_en"], g["exec"], g["kimlik"]], g)
 
 
 def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict | None = None,

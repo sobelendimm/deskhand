@@ -11,7 +11,11 @@ Ortam:       DESKHAND_MCP_SADECE_ARKA=1  → yalnız görünmez masaüstü (fore
 - Masaüstü: desktop = foreground | background | auto (auto → mesgul.karar; "sonra" → araç çalışmaz).
 - TEK kilit: masaüstüne dokunan araçlar (girdi ve öne getiren okumalar) sıralı. Onay ve karar beklemeleri kilidi
   tutmaz (çekirdek onay eylemin ortasında sorulursa kilit onay süresince bırakılır, sonra yeniden alınıp hedef
-  pencere/başlık yeniden doğrulanır).
+  yeniden doğrulanır: kimlik, başlık, geometri ve onaylanan bölgenin görüntüsü; değiştiyse [10], eylem yok).
+  Bir masaüstünde onay beklenirken O masaüstüne giden her GİRDİ aracı beklemeden reddedilir ([7] "onay
+  bekleniyor"); okuma araçları serbest.
+- open_app yalnız kurulu bir .desktop girdisini başlatır (ham yol/komut, kabuk, yorumlayıcı, uçbirim yok; argümanlar
+  yalnız belge/URL; ortam değişkeni ajandan alınmaz): kabuksuz ajana kabuk verilmez (uygulama.mcp_uygulama).
 - Görüntü: uzun kenar varsayılan 1280; koordinatlı tıklama `shot_id` ister, pencere geometrisi değiştiyse reddedilir.
   Yasak pencereler görüntüde siyah kutu, OCR sonucundan çıkarılır.
 - Kapanış (SIGINT/SIGTERM/ebeveyn öldü): açık girdiler 400 ms içinde bırakılır, sonra çıkılır.
@@ -38,7 +42,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 
-from . import __version__, api, dongu, fark, guvenlik, hata, masaustu
+from . import __version__, api, dongu, fark, guvenlik, hata, masaustu, onay_hedef
 from .arka_uc import EKRAN
 from .i18n import N_, _
 
@@ -209,11 +213,16 @@ _KILIT_YEREL = threading.local()  # bu iş parçacığı KILIT'i tutuyor mu (ona
 
 
 @contextmanager
-def kilitli():
+def kilitli(girdi: bool = False):
+    """Tek kilit. girdi=True: GİRDİ aracı (click, type_text, press_key, scroll, drag, manage_window, clipboard write,
+    run_flow, open_app) — bu masaüstünde bekleyen bir insan onayı varsa kilit alınır alınmaz beklemeden reddedilir
+    (onay beklenirken kilit bırakıldığından başka bir iş parçacığı hedefi değiştirmesin). Okuma araçları serbest."""
     if not KILIT.acquire(timeout=KILIT_BEKLE):
         raise ToolError("[7] " + _("başka bir Deskhand eylemi sürüyor; biraz sonra yeniden dene"))
     _KILIT_YEREL.tutuyor = True
     try:
+        if girdi:
+            _onay_kapisi()
         yield
     finally:
         if getattr(_KILIT_YEREL, "tutuyor", False):
@@ -238,6 +247,65 @@ def kilit_birakilmis():
         _KILIT_YEREL.tutuyor = True
 
 
+# ---------------------------------------------------------------- bekleyen onay kapısı (eşzamanlı girdi yok)
+
+_BEKLEYEN: dict[str, int] = {}  # arka uç adı ("kde" | "sanal") → bu süreçte onayı beklenen eylem sayısı
+_BEKLEYEN_KILIT = threading.Lock()
+
+
+class _OnayKaydi:
+    """Bir masaüstü için "onay bekleniyor" kaydı. KILIT tutulurken açılır (kilit bırakılmadan ÖNCE), onaydan sonra
+    kilit yeniden alındıktan SONRA kapanır: aradaki her girdi aracı _onay_kapisi'nde reddedilir. kapat() tekrarlanabilir."""
+
+    def __init__(self, masaustu_ad: str):
+        self.ad = masaustu_ad
+        with _BEKLEYEN_KILIT:
+            _BEKLEYEN[self.ad] = _BEKLEYEN.get(self.ad, 0) + 1
+        self.acik = True
+
+    def kapat(self) -> None:
+        if not self.acik:
+            return
+        self.acik = False
+        with _BEKLEYEN_KILIT:
+            n = _BEKLEYEN.get(self.ad, 0) - 1
+            if n > 0:
+                _BEKLEYEN[self.ad] = n
+            else:
+                _BEKLEYEN.pop(self.ad, None)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        self.kapat()
+
+
+def onay_bekliyor_mu(masaustu_ad: str) -> bool:
+    """Bu masaüstü için bu süreçte ya da başka (canlı) bir Deskhand sürecinde bekleyen insan onayı var mı?"""
+    with _BEKLEYEN_KILIT:
+        if _BEKLEYEN.get(masaustu_ad):
+            return True
+    o = _onay()
+    f = getattr(o, "bekleyen_var", None) if o is not None else None
+    if f is None:
+        return False
+    try:
+        return bool(f("arka" if masaustu_ad == "sanal" else "ekran", haric_pid=os.getpid()))
+    except Exception as e:  # noqa: BLE001 - dizin okunamadı: kapı yalnız süreç içi kayda bakar
+        log.debug("bekleyen onay okunamadı: %s", e)
+        return False
+
+
+def _onay_kapisi() -> None:
+    """Girdi aracı, bekleyen onaylı masaüstüne gidiyorsa → ToolError [7] (beklemeden; DUR her zaman serbest)."""
+    ad = api.arka().ad
+    if onay_bekliyor_mu(ad):
+        raise ToolError("[7] " + _("onay bekleniyor: kullanıcı Deskhand panelinde yanıt verene dek bu masaüstüne girdi "
+                                   "gönderilmez. Okuma araçları (screenshot, read_text, find, get_status) serbest; "
+                                   "onay sonuçlandıktan sonra yeniden dene."))
+
+
 # ---------------------------------------------------------------- onay (yalnız insan)
 
 def _hassas_mi(e: hata.Dur) -> bool:
@@ -250,21 +318,54 @@ def _onay_iste(eylem: str, hedef_metin: str, ayrinti: str, masaustu_ad: str, gor
     if o is None:
         return False, _("onay modülü yok (Deskhand paneli kurulu değil)")
     try:
-        if hasattr(o, "iste_sonuc"):
-            s = o.iste_sonuc(eylem, hedef_metin, ayrinti, masaustu_ad, 120, goruntu)
-            return bool(s.izin), s.mesaj
-        return bool(o.iste(eylem, hedef_metin, ayrinti, masaustu_ad, 120)), ""
+        with _OnayKaydi("sanal" if masaustu_ad == "arka" else "kde"):  # beklerken bu masaüstüne girdi yok
+            if hasattr(o, "iste_sonuc"):
+                s = o.iste_sonuc(eylem, hedef_metin, ayrinti, masaustu_ad, 120, goruntu)
+                return bool(s.izin), s.mesaj
+            return bool(o.iste(eylem, hedef_metin, ayrinti, masaustu_ad, 120)), ""
     except Exception as e:  # noqa: BLE001 - onay yolu çökerse red
         log.warning("onay hatası: %s", e)
         return False, _("onay isteği başarısız ({hata})").format(hata=e)
 
 
-_ONAY_YEREL = threading.local()
+_ONAY_YEREL = threading.local()  # onayla_ve_yap → sarili: hedef pencere (k), tıklama noktası (nokta), izin sayısı
+
+
+def _onay_bolgesi(goruntu) -> tuple | None:
+    """Onay isteğine giden hedef görüntüsünün kırpıldığı bölge (pencere pikseli): koordinatlı tıklamada noktanın
+    çevresi (guvenlik.hedef_goruntusu ile aynı), yoksa görüntünün bildirdiği bölge (PIL info["deskhand_bolge"]),
+    yoksa None (tüm pencere)."""
+    n = getattr(_ONAY_YEREL, "nokta", None)
+    if n is not None:
+        return onay_hedef.nokta_bolgesi(n)
+    b = (getattr(goruntu, "info", None) or {}).get("deskhand_bolge")
+    if isinstance(b, (tuple, list)) and len(b) == 4:
+        try:
+            return tuple(int(v) for v in b)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _onay_hedefi_yakala(k: str | None, goruntu=None):
+    """Onaydan ÖNCE (kilit tutulurken) hedefin özeti → onay_hedef.OnayHedefi | None. Görüntü yalnız görünmez
+    masaüstünde ya da çekirdek zaten hedef görüntüsünü almışsa (pencere öndedir) alınır: kde'de odak çalınmaz.
+    Tüm ekran (bölgesiz masaüstü kipi) görüntüyle karşılaştırılmaz (saat/bildirim her an değişir)."""
+    if k is None:
+        return None
+    bolge = _onay_bolgesi(goruntu)
+    gor = (api.arka().ad == "sanal" or goruntu is not None) and (bolge is not None or k != EKRAN)
+    try:
+        return onay_hedef.yakala(k, bolge, goruntu=gor)
+    except hata.Dur:
+        return None  # pencere yok: eylem zaten kendi denetiminde durur
 
 
 def _cekirdek_onay_sarmala() -> bool:
     """guvenlik kendi içinde panelden onay istiyorsa (guvenlik._panelden_onay) onu sar: onay modülü yoksa red,
-    izinler bu iş parçacığında sayılır (approved_by_user). → çekirdek onay var mı."""
+    izinler bu iş parçacığında sayılır (approved_by_user). Beklerken: kilit bırakılır ama masaüstü "onay bekleniyor"
+    kaydındadır (girdi araçları reddedilir); izinden sonra kilit yeniden alınır ve hedef (kimlik, başlık, geometri,
+    onaylanan bölgenin görüntüsü) yeniden doğrulanır: değiştiyse Dur 10, eylem yapılmaz. → çekirdek onay var mı."""
     asil = getattr(guvenlik, "_panelden_onay", None)
     if asil is None:
         return False
@@ -276,17 +377,17 @@ def _cekirdek_onay_sarmala() -> bool:
             return False, _("onay modülü yok (Deskhand paneli kurulu değil)")
         if getattr(guvenlik._EYLEM, "onaylandi", False):  # bu eylemde zaten onaylandı: sormaz, kilit bırakılmaz
             return asil(*a, **k)
-        hedef = getattr(_ONAY_YEREL, "hedef", None)  # (pencere, onaydan önceki başlık) — onayla_ve_yap koyar
-        with kilit_birakilmis():  # insan beklenirken diğer (okuma) araçları çalışabilsin
-            izin, neden = asil(*a, **k)
-        if izin and hedef is not None and hedef[0] != EKRAN:
-            try:
-                b = api.arka().baslik(hedef[0])
-            except hata.Dur:
-                b = None
-            if b != hedef[1]:  # kilit bırakılmışken pencere/sekme değişti: onay bu hedef içindi
-                guvenlik._EYLEM.onaylandi = False
-                raise hata.Dur(4, _("pencere başlığı onaydan sonra değişti; onay geçersiz, eylem yapılmadı"))
+        goruntu = k.get("goruntu", a[3] if len(a) > 3 else None)
+        onh = _onay_hedefi_yakala(getattr(_ONAY_YEREL, "k", None), goruntu)
+        with _OnayKaydi(api.arka().ad):  # kilit bırakılmadan önce açılır, yeniden alındıktan sonra kapanır
+            with kilit_birakilmis():  # insan beklenirken okuma araçları çalışabilsin (girdi araçları kapıda döner)
+                izin, neden = asil(*a, **k)
+            if izin:
+                try:
+                    onay_hedef.dogrula_dur(onh)  # kilit altında, eylemden önce
+                except hata.Dur:
+                    guvenlik._EYLEM.onaylandi = False
+                    raise
         if izin:
             _ONAY_YEREL.izin = getattr(_ONAY_YEREL, "izin", 0) + 1
         return izin, neden
@@ -295,16 +396,17 @@ def _cekirdek_onay_sarmala() -> bool:
     return True
 
 
-def onayla_ve_yap(arac: str, k: str, yap, ayrinti_ek: str = ""):
-    """yap(onayli) kilit altında çalışır. → (sonuç, kullanıcı_onayladı_mı).
+def onayla_ve_yap(arac: str, k: str, yap, ayrinti_ek: str = "", nokta=None):
+    """yap(onayli) kilit altında (girdi kapısıyla) çalışır. → (sonuç, kullanıcı_onayladı_mı).
+    nokta: koordinatlı tıklamanın pencere pikseli (onaydan sonra o bölgenin görüntüsü karşılaştırılır).
     Çekirdek onay varsa (guvenlik hassas engelde paneli kendisi sorar): bir eylem = bir onay, burada yeniden
     sorulmaz; red → ToolError. Yoksa: hassas engelde (Dur 10 HASSAS) kilit bırakılır, panelden insan onayı istenir;
-    izin gelirse pencere başlığı değişmediyse bir kez onaylı yapılır."""
+    izin gelirse hedef değişmediyse bir kez onaylı yapılır. İki yolda da beklerken masaüstüne başka girdi gitmez."""
     au = api.arka()
     if _cekirdek_onay_sarmala():
         _ONAY_YEREL.izin = 0
-        with kilitli():
-            _ONAY_YEREL.hedef = (k, au.baslik(k) if k != EKRAN else "")
+        with kilitli(girdi=True):
+            _ONAY_YEREL.k, _ONAY_YEREL.nokta = k, nokta
             try:
                 sonuc = yap(False)
             except hata.Dur as e:
@@ -313,9 +415,9 @@ def onayla_ve_yap(arac: str, k: str, yap, ayrinti_ek: str = ""):
                                                 "kendine yeniden deneme. ({mesaj})").format(mesaj=e.mesaj)) from None
                 raise
             finally:
-                _ONAY_YEREL.hedef = None
+                _ONAY_YEREL.k = _ONAY_YEREL.nokta = None
         return sonuc, getattr(_ONAY_YEREL, "izin", 0) > 0
-    with kilitli():
+    with kilitli(girdi=True):
         try:
             return yap(False), False
         except hata.Dur as e:
@@ -330,16 +432,29 @@ def onayla_ve_yap(arac: str, k: str, yap, ayrinti_ek: str = ""):
             goruntu = im
         except Exception:  # noqa: BLE001 - görüntü isteğe bağlı
             pass
-    hedef_metin = baslik0 or _("tüm ekran")
-    izin, neden = _onay_iste(arac, hedef_metin, f"{engel.mesaj}{ayrinti_ek}",
-                             "arka" if au.ad == "sanal" else "ekran", goruntu)
-    if not izin:
-        raise ToolError("[10] " + _("kullanıcı onayı alınamadı: {neden}. Eylem yapılmadı; kullanıcıya bildir, kendi "
-                                    "kendine yeniden deneme. ({mesaj})").format(neden=neden or _("red"), mesaj=engel.mesaj))
-    with kilitli():
-        if k != EKRAN and au.baslik(k) != baslik0:
-            raise ToolError("[4] " + _("pencere başlığı onaydan sonra değişti; onay geçersiz, eylem yapılmadı"))
-        return yap(True), True
+        _ONAY_YEREL.nokta = nokta
+        try:
+            onh = _onay_hedefi_yakala(k, goruntu)
+        finally:
+            _ONAY_YEREL.nokta = None
+        kayit = _OnayKaydi(au.ad)  # kilit bırakılmadan: aradaki girdi araçları kapıda döner
+    try:
+        hedef_metin = baslik0 or _("tüm ekran")
+        izin, neden = _onay_iste(arac, hedef_metin, f"{engel.mesaj}{ayrinti_ek}",
+                                 "arka" if au.ad == "sanal" else "ekran", goruntu)
+        if not izin:
+            raise ToolError("[10] " + _("kullanıcı onayı alınamadı: {neden}. Eylem yapılmadı; kullanıcıya bildir, kendi "
+                                        "kendine yeniden deneme. ({mesaj})").format(neden=neden or _("red"),
+                                                                                   mesaj=engel.mesaj))
+        with kilitli():  # kapısız: bekleyen kayıt bu eylemin kendisi
+            kayit.kapat()
+            try:
+                onay_hedef.dogrula_dur(onh)
+            except hata.Dur as e:
+                raise ToolError(hata_metni(e)) from None
+            return yap(True), True
+    finally:
+        kayit.kapat()
 
 
 # ---------------------------------------------------------------- ekran görüntüleri (shot_id)
@@ -431,6 +546,8 @@ def _yeni_metin(im, bolge) -> list[str] | None:
 # durulma beklenip SON ölçüm alınır (yarım animasyon değil, oturmuş hâl). Hiç değişmezse üst sınırda changed=false.
 SONRA_ARALIKLAR = (0.05, 0.12, 0.22, 0.35)
 SONRA_DURULMA = 0.11
+ONSUZ_ANLAR = (0.06, 0.12, 0.2)  # ön ölçümsüz yol: başlık yoklama anları (sn); sonuncusu üst sınır (ONSUZ_BEKLE)
+ONSUZ_BEKLE = ONSUZ_ANLAR[-1]
 
 
 def _sonra(k: str, once: fark.Once | None, bekle: float = 0.35) -> dict:
@@ -440,8 +557,8 @@ def _sonra(k: str, once: fark.Once | None, bekle: float = 0.35) -> dict:
 
     Uyarlamalı bekleme: ekran SONRA_ARALIKLAR anlarında (en çok `bekle` sn'ye dek) ölçülür; değişiklik ilk görüldüğünde
     SONRA_DURULMA kadar beklenip son ölçüm alınır (changed_region animasyonun ortasını değil oturmuş hâli yansıtır).
-    Değişmezse `bekle` sonunda changed=false. Ön ölçüm (`once`) yoksa yalnız `bekle` kadar beklenip başlık/pencere
-    durumu döner."""
+    Değişmezse `bekle` sonunda changed=false. Ön ölçüm (`once`) yoksa en çok ONSUZ_BEKLE (ölçülmüş) kadar başlık
+    yoklanır (değişince hemen) ve başlık/pencere durumu döner."""
     au = api.arka()
     t0 = time.monotonic()
 
@@ -459,7 +576,22 @@ def _sonra(k: str, once: fark.Once | None, bekle: float = 0.35) -> dict:
     fark_ = None
     im = None
     if once is None:
-        uyku(bekle)
+        # ön ölçüm yok (kde'de via='action': görüntü pencereyi öne getirirdi): yalnız başlık/pencere durumu döner.
+        # Ölçüm (görünmez masaüstü, Qt, AT-SPI eylemi → ekranda değişiklik, 25 deneme): medyan ~170 ms, en çok
+        # ~180 ms → sabit 0,35 sn yerine en çok ONSUZ_BEKLE; başlık daha önce değişirse hemen dönülür.
+        try:
+            b0 = au.baslik(k) if k != EKRAN else ""
+        except hata.Dur:
+            b0 = None
+        for t in ONSUZ_ANLAR:
+            uyku(min(t, bekle))
+            try:
+                if b0 is not None and k != EKRAN and au.baslik(k) != b0:
+                    break
+            except hata.Dur:
+                break
+            if t >= bekle:
+                break
     else:
         anlar = [t for t in SONRA_ARALIKLAR if t < bekle] + [bekle]
         for t in anlar:
@@ -817,7 +949,7 @@ def click(
                                        eylem="" if via == "action" else None)
             return api.tikla(k, wx, wy, button, desen, onayli, mod=mod)
         mesaj, onaylandi = onayla_ve_yap("click", k, yap, " | " + _("hedef: {hedef}").format(
-            hedef=text or icon or element or f"({x},{y})"))
+            hedef=text or icon or element or f"({x},{y})"), nokta=(wx, wy) if hdf[0] == "xy" else None)
         s = {**bilgi, "status": "clicked", "message": mesaj, "approved_by_user": onaylandi}
         if via == "action":
             s["via"] = "action"
@@ -892,7 +1024,7 @@ def clipboard(
         if action == "write":
             if text is None:
                 raise ToolError("[1] " + _("write için text gerekli ('' panoyu temizler)"))
-            with kilitli():
+            with kilitli(girdi=True):
                 api.pano_yaz(text)
             if text:
                 _KENDI_PANO.append(_pano_ozeti(text))
@@ -974,7 +1106,7 @@ def scroll(
             nokta = cekim_noktasi(cekim_coz(shot_id, k), x, y)
         desen = baslik_kilidi(window, k)
         dhedef = ("scroll", direction, amount, dongu.Nokta(*nokta) if nokta else None)
-        with kilitli():
+        with kilitli(girdi=True):
             once = _once(k)
             _dongu_kapisi("scroll", k, dhedef, once)
             mesaj = api.kaydir(k, direction, amount, nokta, desen)
@@ -1034,40 +1166,40 @@ def drag(
 
 @mcp.tool(title="Open app", annotations=YUMUSAK)
 def open_app(
-    app: Annotated[str, Field(description="Application name (.desktop entry) or executable")],
-    args: Annotated[list[str] | None, Field(description="Arguments (runs app as an executable)")] = None,
+    app: Annotated[str, Field(description="Installed application name or .desktop id (e.g. firefox, org.kde.kate); "
+                                          "paths and commands are refused")],
+    args: Annotated[list[str] | None, Field(description="Documents to open in the app: http/https/file URLs or "
+                                                        "absolute paths of existing files; no options")] = None,
     title: Annotated[str | None, Field(description="Wait for a window whose title matches this regex")] = None,
     wait_s: Annotated[float, Field(ge=1, le=120)] = 15,
     desktop: Masaustu = "auto",
 ) -> dict[str, Any]:
-    """Start an application on the chosen desktop and wait for its new window (returns its id). Forbidden apps are
-    not started. On the background desktop the user's logged-in sessions are reused when the app's policy allows
+    """Start an installed application (.desktop entry) on the chosen desktop and wait for its new window (returns its
+    id); args are documents/URLs for it to open. Forbidden apps, terminals, shells and interpreters are never started
+    [10]. On the background desktop the user's logged-in sessions are reused when the app's policy allows
     (copy/share); single-instance apps already open on the user's screen may be refused ("wait")."""
     with baglam(desktop, _("uygulama aç: {uygulama}").format(uygulama=app)) as bilgi:
         hata.dur_denetle()
+        # yalnız kurulu masaüstü girdisi + belge argümanları (ham yol/komut, yorumlayıcı, uçbirim → 10)
+        argv, ad, yasak_metin, girdi = api.uygulama_komutu(app, args)
+        belgeler = argv[3:]
         ot = _oturum() if api.arka().ad == "sanal" else None
-        if api.arka().ad == "sanal" and ot is None and not (os.path.isabs(app) and os.path.isfile(app)):
+        if api.arka().ad == "sanal" and ot is None:
             # Politikasız başlatma kullanıcının GERÇEK uygulama verisini (profil, kasa, ayar) görünmez masaüstünden
-            # değiştirebilir: oturum köprüsü yokken yalnız mutlak yollu komutlar (ör. test penceresi) başlatılır.
-            raise ToolError("[10] " + _("oturum köprüsü yok: görünmez masaüstünde yalnız mutlak yollu bir komut "
-                                        "başlatılabilir (app='/usr/bin/…', args=[...]); '{uygulama}' başlatılmadı. Gerçek "
-                                        "uygulamalar için oturum politikası gerekir ya da desktop='foreground' "
-                                        "(kullanıcının ekranı).").format(uygulama=app))
-        argv, ad, yasak_metin = api.uygulama_komutu(app, args)
+            # değiştirebilir: oturum köprüsü yokken görünmez masaüstünde hiçbir uygulama başlatılmaz.
+            raise ToolError("[10] " + _("oturum köprüsü yok: görünmez masaüstünde uygulama başlatılamaz; '{uygulama}' "
+                                        "başlatılmadı. desktop='foreground' (kullanıcının ekranı) kullan ya da "
+                                        "kullanıcıya bildir.").format(uygulama=app))
         env = None
         notlar = []
         if api.arka().ad == "sanal":
             if masaustu.durum() is None:
                 masaustu.masaustu_baslat()
                 notlar.append(_("görünmez masaüstü başlatıldı"))
-            if ot is None:
-                notlar.append(_("oturum köprüsü yok: politikasız başlatıldı (yalnız mutlak yollu komut; giriş "
-                                "yapılmış oturum yok)"))
-            else:
-                # mutlak yol da politikadan geçer (ör. /usr/bin/telegram-desktop → bekle); bilinen bir uygulamaya
-                # uymayan ham komut (test penceresi gibi) olduğu gibi başlatılır
+            if ot is not None:
+                # politika ajanın yazdığı addan değil ÇÖZÜLMÜŞ masaüstü girdisinden hesaplanır
                 try:
-                    h = ot.hazirla(app, ham_komut=os.path.isabs(app))
+                    h = ot.hazirla(girdi["kimlik"], ham_komut=False)
                 except hata.Dur:
                     raise
                 except Exception as e:  # noqa: BLE001
@@ -1088,16 +1220,18 @@ def open_app(
                     raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {uygulama} için oturum politikası 'kapali'"
                                                 ).format(uygulama=app) + (f" ({aciklama})" if aciklama else ""))
                 if karar in ("kopya", "paylas"):
-                    if getattr(h, "argv", None):
-                        argv = list(h.argv)
+                    if getattr(h, "argv", None):  # politikanın komutu (kopya profil / Flatpak sarmalayıcı) + belgeler
+                        argv = [*h.argv, *belgeler]
                         yasak_metin = [*yasak_metin, " ".join(argv)]
-                    env = dict(getattr(h, "env_ek", None) or {}) or None
+                    env = dict(getattr(h, "env_ek", None) or {}) or None  # yalnız politikanın ortamı; ajandan değil
                     if karar == "kopya" and hasattr(ot, "parmak_kaydet"):
                         ot.parmak_kaydet(getattr(h, "kopya_yolu", None))
                     notlar.append(_("oturum politikası: {karar}").format(karar=karar)
                                   + (f" ({aciklama})" if aciklama else ""))
                 elif karar:
                     raise ToolError("[1] " + _("bilinmeyen oturum kararı: {karar}").format(karar=repr(karar)))
+        with kilitli(girdi=True):  # onay bekleyen masaüstüne uygulama açılmaz (yalnız kapı denetimi; başlatma
+            pass                   # ve pencere beklemesi kilidi tutmaz)
         r = api.uygulama_ac(argv, ad, yasak_metin, env, title, wait_s)
         if notlar:
             r["notes"] = notlar
@@ -1125,7 +1259,7 @@ def manage_window(
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
         desen = baslik_kilidi(window, k)
         if action == "close":
-            with kilitli():
+            with kilitli(girdi=True):
                 mesaj = api.pencere_kapat(k, desen)
             return {**bilgi, "status": "closed", "message": mesaj, "window_closed": True}
         islem = {"move": "tasi", "resize": "boyut", "minimize": "kucult", "maximize": "buyut",
@@ -1134,7 +1268,7 @@ def manage_window(
             raise ToolError("[1] " + _("move için x ve y gerekli"))
         if action == "resize" and (width is None or height is None):
             raise ToolError("[1] " + _("resize için width ve height gerekli"))
-        with kilitli():
+        with kilitli(girdi=True):
             r = api.pencere_yonet(k, islem, x, y, width, height, desen)
         s = {**bilgi, "status": {"move": "moved", "resize": "resized", "minimize": "minimized",
                                  "maximize": "maximized", "restore": "restored"}[action],
@@ -1161,6 +1295,7 @@ def run_flow(
         raise ToolError("[1] " + _("run için name gerekli (action=list ile adlar)"))
     with baglam(desktop, _("akış {ad}: {pencere}").format(ad=name, pencere=window)) as bilgi:
         hata.dur_denetle()
+        _onay_kapisi()  # erken ret (akışın kendi onayı istenmeden); çalıştırma ayrıca kilit altında denetlenir
         k = _pencere_zorunlu(window)
         y_ = api.yasak_mi(k)
         if y_:
@@ -1177,7 +1312,7 @@ def run_flow(
                 raise ToolError("[10] " + _("kullanıcı onayı alınamadı: {neden}. Akış çalıştırılmadı; kullanıcıya "
                                             "bildir.").format(neden=neden or _("red")))
             onaylandi = True
-        with kilitli():
+        with kilitli(girdi=True):
             # onaylanmadıysa çalışırken --onayli adım reddedilir (ön taramadan sonra dosya değişmiş olsa bile)
             mesaj = api.akis_calistir(k, name, timeout_s, baslik_kilidi(window, k), onayli_izin=onaylandi)
         return {**bilgi, "status": "done", "message": mesaj[-3000:], "approved_by_user": onaylandi}
