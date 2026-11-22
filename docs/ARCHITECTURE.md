@@ -250,9 +250,12 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   ONAYSIZ yalnız şu koşulda başlar: dosya `SISTEM_UYGULAMA_DIZINLERI`'nde (`/usr/share/applications`,
   `/usr/local/share/applications`, `/var/lib/flatpak/exports/share/applications`) ve kendisi + tüm üst dizinleri
   (sembolik bağlar çözülerek) root sahipli, grup/diğerleri yazamaz; Exec'teki her program (geçirgen sarmalayıcılar
-  dahil, PATH ile çözülüp `os.stat`) root sahipli, yazılamaz, çalıştırılabilir bir ELF ikilisi (`#!` betik kabul
-  edilmez). Aksi halde (kullanıcı dizini `~/.local/share/applications`, kullanıcı Flatpak'ı, kullanıcıya ait ya da
-  betik program, PATH'te önce gelen kullanıcı dosyası) panelden insan onayı istenir (`guvenlik._panelden_onay`; bir
+  dahil, PATH ile çözülüp `os.stat`) root sahipli, yazılamaz, çalıştırılabilir bir ELF ikilisi ya da aynı koşuldaki
+  bir `#!` betik (sistemin kurduğu sarmalayıcılar: libreoffice, steam, vivaldi…) — betiğin yorumlayıcısı (mutlak yol)
+  ve `#!/usr/bin/env PROG` ise PROG da root sahipli, yazılamaz ELF olmalı; env'e seçenek (`-S`) ya da atama verilemez.
+  Kara liste aynen geçerlidir (Exec'in kendisi `bash`/`ldd`/… ise 10). Aksi halde (kullanıcı dizini
+  `~/.local/share/applications`, kullanıcı Flatpak'ı, kullanıcıya ait program ya da yorumlayıcı, PATH'te önce gelen
+  kullanıcı dosyası) panelden insan onayı istenir (`guvenlik._panelden_onay`; bir
   eylem = bir onay; gözetimsiz kipte/panel kapalıyken/redde 10, tur "hassas"); onay isteği girdi yolunu ve Exec'i
   gösterir; izinde girdi bir kez okunup onaylanan Exec ile aynı olduğu doğrulanır ve `RUNTIME_DIR/uygulama/` altındaki
   0600 kopyasından başlatılır (onaydan sonra dosyayı değiştirmek işe yaramaz). Argümanlar yalnız belge: http/https URL'si (sorgudaki `=` serbest), yerel `file://` URL'si ya da var

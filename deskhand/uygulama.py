@@ -132,7 +132,7 @@ YASAK_PROGRAMLAR = frozenset({
     "fakeroot", "fakechroot", "kioexec", "kde-inhibit", "kdeinit5", "kdeinit6", "klauncher", "nsjail", "minijail0",
     "ld.so", *"xdotool ydotool dotool dotoold wtype".split(),  # girdi enjeksiyon araçları (tek dizede: ham çağrı değil)
     "kwriteconfig5", "kwriteconfig6", "dconf",
-    "gsettings", "crontab", "dbus-update-activation-environment",
+    "gsettings", "crontab", "dbus-update-activation-environment", "ldd",
 })
 _YORUMLAYICI_KOK = ("python", "pypy", "perl", "ruby", "lua", "luajit", "php", "node", "tclsh", "wish", "guile", "java",
                     "wine", "pwsh", "julia")
@@ -344,8 +344,41 @@ def program_guvenilir(program: str) -> str | None:
         return _("program okunamadı: {p}").format(p=gercek)
     if not stat.S_ISREG(st.st_mode) or not os.access(gercek, os.X_OK):
         return _("program çalıştırılabilir bir dosya değil: {p}").format(p=gercek)
-    if imza != b"\x7fELF":
-        return _("program bir betik (#!) ya da ikili olmayan dosya: {p}").format(p=gercek)
+    if imza == b"\x7fELF":
+        return None
+    if imza[:2] == b"#!":  # sistemin kurduğu, kullanıcının değiştiremediği sarmalayıcı betik (libreoffice, steam…)
+        return _betik_yorumlayici_guvenilir(gercek)
+    return _("program ikili ya da betik değil: {p}").format(p=gercek)
+
+
+def _elf_root(yol: str) -> bool:
+    try:
+        with open(os.path.realpath(yol), "rb") as f:
+            return _root_yazilamaz(yol) and f.read(4) == b"\x7fELF" and os.access(yol, os.X_OK)
+    except OSError:
+        return False
+
+
+def _betik_yorumlayici_guvenilir(betik: str) -> str | None:
+    """Root sahipli, yazılamaz #! betiğin yorumlayıcısı da root sahipli, yazılamaz bir ELF mi? `#!/usr/bin/env PROG`
+    ise env ve PROG (PATH ile çözülür) aynı koşulu sağlamalı; env'e seçenek (-S…) ya da ortam ataması verilemez."""
+    try:
+        with open(betik, "rb") as f:
+            satir = f.readline(512).decode("utf-8", "replace")
+    except OSError:
+        return _("betik okunamadı: {p}").format(p=betik)
+    parcalar = satir[2:].strip().split()
+    if not parcalar or not os.path.isabs(parcalar[0]):
+        return _("betiğin yorumlayıcısı mutlak yol değil: {p}").format(p=betik)
+    yorumlayici = parcalar[0]
+    if not _elf_root(yorumlayici):
+        return _("betiğin yorumlayıcısı root sahipli/yazılamaz bir ikili değil: {y}").format(y=yorumlayici)
+    if _ad(yorumlayici) == "env":
+        if len(parcalar) < 2 or parcalar[1].startswith("-") or "=" in parcalar[1]:
+            return _("betiğin env satırı yalın bir program adı değil: {s}").format(s=satir.strip()[:120])
+        hedef = parcalar[1] if os.path.isabs(parcalar[1]) else shutil.which(parcalar[1])
+        if not hedef or not _elf_root(hedef):
+            return _("betiğin env hedefi root sahipli/yazılamaz bir ikili değil: {h}").format(h=parcalar[1])
     return None
 
 

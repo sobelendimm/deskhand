@@ -195,10 +195,32 @@ import shutil  # noqa: E402
 
 shutil.copy("/usr/bin/true", benim)
 kontrol("YB2: kullanıcıya ait ikili program → güvenilir değil", uygulama.program_guvenilir(benim) is not None)
-betik_root = next((p for p in ("/usr/bin/ldd", "/usr/bin/xdg-open", "/usr/bin/gettext.sh", "/usr/bin/zcat")
-                   if os.path.exists(p) and open(p, "rb").read(2) == b"#!"), None)
-kontrol(f"YB2: root sahipli #! betik ({betik_root}) → güvenilir değil (betik kabul edilmez)",
-        betik_root is None or "betik" in (uygulama.program_guvenilir(betik_root) or ""))
+# politika: sistemin kurduğu root sahipli, yazılamaz #! sarmalayıcı (libreoffice, steam, vivaldi…) ELF kadar güvenilir;
+# şart: yorumlayıcı (ve `#!/usr/bin/env PROG` ise PROG) da root sahipli, yazılamaz ELF. Kara liste aynen kalır.
+if os.path.exists("/usr/bin/ldd") and open("/usr/bin/ldd", "rb").read(2) == b"#!":
+    kontrol("YB2: root sahipli #! betik (/usr/bin/ldd) program olarak güvenilir AMA ldd kara listede (girdi = 10)",
+            uygulama.program_guvenilir("/usr/bin/ldd") is None and uygulama.program_yasak_mi("ldd") is not None)
+kontrol("YB2: kullanıcıya ait #! betik (yorumlayıcısı root sahipli olsa da) → güvenilir değil",
+        uygulama.program_guvenilir(CALISIR) is not None)
+SB = os.path.join(G, "sahte-sistem")  # root sahipliği taklidi: yalnız bu dizin "root sahipli/yazılamaz" sayılır
+os.makedirs(SB, exist_ok=True)
+gercek_root = uygulama._root_yazilamaz
+uygulama._root_yazilamaz = lambda y: os.path.realpath(y).startswith(SB + "/") or gercek_root(y)
+SHEBANG = {"sh-sarmalayici": ("#!/usr/bin/sh\nexec /usr/lib/x/soffice \"$@\"\n", True),
+           "bash-sarmalayici": ("#!/bin/bash\nexec /opt/steam/steam \"$@\"\n", True),
+           "env-python": ("#!/usr/bin/env python3\nprint(1)\n", True),
+           "env-S": ("#!/usr/bin/env -S LD_PRELOAD=/tmp/x.so python3\n", False),
+           "env-atama": ("#!/usr/bin/env FOO=1 python3\n", False),
+           "goreli": ("#!sh\n", False),
+           "kullanici-yorumlayici": (f"#!{benim}\n", False)}
+for ad_, (icerik, beklenen) in SHEBANG.items():
+    yol_ = os.path.join(SB, ad_)
+    with open(yol_, "w") as f:
+        f.write(icerik)
+    os.chmod(yol_, 0o755)
+    kontrol(f"YB2: root sahipli (taklit) #! betik '{ad_}' → {'güvenilir' if beklenen else 'güvenilir değil'}",
+            (uygulama.program_guvenilir(yol_) is None) == beklenen, str(uygulama.program_guvenilir(yol_)))
+uygulama._root_yazilamaz = gercek_root
 kontrol("YB2: root sahipli ELF (/usr/bin/true) → güvenilir", uygulama.program_guvenilir("/usr/bin/true") is None)
 kontrol("YB2: /tmp (herkes yazabilir) altındaki girdi → güvenilir değil",
         uygulama.girdi_guvenilir({"yol": "/tmp/x.desktop", "exec": "/usr/bin/true"}) is not None)
@@ -258,7 +280,8 @@ a_.close(); b_.close()
 # sistem girdileri (yalnız OKUNUR, BAŞLATILMAZ): firefox, kate, dolphin… onaysız
 sistem = {x["kimlik"]: x for x in uygulama.masaustu_girdileri()
           if x["yol"].startswith(uygulama.SISTEM_UYGULAMA_DIZINLERI)}
-for kimlik in ("firefox", "org.kde.kate", "org.kde.dolphin", "org.kde.gwenview", "mpv", "org.kde.okular"):
+for kimlik in ("firefox", "org.kde.kate", "org.kde.dolphin", "org.kde.gwenview", "mpv", "org.kde.okular",
+               "libreoffice-writer", "steam", "vivaldi-stable"):  # son üçü root sahipli #! sarmalayıcı
     x = sistem.get(kimlik)
     if x is None:
         continue
