@@ -128,10 +128,20 @@ au = SahteAU("kde")
 arka_uc._ORNEKLER["kde"] = au
 
 
+TAMPON_KORU = False  # True: sorar() çağrıları arasında kart parça tamponu korunur (parça parça yazma testleri)
+
+
 def temiz():
+    if not TAMPON_KORU:
+        guvenlik._KART_TAMPON.clear()  # parça tamponu testler arasında taşınmasın
     ISTEKLER.clear()
     YANIT["izin"] = False
     del au.satirlar[:]
+
+
+def api_pano_yaz(metin):
+    from deskhand import api
+    api.pano_yaz(metin)
 
 
 def sorar(f, *a, **k):
@@ -268,10 +278,8 @@ with arka_uc.hedef_sabit("kde"):
             kontrol(f"[{mod}] ödeme sayfasında tıklama ({ad}) → onay ister", kod == 10 and n == 1, f"{kod} {n}")
         kod, n, _g = sorar(guvenlik.hassas_sayfa_engel, "{o}", False, "tıklama", yakin=["Kuponu uygula"], nokta=(5, 5),
                            goruntu_al=False)
-        if mod == "kart":
-            kontrol("[kart] ödeme sayfasında para OLMAYAN okunur öge ('Kuponu uygula') → sorulmaz", kod == 0 and n == 0)
-        else:
-            kontrol("[hepsi] ödeme sayfasında 'Kuponu uygula' → sorar (eski davranış)", kod == 10 and n == 1)
+        kontrol(f"[{mod}] ödeme sayfasında okunur 'Kuponu uygula' → sorar (muafiyet YOK: kayıtlı kart)",
+                kod == 10 and n == 1)
         # gözetimsiz: ret (gerçek onay modülü; panel yok)
         onay.iste_sonuc = gercek_iste_sonuc
         os.environ["DESKHAND_GOZETIMSIZ"] = "1"
@@ -374,6 +382,129 @@ with arka_uc.hedef_sabit("kde"):
     guvenlik.dur_ac("kullanici")
     kontrol("kart kipinde de: DUR açıkken girdi → 13", kod_al(eylem.k_tus, ns(kimlik="{n}", kombinasyon="a")) == 13)
     guvenlik.dur_kapat("kullanici")
+
+    # ================================================================ İNCELEME DÜZELTMELERİ (kayıtlı kart senaryosu)
+    def iletiler_():
+        return " ".join(i["eylem"] + i["ayrinti"] + i["hedef"] for i in ISTEKLER)
+
+    # B2: ödeme sayfasında HER tıklama onay ister (kart kipinde de); ajanın adı / yakın "Toplam" yazısı muafiyet vermez
+    for mod in ("hepsi", "kart"):
+        assert kapsam(mod)
+        for yazi in ("Place your order", "Siparişinizi verin", "Onayla ve Bitir", "Siparişi Gönder", "Confirm",
+                     "Submit order", "Subscribe", "Abone ol", "Donate", "Devam Et", "Continue", "Toplam 249,90 TL"):
+            kod, n, _g = sorar(guvenlik.hassas_sayfa_engel, "{o}", False, "tıklama", yakin=[yazi], nokta=(5, 5),
+                               goruntu_al=False)
+            kontrol(f"[{mod}] ödeme sayfasında {yazi!r} → onay ister", kod == 10 and n == 1, f"{kod} {n}")
+        # yazısız düğme + yanında "Toplam" yazısı + ajanın kendi sorgusu (hassas_nokta ek_metinler)
+        kod, n, _g = sorar(eylem.hassas_nokta, SahteGirdi(au), "{o}", False, "tıklama", 5, 5, ["Toplam 249,90 TL"],
+                           ek_metinler=["Kuponu uygula"])
+        kontrol(f"[{mod}] yazısız ödeme düğmesi + 'Toplam 249,90 TL' + ajan adı → onay ister", kod == 10 and n == 1,
+                f"{kod} {n}")
+    # B2(b): ödeme sayfası DIŞINDA yeni para düğmeleri (yalnız kart kipinde onay; hepsi değişmedi)
+    YENI_PARA = ("Place your order", "Submit order", "Complete your order", "Confirm and pay", "Confirm & Pay",
+                 "Siparişinizi verin", "Siparişi Gönder", "Siparişi onayla", "Siparişi tamamla", "Onayla ve Bitir",
+                 "Onayla ve öde", "Subscribe", "Subscribe now", "Abone ol", "Abonelik başlat", "Bağış yap", "Donate",
+                 "Satın al", "Buy", "Purchase", "Ödeme yap", "Ödemeyi tamamla", "Pay now")
+    DEGIL = ("Devam Et", "Continue", "Confirm", "Next", "Kuponu uygula", "İleri")
+    assert kapsam("kart")
+    for yazi in YENI_PARA:
+        kod, n, _g = sorar(guvenlik.hassas_engel, False, yazi, k=None)
+        kontrol(f"[kart] ödeme sayfası DIŞINDA {yazi!r} → onay ister", kod == 10 and n == 1, f"{kod} {n}")
+    for yazi in DEGIL:
+        kod, n, _g = sorar(guvenlik.hassas_engel, False, yazi, k=None)
+        kontrol(f"[kart] ödeme sayfası DIŞINDA {yazi!r} → para düğmesi sayılmaz (onaysız)", kod == 0 and n == 0, f"{kod} {n}")
+    assert kapsam("hepsi")
+    for yazi in ("Place your order", "Donate", "Subscribe", "Devam Et"):
+        kod, n, _g = sorar(guvenlik.hassas_engel, False, yazi, k=None)
+        kontrol(f"[hepsi] {yazi!r} (ödeme sayfası dışında) → bugünkü davranış: sorulmaz", kod == 0 and n == 0, f"{kod} {n}")
+
+    # O1: kart numarası tespiti, ayırıcı / ek rakam atlatmaları
+    for m_ in ("4111 1111 1111 1111 12", "4111.1111.1111.1111", "4111  1111  1111  1111", "4111/1111/1111/1111",
+               "12 4111 1111 1111 1111 12", "1226 4111111111111111", "411111111111111112/26 123", "5500 0000 0000 0004"):
+        kontrol(f"Luhn atlatma: {m_!r} → kart numarası", guvenlik.kart_numarasi(m_) is not None, m_)
+    for m_ in ("4111 1111 1111 1112", "12345678901234567890", "2026-11-22 14:30:55 99", "0532 123 45 67"):
+        kontrol(f"Luhn atlatma: {m_!r} → kart numarası DEĞİL", guvenlik.kart_numarasi(m_) is None, m_)
+    assert kapsam("kart")
+    for m_ in ("4111 1111 1111 1111 12", "4111.1111.1111.1111", "4111  1111  1111  1111"):
+        kod, n, g = sorar(eylem.k_yaz, ns(kimlik="{n}", metin=m_))
+        kontrol(f"[kart] {m_!r} yazma → onay ister (yalnız son 4 hane), girdi yok",
+                kod == 10 and n == 1 and g == 0 and "1111" in iletiler_() and "4111" not in iletiler_(),
+                f"{kod} {n} {g} {iletiler_()[:120]}")
+    # pano yazma (ajan numarayı panoya yazıp Ctrl+V ile yapıştırmasın)
+    for m_ in ("4111 1111 1111 1111", "4111.1111.1111.1111 12"):
+        kod, n, _g = sorar(guvenlik.pano_yazma_engel, m_)
+        kontrol(f"[kart] panoya {m_!r} yazma → onay ister, iletide tam numara yok",
+                kod == 10 and n == 1 and "4111" not in iletiler_(), f"{kod} {n} {iletiler_()[:120]}")
+    kod_api, n_api, _g = sorar(api_pano_yaz, "4111 1111 1111 1111")
+    kontrol("[kart] api.pano_yaz(kart numarası) → onay ister, pano DEĞİŞMEDİ",
+            kod_api == 10 and n_api == 1 and au.pano == "kullanicinin-panosu", f"{kod_api} {n_api} {au.pano!r}")
+    kod, n, _g = sorar(guvenlik.pano_yazma_engel, "merhaba 1234")
+    kontrol("[kart] panoya kart olmayan metin yazma → sorulmaz", kod == 0 and n == 0)
+    temiz()
+    YANIT["izin"] = True
+    kod = kod_al(guvenlik.pano_yazma_engel, "4111 1111 1111 1111")
+    kontrol("[kart] panoya numara yazma: panelden izin → geçer (bir onay)", kod == 0 and len(ISTEKLER) == 1, f"{kod}")
+    assert kapsam("hepsi")
+    kod, n, _g = sorar(guvenlik.pano_yazma_engel, "4111 1111 1111 1111")
+    kontrol("[hepsi] panoya numara yazma → ekstra onay YOK (bugünkü davranış)", kod == 0 and n == 0)
+    assert kapsam("kart")
+    # parça parça yazma: aynı pencereye 60 sn içinde gelen parçalar tamponda birleşir
+    TAMPON_KORU = True
+    guvenlik._KART_TAMPON.clear()
+    sonuc = [sorar(eylem.k_yaz, ns(kimlik="{n}", metin=p_))[:2] for p_ in ("4111", " 1111", " 1111")]
+    kontrol("[kart] parça parça yazma: ilk üç parça (12 hane) sorulmaz", all(r == (0, 0) for r in sonuc), str(sonuc))
+    kod, n, g = sorar(eylem.k_yaz, ns(kimlik="{n}", metin=" 1111"))
+    kontrol("[kart] parça parça yazma: dördüncü parça numarayı tamamlar → onay ister, girdi yok",
+            kod == 10 and n == 1 and g == 0, f"{kod} {n} {g}")
+    guvenlik._KART_TAMPON.clear()
+    r1 = sorar(eylem.k_yaz, ns(kimlik="{n}", metin="4111 1111"))[:2]
+    r2 = sorar(eylem.k_yaz, ns(kimlik="{t}", metin=" 1111 1111"))[:2]
+    kontrol("[kart] parçalar FARKLI pencerelere → birleşmez", (r1, r2) == ((0, 0), (0, 0)), f"{r1} {r2}")
+    guvenlik._KART_TAMPON.clear()
+    sorar(eylem.k_yaz, ns(kimlik="{n}", metin="4111 1111"))
+    sorar(eylem.k_yaz, ns(kimlik="{n}", metin="\t"))
+    kod, n, g = sorar(eylem.k_yaz, ns(kimlik="{n}", metin="1111 1111"))
+    kontrol("[kart] parçalar arasında Tab (alan değişti) → birleşmez", (kod, n) == (0, 0), f"{kod} {n}")
+    guvenlik._KART_TAMPON.clear()
+    sorar(eylem.k_yaz, ns(kimlik="{n}", metin="4111 1111 1111"))
+    z_, kuyruk_ = guvenlik._KART_TAMPON["{n}"]
+    guvenlik._KART_TAMPON["{n}"] = (z_ - guvenlik.KART_TAMPON_SN - 1, kuyruk_)
+    ISTEKLER.clear()
+    del au.satirlar[:]
+    kod = kod_al(eylem.k_yaz, ns(kimlik="{n}", metin=" 1111"))
+    kontrol("[kart] tampon 60 sn sonra düşer → birleşmez", kod == 0 and not ISTEKLER, f"{kod} {len(ISTEKLER)}")
+    # tek tuşla (rakam tuşları)
+    guvenlik._KART_TAMPON.clear()
+    sonuc = [sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon=t_))[:2] for t_ in "411111111111111"]
+    kontrol("[kart] tek tuşla ilk 15 rakam sorulmaz", all(r == (0, 0) for r in sonuc), str(sonuc))
+    kod, n, g = sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon="1"))
+    kontrol("[kart] tek tuşla 16. rakam numarayı tamamlar → onay ister, tuş gönderilmez",
+            kod == 10 and n == 1 and g == 0, f"{kod} {n} {g}")
+    guvenlik._KART_TAMPON.clear()
+    kod, n, g = sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon=" ".join("4111111111111111")))
+    kontrol("[kart] tek çağrıda 16 rakam tuşu → onay ister", kod == 10 and n == 1 and g == 0, f"{kod} {n} {g}")
+    guvenlik._KART_TAMPON.clear()
+    sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon=" ".join("41111111")))
+    sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon="a"))
+    kod, n, g = sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon=" ".join("11111111")))
+    kontrol("[kart] araya harf tuşu girerse birleşmez", (kod, n) == (0, 0), f"{kod} {n}")
+    assert kapsam("hepsi")
+    TAMPON_KORU = False
+    guvenlik._KART_TAMPON.clear()
+    kod, n, g = sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon=" ".join("4111111111111111")))
+    kontrol("[hepsi] rakam tuşları → ekstra onay yok, bellekte tampon yok", (kod, n) == (0, 0) and not guvenlik._KART_TAMPON,
+            f"{kod} {n}")
+    # K1: k_yaz içinde kart alanı sorgusu TEK kez
+    assert kapsam("kart")
+    sayac = []
+    eski = eylem._kart_alani_mi
+    eylem._kart_alani_mi = lambda k: sayac.append(k) or False
+    try:
+        sorar(eylem.k_yaz, ns(kimlik="{n}", metin="merhaba"))
+    finally:
+        eylem._kart_alani_mi = eski
+    kontrol("K1: k_yaz içinde _kart_alani_mi tek çağrı", len(sayac) == 1, str(sayac))
+    assert kapsam("hepsi")
 
 # ---------------------------------------------------------------- doktor + panel
 assert kapsam("kart")

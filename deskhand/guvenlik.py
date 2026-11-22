@@ -40,7 +40,13 @@ _YETKI_KALIPLARI = (r"authori[sz]e|yetkilendir\w*|izin ver\w*|allow|grant( acces
                     r"delete (my )?account|kalici olarak sil\w*|permanently delete")
 HASSAS = re.compile(r"\b(" + _PARA_KALIPLARI + "|" + _YETKI_KALIPLARI + r")\b")
 # onay kapsamı "kart": onay istemeye devam eden YALNIZ para alt kümesi (satın alma/ödeme/sipariş onayı düğmeleri)
-PARA_DUGMESI = re.compile(r"\b(" + _PARA_KALIPLARI + r")\b")
+# + ödeme sayfası DIŞINDA da son sipariş/abonelik/bağış düğmeleri (HASSAS'a girmez: "hepsi" kipi değişmez). "Devam Et" /
+# "Continue" / "Confirm" para düğmesi SAYILIR DEĞİL (çok yaygın); ödeme sayfasında zaten her tıklama onay ister.
+# katla "&" işaretini boşluğa çevirir ("Confirm & Pay" → "confirm pay").
+_PARA_EK_KALIPLARI = (r"(place|submit|complete) (your )?order|confirm (and )?pay|siparis\w* (ver|gonder|onayla|tamamla)\w*|"
+                      r"onayla ve (bitir|ode)\w*|abone ol\w*|subscri\w*|abonelik(i)? (baslat|onayla)\w*|bagis yap\w*|"
+                      r"donate|odeme(yi)? (yap|tamamla)\w*")
+PARA_DUGMESI = re.compile(r"\b(" + _PARA_KALIPLARI + "|" + _PARA_EK_KALIPLARI + r")\b")
 # başlığı ödeme/sipariş onayı olan sayfada HER tıklama ve Enter/boşluk onay ister: OCR'ın okuyamadığı
 # ödeme düğmesine (ör. orta ton zeminde beyaz yazı) koordinatla basılmasın. Form doldurmak (yaz) serbest; ama
 # yazı Enter/Tab/boşluk içeriyorsa (\n = gönder, Tab+boşluk = odaktaki düğmeye bas) o da onay ister.
@@ -1300,8 +1306,6 @@ def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=Tr
         m = HASSAS_SAYFA.search(katla(eb or ""))
         if m:
             b = eb
-    if m and onay_kapsami() == "kart" and yakin and not any(PARA_DUGMESI.search(katla(t)) for t in yakin if t):
-        m = None  # kart kipi: ödeme sayfasında okunabilen, para olmayan öge ("Kuponu uygula") sorulmaz
     onayli = onayli_gecerli_kati(onayli)
     if m and not onayli:
         ayrinti = _("Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}").format(eslesen=repr(m.group(0)))
@@ -1711,7 +1715,58 @@ def yapistirma_engel(k, onayli, kaynak="pano"):
 _KART_ALANI = re.compile(
     r"kart numaras|kredi kart|banka kart|kart no\b|card[\s_-]?number|credit[\s_-]?card|debit[\s_-]?card|cc[\s_-]?(?:num|csc|exp|cvc)|"
     r"\bcvc\d?\b|\bcvv\d?\b|\bcvn\b|guvenlik kodu|security code|son kullanma|expir|\bskt\b")
-_KART_ADAYI = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)")
+# rakam dizisi: ayırıcı (boşluk/nokta/tire/bölü) en çok 3 karakter; çift boşluk, "4111.1111…", bitişik ek rakam atlatmasın
+_KART_ADAYI = re.compile(r"\d(?:[\s.\-/]{0,3}\d)*")
+_KART_SON_DIZI = re.compile(r"\d(?:[\s.\-/]{0,3}\d)*[ .\-/]{0,3}\Z")  # metnin SONUNDAKİ rakam dizisi (tampon; Tab/Enter ile biter → boş)
+KART_TAMPON_SN = 60  # aynı pencereye bu süre içinde gelen yazı parçaları birleştirilip sınanır
+_KART_TAMPON = {}  # pencere → (zaman, metnin sonundaki rakam dizisi): YALNIZ süreç belleği, "kart" kipinde, ≤48 karakter
+
+
+def _kart_biciminde(w):
+    """Rakam penceresi bilinen bir kart ailesinin ön eki + uzunluğuna uyuyor mu (Visa 16/19, Mastercard 16, Amex 15, Troy 16,
+    Diners 14/16–19, JCB/Discover/UnionPay/Maestro 16–19)? Yalnız ALT pencereler için (rastgele uzun rakam dizisinde
+    sahte alarmı keser); dizinin tamamı 13–19 hane ise bu şart aranmaz."""
+    n = len(w)
+    ilk2, ilk4 = int(w[:2]), int(w[:4])
+    if w[0] == "4":
+        return n in (16, 19)
+    if 51 <= ilk2 <= 55 or 2221 <= ilk4 <= 2720:
+        return n == 16
+    if ilk2 in (34, 37):
+        return n == 15
+    if ilk2 in (36, 38) or 3000 <= ilk4 <= 3059:
+        return n == 14 or 16 <= n <= 19
+    if ilk4 == 9792:
+        return n == 16
+    if ilk2 == 35 or w[0] == "6":
+        return 16 <= n <= 19
+    return False
+
+
+def _luhn_son4(rakam):
+    """Rakam dizisinde kart numarası: dizinin kendisi 13–19 hane ve Luhn'u geçiyorsa; ya da dizinin bir ALT penceresi
+    (ek rakam/SKT/CVV bitişik yazılsa da) 13–19 hane, kart ailesine uyuyor (_kart_biciminde) ve Luhn'u geçiyorsa
+    (önek toplamlarıyla O(n)). → ilk uyan pencerenin son 4 hanesi | None."""
+    n = len(rakam)
+    if n < 13:
+        return None
+    d = [int(c) for c in rakam]
+    cift = [x * 2 - 9 if x > 4 else x * 2 for x in d]
+    duz = [[0], [0]]  # duz[p][i]: ilk i rakamdan indeksi p eşliğinde olanların toplamı (tek katlı)
+    kat = [[0], [0]]
+    for i in range(n):
+        for p in (0, 1):
+            duz[p].append(duz[p][-1] + (d[i] if i % 2 == p else 0))
+            kat[p].append(kat[p][-1] + (cift[i] if i % 2 == p else 0))
+    for e in range(13, n + 1):  # e: pencerenin bitişi (hariç); son rakam indeksi e-1, ondan geriye değişimli çiftlenir
+        q = (e - 1) % 2
+        for uz in range(13, min(19, e) + 1):
+            s = e - uz
+            if ((duz[q][e] - duz[q][s]) + (kat[1 - q][e] - kat[1 - q][s])) % 10:
+                continue
+            if uz == n or _kart_biciminde(rakam[s:e]):
+                return rakam[e - 4:e]
+    return None
 
 
 def kart_alani_mi(*adlar) -> bool:
@@ -1721,30 +1776,76 @@ def kart_alani_mi(*adlar) -> bool:
 
 
 def kart_numarasi(metin):
-    """Metinde 13–19 haneli, Luhn sınamasını geçen (boşluk/tire ayırıcılı da) numara var mı? → son 4 hane | None.
-    Numaranın kendisi hiçbir yere döndürülmez."""
-    for m in _KART_ADAYI.finditer(metin or ""):
-        rakam = re.sub(r"\D", "", m.group(0))
-        if 13 <= len(rakam) <= 19:
-            toplam = 0
-            for i, c in enumerate(reversed(rakam)):
-                d = int(c)
-                if i % 2:
-                    d = d * 2 - 9 if d > 4 else d * 2
-                toplam += d
-            if toplam % 10 == 0:
-                return rakam[-4:]
+    """Metinde 13–19 haneli, Luhn sınamasını geçen numara var mı (boşluk/nokta/tire/bölü ayırıcılı, ek rakama bitişik,
+    bir rakam dizisinin herhangi bir alt penceresi)? → son 4 hane | None. Numaranın kendisi hiçbir yere döndürülmez."""
+    for m in _KART_ADAYI.finditer((metin or "")[:200000]):
+        son4 = _luhn_son4(re.sub(r"\D", "", m.group(0)))
+        if son4:
+            return son4
     return None
 
 
-def kart_bilgisi_engel(k, onayli, metin, alan_kart=False, ne="yazı") -> bool:
+def kart_tampon_denetle(k, metin):
+    """kart_numarasi(metin) + parça parça yazma: aynı pencereye KART_TAMPON_SN sn içinde gönderilen önceki yazının
+    SONUNDAKİ rakam dizisiyle birleştirilip Luhn denenir (4111 / 1111 / 1111 / 1111 ayrı çağrılarda da yakalanır).
+    Süreç içi (CLI'de her çağrı ayrı süreç: yalnız MCP/Python API tek süreçte yakalar). → son 4 hane | None."""
+    import time as _t
+    simdi = _t.monotonic()
+    zaman, kuyruk = _KART_TAMPON.get(k, (0.0, ""))
+    if simdi - zaman > KART_TAMPON_SN:
+        kuyruk = ""
+    if kuyruk and metin and metin[0] in "\t\r\n":  # parçalar arasında Tab/Enter: alan değişti, birleştirilmez
+        kuyruk = ""
+    birlesik = (kuyruk + (metin or ""))[-5000:] if metin else kuyruk
+    son4 = kart_numarasi(birlesik)
+    if son4:
+        _KART_TAMPON.pop(k, None)
+        return son4
+    m = _KART_SON_DIZI.search(birlesik[-200:]) if birlesik else None
+    if m:
+        if len(_KART_TAMPON) > 32:
+            _KART_TAMPON.pop(next(iter(_KART_TAMPON)))
+        _KART_TAMPON[k] = (simdi, m.group(0)[-48:])
+    else:
+        _KART_TAMPON.pop(k, None)
+    return None
+
+
+def tus_metni(kombinasyon):
+    """tus/bas kombinasyonundaki düz yazı tuşlarının (rakam, kp_rakam, boşluk, tire) yazdığı metin; diğer her akor
+    yazıyı keser ("\n"). Tek tuşla kart numarası yazmayı tampona beslemek için."""
+    parca = []
+    for akor in (kombinasyon or "").split():
+        a = akor.lower()
+        if len(a) == 1 and a.isdigit():
+            parca.append(a)
+        elif a.startswith("kp_") and a[3:].isdigit() and len(a) == 4:
+            parca.append(a[3:])
+        elif a in ("space", "minus", "kp_subtract"):
+            parca.append(" " if a == "space" else "-")
+        else:
+            parca.append("\n")
+    return "".join(parca)
+
+
+def pano_yazma_engel(metin):
+    """Onay kapsamı "kart": panoya YAZILAN metinde Luhn'dan geçen kart numarası varsa onay (ajan numarayı panoya yazıp
+    Ctrl+V ile yapıştırmasın; kart_bilgisi_engel yolu: CLI --onayli yok sayılır, gözetimsiz → ret; iletide yalnız son 4
+    hane). "hepsi" kipinde dokunmaz. api.pano_yaz ve CLI `pano yaz` ortak kullanır. → onay gerekti mi (onaylandı)."""
+    if onay_kapsami() != "kart" or kart_numarasi(metin) is None:
+        return False
+    eylem_basladi()
+    return kart_bilgisi_engel(None, False, metin, False, _("pano yazma"))
+
+
+def kart_bilgisi_engel(k, onayli, metin, alan_kart=False, ne="yazı", son4=None) -> bool:
     """Onay kapsamı "kart": hedef alan kart alanıysa (alan_kart) ya da yazılacak metinde Luhn'dan geçen kart numarası varsa
     yazma/yapıştırma/değer yazma insan onayı ister (CLI --onayli yok sayılır; gözetimsiz kipte ret). Onay isteğine ve
     iletilere YALNIZ son 4 hane / uzunluk girer; çağıran metni günlükte gizli tutmalı. "hepsi" kipinde dokunmaz.
     → kart bilgisi vardı (onaylandı)."""
     if onay_kapsami() != "kart":
         return False
-    son4 = kart_numarasi(metin)
+    son4 = son4 or kart_numarasi(metin)  # son4: çağıranın (parça tamponuyla) bulduğu numara
     if not (alan_kart or son4):
         return False
     if onayli_gecerli_kati(onayli):

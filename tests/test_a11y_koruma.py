@@ -115,8 +115,10 @@ if ao.bwrap_var():
     os.makedirs(os.path.join(kok, "run", "at-spi"), mode=0o700, exist_ok=True)
     for tur, g in (("kwin", {"tur": "kwin", "calisma": kok, "wayland_yol": os.path.join(kok, "wl"), "x_ana": None}),
                    ("xvfb", {"tur": "xvfb", "calisma": kok, "no": 77})):
-        ro = {y: r for y, r in (ko.uygulama_baglari(g) if tur == "kwin" else masaustu.uygulama_baglari(g))}
         hedef = dizin if tur == "kwin" else os.path.join(kok, "run", "at-spi")
+        st_ = os.lstat(hedef)  # masaüstü açılışında kaydedilen dizin kimliği (kimliksiz + var olan dizin artık reddedilir)
+        g["a11y_dizin_kimlik"] = [st_.st_dev, st_.st_ino]
+        ro = {y: r for y, r in (ko.uygulama_baglari(g) if tur == "kwin" else masaustu.uygulama_baglari(g))}
         kontrol(f"{tur}: a11y dizini uygulamaya SALT OKUNUR bağlanır", ro.get(hedef) is True, str(ro))
     # xvfb düzeni: <çalışma>/run yazılabilir + <çalışma>/run/at-spi salt okunur (bwrap'te ölç)
     kok3 = os.path.realpath(os.path.join(GECICI, "a11y3"))
@@ -152,6 +154,8 @@ kontrol("a11y_bagi: kimlik kayıtlı ama dizin YOK → Dur(14), uygulama başlat
 d4b = os.path.join(k4, "eski-at-spi")
 kontrol("a11y_bagi: kimlik yok (eski masaüstü) + dizin yok → uygulamadan ÖNCE 0700 yaratılır",
         ao.a11y_bagi(d4b, None) == (d4b, True) and (os.lstat(d4b).st_mode & 0o777) == 0o700)
+kontrol("a11y_bagi: kimlik yok (eski masaüstü) + dizin ZATEN var (0700, kendi yarattığı) → Dur(14), yeniden açın",
+        dur14(ao.a11y_bagi, d4b, None) == 14)
 os.rmdir(d4)
 os.mkdir(d4, 0o700)  # aynı yol, yeni dizin (uygulama ya da başkası yeniden yaratmış)
 kontrol("a11y_bagi: aynı yolda başka dizin (kimlik değişti) → Dur(14)", dur14(ao.a11y_bagi, d4, kim) == 14)

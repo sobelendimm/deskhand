@@ -567,11 +567,21 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   aynen (bugünkü davranış). **`kart`** (kullanıcının kendi bilgisayarı için bilinçli tercih: "yalnız kartla ödeme")
   yalnız şu iki sınıfta onay sorar: (1) para düğmeleri (`guvenlik.PARA_DUGMESI`: satın al, hemen al, öde, ödemeyi
   tamamla, siparişi onayla/tamamla, buy now, pay, place order, complete purchase, confirm payment… — HASSAS'ın para alt
-  kümesi, tek sabit; ödeme sayfası dışında da) ve ödeme/sipariş sayfasında para düğmesi (ya da okunamayan hedef) tıklaması
-  ile Enter/boşluk (`hassas_engel`, `hassas_sayfa_engel`, `hassas_nokta`, AT-SPI/web hassas öge); (2) kart bilgisi yazma
+  kümesi + son sipariş/abonelik/bağış düğmeleri: place/submit/complete order, confirm (and) pay, siparişi ver/gönder/
+  onayla/tamamla, onayla ve bitir/öde, abone ol/subscribe, bağış yap/donate, ödemeyi yap/tamamla; "Devam Et"/"Continue"
+  para düğmesi SAYILMAZ; ödeme sayfası dışında da) ve ödeme/sipariş sayfasında HER tıklama ile Enter/boşluk — düğme yazısı
+  okunabilse de, ajanın verdiği ad ya da noktanın yanındaki yazı ("Toplam 249,90 TL") karara girmez, muafiyet YOKTUR
+  (kayıtlı kartta kart yazma kapısı hiç tetiklenmez; son sipariş tıklamasını bu kapı yakalar) (`hassas_engel`,
+  `hassas_sayfa_engel`, `hassas_nokta`, AT-SPI/web hassas öge); (2) kart bilgisi yazma
   (`guvenlik.kart_bilgisi_engel`: yazı, yapıştırarak yazma, AT-SPI değer yazma; hedef alan kart alanıysa — AT-SPI/web ad,
   etiket, açıklama ya da autocomplete/id/placeholder: kart numarası, card number, cc-number, cvc/cvv, güvenlik kodu, son
-  kullanma, expiry — ya da metinde 13–19 haneli, Luhn'dan geçen numara varsa, ayırıcılı da). Onay isteğinde yalnız son 4
+  kullanma, expiry — ya da metinde 13–19 haneli, Luhn'dan geçen numara varsa: boşluk/nokta/tire/bölü ayırıcılı, çift
+  boşluklu, ek rakam/SKT/CVV bitişik; dizinin kendisi 13–19 hane değilse alt pencereler yalnız bilinen kart ailesi ön eki +
+  uzunluğuyla aranır: sahte alarmı keser). Panoya YAZILAN metin de aynı denetimden geçer (`guvenlik.pano_yazma_engel`: API
+  `pano_yaz`, MCP `clipboard write`, CLI `pano yaz`); aynı pencereye 60 sn içinde yazılan parçalar ve rakam tuşları
+  (`tus`/`bas`) süreç içi küçük bir tamponda (yalnız metnin SONUNDAKİ ≤48 karakterlik rakam dizisi, yalnız bellek)
+  birleştirilip denenir (`guvenlik.kart_tampon_denetle`; CLI'de her çağrı ayrı süreç: tampon yalnız MCP/Python API
+  sürecinde işler). Onay isteğinde yalnız son 4
   hane görünür; metin kendiliğinden gizli sayılır (günlüğe tam numara yazılmaz). Bu iki sınıfta CLI `--onayli`/`--approved`
   YOK SAYILIR (`guvenlik.onayli_gecerli_kati`): onay her zaman panelden gelir (terminali serbest ajan CLI'yi `--onayli`
   ile çağırıp atlatamasın); panel kapalıyken ya da gözetimsiz kipte ret (10). Onaysız serbest kalanlar
@@ -584,10 +594,13 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   onayı. DEĞİŞMEYENLER (onay değil, ret/koruma): ajanın kendi istemcisi, `open_app` kara listesi, panel/onay penceresi
   yasağı, liste koruma, yasak pencere listesi ve erişim seviyeleri, DUR, insan önceliği, oyun/film koruması (15), oturum
   kilidi, parola alanı DEĞERİNİ okuma reddi, bekleyen onay kapısı, onay sonrası hedef doğrulaması, arka plan yalıtımı.
-  Sınır: liste korumasındaki gibi, panel KAPALIYKEN hem ayar dosyasını hem işareti tutarlı biçimde sahteleyen (sha256
-  hesaplayıp STATE_DIR'e yazan) bir süreç panelin bir sonraki açılışında `kart`'ı geçirebilir; tek tuşla/ayrı alanlara
-  parça parça yazılan ya da panodan yapıştırılan kart numarası ve kart alanı olarak işaretlenmemiş bir alan yakalanamaz;
-  `run_flow` önceden onaylı (`--onayli`) adım onayı bu ayardan etkilenmez.
+  Sınırlar: `kart` kipinde kart onayı SERT SINIR DEĞİLDİR: uçbirim serbest olduğundan ham girdi araçlarıyla (dotool,
+  xdotool, wtype…) atlatılabilir; `alt+sysrq`, `ctrl+alt+backspace` gibi akorlar da serbesttir; gözetimsiz kipte kart dışı
+  her şey onaysız çalışır. Liste korumasındaki gibi, panel KAPALIYKEN hem ayar dosyasını hem işareti tutarlı biçimde
+  sahteleyen (sha256 hesaplayıp STATE_DIR'e yazan) bir süreç panelin bir sonraki açılışında `kart`'ı geçirebilir; ayrı
+  çağrılarda (CLI'de ayrı süreçlerde) parça parça yazılan numara, tampon süresi (60 sn) dışına yayılan ya da kart alanı
+  olarak işaretlenmemiş alana başka biçimde (kodlanmış, harflerle) yazılan numara yakalanamaz; `run_flow` önceden onaylı
+  (`--onayli`) adım onayı bu ayardan etkilenmez.
 
 ## 5. Çıkış kodları
 0 tamam · 1 kullanım hatası · 2 nokta pencere/ekran dışında · 3 aktif değil/başka pencere · 4 başlık/sınıf kilidi

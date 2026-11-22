@@ -483,6 +483,7 @@ def pano_yaz(metin: str) -> None:
     from .gunluk import gunluk
     from . import guvenlik
     au = arka()
+    guvenlik.pano_yazma_engel(metin)  # kart kipi: panoya yazılan Luhn'lu kart numarası onay ister
     if au.ad == "kde":
         guvenlik.insan_onceligi(_("pano yazma"))
     au.pano_yaz(metin, hassas=True)
