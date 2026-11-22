@@ -565,7 +565,8 @@ def ev_soketleri(ev: str | None = None) -> list[str]:
 SIR_YOLLARI = (
     ".ssh", ".gnupg", ".local/share/keyrings", ".local/share/kwalletd", ".password-store",
     ".config/mozilla", ".mozilla",                                     # gerçek Firefox profilleri (arka plan: kopya)
-    ".config/chromium", ".config/google-chrome*", ".config/vivaldi*", ".config/BraveSoftware",
+    ".config/chromium*", ".config/google-chrome*", ".config/vivaldi*", ".config/BraveSoftware*",  # * : profile-sync-daemon
+    # disk kopyaları (<ad>-back-ovfs, <ad>-backup, -backup-crashrecovery-*) da örtülür: canlı profilin çerezleri orada
     ".config/microsoft-edge*",                                         # Chromium ailesi profil kökleri
     ".claude", ".claude.json", ".config/gh", ".git-credentials", ".netrc", ".aws", ".docker/config.json",
     ".config/rclone", ".kube",                                         # ajan / bulut / depo kimlik bilgileri
