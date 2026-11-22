@@ -806,8 +806,13 @@ def k_ogeye_tikla(a):
         ogeler, sure = erisim_ogeleri(a.kimlik)
         o, kademe = _oge_secimi(a, ogeler, sure)
         # öge bulunduktan SONRA tek onay: istek ögenin adını, noktadaki yazıyı ve çevresinin görüntüsünü taşır
-        hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), o["cx"], o["cy"],
-                     nokta_metni(a.kimlik, o["cx"], o["cy"]), ek_metinler=(a.ad, o["ad"]))
+        yakin = nokta_metni(a.kimlik, o["cx"], o["cy"])
+        hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), o["cx"], o["cy"], yakin, ek_metinler=(a.ad, o["ad"]))
+        if getattr(g, "onay_hedefi", None):  # panelden onaylandı: öge ağaçta hâlâ aynı yerde ve aynı mı
+            def yeniden():
+                ogeler2, sure2 = erisim_ogeleri(a.kimlik)
+                return _oge_secimi(a, ogeler2, sure2)[0]
+            _onay_sonrasi_oge(g, o, yeniden, yakin)
         print(_("bulundu: {rol} '{ad}' ({x},{y}) {kademe} eşleşme, {sn} sn").format(
             rol=o["rol"], ad=o["ad"], x=f"{o['cx']:.0f}", y=f"{o['cy']:.0f}", kademe=kademe, sn=f"{sure:.2f}"))
         tikla_ic(g, a.kimlik, a.baslik, o["cx"], o["cy"], a.dugme, sec().geometri(a.kimlik), mod=mod)
@@ -956,6 +961,42 @@ def _web_gorunur_yap(g, a, w):
     return w
 
 
+ONAY_KONUM_PAYI = 3  # onaydan sonra ögenin merkezi en çok bu kadar piksel oynayabilir
+
+
+def _ayni_oge(o1, o2):
+    """İki okuma aynı ögeyi mi gösteriyor (ad + rol + merkez ±ONAY_KONUM_PAYI; web'de nesne adresi de)?"""
+    if o2 is None or o1.get("ad") != o2.get("ad") or o1.get("rol") != o2.get("rol"):
+        return False
+    if o1.get("_bus") and (o1.get("_bus"), o1.get("_yol")) != (o2.get("_bus"), o2.get("_yol")):
+        return False
+    m1 = o1.get("merkez") or (o1.get("cx"), o1.get("cy"))
+    m2 = o2.get("merkez") or (o2.get("cx"), o2.get("cy"))
+    if None in (*m1, *m2):
+        return tuple(m1) == tuple(m2)
+    return abs(m1[0] - m2[0]) <= ONAY_KONUM_PAYI and abs(m1[1] - m2[1]) <= ONAY_KONUM_PAYI
+
+
+def _onay_sonrasi_oge(g, o, yeniden_bul, yakin):
+    """Ağaç ögesine hassas tık panelden onaylandıktan sonra (B3, öge tarafı): öge ağaçtan yeniden bulunur; adı, rolü,
+    konumu (web'de nesne adresi) onaylanandan farklıysa ya da artık yoksa tık YAPILMAZ → Dur 10. Onay anında noktada
+    OCR yazısı yoksa (yazısız simge/aria-label düğmesi) noktanın OCR karşılaştırması yalnız "şimdi de yazı yok" olur
+    (öge adı OCR'da görünmez; kimlik ağaçtan doğrulandı). Yazı varsa eylem.onay_hedefi_dogrula aynen karşılaştırır."""
+    try:
+        o2 = yeniden_bul()
+    except Dur as e:
+        if e.kod in (10, 12, 13, 15):
+            raise
+        o2 = None
+    if not _ayni_oge(o, o2):
+        g.onay_hedefi = None
+        raise Dur(10, _("onay verilen hedef değişti: öge '{ad}' artık aynı yerde/aynı değil; tıklanmadı").format(
+            ad=o.get("ad")), tur="hedef-degisti")
+    h = g.onay_hedefi
+    if not [t for t in yakin if t and t.strip()]:
+        g.onay_hedefi = (h[0], h[1], [])
+
+
 def _web_tikla(g, a, w, mod):
     """Web ögesine GERÇEK fare tıklaması: ögenin merkezi (pencere pikseli) mevcut tikla_ic yoluna gider; tüm
     denetimler fare yolundakiyle aynı: DUR/yasak/kilit/seviye/oyun-film/imleç altı/insan önceliği tikla_ic ve
@@ -967,8 +1008,12 @@ def _web_tikla(g, a, w, mod):
     o, sayfa = w["oge"], w["sayfa"]
     cx, cy = o["merkez"]
     basliklar = (sayfa.get("baslik") or "",) if sayfa.get("hassas_sayfa") else ()
-    hassas_nokta(g, k, a.onayli, _("tıklama"), cx, cy, nokta_metni(k, cx, cy), ek_metinler=(a.ad, o["ad"]),
-                 ek_basliklar=basliklar)
+    yakin = nokta_metni(k, cx, cy)
+    hassas_nokta(g, k, a.onayli, _("tıklama"), cx, cy, yakin, ek_metinler=(a.ad, o["ad"]), ek_basliklar=basliklar)
+    if getattr(g, "onay_hedefi", None):  # panelden onaylandı: sayfadaki öge hâlâ aynı mı (yazısız düğme dahil)
+        from . import web
+        _onay_sonrasi_oge(g, o, lambda: web.oge_ve_sayfa(k, a.ad, getattr(a, "rol", None), w["idx"] + 1, True,
+                                                         yol_ver=True)[0], yakin)
     print(_("bulundu: web {rol} '{ad}' ({x},{y}) {konum}, {sn} sn").format(
         rol=o["rol"], ad=o["ad"], x=cx, y=cy, konum=sayfa.get("konum"), sn=f"{w['sure']:.2f}"))
     tikla_ic(g, k, a.baslik, cx, cy, a.dugme, sec().geometri(k), mod=mod)
@@ -983,11 +1028,23 @@ def _web_eylem(a, w):
     merkez = o.get("merkez")
     oz = {"ad": o["ad"], "cx": merkez[0] if merkez else None, "cy": merkez[1] if merkez else None}
     etiket = f"ogeye-tikla '{a.ad}' --eylem" + (f" {a.eylem}" if a.eylem else "")
+    from .guvenlik import sistem_istemi_engel
+    sistem_istemi_engel(k, getattr(a, "onayli", False), _("erişilebilirlik eylemi"), goruntu_al=False)
     onayli = _hassas_oge(k, a.onayli, _("tıklama (erişilebilirlik eylemi)"), oz, {}, ek_metinler=(a.ad,),
                          ek_basliklar=basliklar)
     if onayli:
         etiket += " --onayli"
     _atspi_korumalari(k, a.baslik, "fare")  # onay beklenmiş olabilir
+    if onayli:  # onay beklenirken sayfa değişmiş olabilir: aynı öge (ad, rol, nesne adresi, konum) değilse eylem yok
+        try:
+            o2 = web.oge_ve_sayfa(k, a.ad, getattr(a, "rol", None), w["idx"] + 1, False, yol_ver=True)[0]
+        except Dur as e:
+            if e.kod in (10, 12, 13, 15):
+                raise
+            o2 = None
+        if not _ayni_oge(o, o2):
+            raise Dur(10, _("onay verilen hedef değişti: öge '{ad}' artık aynı yerde/aynı değil; eylem yapılmadı"
+                            ).format(ad=o["ad"]), tur="hedef-degisti")
     r = web.eylem_yap(k, o, a.eylem or None)
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']} (web)" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:

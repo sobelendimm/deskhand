@@ -370,6 +370,118 @@ async def senaryo():
         r = await arac(c, "click", window=k, element="Siparişi onayla", via="action", verify=False)
         kontrol("hassas ad: via=action da onaysız yapılmaz ([10]), tık yok", r.is_error and "[10]" in metin(r) and
                 len(ISTEKLER) == 1 and tik(k)[1] == n0 + 1, metin(r)[:300])
+
+        # ---- birleştirme bağlamaları: bekleyen onay kapısı, onay sonrası öge doğrulaması, çerçeve = pencerenin PID ağacı
+        n0 = tik(k)[1]
+        onay._dizin_hazirla()
+        bid = "7" * 32
+        onay._yaz_atomik(onay.istek_yolu(bid), {"id": bid, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "arka",
+                                               "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getppid()})
+        try:
+            r1 = await arac(c, "click", window=k, element="İade koşulları", verify=False)
+            r2 = await arac(c, "click", window=k, element="İade koşulları", via="action", verify=False)
+            kod_cli, _o, e_cli = cli("click-element", k, "İade koşulları")
+            r3 = await arac(c, "read_text", window=k, source="web", max_items=2)
+        finally:
+            onay._sil(onay.istek_yolu(bid))
+        kontrol("bekleyen onay (başka süreç, bu masaüstü): click(element, web) ve via=action → [7], tık yok",
+                r1.is_error and "[7]" in metin(r1) and r2.is_error and "[7]" in metin(r2) and tik(k)[1] == n0,
+                metin(r1)[:200] + " | " + metin(r2)[:200])
+        kontrol("bekleyen onay: CLI click-element (web) → 7, tık yok; okuma serbest",
+                kod_cli == 7 and tik(k)[1] == n0 and not r3.is_error, f"{kod_cli} {e_cli[-300:]}")
+
+        asil_ovs = web.oge_ve_sayfa
+
+        def kaydiran(*a_, **k_):  # onay beklenirken öge yer değiştirdi (sayfa yeniden dizildi)
+            o_, sf_, su_, i_ = asil_ovs(*a_, **k_)
+            if o_.get("merkez"):
+                o_ = {**o_, "merkez": [o_["merkez"][0], o_["merkez"][1] + 40]}
+            return o_, sf_, su_, i_
+
+        def degistiren_onay(*a_, **k_):
+            web.oge_ve_sayfa = kaydiran
+            return sahte_iste_sonuc(*a_, **k_)
+        ISTEKLER.clear()
+        YANIT["izin"] = True
+        onay.iste_sonuc = degistiren_onay
+        try:
+            r = await arac(c, "click", window=k, element="Satın al", verify=False)
+        finally:
+            web.oge_ve_sayfa = asil_ovs
+        kontrol("onay sonrası (fare): web ögesi onay beklenirken yer değiştirdi → [10] 'onay verilen hedef değişti', "
+                "tık yok", r.is_error and "[10]" in metin(r) and "hedef değişti" in metin(r) and tik(k)[1] == n0,
+                metin(r)[:300])
+        ISTEKLER.clear()
+        try:
+            r = await arac(c, "click", window=k, element="Siparişi onayla", via="action", verify=False)
+        finally:
+            web.oge_ve_sayfa = asil_ovs
+            onay.iste_sonuc = sahte_iste_sonuc
+        kontrol("onay sonrası (via=action): web ögesi değişti → [10], eylem yok",
+                r.is_error and "[10]" in metin(r) and "hedef değişti" in metin(r) and tik(k)[1] == n0, metin(r)[:300])
+        ISTEKLER.clear()
+        r = await arac(c, "click", window=k, element="Siparişi onayla", via="action", verify=False)
+        kontrol("onay sonrası (via=action): öge aynı → izinle BİR kez çalıştı", not r.is_error and len(ISTEKLER) == 1 and
+                bekle(lambda: tik(k) == ("Siparişi onayla", n0 + 1), 3), metin(r)[:300] + str(tik(k)))
+        YANIT["izin"] = False
+        n0 = tik(k)[1]
+
+        asil_pid = s_au.pid
+        yabanci = subprocess.Popen(["sleep", "30"])
+        try:
+            s_au.pid = lambda _k: yabanci.pid  # pencere başka (ağaçta olmayan) bir sürece ait görünüyor
+            r = await arac(c, "read_text", window=k, source="web")
+            r2 = await arac(c, "click", window=k, element="İade koşulları", via="action", verify=False)
+            s_au.pid = lambda _k: ""
+            r3 = await arac(c, "read_text", window=k, source="web")
+        finally:
+            s_au.pid = asil_pid
+            yabanci.kill()
+            yabanci.wait()
+        kontrol("B2 (web): pencerenin PID ağacında uygulama yoksa başlık benzerliğiyle Firefox çerçevesine DÜŞÜLMEZ → [6]",
+                r.is_error and "[6]" in metin(r) and r2.is_error and tik(k)[1] == n0, metin(r)[:200] + metin(r2)[:200])
+        kontrol("B2 (web): PID bilinmiyorsa → [6]", r3.is_error and "[6]" in metin(r3), metin(r3)[:200])
+        from deskhand import kendi
+        asil_panel = onay.panel_pid
+        onay.panel_pid = lambda: ff.p.pid  # çerçeve Deskhand panelinin sürecine ait görünüyor
+        try:
+            r = await arac(c, "read_text", window=k, source="web")
+            r2 = await arac(c, "click", window=k, element="İade koşulları", via="action", verify=False)
+        finally:
+            onay.panel_pid = asil_panel
+        kontrol("çerçeve denetimi (web): panel sürecinin çerçevesi okunmaz ve eylem almaz → [10]",
+                r.is_error and "[10]" in metin(r) and r2.is_error and "[10]" in metin(r2) and tik(k)[1] == n0,
+                metin(r)[:200] + metin(r2)[:200])
+        asil_kendi = kendi.kendi_mi
+        kendi.kendi_mi = lambda pid, *a_, **k_: str(pid) == str(ff.p.pid)  # yalnız çerçeve düzeyi (PID kuralı)
+        try:
+            with api.hedef("sanal"):
+                e_tara = e_eylem = None
+                try:
+                    web._baglam(k, "tara")[1].kapat()
+                except Dur as e:
+                    e_tara = e
+                try:
+                    web._baglam(k, "eylem")[1].kapat()
+                except Dur as e:
+                    e_eylem = e
+        finally:
+            kendi.kendi_mi = asil_kendi
+        kontrol("çerçeve denetimi (web): ajanın kendi istemcisine ait çerçeve → eylemde 10, okumada serbest",
+                e_tara is None and e_eylem is not None and e_eylem.kod == 10, f"{e_tara} | {e_eylem}")
+        seviye_yaz("firefox = goruntule")  # uygulama adı (sayfa başlığı tık günlüğüyle değişir)
+        try:
+            with api.hedef("sanal"):
+                e_eylem = None
+                try:
+                    web._baglam(k, "eylem")[1].kapat()
+                except Dur as e:
+                    e_eylem = e
+        finally:
+            seviye_sil()
+        kontrol("çerçeve denetimi (web): çerçevenin uygulama adına uyan erişim seviyesi goruntule → eylemde 10",
+                e_eylem is not None and e_eylem.kod == 10, str(e_eylem))
+
         # belge başlığı ağaçtan (pencere başlığına EK denetim)
         ISTEKLER.clear()
         try:

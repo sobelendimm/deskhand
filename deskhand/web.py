@@ -199,9 +199,12 @@ def _veri_yolu_adresi(au, sanal: bool) -> str:
     return adres
 
 
-def _baglam(k):
+def _baglam(k, islem="tara"):
     """→ (arka uç, _Yol, uygulama veri yolu adı, çerçeve yolu, koordinat türü, köken (ox, oy), konum: çerçeve adı | None).
-    konum None = çerçeve sınırı pencere geometrisiyle eşleşmedi: koordinatlar doğrulanamadı (okuma uyarır, tık reddeder)."""
+    konum None = çerçeve sınırı pencere geometrisiyle eşleşmedi: koordinatlar doğrulanamadı (okuma uyarır, tık reddeder).
+    Çerçeve YALNIZ pencerenin süreç ağacından seçilir ve kendi kimliğiyle denetlenir (erisim._cerceve_denetle):
+    islem "tara" = okuma (panel süreci / yasak desen → 10), "eylem" = ek olarak ajanın kendi istemcisi ve uygulama
+    erişim seviyesi (10)."""
     if k == EKRAN or not k:
         raise Dur(1, _("web ögeleri pencere ister (masaüstü kipi değil)"))
     au = sec(k)
@@ -214,7 +217,9 @@ def _baglam(k):
     baslik = au.baslik(k) or ""
     yol = _Yol(adres)
     try:
-        bus, cerceve = _cerceve_bul(yol, pid, baslik)
+        bus, cerceve, app_pid, app_ad, cerceve_ad = _cerceve_bul(yol, pid, baslik)
+        from .erisim import _cerceve_denetle
+        _cerceve_denetle(app_pid, app_ad, cerceve_ad, islem)
         geo = tuple(au.geometri(k))
         ekran, pencere = yol.toplu([_m(bus, cerceve, BILESEN, "GetExtents", "u", (SCREEN,)),
                                     _m(bus, cerceve, BILESEN, "GetExtents", "u", (WINDOW,))])
@@ -234,33 +239,54 @@ def _baglam(k):
         raise
 
 
-def _cerceve_bul(yol: _Yol, pid: int, baslik: str) -> tuple[str, str]:
-    """Pencerenin süreç kimliğine ait uygulamanın, başlığı pencereye en çok uyan üst düzey çerçevesi."""
+def _cerceve_bul(yol: _Yol, pid: int, baslik: str) -> tuple[str, str, int, str, str]:
+    """Pencerenin üst düzey erişilebilirlik çerçevesi: YALNIZ pencerenin süreç ağacındaki (pencerenin süreci ya da onun
+    torunları: çok süreçli tarayıcı) bağlantılardan, aynı süreç önce, sonra başlık benzerliğiyle. Atalar (pencereyi
+    başlatan uçbirim/başlatıcı, bu süreç) ve bu sürecin kendi bağlantısı sayılmaz. PID bilinmiyorsa ya da ağaçta yoksa
+    Dur 6: başka bir uygulamanın çerçevesine başlık benzerliğiyle düşülmez (denetimler pencerede yapılır, eylem BAŞKA
+    uygulamada olurdu). → (veri yolu adı, çerçeve yolu, uygulama pid, uygulama adı, çerçeve adı)."""
+    import os
+
+    from . import kendi
+    if not pid:
+        raise Dur(BULUNAMADI, _("pencerenin süreç kimliği (PID) bilinmiyor: web çerçevesi güvenle eşlenemez ({baslik})"
+                                ).format(baslik=repr(baslik)))
     dbus = ("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus")
     adlar = [a for a in (_deg(yol.toplu([_m(*dbus, "ListNames")])[0], []) or []) if a.startswith(":")]
     pidler = yol.toplu([_m(*dbus, "GetConnectionUnixProcessID", "s", (a,)) for a in adlar])
-    uygulamalar = [a for a, p in zip(adlar, pidler) if p and (not pid or int(p[0]) == pid)]
+    ben = getattr(yol.c, "unique_name", None)
+
+    def agacta(p_):
+        if p_ == os.getpid():
+            return False
+        return p_ == pid or any(a_ == pid for a_, _c in kendi.atalar(p_)[1:])
+    uygulamalar = [(a, int(p[0])) for a, p in zip(adlar, pidler) if p and a != ben and agacta(int(p[0]))]
     if not uygulamalar:
         raise Dur(BULUNAMADI, _("pencerenin uygulaması erişilebilirlik ağacında yok (pid {pid}). Firefox "
                                 "GNOME_ACCESSIBILITY=1 ile, Chromium --force-renderer-accessibility ile "
                                 "başlatılmalı").format(pid=pid))
-    cocuklar = yol.toplu([_m(a, KOK_YOL, ERISIM, "GetChildren") for a in uygulamalar])
-    adaylar = [(b_, y) for c in cocuklar if c for b_, y in c[0]]
+    cocuklar = yol.toplu([_m(a, KOK_YOL, ERISIM, "GetChildren") for a, _p in uygulamalar])
+    app_adlari = yol.toplu([_ozellik(a, KOK_YOL, "Name") for a, _p in uygulamalar])
+    adaylar = [(b_, y, ap, _ozd(an, "") or "") for (a, ap), c, an in zip(uygulamalar, cocuklar, app_adlari) if c
+               for b_, y in c[0] if b_ == a]  # çerçeve uygulamanın KENDİ bağlantısında olmalı
     if not adaylar:
-        raise Dur(BULUNAMADI, _("uygulamanın erişilebilirlik ağacında pencere yok (pid {pid})").format(pid=pid))
-    adlar_ = yol.toplu([_ozellik(a, y, "Name") for a, y in adaylar])
-    durum = yol.toplu([_m(a, y, ERISIM, "GetState") for a, y in adaylar])
+        raise Dur(BULUNAMADI, _("uygulamanın erişilebilirlik ağacında pencere yok (pid {pid}). Firefox "
+                                "GNOME_ACCESSIBILITY=1 ile, Chromium --force-renderer-accessibility ile "
+                                "başlatılmalı").format(pid=pid))
+    adlar_ = yol.toplu([_ozellik(a, y, "Name") for a, y, _p, _n in adaylar])
+    durum = yol.toplu([_m(a, y, ERISIM, "GetState") for a, y, _p, _n in adaylar])
 
     def puan(i):
         ad = _ozd(adlar_[i], "") or ""
         benz = 1.0 if ad and baslik and (ad == baslik or ad in baslik or baslik in ad) else \
             difflib.SequenceMatcher(None, ad, baslik).ratio()
         d = _durumlar(durum[i])
-        return (benz, "active" in d, "showing" in d)
+        return (adaylar[i][2] == pid, benz, "active" in d, "showing" in d)
     en_iyi = max(range(len(adaylar)), key=puan)
-    if len(adaylar) > 1 and puan(en_iyi)[0] < 0.6:
+    if len(adaylar) > 1 and puan(en_iyi)[1] < 0.6:
         raise Dur(BULUNAMADI, _("pencere erişilebilirlik ağacında bulunamadı ({baslik})").format(baslik=repr(baslik)))
-    return adaylar[en_iyi]
+    b_, y, ap, an = adaylar[en_iyi]
+    return b_, y, ap, an, _ozd(adlar_[en_iyi], "") or ""
 
 
 # ---------------------------------------------------------------- ağaç yürüyüşü
@@ -603,12 +629,17 @@ def _eylem_birincil(liste):
 
 def eylem_yap(k, oge, eylem=None) -> dict:
     """Öge için erişilebilirlik EYLEMİ (gerçek fare/klavye girdisi yok). oge: oku(yol_ver=True) çıktısı (_bus + _yol
-    BİRLİKTE). Güvenlik denetimleri ÇAĞIRANDA. → {"eylem": çalışan, "eylemler": tümü, "tamam": bool}."""
+    BİRLİKTE). Pencere düzeyi denetimler ÇAĞIRANDA (erisim._web_eylem); çerçeve düzeyi burada (_baglam "eylem").
+    → {"eylem": çalışan, "eylemler": tümü, "tamam": bool}."""
     if not oge.get("_bus") or not oge.get("_yol"):
         raise Dur(1, _("öge kimliği yok (yol_ver)"))
-    au = sec(k)
-    yol = _Yol(_veri_yolu_adresi(au, getattr(au, "ad", "") == "sanal"))
+    # eylemden HEMEN önce çerçeve yeniden seçilir ve eylem düzeyinde denetlenir (panel/yasak/kendi istemci/seviye):
+    # öge, pencerenin süreç ağacındaki bu çerçevenin bağlantısında olmalı (başka uygulamaya eylem gitmez)
+    _au, yol, bus, *_x = _baglam(k, "eylem")
     try:
+        if oge["_bus"] != bus:
+            raise Dur(8, _("web ögesi artık pencerenin erişilebilirlik bağlantısında değil (uygulama değişti); "
+                           "yeniden oku"))
         arayuz = "org.a11y.atspi.Action"
         # GetActions bazı tarayıcılarda anlamsız (';;') döner: NActions + GetName(i) güvenilir yol
         n = int(_ozd(yol.toplu([_ozellik(oge["_bus"], oge["_yol"], "NActions", arayuz)])[0], 0) or 0)
