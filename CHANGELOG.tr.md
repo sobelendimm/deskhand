@@ -2,7 +2,24 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
-## Yayımlanmamış
+## 0.7.0 (22 Kasım 2026)
+
+- **Panelde "Görev" sekmesi: görev ver, o yapsın.** Yazdığınız işi (ör. "şu sitede şunu bul, bana özetle") panel kendi
+  ajanına (`claude -p`) görünmez masaüstünde yaptırır; adımlar canlı akar, bitince sonuç ve indirilen dosyalar gösterilir.
+  Ajan yalnız Deskhand'in arka plan araçlarını kullanır, sizin ekranınıza dokunmaz.
+- **Güvenlik: görev kipi.** Görev ajanı güvenilmeyen web içeriği okuduğu için kısıtlıdır: yalnız tarayıcı açabilir
+  (uçbirim, dosya yöneticisi, düzenleyici açamaz); Belgeler/Masaüstü gibi klasörleri görmez, indirmeler göreve özel
+  klasöre iner; Firefox'ta `file://`, `about:logins`/`about:config` ilkeyle kapalı, indirilen dosya dış uygulamayla
+  açılamaz; kayıtlı parolalar ve uzantılar kopyalanmaz, çerezler yalnız izin verdiğiniz siteler için gelir; tarayıcı
+  dışında beliren pencere kapatılır. Görünmez masaüstü başka bir iş için açıksa görev ona dokunmaz: kapatıp başlatmak
+  için onayınızı ister; görev sürerken başka istemciler görev masaüstüne bağlanamaz. İzinli sitelerde ajanın sizin
+  adınıza işlem yapabileceği başlatmadan önce açıkça gösterilir.
+- **İnsan doğrulaması (CAPTCHA) devri.** CAPTCHA çözülmez ve atlatılmaz: algılanınca ajanın girdisi reddedilir (kod 18)
+  ve `request_human` ile size bildirim + panel diyaloğu gelir (Devral / Bitti / Vazgeç); siz çözünce ajan devam eder.
+  Sayfa okunamıyorsa (erişilebilirlik kapalı) tek başına Enter/Boşluk reddedilir ve ileti "CAPTCHA olmayabilir,
+  tarayıcıyı yeniden başlatın" der.
+- **Testler 4 kat hızlı.** `tools/test_kos.py` takımları paralel koşar (tam koşu ~13 dk → ~3 dk); gerçek sistemi
+  ölçen takımlar sonda tek başına koşar.
 
 - **Güvenlik: arka plan uygulamaları ev dizininde yalnız beyaz listeyi görür.** Görünmez masaüstünde açılan
   uygulamanın ev dizini artık boştur; gerçek evden yalnız görünüm ayarları (KDE/GTK/Qt teması, renkler, yazı tipleri,
