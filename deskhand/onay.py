@@ -64,7 +64,10 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "hata": N_("onay isteği yazılamadı → red"),
     "gozetimsiz": N_("gözetimsiz çalışmada hassas eylem yapılmaz"),
     "kanal": N_("onay kanalı doğrulanamadı (yanıtın Deskhand panelinden geldiği kanıtlanamadı) → red"),
+    "kosul": N_("beklenen koşul gerçekleşti (insan doğrulaması sayfadan kalktı)"),
 }
+TUR_DEVIR = "devir"           # istek türü: insan doğrulaması devri (panelde "Devral / Bitti / Vazgeç"; izin = Bitti)
+KONTROL_ARALIK = 3.0          # isteyen `kontrol` işlevini en çok bu sıklıkta çağırır (sn)
 KARARLAR = ("izin", "red")
 _ID = re.compile(r"[0-9a-f]{32}")
 
@@ -555,9 +558,13 @@ def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str) -> 
 
 
 def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran", sure: float = VARSAYILAN_SURE,
-               goruntu=None, gunluge_yaz: bool = True) -> OnaySonucu:
+               goruntu=None, gunluge_yaz: bool = True, tur: str = "", kontrol=None) -> OnaySonucu:
     """Paneldeki insandan bir kez izin iste ve bekle (en çok `sure` sn). → OnaySonucu.
     masaustu: "ekran" (kullanıcının ekranı) | "arka" (görünmez masaüstü).
+    tur: "" (hassas eylem onayı) | "devir" (insan doğrulaması devri: panel "Devral/Bitti/Vazgeç" gösterir; izin = Bitti).
+    kontrol: isteğe bağlı koşul işlevi (beklerken ~KONTROL_ARALIK sn'de bir çağrılır); True dönerse bekleme biter,
+    OnaySonucu(izin=False, neden="kosul"): izin DEĞİL, yalnız "beklenen şey kendiliğinden oldu" (isteği kapatma yetkisi
+    ajanda değil: koşul sayfanın gerçek durumudur ve bekleme boyunca ajanın girdisi o masaüstüne kapalıdır).
     goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu."""
     masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
 
@@ -596,6 +603,8 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
         istek = {"id": istek_id, "eylem": str(eylem), "hedef": str(hedef),
                  "ayrinti": str(ayrinti or "")[:AYRINTI_SINIR], "masaustu": masaustu, "zaman": simdi,
                  "son_zaman": simdi + sure, "pid": os.getpid(), "goruntu": g_yol}
+        if tur == TUR_DEVIR:
+            istek["tur"] = TUR_DEVIR
         _yaz_atomik(iy, istek)
         kanal.sendall(f"bekle {istek_id}\n".encode())
     except Exception:  # noqa: BLE001 - görüntü/istek yazılamadı: red (soket açık kalmasın)
@@ -605,6 +614,7 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
     try:
         son = time.monotonic() + sure
         sonraki_canlilik = time.monotonic() + CANLILIK_ARALIK
+        sonraki_kontrol = time.monotonic() + KONTROL_ARALIK
         tampon = b""
         while True:
             try:
@@ -632,6 +642,13 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
                 sonraki_canlilik = t + CANLILIK_ARALIK
                 if panel_pid() != ppid:
                     return bitir(OnaySonucu(False, "panel-kapandi", istek_id))
+            if kontrol is not None and t >= sonraki_kontrol:
+                try:
+                    if kontrol():
+                        return bitir(OnaySonucu(False, "kosul", istek_id))
+                except Exception:  # noqa: BLE001 - koşul okunamadı: beklemeye devam (insan kararı/zaman aşımı geçerli)
+                    pass
+                sonraki_kontrol = time.monotonic() + KONTROL_ARALIK
     finally:
         try:
             kanal.close()
@@ -665,6 +682,7 @@ def istek_oku(yol: str) -> dict | None:
         d[alan] = str(d.get(alan) or "")
     d["ayrinti"] = d["ayrinti"][:AYRINTI_SINIR]
     d["masaustu"] = "arka" if d.get("masaustu") == "arka" else "ekran"
+    d["tur"] = TUR_DEVIR if d.get("tur") == TUR_DEVIR else ""
     g = d.get("goruntu")
     d["goruntu"] = g if isinstance(g, str) and os.path.isfile(g) else None
     return d

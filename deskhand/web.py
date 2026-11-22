@@ -489,6 +489,9 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
         ust = min(belgeler, key=lambda b: b["derinlik"]) if belgeler else None
         sayfa = _sayfa_ozeti(ust, au.baslik(k), len(belgeler))
         sayfa["konum"] = konum  # hangi koordinat çerçevesinde geldiği (None = doğrulanamadı)
+        ic = [{"ad": b["ad"], "adres": b["adres"]} for b in belgeler if b["derinlik"] > 1][:12]
+        if ic:  # gömülü belgeler (iframe): insan doğrulaması algısı (dogrulama_sinamasi) adreslerine bakar
+            sayfa["cerceveler"] = ic
         sayfa["konum_dogrulandi"] = konum is not None
         son = atla + len(ogeler)
         return {"ogeler": ogeler, "toplam": toplam, "atla": atla, "sonraki": son if son < toplam else None,

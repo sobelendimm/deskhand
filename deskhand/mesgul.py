@@ -522,6 +522,23 @@ def sor(ozet, sure=45, kritik=False):
         conn.close()
 
 
+def bildir(baslik, govde, kritik=True, sure=30):
+    """Tek yönlü KDE bildirimi (düğmesiz; yanıt beklenmez): ör. insan doğrulaması devri (request_human). → gönderildi mi.
+    Kritik: tam ekranın üstünde de görünür. Oturum veri yolu/bildirim hizmeti yoksa False (sessiz)."""
+    conn = _dbus_ac()
+    if conn is None:
+        return False
+    try:
+        r = _cagir(conn, BILDIRIM_AD, BILDIRIM_YOL, BILDIRIM_AD, "Notify", "susssasa{sv}i",
+                   (UYGULAMA_AD, 0, "", str(baslik)[:120], html.escape(str(govde or "").strip()[:400], quote=False), [],
+                    {"urgency": ("y", 2 if kritik else 1)}, int(sure * 1000)), otobaslatma=True)
+        return bool(r)
+    except Exception:  # noqa: BLE001 - bildirim isteğe bağlı: panel diyaloğu asıl kanal
+        return False
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------- karar
 
 def karar_ayrintili(ozet, d=None, ayar=None, sor_f=None):

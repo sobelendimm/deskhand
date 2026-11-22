@@ -389,6 +389,8 @@ def web_oku(k: str, sorgu: str | None = None, rol: str | None = None, gizliler: 
              "position_verified": bool(sf.get("konum_dogrulandi"))}
     if sf.get("hassas_sayfa"):
         sayfa["sensitive_page"] = True
+    if sf.get("cerceveler"):  # gömülü belgeler (iframe): insan doğrulaması algısı (dogrulama_sinamasi)
+        sayfa["frame_documents"] = sf["cerceveler"]
     return {"items": ogeler, "total": s["toplam"], "next": s["sonraki"], "page": sayfa, "seconds": s["sure"]}
 
 

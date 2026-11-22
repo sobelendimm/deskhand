@@ -48,7 +48,8 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 
-from . import __version__, api, dongu, fark, gonderim, gozlem, guvenlik, hata, masaustu, onay_hedef
+from . import (__version__, api, dogrulama_sinamasi, dongu, fark, gonderim, gozlem, guvenlik, hata, masaustu,
+               onay_hedef)
 from .arka_uc import EKRAN
 from .i18n import N_, _
 
@@ -110,6 +111,9 @@ commands, password dialogs) need the user's approval in the Deskhand panel; the 
 the user. Never ask the user for passwords.
 - [13] STOP: send nothing until the user resumes. [12] the user is at the keyboard: retry later. [10]: not done; \
 tell the user.
+- CAPTCHA / "verify you are human" challenges are NEVER solved or bypassed. A result with human_verification (or error \
+[17]) means: do not click, type or drag in it; call request_human(reason, window) and continue only when it returns \
+status=resolved (then observe again). The rest of the page stays usable.
 - click: button="triple" selects a line, modifiers=["ctrl"] are held during the click; drag goes between two refs \
 or points. x/y need the shot_id of a fresh screenshot; prefer refs."""
 
@@ -139,6 +143,7 @@ KOD_ADI = {  # gösterirken _()
     14: N_("sanal masaüstü kapalı (manage_desktop action=start)"),
     15: N_("kullanıcı oyunda/film izliyor: ekranına dokunma, desktop=background kullan ya da sonra dene"),
     16: N_("uygulama arka planda açılamaz (kullanıcının ekranında açık ya da yalnız ön plan)"),
+    17: N_("insan doğrulaması (CAPTCHA) bekliyor: kullanıcıya devret (request_human)"),
 }
 
 
@@ -159,9 +164,9 @@ class AracHatasi(ToolError):
     """ToolError + makinece okunur ayrıntı: kod (çıkış kodu) ve neden (ör. ref bayatlığının türü:
     "snapshot" | "window" | "element")."""
 
-    def __init__(self, mesaj: str, kod: int | None = None, neden: str | None = None):
+    def __init__(self, mesaj: str, kod: int | None = None, neden: str | None = None, ek: dict | None = None):
         super().__init__(mesaj)
-        self.kod, self.neden = kod, neden
+        self.kod, self.neden, self.ek = kod, neden, ek
 
 
 def _ref_hatasi(neden: str, mesaj: str) -> AracHatasi:
@@ -186,6 +191,8 @@ IPUCU = {
     14: "start it with manage_desktop(action='start')",
     15: "the user is gaming or watching: use desktop='background' or try later",
     16: "use desktop='foreground' when the user is not busy, or tell the user",
+    17: "a human-verification challenge (CAPTCHA) is in the way: never click it or try to solve it; call "
+        "request_human(reason, window) and continue when it returns status=resolved",
 }
 
 
@@ -210,8 +217,10 @@ def hata_sonucu(e: ToolError) -> CallToolResult:
         hata_["reason"] = e.neden
     if ipucu:
         hata_["next"] = ipucu
-    return CallToolResult(content=[TextContent(type="text", text=metin)], is_error=True,
-                          structured_content={"status": "error", "effect": etki, "sent": sent, "error": hata_})
+    yapisal = {"status": "error", "effect": etki, "sent": sent, "error": hata_}
+    if getattr(e, "ek", None):  # ör. kod 17: human_verification {detected, kind, window, hint}
+        yapisal.update(e.ek)
+    return CallToolResult(content=[TextContent(type="text", text=metin)], is_error=True, structured_content=yapisal)
 
 
 def _json(d) -> str:
@@ -273,6 +282,7 @@ class GirdiSonuc(TypedDict, total=False):
     approved_by_user: bool
     after: dict[str, Any]
     warning: str
+    human_verification: dict[str, Any]
 
 
 class TiklamaSonuc(GirdiSonuc, total=False):
@@ -301,6 +311,7 @@ class GozlemSonuc(TypedDict, total=False):
     removed: list[dict[str, Any]]
     notes: list[str]
     shot_id: str
+    human_verification: dict[str, Any]
 
 
 class TopluSonuc(TypedDict, total=False):
@@ -874,6 +885,68 @@ GOZLEM = gozlem.Depo()
 _SON = threading.local()  # bu iş parçacığında son girdi aracının penceresi (batch observe_after)
 
 
+# ---------------------------------------------------------------- insan doğrulaması (CAPTCHA) devri: ALGILA, REDDET, DEVRET
+
+def _baslik_simdi(k: str) -> str | None:
+    try:
+        return api.arka().baslik(k) if k and k != EKRAN else None
+    except Exception:  # noqa: BLE001 - başlık okunamazsa yalnız önbellekteki algıya bakılır
+        return None
+
+
+def _sinama_kapisi(k: str | None, *, oge: dict | None = None, ad: str | None = None, noktalar=(),
+                   klavye: bool = False) -> None:
+    """Girdi bir insan-doğrulaması (CAPTCHA) sınamasına gidiyorsa [17] ile REDDEDER (hiçbir şey gönderilmez; çözülmez,
+    atlatılmaz). Sayfanın geri kalanına girdi serbesttir. Algı: observe/read_text/wait_for/girdi sonrası kontrol
+    (dogrulama_sinamasi.kaydet) + ögenin sinama bayrağı + metin hedefi + pencere başlığı."""
+    if not k or k == EKRAN:
+        return
+    r = dogrulama_sinamasi.girdi_engeli(k, oge=oge, ad=ad, noktalar=[p for p in noktalar if p is not None],
+                                        klavye=klavye, baslik=_baslik_simdi(k))
+    if r is not None:
+        log.info("insan doğrulaması: girdi reddedildi (%s)", r.get("kind"))
+        raise AracHatasi("[17] " + dogrulama_sinamasi.red_metni(r), 17, ek={"human_verification": r})
+
+
+def _sinama_tara(k: str, ogeler: list[dict], baslik: str, sayfa: dict | None) -> dict | None:
+    """Ögeleri/başlığı incele, sınama ögelerini işaretle, pencere durumunu kaydet. → sonuç | None."""
+    s = dogrulama_sinamasi.incele(ogeler, baslik, sayfa)
+    dogrulama_sinamasi.ogeleri_isaretle(ogeler, s)
+    dogrulama_sinamasi.kaydet(k, s, ogeler)
+    return s
+
+
+def _sinama_yenile(k: str) -> dict | None:
+    """Pencerenin web/ağaç ögelerini okuyup sınama durumunu tazele (girdi sonrası, wait_for, request_human yoklaması).
+    KİLİT dışında çağrılır. Okunamazsa mevcut algı korunur (None değil, önbellek)."""
+    if not k or k == EKRAN:
+        return None
+    try:
+        with kilitli(), api.okuma(k):
+            ogeler, _kaynak, sayfa, _n = _agac_topla(k, False)
+            baslik = api.arka().baslik(k)
+        return _sinama_tara(k, ogeler, baslik, sayfa)
+    except (hata.Dur, ToolError, OSError) as e:
+        log.debug("sınama taraması okunamadı: %s", e)
+        d = dogrulama_sinamasi.durum(k)
+        return ({"kind": d["kind"], "window": d["window"], "hint": d["hint"], "confidence": d.get("confidence", "high")}
+                if d else None)
+
+
+def _sinama_alani(k: str | None, s: dict, tara: bool = False) -> None:
+    """Girdi aracı sonucuna `human_verification` ekle: pencerede (önbellekte ya da başlıkta) sınama varsa."""
+    if not k or k == EKRAN:
+        return
+    if tara and dogrulama_sinamasi.durum(k):
+        _sinama_yenile(k)  # sınama biliniyorsa şimdi hâlâ var mı
+    d = dogrulama_sinamasi.durum(k)
+    if d is None and dogrulama_sinamasi.baslik_mi(_baslik_simdi(k)):
+        d = {"kind": "cloudflare_interstitial", "window": _baslik_simdi(k) or "",
+             "hint": dogrulama_sinamasi.IPUCU.format(kind="cloudflare_interstitial"), "confidence": "high"}
+    if d is not None:
+        s["human_verification"] = dogrulama_sinamasi.acik_sonuc(d)
+
+
 def _web():
     from . import web
     return web
@@ -1245,6 +1318,7 @@ def observe(
         for o in (*agac, *satirlar):
             if guvenlik.hassas_mi(o["ad"]):
                 o["hassas"] = True
+        sinama = _sinama_tara(k, [*agac, *satirlar], pb["title"], sayfa) if k != EKRAN else None
         if query:
             liste = gozlem.sorgu_suz(agac, query, interactive_only) + gozlem.sorgu_suz(satirlar, query, False)
         else:
@@ -1300,6 +1374,8 @@ def observe(
             s["count"] = len(satir_)
         if notlar:
             s["notes"] = notlar
+        if sinama:
+            s["human_verification"] = dogrulama_sinamasi.acik_sonuc(sinama)
         ust = [baslik]
         if "page" in s:
             p = s["page"]
@@ -1308,6 +1384,9 @@ def observe(
                        ("" if p["position_verified"] else " | positions unverified: element clicks are refused, use "
                                                           "click(text=...)"))
         ust += [f"note: {n}" for n in notlar]
+        if sinama:
+            ust.append(f"human_verification: {sinama['kind']} on this page: do not click, type or drag in it; call "
+                       f"request_human(reason, window); the rest of the page can still be read")
         if "next_offset" in s:
             satir_.append(f"next_offset {s['next_offset']}: observe(offset={s['next_offset']}) lists more")
         metin = "\n".join(ust + satir_)
@@ -1420,7 +1499,18 @@ def read_text(
                 r = api.metin_oku(k, query, region, deep, bekle=wait_s, en_cok=max_items)
                 geo = r.pop("geometry")
         sid = cekim_kaydet(k, api.arka().ad, geo, (0, 0), 1.0, (geo[2], geo[3]))
-        return {**bilgi, **r, "shot_id": sid, "window": api.pencere_bilgi(k)}
+        pb_ = api.pencere_bilgi(k)
+        sonuc = {**bilgi, **r, "shot_id": sid, "window": pb_}
+        if k != EKRAN:
+            kalem = [{"rol": i.get("role") or "ocr_text", "ad": i.get("text") or "", "kutu": i.get("box") or [0, 0, 0, 0],
+                      "cerceve": i.get("frame"), "kaynak": "ocr" if source == "ocr" else source}
+                     for i in r.get("items", ())]
+            sayfa_ = r.get("page") or {}
+            hv = _sinama_tara(k, kalem, pb_["title"], {"baslik": sayfa_.get("title"),
+                                                      "cerceveler": sayfa_.get("frame_documents")})
+            if hv:
+                sonuc["human_verification"] = dogrulama_sinamasi.acik_sonuc(hv)
+        return sonuc
 
 
 @mcp.tool(title="Find icon/colour", annotations=OKUMA)
@@ -1518,6 +1608,7 @@ def click(
         y_ = api.yasak_mi(k)
         if y_:
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
+        _sinama_kapisi(k, oge=ref_o, ad=text or element, noktalar=[(wx, wy)] if (x is not None and not ref) else ())
         desen = baslik_kilidi(window if not ref else None, k, ref_b)
         once = {}
         mod = list(dict.fromkeys(modifiers or ()))
@@ -1570,6 +1661,7 @@ def click(
         uyari = _dongu_sonrasi("click", k, dhedef, once.get("ozet"), after or {})
         if uyari:
             s["warning"] = uyari
+        _sinama_alani(k, s, tara=True)
         return s
 
 
@@ -1606,6 +1698,7 @@ def type_text(
         else:
             k = _pencere_zorunlu(window)
         _SON.k = k
+        _sinama_kapisi(k, oge=ref_o, ad=element, klavye=not ref and not element)
         desen = baslik_kilidi(window if not ref else None, k, ref_b)
         if element and submit:
             raise ToolError("[1] " + _("submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)"))
@@ -1638,6 +1731,7 @@ def type_text(
             if secret:
                 after.pop("new_text", None)  # gizli yazı sonuçta yankılanmaz
             s["after"] = after
+        _sinama_alani(k, s, tara=True)
         return s
 
 
@@ -1702,6 +1796,7 @@ def press_key(
         hata.dur_denetle()
         k = _pencere_zorunlu(window)
         _SON.k = k
+        _sinama_kapisi(k, klavye=True)
         desen = baslik_kilidi(window, k)
         once = {}
         dhedef = ("keys", dongu.metin_norm(keys), repeat, hold_s)
@@ -1722,6 +1817,7 @@ def press_key(
         uyari = _dongu_sonrasi("press_key", k, dhedef, once.get("ozet"), after or {})
         if uyari:
             s["warning"] = uyari
+        _sinama_alani(k, s, tara=True)
         return s
 
 
@@ -1823,6 +1919,8 @@ def drag(
         y_ = api.yasak_mi(k)
         if y_:
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
+        for o_ in (o1, o2):
+            _sinama_kapisi(k, oge=o_, noktalar=[p1, p2])
         desen = baslik_kilidi(window if not (from_ref or to_ref) else None, k, ref_b)
         once = {}
         noktalar = {}
@@ -1844,6 +1942,7 @@ def drag(
         uyari = _dongu_sonrasi("drag", k, noktalar.get("dh"), once.get("ozet"), after)
         if uyari:
             s["warning"] = uyari
+        _sinama_alani(k, s, tara=True)
         return s
 
 
@@ -2347,7 +2446,121 @@ def wait_for(
             s["window"] = pencere_id
         elif k is not None and k != EKRAN:
             s["window"] = k
+        if k is not None and k != EKRAN:
+            _sinama_alani(k, s)
         return s
+
+
+class DevirSonuc(TypedDict, total=False):
+    status: Literal["resolved", "timeout", "declined", "unavailable"]
+    resolved_by: Literal["user", "challenge_cleared"]
+    still_detected: bool
+    desktop: str
+    window: str
+    waited_s: float
+    message: str
+    human_verification: dict[str, Any]
+    error: HataAyrinti
+
+
+DEVIR_ARALIK_SAYISI = 2  # sınama işareti ART ARDA bu kadar yoklamada yoksa "kayboldu" sayılır (geçici okuma boşluğu)
+DEVIR_NEDEN = {  # onay.OnaySonucu.neden → (status, mesaj)
+    "sure": ("timeout", N_("kullanıcı süre içinde gelmedi; hiçbir girdi gönderilmedi")),
+    "red": ("declined", N_("kullanıcı devri reddetti / çözemedi; hiçbir girdi gönderilmedi")),
+    "panel-yok": ("unavailable", N_("Deskhand paneli kapalı: kullanıcıya devredilemedi")),
+    "panel-kapandi": ("unavailable", N_("Deskhand paneli beklerken kapandı")),
+    "gozetimsiz": ("unavailable", N_("gözetimsiz çalışmada insana devredilemez")),
+    "dur": ("unavailable", N_("kullanıcı DUR dedi")),
+    "kanal": ("unavailable", N_("panel kanalı doğrulanamadı")),
+    "hata": ("unavailable", N_("devir isteği yazılamadı")),
+}
+
+
+@arac(DevirSonuc, title="Hand over to the user", annotations=SECIM)
+def request_human(
+    reason: Annotated[str, Field(min_length=1, max_length=400, description="Why the user is needed, in one sentence "
+                                                                           "(shown in the notification and panel)")],
+    window: Annotated[str | None, Field(description="Window the user must look at (title pattern or id); "
+                                                    "default: whole screen")] = None,
+    timeout_s: Annotated[float, Field(ge=10, le=3600, description="How long to wait for the user (default 10 min)")] = 600,
+    desktop: Masaustu = "auto",
+) -> dict[str, Any]:
+    """Hand the task to the user for a step only a human may do: a CAPTCHA / "verify you are human" challenge (this
+    server never solves or bypasses them: click, type_text, drag and press_key are refused with [17] on them). Shows
+    the request in the Deskhand panel (with a Take over button for the background desktop) and a KDE notification,
+    then waits. Returns status=resolved when the user presses Done in the panel or the challenge is gone from the page
+    (resolved_by), timeout when nobody came, declined when the user gave up. You cannot close the request yourself:
+    only the panel (the user) or the page itself can. Input to that desktop is refused while it waits; reading tools
+    stay free. After resolved, observe again before acting."""
+    with baglam(desktop, _("insana devir: {pencere}").format(pencere=window or _("tüm ekran"))) as bilgi:
+        hata.dur_denetle()
+        k = api.pencere(window)
+        y_ = api.yasak_mi(k)
+        if y_:
+            raise AracHatasi("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_), 10)
+        if dogrulama_sinamasi.devir_acik(k):
+            raise AracHatasi("[7] " + _("bu pencere için insana devir zaten bekliyor"), 7)
+        au = api.arka()
+        baslik = _baslik_simdi(k) or ""
+        once = _sinama_yenile(k) if k != EKRAN else None
+        o = _onay()
+        if o is None or not hasattr(o, "iste_sonuc"):
+            return {**bilgi, "status": "unavailable", "window": baslik,
+                    "message": _("onay modülü yok (Deskhand paneli kurulu değil)")}
+        ad = au.ad
+        masa = "arka" if ad == "sanal" else "ekran"
+        bos = [0]
+
+        def kayboldu() -> bool:
+            """Yalnız başta sınama VARDI ise: art arda DEVIR_ARALIK_SAYISI yoklamada algı yok → çözüldü sayılır."""
+            if once is None:
+                return False
+            simdi = _sinama_yenile(k)
+            if simdi is None and not dogrulama_sinamasi.baslik_mi(_baslik_simdi(k)):
+                bos[0] += 1
+            else:
+                bos[0] = 0
+            return bos[0] >= DEVIR_ARALIK_SAYISI
+
+        dogrulama_sinamasi.devir_baslat(k)
+        try:
+            ozet = (reason.strip() + (f" ({baslik[:80]})" if baslik else ""))[:300]
+            try:
+                _mesgul_m = _mesgul_bildirimi()
+                if _mesgul_m is not None:
+                    _mesgul_m(_("Deskhand sizi bekliyor"), ozet, True, 30)
+            except Exception as e:  # noqa: BLE001 - bildirim isteğe bağlı; asıl kanal panel diyaloğu
+                log.debug("devir bildirimi gönderilemedi: %s", e)
+            from .gunluk import gunluk
+            gunluk(f"insan devri istendi | {'arka sanal ' if masa == 'arka' else ''}[{baslik[:80]}] | {reason[:120]}")
+            t0 = time.monotonic()
+            with _OnayKaydi(ad):  # beklerken bu masaüstüne girdi yok ([7]); ajan isteği kendi kapatamaz
+                sonuc = o.iste_sonuc("human_verification", baslik or _("tüm ekran"), reason, masa, timeout_s,
+                                     tur="devir", kontrol=kayboldu)
+        finally:
+            dogrulama_sinamasi.devir_bitir(k)
+        gecen = round(time.monotonic() - t0, 1)
+        s = {**bilgi, "window": baslik, "waited_s": gecen}
+        if sonuc.izin or sonuc.neden == "kosul":
+            s["status"] = "resolved"
+            s["resolved_by"] = "user" if sonuc.izin else "challenge_cleared"
+            hv = _sinama_yenile(k) if k != EKRAN else None
+            s["still_detected"] = hv is not None
+            if hv is not None:
+                s["human_verification"] = dogrulama_sinamasi.acik_sonuc(hv)
+                s["message"] = _("kullanıcı Bitti dedi ama sınama işareti hâlâ sayfada: observe ile bak; gerekirse "
+                                 "yeniden request_human")
+            else:
+                s["message"] = _("devir tamamlandı: observe çağırıp sayfayı yeniden oku")
+        else:
+            durum_, mesaj_ = DEVIR_NEDEN.get(sonuc.neden, ("declined", N_("devir sonuçlanmadı")))
+            s["status"], s["message"] = durum_, _(mesaj_)
+        return s
+
+
+def _mesgul_bildirimi():
+    m = _modul("mesgul")
+    return getattr(m, "bildir", None) if m is not None else None
 
 
 def _basliksiz(d) -> None:

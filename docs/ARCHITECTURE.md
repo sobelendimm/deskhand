@@ -620,9 +620,10 @@ uymadı · 5 belirsiz (birden çok eşleşme) · 6 bulunamadı · 7 zaman aşım
 9 araç eksik (dotool/tesseract/Xvfb…) · 10 yasak/hassas · 11 akış hata ekranı · 12 insan kullanıyor ·
 **13 kullanıcı DUR dedi** · **14 sanal masaüstü kapalı** · **15 kullanıcı oyunda/film izliyor, ekranına müdahale yok** ·
 **16 uygulama arka planda açılamaz** (kullanıcının ekranında açık ya da yalnız ön plan) ·
+**17 insan doğrulaması (CAPTCHA) bekliyor: ajan girdisi reddedildi, kullanıcıya devret (`request_human`)** ·
 20 / 21 `decide` karar kodları: 0 = kullanıcının ekranı, 20 = arka plan, 21 = sonra.
 
-Çağıran otomasyon 10, 12, 13, 15 ve 16'da durmalı ve kullanıcıya haber vermelidir. MCP yüzeyinde aynı kodlar
+Çağıran otomasyon 10, 12, 13, 15, 16 ve 17'de durmalı ve kullanıcıya haber vermelidir. MCP yüzeyinde aynı kodlar
 `[kod] ad: ayrıntı` hatası olarak görünür. Bu tablo README'deki "Exit codes" tablosuyla tutarlı tutulur.
 
 ## 6. Çalışma kuralları
@@ -813,3 +814,31 @@ sonuçları (her araçta) küçük structuredContent'i korur. Şemalardaki otoma
 element, simge, renk, koordinat, `via=action` — hedef aranmadan önce insan onayı ister (`eylem.sistem_istemi_on`;
 gözetimsiz kipte ret → 10). `type_text(ref=…)` iki çekirdek eylemdir (alan tıklaması + yazı): sistem isteminde iki
 onay sorulur.
+
+## 13. İnsan doğrulaması (CAPTCHA) devri: algıla, reddet, devret, devam et
+
+**Politika (değişmez):** CAPTCHA / "insan olduğunuzu doğrulayın" sınamaları ÇÖZÜLMEZ ve atlatılmaz (görsel, sesli ya da
+başka yolla). Deskhand yalnız algılar, ajan girdisini reddeder, kullanıcıya devreder, çözülünce devam eder.
+
+- **Algı** (`deskhand/dogrulama_sinamasi.py`, saf; yalnız metin geçmesi YETMEZ). Kaynaklar: (1) pencere/sayfa başlığı
+  "Just a moment…", "Bir dakika lütfen…", "Attention Required", "Verifying you are human" (sayfanın tamamı sınama:
+  `cloudflare_interstitial`); (2) gömülü belge (iframe) adresi: `google.com/recaptcha`, `hcaptcha.com`,
+  `challenges.cloudflare.com`, `arkoselabs`/`funcaptcha`, `geetest` (görünmez `size=invisible` reCAPTCHA v3 rozeti
+  sayılmaz; `web.oku` bu adresleri `sayfa.cerceveler` ile verir); (3) öge adı + rol: onay kutusu/düğme/kaydırıcı
+  "I'm not a robot", "Ben robot değilim", "Verify you are human", "İnsan olduğunuzu doğrulayın", "Slide to verify"…
+  ya da satıcı adı (reCAPTCHA, hCaptcha, Turnstile…); iframe içindeyse her rol; üst düzey bağlantı/başlık/paragraf
+  (blog yazısı) sayılmaz; (4) OCR: yalnız kısa, tek başına duran satır (düşük güven). Sonuç `human_verification:
+  {detected, kind, window, hint}` (+ düşük güvende `confidence`); `observe`, `read_text`, `wait_for`, `click`,
+  `type_text`, `press_key`, `drag` sonuçlarında. Algı pencere başına 5 dk saklanır (`kaydet/durum`).
+- **Reddetme:** sınama ögesine (ref bayrağı `!human-verification`, metin/öge adı, sınama kutusu içindeki koordinat) ve
+  sayfanın tamamı sınamaysa hedefsiz klavyeye `click/drag/type_text/press_key` → **kod 17**, `sent: nothing_sent`,
+  hata yapısında `human_verification`. Sayfanın geri kalanı okunabilir ve kullanılabilir.
+- **Devir** (`request_human(reason, window, timeout_s=600)`): KDE bildirimi (`mesgul.bildir`, kritik) + onay
+  kanalında `tur="devir"` isteği (panel diyaloğu: **Devral** [yalnız arka plan masaüstü; panelin mevcut Devral'ı:
+  önizleme + girdi aktarımı], **Bitti**, **Vazgeç**). Bekleme boyunca o masaüstüne ajan girdisi kapalıdır ([7]);
+  istek yalnız panelden (SO_PEERCRED ile doğrulanmış kanal, §8: Bitti = izin) ya da sayfanın kendisinden (başta var
+  olan sınama işareti art arda 2 yoklamada yok → `resolved_by=challenge_cleared`) kapanır; ajan kendi isteğini
+  kapatamaz. Sonuç: `resolved | timeout | declined | unavailable` (panel kapalı, gözetimsiz kip, DUR). `resolved`
+  sonrası işaret hâlâ varsa `still_detected: true`. Zaman aşımı 10 dk (en çok 60).
+- **Sınırlar:** yeni CAPTCHA türleri algıdan kaçabilir (araç sonuçlarına her işlemden sonra yeniden bakılır); CLI
+  (`ekran click ...`) bu kapıdan geçmez, kapı MCP yüzeyindedir.

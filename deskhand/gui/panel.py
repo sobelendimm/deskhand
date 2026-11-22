@@ -249,10 +249,19 @@ class Panel(QObject):
         dlg = OnayDiyalog(istek, **kw)
         dlg.setWindowIcon(self.pencere.windowIcon())
         dlg.karar_verildi.connect(self._karar)
+        dlg.devral_istendi.connect(self.devral_ac)
         self.diyaloglar[istek["id"]] = dlg
         dlg.show()
         dlg.raise_()
         return dlg
+
+    def devral_ac(self, _istek_id: str = ""):
+        """İnsan doğrulaması devri: panel Arka plan sekmesinde Devral açılır (önizleme + girdi aktarımı; ajan bekler);
+        insan sınamayı çözer, diyalogda Bitti der. Devral'ı panel (yerleşik yasak pencere) açar: ajan açamaz."""
+        self.arka_goster()
+        b = self.pencere.arka.b_devral
+        if b.isEnabled() and not b.isChecked():
+            b.setChecked(True)
 
     def diyalog_one(self, istek_id: str):
         dlg = self.diyaloglar.get(istek_id)

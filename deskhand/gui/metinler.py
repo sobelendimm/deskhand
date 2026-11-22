@@ -113,6 +113,13 @@ D_KALAN = N_("Kalan süre: {s} — yanıt vermezseniz reddedilir")
 D_IZIN = N_("Bir kez izin ver")
 D_RED = N_("Reddet")
 D_NOT = N_("İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.")
+# insan doğrulaması devri (request_human): CAPTCHA çözülmez, kullanıcıya devredilir
+D_DEVIR_SORU = N_("Claude sizi bekliyor: insan doğrulaması gerekiyor")
+D_DEVIR_BITTI = N_("Bitti")
+D_DEVIR_VAZGEC = N_("Çözemiyorum / Vazgeç")
+D_DEVIR_DEVRAL = N_("Devral")
+D_DEVIR_NOT = N_("Sınamayı kendiniz çözün (Claude çözmez). Arka plan masaüstündeyse Devral'a basın; bitince Bitti. "
+                 "Sınama sayfadan kalkınca da devam edilir.")
 D_IZIN_IPUCU = N_("Kazara izne karşı: birkaç saniye sonra ve fareyi bu pencerenin üzerinde gezdirince etkinleşir.")
 
 # ---- ayarlar
