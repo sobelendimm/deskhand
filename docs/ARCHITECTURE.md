@@ -64,7 +64,8 @@ deskhand/
   mesgul.py        kullanıcı meşgul mü (oyun / film) koruması
   onay.py          insan onayı protokolü (§8): istek dosyası + panelin doğrulanmış onay kanalı (Unix soketi)
   onay_hedef.py    onay verilen hedefin özeti (kimlik, başlık, geometri, bölge görüntüsü) + onay sonrası doğrulama (§8)
-  liste_koruma.py  yasak/seviye listeleri: panel yetkili kaynak (bellek, geri yazma, işaret, kanaldan okuma; §4)
+  liste_koruma.py  yasak/seviye listeleri, onay kapsamı, hesap oturumları: panel yetkili kaynak (bellek, geri yazma,
+                   işaret, kanaldan okuma; §4)
   girdi_merkezi.py panelin içinde hazır bekleyen tek dotool + RUNTIME_DIR/girdi.sock (Qt'siz; §2, §4)
   gui/             panel, tepsi, onay diyaloğu; gui/gorev.py = "Görev" sekmesi (görev kutusu, canlı adımlar, görünmez
                    masaüstünün canlı görüntüsü, geçmiş)
@@ -362,7 +363,9 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   yasak|seviye` → `icerik <n>` + metin | `yok`; kanal doğrulaması §8 ile aynı; istemci 0,3 sn önbellek). Panel
   kapalıysa dosyadan okunur; işaret VAR ama dosya yok ya da işaretle uyuşmuyorsa Dur 10 ("Deskhand ayar dosyası kayıp
   ya da panel dışında değişti; … paneli açın"), hiçbir girdi gönderilmez. İşaret yoksa (ilk kurulum) eski davranış.
-  Dosyayı elle düzenlemek desteklenmez: değişiklikler panelin Ayarlar'ından yapılır.
+  Dosyayı elle düzenlemek desteklenmez: değişiklikler panelin Ayarlar'ından yapılır. Aynı panel yetkili desen
+  `ayarlar.toml`'daki iki gevşetici ayara da uygulanır: onay kapsamı (`liste onaylar`) ve hesap oturumları
+  (`liste kimlik`; aşağıda "Onay kapsamı" ve "Hesap oturumları").
 - **Bekleyen onay = girdi yok (MCP).** Bir masaüstünde (kde/sanal) insan onayı beklenirken O masaüstüne giden her
   girdi aracı (click, type_text, press_key, scroll, drag, manage_window, clipboard write, run_flow, open_app) kilidi
   alır almaz beklemeden `[7] onay bekleniyor` ile reddedilir (`mcp_sunucu.kilitli(girdi=True)`); kayıt kilit
@@ -688,6 +691,31 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   çağrılarda (CLI'de ayrı süreçlerde) parça parça yazılan numara, tampon süresi (60 sn) dışına yayılan ya da kart alanı
   olarak işaretlenmemiş alana başka biçimde (kodlanmış, harflerle) yazılan numara yakalanamaz; `run_flow` önceden onaylı
   (`--onayli`) adım onayı bu ayardan etkilenmez.
+- **Hesap oturumları** (`ayarlar.toml` `[guvenlik] hesap_oturumlari` = virgüllü `microsoft`/`google`/`edevlet` alt
+  kümesi; panel Ayarlar → "Hesap oturumları"; varsayılan **boş = hepsi kapalı**). Oturum politikasının site ret
+  listesi (`data/oturum.toml` `[site] reddet`) görünmez masaüstündeki Firefox kopyasında kimlik sağlayıcı oturumlarını
+  da süzer: `login.live.com` / `login.microsoftonline.com` (alan çerezi kuralıyla `.live.com` MSPAuth/WLSSC da),
+  `accounts.google.com` / `securetoken.googleapis.com` (`.google.com` SID…), devlet girdileri. Kullanıcı bir sağlayıcıya
+  izin verirse `firefox.hazirla` politikayı `Politika.kimlik_izni_uygula` ile kopyalar: YALNIZ o sağlayıcının tam
+  girdileri (`politika.KIMLIK_ALANLARI`: microsoft → 2 giriş alanı; google → 2; edevlet → `*e-devlet*`, `*edevlet*`,
+  `turkiye.gov.tr`, `gib.gov.tr`, `sgk.gov.tr`, `*.gov.tr`, `*.gov`) ret listesinden çıkar → o alanların çerezi (oturum
+  çerezleri dahil), kayıtlı girişleri (`logins.json`/`logins.db`; parolayı Firefox doldurur, ajan okumaz; `key4.db`
+  zaten kopyalanır) ve `--site` verilmişse deposu kopyaya girer. Banka/ödeme desenleri (`*bank*`, `*odeme*`,
+  `*payment*`, `*checkout*`, `*paypal*`, `*stripe*`, bankalar, iyzico, PayTR…) hiçbir sağlayıcıda yoktur: bir alan
+  kalan herhangi bir girdiye uyarsa yine reddedilir (`ebank.gov.tr` e-Devlet izniyle de ret). **Görev kipinde
+  (`DESKHAND_GOREV=1`) izin HİÇ uygulanmaz**: `hazirla` izni sormaz, kimlik çerezleri her zaman süzülür. Kopya
+  açıklaması (`open` çıktısı, `oturum hazirla`) ve `doctor` satırı özet verir ("kimlik oturumları: Microsoft aktarıldı
+  (5 çerez, 1 kayıtlı giriş); Google süzüldü (… izin kapalı)"); son özet `RUNTIME_DIR/oturum/kimlik-son.json`'da (yalnız
+  bilgi, karar için okunmaz). İzin GEVŞETME yönünde olduğundan onay kapsamıyla aynı PANEL YETKİLİ model
+  (`liste_koruma` KIMLIK): CLI/MCP değeri dosyadan değil panelin doğrulanmış kanalından alır (`liste kimlik`; kanal
+  salt okunur, yazma komutu yok); panel kapalı / doğrulanamıyor / eski panel → izin YOK. Panel açılışta dosyadaki
+  sağlayıcılardan yalnız kendi işaretinde (`liste-kimlik.isaret`) de olanları kabul eder; işaretsiz sağlayıcı →
+  dosya geri yazılır + uyarı. Panel açıkken dosyaya elle eklenen sağlayıcı geri alınır (`denetle`); dosyadan çıkarmak
+  ya da dosyayı silmek kabul (sıkılaştırma). Tek açma yolu panelin Ayarlar'ı: ana anahtar ("Giriş yaptığım hesaplar …
+  banka ve ödeme siteleri hariç") üçünü birlikte, kutular tek tek açar; açarken onay diyaloğu (varsayılan Hayır),
+  kapatmak sorusuz. Sınır (onay kapsamıyla aynı): panel KAPALIYKEN hem ayar dosyasını hem işareti tutarlı biçimde
+  sahteleyen bir süreç panelin bir sonraki açılışında izni geçirebilir. İzin açıkken arka plandaki tarayıcı o hesabın
+  e-postasına/dosyalarına erişebilir; güvenilmeyen sayfa ajanı kandırabilir (panel uyarı metni bunu söyler).
 
 ## 5. Çıkış kodları
 0 tamam · 1 kullanım hatası · 2 nokta pencere/ekran dışında · 3 aktif değil/başka pencere · 4 başlık/sınıf kilidi

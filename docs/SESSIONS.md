@@ -555,6 +555,10 @@ da kapsar. Kayıtlı parolalar (`logins.json` / `logins.db`) aynı listeyle süz
 - devlet: `turkiye.gov.tr`, `gib.gov.tr`, `sgk.gov.tr`, `*.gov.tr`, `*.gov`;
 - merkezi kimlik: `accounts.google.com`, `login.microsoftonline.com`, `login.live.com`, `securetoken.googleapis.com`.
 
+**Hesap oturumları (kullanıcı izni):** panel Ayarlar → "Hesap oturumları"ndan (YALNIZ oradan; ARCHITECTURE §4) Microsoft,
+Google ya da e-Devlet/devlet grubu açılırsa o grubun ret girdileri Firefox kopyasında ret listesinden çıkar (çerez +
+kayıtlı giriş + depo). Banka/ödeme girdileri hiçbir izinle çıkmaz; görev kipinde izin uygulanmaz. Varsayılan kapalı.
+
 Örnek geçersiz kılma:
 
 ```toml

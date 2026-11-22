@@ -699,6 +699,33 @@ class AyarlarSekmesi(QScrollArea):
         gl.addRow(self._soluk(T.Y_ONAY_NOT))
         kok.addWidget(g)
 
+        # ---- hesap oturumları (panel yetkili; açarken onay diyaloğu): Microsoft / Google
+        g = self._grup(T.Y_HESAP)
+        gl = QVBoxLayout(g)
+        uyari = QLabel()
+        uyari.setWordWrap(True)
+        self.mt(lambda m, e=uyari: e.setText("⚠ " + m), T.Y_HESAP_UYARI)
+        gl.addWidget(uyari)
+        acik = A.hesap_oturumlari_oku()
+        self.k_hesap_hepsi = QCheckBox()  # ana anahtar: üçünü birlikte açar/kapatır
+        self.mt(self.k_hesap_hepsi.setText, T.Y_HESAP_HEPSI)
+        self.k_hesap_hepsi.setChecked(set(A.HESAP_SAGLAYICILARI) <= acik)
+        self.k_hesap_hepsi.toggled.connect(self.hesap_hepsi_sec)
+        gl.addWidget(self.k_hesap_hepsi)
+        self.k_hesap: dict[str, QCheckBox] = {}
+        for sag in A.HESAP_SAGLAYICILARI:
+            k = QCheckBox()
+            self.mt(k.setText, T.Y_HESAP_SECENEK[sag])
+            k.setChecked(sag in acik)
+            k.toggled.connect(lambda durum, sag=sag: self.hesap_oturumu_sec(sag, durum))
+            self.k_hesap[sag] = k
+            k.setStyleSheet("QCheckBox { margin-left: 22px; }")  # ana anahtarın altında girintili
+            gl.addWidget(k)
+        self.l_hesap = soluk_etiket("")
+        gl.addWidget(self.l_hesap)
+        gl.addWidget(self._soluk(T.Y_HESAP_NOT))
+        kok.addWidget(g)
+
         # ---- yasak pencereler
         g = self._grup(T.Y_YASAK)
         gl = QVBoxLayout(g)
@@ -897,6 +924,58 @@ class AyarlarSekmesi(QScrollArea):
             self.l_onay.setText(_(T.Y_ONAY_HATA).format(hata=e))
             return False
         self.l_onay.setText(_(T.Y_KAYDEDILDI))
+        return True
+
+    def hesap_onay_sor(self, saglayici: str) -> bool:
+        """Açmadan önce Evet/Hayır (varsayılan Hayır). Testler bu yöntemi değiştirir."""
+        hesap = _(T.Y_HESAP_AD[saglayici])
+        k = QMessageBox(QMessageBox.Icon.Warning, _(T.Y_HESAP_SORU_BASLIK).format(hesap=hesap),
+                        _(T.Y_HESAP_SORU).format(hesap=hesap), QMessageBox.StandardButton.NoButton, self)
+        evet = k.addButton(_(T.EVET), QMessageBox.ButtonRole.YesRole)
+        hayir = k.addButton(_(T.HAYIR), QMessageBox.ButtonRole.NoRole)
+        k.setDefaultButton(hayir)
+        k.setEscapeButton(hayir)
+        k.exec()
+        return k.clickedButton() is evet
+
+    def _hesap_kutulari(self) -> None:
+        """Kutuları panelin yetkili değerine çek (sinyal üretmeden)."""
+        acik = A.hesap_oturumlari_oku()
+        for sag, k in [*self.k_hesap.items(), ("*", self.k_hesap_hepsi)]:
+            k.blockSignals(True)
+            k.setChecked(set(A.HESAP_SAGLAYICILARI) <= acik if sag == "*" else sag in acik)
+            k.blockSignals(False)
+
+    def hesap_hepsi_sec(self, acik: bool) -> bool:
+        """Ana anahtar: açarken TEK onay diyaloğu (Hayır → geri döner); kapatmak sormadan. → kaydedildi mi."""
+        if acik and not self.hesap_onay_sor("hepsi"):
+            self._hesap_kutulari()
+            self.l_hesap.setText("")
+            return False
+        try:
+            A.hesap_oturumlari_hepsi_yaz(acik)
+        except Exception as e:  # noqa: BLE001
+            self._hesap_kutulari()
+            self.l_hesap.setText(_(T.Y_HESAP_HATA).format(hata=e))
+            return False
+        self._hesap_kutulari()
+        self.l_hesap.setText(_(T.Y_KAYDEDILDI))
+        return True
+
+    def hesap_oturumu_sec(self, saglayici: str, acik: bool) -> bool:
+        """Onay kutusu: açarken onay diyaloğu (Hayır → kutu geri döner); kapatmak sormadan. → kaydedildi mi."""
+        if acik and not self.hesap_onay_sor(saglayici):
+            self._hesap_kutulari()
+            self.l_hesap.setText("")
+            return False
+        try:
+            A.hesap_oturumu_yaz(saglayici, acik)
+        except Exception as e:  # noqa: BLE001
+            self._hesap_kutulari()
+            self.l_hesap.setText(_(T.Y_HESAP_HATA).format(hata=e))
+            return False
+        self._hesap_kutulari()
+        self.l_hesap.setText(_(T.Y_KAYDEDILDI))
         return True
 
     def yasak_yukle(self):

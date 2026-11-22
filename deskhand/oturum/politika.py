@@ -13,6 +13,11 @@ Karar değerleri: kopya | paylas | bekle | kapali | on  (anlamları data/oturum.
 Site listeleri: `reddet` (çerez/deposu/kayıtlı parolası asla kopyalanmayan alanlar: banka/ödeme/devlet/merkezi
 kimlik) ve görev bazlı `izin` (yalnız bu origin'ler kopyalanır). Eşleşme fnmatch kalıbı (`*bank*` gibi), alt alan
 adları dahil; alan çerezi (`.google.com`) ret listesindeki bir alt alana gönderiliyorsa o da reddedilir.
+
+Hesap oturumu izni (`Politika.kimlik_izni_uygula`): kullanıcı panelden bir sağlayıcıya (microsoft | google | edevlet)
+izin verdiyse o sağlayıcının ret girdileri (KIMLIK_ALANLARI; YALNIZ bu tam girdiler) ret listesinden çıkar → o alanların
+ve alan çerezlerinin (.live.com, .google.com, *.gov.tr) oturumu + kayıtlı girişleri + deposu kopyaya girer. Banka/ödeme
+desenleri ve diğer girdiler hiçbir izinle etkilenmez (bir alan kalan herhangi bir girdiye uyarsa yine reddedilir). İzin kaynağı panel (liste_koruma.kimlik_izinleri); görev kipinde hiç uygulanmaz.
 """
 from __future__ import annotations
 
@@ -23,6 +28,17 @@ import tomllib
 from .. import yollar
 
 KARARLAR = ("kopya", "paylas", "bekle", "kapali", "on")
+
+# Kimlik sağlayıcı → ret listesinde (data/oturum.toml [site] reddet "merkezi kimlik") duran alanları. Panelden izin
+# verilirse YALNIZ bu tam girdiler ret listesinden çıkarılır (liste_koruma.KIMLIK_SAGLAYICILARI ile aynı adlar).
+KIMLIK_ALANLARI = {
+    "microsoft": ("login.live.com", "login.microsoftonline.com"),
+    "google": ("accounts.google.com", "securetoken.googleapis.com"),
+    # e-Devlet / devlet siteleri: reddet'teki devlet girdilerinin TAMAMI (desenler dahil). Banka/ödeme desenleri
+    # (`*bank*`, `*odeme*`, `*payment*`…) HİÇBİR sağlayıcıda yok: hiçbir izinle açılmaz.
+    "edevlet": ("*e-devlet*", "*edevlet*", "turkiye.gov.tr", "gib.gov.tr", "sgk.gov.tr", "*.gov.tr", "*.gov"),
+}
+KIMLIK_ADLARI = {"microsoft": "Microsoft", "google": "Google", "edevlet": "e-Devlet"}  # özel ad: çevrilmez
 _VARSAYILAN_AD = "_varsayilan"
 
 # Paket içindeki varsayılan politika (yollar.PAKET_DIZIN = .../deskhand)
@@ -143,6 +159,18 @@ class Politika:
 
     def karar(self, calisiyor: bool) -> str:
         return self.acik_iken if calisiyor else self.kapali_iken
+
+    def kimlik_izni_uygula(self, saglayicilar) -> "Politika":
+        """İzin verilen kimlik sağlayıcılarının merkezi kimlik alanları ret listesinden çıkarılmış KOPYA (self
+        değişmez). Yalnız KIMLIK_ALANLARI'ndaki tam girdiler çıkar; desenler (`*bank*`, `*.gov.tr`) ve diğer alanlar
+        aynen kalır. Bilinmeyen sağlayıcı adı yok sayılır. Çağıran görev kipinde ÇAĞIRMAZ."""
+        import copy
+        cikar = {a for s in (saglayicilar or ()) for a in KIMLIK_ALANLARI.get(s, ())}
+        if not cikar:
+            return self
+        yeni = copy.copy(self)
+        yeni._reddet = tuple(k for k in self._reddet if str(k).strip().lower() not in cikar)
+        return yeni
 
     # ---- site süzme ----
     def site_reddedildi(self, alan: str) -> bool:

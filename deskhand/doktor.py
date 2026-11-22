@@ -130,6 +130,39 @@ def satir_onay_kapsami():
     return _satir(_("Onay kapsamı"), "tamam", _("hepsi: tüm onaylar açık (varsayılan)"))
 
 
+def satir_hesap_oturumlari():
+    """Hesap oturumu izinleri (panel yetkili; liste_koruma.kimlik_izinleri): Microsoft / Google / e-Devlet açık-kapalı
+    + son Firefox kopyasının kimlik özeti (yalnız bilgi; oturum/firefox.kimlik_son_oku)."""
+    from . import liste_koruma
+    from .oturum.politika import KIMLIK_ADLARI
+    try:
+        izin = liste_koruma.kimlik_izinleri()
+    except Exception:  # noqa: BLE001 - doğrulanamadı: güvenli taraf
+        izin = frozenset()
+    acik, kapali = _("açık"), _("kapalı")
+    metin = ", ".join(f"{KIMLIK_ADLARI[s]} {acik if s in izin else kapali}" for s in liste_koruma.KIMLIK_SAGLAYICILARI)
+    try:
+        from .oturum import firefox
+        son = firefox.kimlik_son_oku()
+        son_metin = firefox.kimlik_ozeti_metni(son["ozet"], son.get("gorev", False)) if son else ""
+    except Exception:  # noqa: BLE001 - bilgi satırı: okunamazsa yok
+        son, son_metin = None, ""
+    if son_metin:
+        import time
+        metin += _(" | son kopya ({saat}): {ozet}").format(saat=time.strftime("%H:%M", time.localtime(son["zaman"])),
+                                                          ozet=son_metin)
+    try:
+        teyitsiz = liste_koruma.kimlik_dosyada() - izin
+    except Exception:  # noqa: BLE001
+        teyitsiz = frozenset()
+    if teyitsiz:  # dosyada açık ama panel teyit etmiyor (kapalı / panel dışında yazılmış): izin YOK
+        return _satir(_("Hesap oturumları"), "uyari",
+                      metin + _(" (ayar dosyasında {saglayici} açık ama panel teyit etmiyor: panel kapalı ya da panel "
+                                "dışında yazılmış; kimlik çerezleri süzülüyor)").format(
+                                    saglayici=", ".join(KIMLIK_ADLARI[s] for s in sorted(teyitsiz))), "deskhand panel")
+    return _satir(_("Hesap oturumları"), "tamam", metin)
+
+
 def satir_girdi_merkezi():
     from . import girdi_merkezi
     yol = girdi_merkezi.soket_yolu()
@@ -262,7 +295,7 @@ def satir_dinleme():
                   _("pipewire, wireplumber, pipewire-pulse ve libpulse araçlarını kur"))
 
 
-SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_onay_kapsami, satir_girdi_merkezi, satir_yardimcilar,
+SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_onay_kapsami, satir_hesap_oturumlari, satir_girdi_merkezi, satir_yardimcilar,
             satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
 
 

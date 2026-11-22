@@ -72,6 +72,10 @@ Ajan ya da izin kipi ne derse desin, iki masaüstünde de aracın kendisi uygula
     banka/ödeme/devlet sitelerinin (Türk bankaları ve e-Devlet dahil) ve merkezi giriş sayfalarının
     (Google, Microsoft) çerezleri **ve kayıtlı şifreleri** kopyalanmaz; bu yüzden orada Google/YouTube
     oturumu açık gelmez. Kamera, mikrofon, konum ve bildirim izinleri kopyadan silinir.
+    İsterseniz panel → Ayarlar → **Hesap oturumları**'ndan Microsoft, Google ya da e-Devlet oturumunun
+    kopyaya girmesine izin verebilirsiniz (varsayılan kapalı; yalnız panelden açılır; banka ve ödeme
+    siteleri hiçbir ayarla açılmaz; görev kipinde uygulanmaz). Açıkken arka plandaki tarayıcı o hesabın
+    e-postalarına ve dosyalarına erişebilir.
   - **Şifre deposu kullanmayan Flatpak uygulamaları** (örneğin Discord, Spotify): anlık kopya.
   - **Şifre deposu isteyen uygulamalar** (Chromium ailesi, VS Code) ve gerçek dosyalara
     yazan uygulamalar (Obsidian kasaları) **yalnız sizin ekranınızda** çalışır.

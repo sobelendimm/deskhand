@@ -152,6 +152,35 @@ def onay_kapsami_yaz(deger: str) -> None:
     guvenlik.onay_kapsami_sifirla()
 
 
+# ---------------------------------------------------------------- hesap oturumları ([guvenlik] hesap_oturumlari)
+
+HESAP_SAGLAYICILARI = ("microsoft", "google", "edevlet")
+
+
+def hesap_oturumlari_oku() -> frozenset:
+    """Panelin bellekteki yetkili değeri (panel dışında yazılmış izin burada görünmez)."""
+    from .. import liste_koruma
+    return liste_koruma.kimlik_izinleri()
+
+
+def hesap_oturumu_yaz(saglayici: str, acik: bool) -> frozenset:
+    """Tek sağlayıcıyı aç/kapat (panel: tek yetkili yazar; açarken onay diyaloğu pencere.py'de). → yeni küme."""
+    if saglayici not in HESAP_SAGLAYICILARI:
+        raise ValueError(saglayici)
+    from .. import liste_koruma
+    k = set(hesap_oturumlari_oku())
+    (k.add if acik else k.discard)(saglayici)
+    liste_koruma.panel_kimlik_kaydet(liste_koruma.kimlik_metni(k))
+    return hesap_oturumlari_oku()
+
+
+def hesap_oturumlari_hepsi_yaz(acik: bool) -> frozenset:
+    """Ana anahtar: üç sağlayıcıyı birlikte aç/kapat (banka/ödeme hiçbir izinde yok). → yeni küme."""
+    from .. import liste_koruma
+    liste_koruma.panel_kimlik_kaydet(liste_koruma.kimlik_metni(HESAP_SAGLAYICILARI if acik else ()))
+    return hesap_oturumlari_oku()
+
+
 # ---------------------------------------------------------------- deskhand.ayarlar köprüsü
 
 class KararAyarlari:
