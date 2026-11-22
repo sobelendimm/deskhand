@@ -319,10 +319,15 @@ for ad_ in ("kde", "sanal"):
         kod = kod_al(eylem.k_tus, ns(kombinasyon="meta+l", onayli=True))
         kontrol(f"[{ad_}] tus meta+l --onayli (sohbette onay) → sorulmaz, gönderilir",
                 kod == 0 and not ISTEKLER and au.satirlar[n0:] == ["key super+l"], f"{kod} {au.satirlar[n0:]}")
-        for tus in ("ctrl+s", "alt+f4", "ctrl+alt+t", "enter"):
+        for tus in ("ctrl+s", "alt+f4", "ctrl+alt+t"):
             ISTEKLER.clear()
             kontrol(f"[{ad_}] tus {tus!r} (riskli değil) → sorulmaz", kod_al(eylem.k_tus, ns(kombinasyon=tus)) == 0
                     and not ISTEKLER)
+        # Enter kapısı: sahte uçbirimin satırı OCR ile okunamıyor; ctrl+u satırı temizler (tampon temiz) → Enter serbest
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] tus 'ctrl+u' sonra 'enter' (satır boş ve biliniyor) → sorulmaz",
+                kod_al(eylem.k_tus, ns(kombinasyon="ctrl+u")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0
+                and not ISTEKLER)
         # ---- bas: tuşlar birlikte basılı
         ISTEKLER.clear()
         n0 = len(au.satirlar)

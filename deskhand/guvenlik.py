@@ -112,11 +112,20 @@ _TUS_ESANLAM = {
     "super_l": "super", "super_r": "super", "meta_l": "super", "meta_r": "super",
     "del": "delete", "bksp": "backspace", "sys_req": "sysrq", "sysreq": "sysrq",
 }
+_TUS_ESANLAM.update({"return": "enter", "kp_enter": "kpenter", "iso_enter": "enter", "3270_enter": "enter",
+                     "leftshift": "shift", "rightshift": "shift", "shift_l": "shift", "shift_r": "shift",
+                     "escape": "esc", "ins": "insert", "kp_insert": "insert"})
 _EVDEV_AD = {29: "ctrl", 97: "ctrl", 56: "alt", 100: "alt", 125: "super", 126: "super", 111: "delete", 14: "backspace",
-             99: "sysrq", 38: "l", **{59 + i: f"f{i + 1}" for i in range(10)}, 87: "f11", 88: "f12"}
+             99: "sysrq", 38: "l", **{59 + i: f"f{i + 1}" for i in range(10)}, 87: "f11", 88: "f12",
+             28: "enter", 96: "kpenter", 101: "linefeed", 47: "v", 110: "insert", 36: "j", 50: "m", 24: "o",
+             42: "shift", 54: "shift", 1: "esc", 46: "c", 22: "u", 15: "tab"}
 _KEYSYM_AD = {0xffe3: "ctrl", 0xffe4: "ctrl", 0xffe9: "alt", 0xffea: "alt", 0xfe03: "alt", 0xffe7: "super",
               0xffe8: "super", 0xffeb: "super", 0xffec: "super", 0xffff: "delete", 0xff08: "backspace",
-              0xff15: "sysrq", 0x6c: "l", 0x4c: "l", **{0xffbe + i: f"f{i + 1}" for i in range(12)}}
+              0xff15: "sysrq", 0x6c: "l", 0x4c: "l", **{0xffbe + i: f"f{i + 1}" for i in range(12)},
+              0xff0d: "enter", 0xff8d: "kpenter", 0xfe34: "enter", 0xfd1e: "enter", 0xff0a: "linefeed",
+              0x76: "v", 0x56: "v", 0xff63: "insert", 0xff9e: "insert", 0x6a: "j", 0x4a: "j", 0x6d: "m", 0x4d: "m",
+              0x6f: "o", 0x4f: "o", 0xffe1: "shift", 0xffe2: "shift", 0xff1b: "esc", 0x63: "c", 0x43: "c",
+              0x75: "u", 0x55: "u", 0xff09: "tab"}
 _FTUS = re.compile(r"f([1-9]|1[0-2])")
 
 
@@ -158,6 +167,41 @@ def _akor_riski(tuslar):
     return None
 
 
+def _akor_kumeleri(kombinasyon):
+    """Çözülmüş tuş dizisi → [(kanonik tuş kümesi, çözülemeyen x:/k: var mı)] (akor başına)."""
+    sonuc = []
+    for akor in (kombinasyon or "").split():
+        kume, bilinmeyen = set(), False
+        for t in akor.split("+"):
+            if not t:
+                continue
+            if t.startswith("x:") and _keysym(t[2:]) is None and t[2:].lower() not in _TUS_ESANLAM:
+                bilinmeyen = True
+            if t.startswith("k:") and not t[2:].isdigit():
+                bilinmeyen = True
+            kume.add(_tus_kanonik(t))
+        sonuc.append((kume, bilinmeyen))
+    return sonuc
+
+
+ENTER_ADLARI = {"enter", "kpenter", "linefeed"}
+
+
+def enter_tusu_mu(kombinasyon):
+    """Kabukta satırı ÇALIŞTIRAN tuş var mı (Enter kapısı): enter, kpenter, linefeed (x:Return, k:28 dahil) ya da
+    ctrl+j / ctrl+m / ctrl+o (bash: satırı çalıştır). Çözülemeyen x:/k: tuşu güvenli tarafta True."""
+    for kume, bilinmeyen in _akor_kumeleri(kombinasyon):
+        if bilinmeyen or kume & ENTER_ADLARI or ("ctrl" in kume and kume & {"j", "m", "o"}):
+            return True
+    return False
+
+
+def yapistir_tusu_mu(kombinasyon):
+    """Panodan yapıştıran kısayol var mı: ctrl+v, ctrl+shift+v, shift+insert (x:/k: biçimleri dahil)."""
+    return any(("ctrl" in kume and "v" in kume) or ("shift" in kume and "insert" in kume)
+               for kume, _b in _akor_kumeleri(kombinasyon))
+
+
 def riskli_tus(kombinasyon, birlikte=False):
     """Oturumu/sistemi sonlandıran ya da ekrandan çıkaran tuş kombinasyonu mu? → neden metni | None.
     Yasak DEĞİL: çağıran insan onayı ister (riskli_tus_engel). kombinasyon: eylem.tus_coz çıktısı ya da ham metin
@@ -195,16 +239,41 @@ def ucbirim_mi(sinif):
 
 
 _SARMALAYICI = {"env", "time", "nohup", "nice", "ionice", "command", "builtin", "exec", "stdbuf", "setsid", "xargs",
-                "watch", "timeout", "chrt", "unbuffer"}
-_KABUK = {"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"}
+                "watch", "timeout", "chrt", "unbuffer", "taskset", "flock", "caffeinate", "systemd-inhibit"}
+# sarmalayıcı → (argüman ALAN seçenekler, komuttan önceki konumsal argüman sayısı): `nice -n 5 X`, `timeout -s 9 5 X`
+_SARMALAYICI_SECENEK = {
+    "env": ({"-u", "--unset", "-C", "--chdir"}, 0), "nice": ({"-n", "--adjustment"}, 0),
+    "ionice": ({"-c", "-n", "-p", "-P", "-u", "--class", "--classdata"}, 0),
+    "timeout": ({"-s", "--signal", "-k", "--kill-after"}, 1), "chrt": ({"-T", "-P", "-D"}, 1),
+    "stdbuf": ({"-i", "-o", "-e"}, 0), "watch": ({"-n", "--interval", "-q", "--equexit"}, 0),
+    "xargs": ({"-I", "-i", "-n", "-P", "-d", "-L", "-l", "-s", "-a", "-E", "-e", "--max-args", "--max-procs",
+               "--delimiter", "--arg-file", "--replace", "--max-lines", "--max-chars", "--eof"}, 0),
+    "time": ({"-f", "-o", "--format", "--output"}, 0), "exec": ({"-a"}, 0), "taskset": (set(), 1),
+    "flock": ({"-w", "-E", "--timeout", "--conflict-exit-code"}, 1),
+    "systemd-inhibit": ({"--what", "--who", "--why", "--mode"}, 0),
+}
+_KABUK = {"sh", "bash", "zsh", "dash", "ksh", "mksh", "fish", "csh", "tcsh", "yash", "busybox-sh"}
 _YETKI = {"sudo", "doas", "pkexec", "run0"}
 _GUC = {"shutdown", "reboot", "poweroff", "halt"}
 _SISTEMD_GUC = {"poweroff", "reboot", "suspend", "halt", "hibernate", "hybrid-sleep", "suspend-then-hibernate", "kexec"}
+# kabuk anahtar sözcükleri: asıl komut bunlardan SONRA gelir (`if true; then sudo reboot; fi`, `{ sudo x; }`, `! sudo x`)
+_ANAHTAR = {"{", "}", "!", "if", "then", "do", "else", "elif", "while", "until", "time", "fi", "done", "esac", "coproc",
+            "(", ")", "[[", "]]"}
+_ATAMA = re.compile(r"([A-Za-z_]\w*)(\+?=)(.*)", re.S)
+_ATAMA_KOMUT = {"export", "declare", "typeset", "local", "readonly"}
+# betik yorumlayıcıları: `python3 -c KOD`, `perl -e KOD` … → KOD dosya silme / komut çalıştırma / dinamik kod içeriyor mu
+_YORUMLAYICI = re.compile(r"(?:python|pypy)[\d.]*|perl[\d.]*|ruby[\d.]*|node|nodejs|deno|bun|php[\d.]*|lua[\d.]*|"
+                          r"luajit|tclsh[\d.]*|osascript|Rscript")
+_YORUMLAYICI_KOD = re.compile(
+    r"rmtree|remove_tree|rm_r|rm_rf|rmSync|rmdirSync|unlinkSync|unlink|\bremove\s*\(|removedirs|\brmdir\b|"
+    r"\bos\s*\.\s*(?:system|popen|exec\w*|spawn\w*|kill\w*|remove|truncate)|subprocess|child_process|\bpty\b|"
+    r"\bsystem\s*\(|\bexec\s*\(|\beval\s*\(|__import__|importlib|\bcompile\s*\(|\bqx\b|%x|`|FileUtils|"
+    r"execSync|spawnSync|\bspawn\s*\(|File\s*\.\s*delete|shell_exec|passthru|proc_open", re.I)
 # kök / ev dizini ya da sistem dizini hedefleri (rm, chmod -R, chown -R); rm için ayrıca * ve ./*
 _KOK_HEDEF = re.compile(r"/|/\*|~/?|~/\*|\$HOME/?|\$\{HOME\}/?|/(?:etc|usr|bin|sbin|lib|lib64|var|boot|home|root|opt|sys|dev|srv)/?\*?")
 _RM_HEDEF = re.compile(r"\*|\./\*|" + _KOK_HEDEF.pattern)
 _ZARARSIZ_AYGIT = re.compile(r"/dev/(?:null|zero|full|stdout|stderr|stdin|tty\w*|pts/\w+|fd/\d+)$")
-_AYIRAC = re.compile(r"\|\||&&|[;&|\n\r]|\$\(|`")
+_DISK_AYGIT = re.compile(r"/dev/(?:sd[a-z]|hd[a-z]|vd[a-z]|xvd[a-z]|nvme\d|mmcblk\d|md\d|dm-\d|disk\d)\S*")
 _DISK_YONLENDIR = re.compile(r">>?\s*/dev/(?:sd[a-z]|hd[a-z]|vd[a-z]|xvd[a-z]|nvme\d|mmcblk\d|md\d|dm-\d|disk\d)")
 _CATAL_BOMBASI = re.compile(r":\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;?\s*:|"
                             r"\b(\w+)\s*\(\s*\)\s*\{\s*\1\s*\|\s*\1\s*&\s*\}")
@@ -213,35 +282,333 @@ _BORU_KABUK = re.compile(r"\b(?:curl|wget)\b[^\n;&]*\|\s*(?:sudo\s+(?:-\S+\s+)*)
                          r"\b(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*<\(\s*(?:curl|wget)\b|"
                          r"\b(?:ba|z|da|k)?sh\s+-c\s+[\"']?\$\(\s*(?:curl|wget)\b")
 _VIM_SUDO = re.compile(r":\s*w\s*!\s*sudo\b")
+_ISARET = "\x00"  # komut ikamesinin (bilinmeyen değer) yer tutucusu
+_ANSI = {"n": "\n", "t": "\t", "r": "\r", "a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "v": "\v",
+         "\\": "\\", "'": "'", '"': '"', "?": "?"}
+_ANSI_SAYI = re.compile(r"x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3})|c(.)", re.S)
 
 
-def _belirtec(t):
-    """Komut belirteci: tırnak/ters bölü/parantez kırpılır (\\rm, "rm", 'rm')."""
-    return t.strip("'\"`\\()")
+# ---- küçük kabuk sözcük çözümleyicisi (bash'in sözcük bölme/tırnak kurallarının riskli komut denetimine yeten kısmı)
+
+def _ters_tirnak_sonu(s, i):
+    j = i
+    while j < len(s):
+        if s[j] == "\\":
+            j += 2
+            continue
+        if s[j] == "`":
+            return j
+        j += 1
+    return len(s)
+
+
+def _cift_tirnak_sonu(s, i):
+    """i: açılış "'ndan sonrası → kapanış "'ndan SONRAKİ dizin (yoksa len)."""
+    j = i
+    while j < len(s):
+        c = s[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == '"':
+            return j + 1
+        if c == "$" and s[j + 1:j + 2] == "(":
+            j = _kapanis(s, j + 2) + 1
+            continue
+        if c == "`":
+            j = _ters_tirnak_sonu(s, j + 1) + 1
+            continue
+        j += 1
+    return len(s)
+
+
+def _kapanis(s, i):
+    """i: '(' sonrası → eşleşen ')' dizini (tırnaklar atlanır) | len(s)."""
+    derin, j = 1, i
+    while j < len(s):
+        c = s[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == "'":
+            k = s.find("'", j + 1)
+            j = len(s) if k < 0 else k + 1
+            continue
+        if c == '"':
+            j = _cift_tirnak_sonu(s, j + 1)
+            continue
+        if c == "(":
+            derin += 1
+        elif c == ")":
+            derin -= 1
+            if derin == 0:
+                return j
+        j += 1
+    return len(s)
+
+
+def _ansi_c(s, i):
+    """$'…' (i: açılış tırnağından sonrası) → (çözülmüş metin, kapanıştan sonraki dizin)."""
+    out, j = [], i
+    while j < len(s):
+        c = s[j]
+        if c == "'":
+            return "".join(out), j + 1
+        if c == "\\" and j + 1 < len(s):
+            d = s[j + 1]
+            m = _ANSI_SAYI.match(s, j + 1)
+            if d in _ANSI:
+                out.append(_ANSI[d])
+                j += 2
+            elif m:
+                if m.group(5) is not None:
+                    out.append(chr(ord(m.group(5)) & 0x1F))
+                else:
+                    deger = m.group(1) or m.group(2) or m.group(3)
+                    try:
+                        out.append(chr(int(deger, 16) if deger else int(m.group(4), 8)))
+                    except (ValueError, OverflowError):
+                        pass
+                j = m.end()
+            else:
+                out.append("\\" + d)
+                j += 2
+            continue
+        out.append(c)
+        j += 1
+    return "".join(out), len(s)
+
+
+class _Komut:
+    __slots__ = ("kelimeler", "ic", "yon")
+
+    def __init__(self):
+        self.kelimeler, self.ic, self.yon = [], [], []  # sözcükler, komut ikamesi içleri, (işleç, hedef) yönlendirmeler
+
+
+def _ayristir(s):
+    """Kabuk metni → boru hatları [[_Komut]]. Tırnaklar/ters bölüler kaldırılır, $'…' açılır, komut ikamesi ($(…),
+    `…`, <(…), >(…)) içeriği ayrıca saklanır (yerinde _ISARET), yorumlar atlanır. Kapanmamış tırnak metnin sonuna dek."""
+    hatlar, hat = [], []
+    kom = _Komut()
+    kel = None  # None = sözcük başlamadı
+    yon_op = None  # bir sonraki sözcük bu yönlendirmenin hedefi
+    i, n = 0, len(s)
+
+    def sozcuk_bitir():
+        nonlocal kel, yon_op
+        if kel is not None:
+            if yon_op is not None:
+                kom.yon.append((yon_op, kel))
+                yon_op = None
+            else:
+                kom.kelimeler.append(kel)
+            kel = None
+
+    def komut_bitir():
+        nonlocal kom
+        sozcuk_bitir()
+        if kom.kelimeler or kom.ic or kom.yon:
+            hat.append(kom)
+        kom = _Komut()
+
+    def hat_bitir():
+        nonlocal hat
+        komut_bitir()
+        if hat:
+            hatlar.append(hat)
+        hat = []
+
+    def ekle(t):
+        nonlocal kel
+        kel = (kel or "") + t
+
+    while i < n:
+        c = s[i]
+        if c in " \t":
+            sozcuk_bitir()
+            i += 1
+        elif c in "\n\r;":
+            hat_bitir()
+            i += 1
+        elif c == "&":
+            if s[i + 1:i + 2] == "&":
+                hat_bitir()
+                i += 2
+            elif s[i + 1:i + 2] == ">":  # &> / &>> dosya
+                sozcuk_bitir()
+                j = i + 2 + (s[i + 2:i + 3] == ">")
+                yon_op = s[i:j]
+                i = j
+            else:
+                hat_bitir()
+                i += 1
+        elif c == "|":
+            if s[i + 1:i + 2] == "|":
+                hat_bitir()
+                i += 2
+            else:
+                komut_bitir()
+                i += 2 if s[i + 1:i + 2] == "&" else 1
+        elif c in "()":
+            hat_bitir()
+            i += 1
+        elif c in "<>":
+            if s[i + 1:i + 2] == "(":  # süreç ikamesi <(…) >(…)
+                j = _kapanis(s, i + 2)
+                kom.ic.append(s[i + 2:j])
+                ekle(_ISARET)
+                i = j + 1
+                continue
+            if kel is not None and kel.isdigit():  # 2>dosya: tanımlayıcı numarası sözcük değil
+                kel = None
+            sozcuk_bitir()
+            j = i
+            while j < n and s[j] in "<>&|-":
+                j += 1
+            yon_op = s[i:j]
+            i = j
+        elif c == "#" and kel is None:
+            k = s.find("\n", i)
+            i = n if k < 0 else k
+        elif c == "\\":
+            if s[i + 1:i + 2] == "\n":
+                i += 2
+            else:
+                ekle(s[i + 1:i + 2])
+                i += 2
+        elif c == "'":
+            k = s.find("'", i + 1)
+            k = n if k < 0 else k
+            ekle(s[i + 1:k])
+            i = k + 1
+        elif c == "$" and s[i + 1:i + 2] == "'":
+            metin, i = _ansi_c(s, i + 2)
+            ekle(metin)
+        elif c == "$" and s[i + 1:i + 3] == "((":  # aritmetik: komut değil
+            j = _kapanis(s, i + 2)
+            ekle(_ISARET)
+            i = min(n, j + 2)
+        elif c == "$" and s[i + 1:i + 2] == "(":
+            j = _kapanis(s, i + 2)
+            kom.ic.append(s[i + 2:j])
+            ekle(_ISARET)
+            i = j + 1
+        elif c == "`":
+            j = _ters_tirnak_sonu(s, i + 1)
+            kom.ic.append(s[i + 1:j])
+            ekle(_ISARET)
+            i = j + 1
+        elif c == '"':
+            j = i + 1
+            parca = []
+            while j < n and s[j] != '"':
+                d = s[j]
+                if d == "\\" and j + 1 < n:
+                    parca.append(s[j + 1] if s[j + 1] in '$`"\\' else ("" if s[j + 1] == "\n" else "\\" + s[j + 1]))
+                    j += 2
+                elif d == "$" and s[j + 1:j + 2] == "(" and s[j + 2:j + 3] != "(":
+                    k = _kapanis(s, j + 2)
+                    kom.ic.append(s[j + 2:k])
+                    parca.append(_ISARET)
+                    j = k + 1
+                elif d == "`":
+                    k = _ters_tirnak_sonu(s, j + 1)
+                    kom.ic.append(s[j + 1:k])
+                    parca.append(_ISARET)
+                    j = k + 1
+                else:
+                    parca.append(d)
+                    j += 1
+            ekle("".join(parca))
+            i = j + 1
+        else:
+            ekle(c)
+            i += 1
+    hat_bitir()
+    return hatlar
 
 
 def _yol_adi(t):
-    return _belirtec(t).rsplit("/", 1)[-1]
+    return t.rsplit("/", 1)[-1]
 
 
 def _ozyinelemeli(belirtecler):
     return any(re.fullmatch(r"-[a-zA-Z]*[rR][a-zA-Z]*", t) or t == "--recursive" for t in belirtecler)
 
 
-def _parca_riski(belirtecler, derinlik=0):
-    """Tek komut parçası (; && | ile bölünmüş) belirteçleri → neden listesi."""
+def _degisken_coz(t, degiskenler):
+    """$AD / ${AD} → bu metinde atanmış değeri (S=sudo; $S reboot); bilinmeyen değişken olduğu gibi kalır."""
+    if "$" not in t:
+        return t
+    return re.sub(r"\$\{(\w+)\}|\$(\w+)", lambda m: degiskenler.get(m.group(1) or m.group(2), m.group(0)), t)
+
+
+def _kume_ac(t):
+    """Küme açılımı (tek düzey): pre{a,b}post → [prea post, preb post]; `{sudo,reboot}` → sudo reboot."""
+    m = re.fullmatch(r"(.*?)\{([^{}]*,[^{}]*)\}(.*)", t, re.S)
+    if not m or _ISARET in t:
+        return [t]
+    return [m.group(1) + x + m.group(3) for x in m.group(2).split(",")]
+
+
+def _komut_riski(kom, degiskenler, derinlik):
+    """Tek basit komut → (neden listesi, asıl komut adı)."""
+    t = []
+    for w in kom.kelimeler:
+        t += _kume_ac(_degisken_coz(w, degiskenler))
     nedenler = []
-    t = [x for x in (_belirtec(b) for b in belirtecler) if x]
+    for op, hedef in kom.yon:
+        if ">" in op and _DISK_AYGIT.fullmatch(_degisken_coz(hedef, degiskenler)):
+            nedenler.append(_("> /dev/diskaygıtı: diskin üzerine yazar"))
     i = 0
-    while i < len(t):  # ortam atamaları (A=1 komut) ve sarmalayıcılar (time, nohup, nice -n 5, xargs…) atlanır
-        if re.fullmatch(r"\w+=\S*", t[i]) or _yol_adi(t[i]) in _SARMALAYICI or (
-                i and _yol_adi(t[i - 1]) in _SARMALAYICI and (t[i].startswith("-") or t[i].isdigit())):
+    while i < len(t):
+        w = t[i]
+        if w in _ANAHTAR:
             i += 1
-        else:
-            break
+            continue
+        m = _ATAMA.fullmatch(w)
+        if m:
+            if _ISARET not in m.group(3):
+                degiskenler[m.group(1)] = m.group(3)
+            i += 1
+            continue
+        if not w or w.startswith("$") or _ISARET in w:  # bilinmeyen değer komut konumunda: sonrakine bak
+            i += 1
+            continue
+        ad = _yol_adi(w)
+        if ad in ("busybox", "toybox"):  # busybox rm -rf ~ → rm
+            i += 1
+            continue
+        if ad in _SARMALAYICI:
+            secenekler, konumsal = _SARMALAYICI_SECENEK.get(ad, (set(), 0))
+            i += 1
+            while i < len(t) and t[i].startswith("-") and t[i] != "-":
+                o = t[i]
+                i += 1
+                if o == "--":
+                    break
+                if ad == "env" and (o in ("-S", "--split-string") or o.startswith("--split-string=")):
+                    ic = o.split("=", 1)[1] if "=" in o else (t[i] if i < len(t) else "")
+                    if "=" not in o:
+                        i += 1
+                    if derinlik < 3:
+                        nedenler += _metin_riskleri(" ".join([ic, *t[i:]]), derinlik + 1)
+                    return nedenler, ""
+                if o in secenekler and "=" not in o:
+                    i += 1
+            i += min(konumsal, max(0, len(t) - i - 1))
+            continue
+        break
     if i >= len(t):
-        return nedenler
+        return nedenler, ""
     komut, arg = _yol_adi(t[i]), t[i + 1:]
+    if komut in _ATAMA_KOMUT:
+        for a in arg:
+            m = _ATAMA.fullmatch(a)
+            if m and _ISARET not in m.group(3):
+                degiskenler[m.group(1)] = m.group(3)
+        return nedenler, komut
     if komut in _YETKI:
         nedenler.append(_("{komut} ile yetki yükseltme").format(komut=komut))
     if komut in _GUC or (komut in ("init", "telinit") and any(a in ("0", "6") for a in arg)):
@@ -260,45 +627,84 @@ def _parca_riski(belirtecler, derinlik=0):
             nedenler.append(_("git push +ref: zorla itme (uzak geçmişi ezer)"))
     if komut in ("chmod", "chown", "chgrp") and _ozyinelemeli(arg) and any(_KOK_HEDEF.fullmatch(a) for a in arg):
         nedenler.append(_("{komut} -R kök/ev/sistem dizininde: tüm dosyaların izin/sahipliğini değiştirir").format(komut=komut))
-    if komut in _KABUK | {"eval"} and derinlik < 2:  # sh -c "sudo …" / eval "rm -rf /": gömülü komut da denetlenir
+    if derinlik < 3:
+        if komut in _KABUK | {"eval"}:  # sh -c "sudo …" / bash -lc … / eval "rm -rf /": gömülü komut da denetlenir
+            for j, a in enumerate(arg):
+                if komut == "eval" or re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a):
+                    nedenler += _metin_riskleri(" ".join(arg[j + (0 if komut == "eval" else 1):]), derinlik + 1)
+                    break
+            if any(_yol_adi(w) in ("curl", "wget") for x in kom.ic for hat in _ayristir(x) for k_ in hat
+                   for w in k_.kelimeler):  # bash <(curl …), sh -c "$(curl …)" (tırnaklı/kaçışlı yazım dahil)
+                nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
+        if _YORUMLAYICI.fullmatch(komut):  # python3 -c KOD, perl -e KOD …
+            for j, a in enumerate(arg):
+                if re.fullmatch(r"-[a-zA-Z]*[ceEpr]", a) and j + 1 < len(arg) and _YORUMLAYICI_KOD.search(arg[j + 1]):
+                    nedenler.append(_("{komut} ile satır içi kod: dosya silme / komut çalıştırma / dinamik kod").format(
+                        komut=komut))
+                    break
+    if komut == "find":
+        if "-delete" in arg:
+            nedenler.append(_("find -delete: bulunan her şeyi siler (geri alınamaz)"))
         for j, a in enumerate(arg):
-            if a == "-c" or komut == "eval":
-                ic = " ".join(arg[j + (0 if komut == "eval" else 1):])
-                nedenler += _metin_riskleri(ic, derinlik + 1)
-                break
+            if a in ("-exec", "-execdir", "-ok", "-okdir") and j + 1 < len(arg):
+                son = next((n for n in range(j + 1, len(arg)) if arg[n] in (";", "+", "\\;")), len(arg))
+                ic = arg[j + 1:son]
+                if ic and _yol_adi(ic[0]) == "rm":
+                    nedenler.append(_("find -exec rm: bulunan her şeyi siler (geri alınamaz)"))
+                elif ic and derinlik < 3:
+                    alt = _Komut()
+                    alt.kelimeler = ic
+                    nedenler += _komut_riski(alt, dict(degiskenler), derinlik + 1)[0]
     # rm: komut konumunda (xargs/env/time sarmalayıcıları atlanmıştı) ya da bir yürütücünün argümanı olarak
-    # (sudo rm -rf, find … -exec rm -r). echo/grep/man gibi komutların METİN argümanındaki 'rm' sayılmaz.
+    # (sudo rm -rf). echo/grep/man gibi komutların METİN argümanındaki 'rm' sayılmaz.
     j = 0 if komut == "rm" else next((n for n, a in enumerate(arg) if _yol_adi(a) == "rm"), None) \
-        if komut in _YETKI | {"find"} else None
+        if komut in _YETKI else None
     if j is not None:
         sonrasi = arg[j + (0 if komut == "rm" else 1):]
         if _ozyinelemeli(sonrasi) or "--no-preserve-root" in sonrasi:
             tehlikeli = any(_RM_HEDEF.fullmatch(x) for x in sonrasi)
             nedenler.append(_("rm -r: özyinelemeli silme (geri alınamaz)")
                             + (_("; hedef kök/ev dizini ya da *") if tehlikeli else ""))
-    return nedenler
+    return nedenler, komut
 
 
 def _metin_riskleri(metin, derinlik=0):
     nedenler = []
     if _CATAL_BOMBASI.search(metin):
         nedenler.append(_("çatal bombası (sistemi kilitler)"))
-    if _BORU_KABUK.search(metin):
-        nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
     if _DISK_YONLENDIR.search(metin):
         nedenler.append(_("> /dev/diskaygıtı: diskin üzerine yazar"))
     if _VIM_SUDO.search(metin):
         nedenler.append(_(":w !sudo: dosyayı yetkiyle yazar"))
-    for parca in _AYIRAC.split(metin):
-        nedenler += _parca_riski(parca.split(), derinlik)
+    hatlar = _ayristir(metin)
+    duz = " ; ".join(" | ".join(" ".join(k.kelimeler) for k in hat) for hat in hatlar)  # tırnaksız/kaçışsız hâli
+    if _BORU_KABUK.search(metin) or _BORU_KABUK.search(duz):
+        nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
+    degiskenler = {}
+    for hat in hatlar:
+        adlar = []
+        for kom in hat:
+            n_, ad = _komut_riski(kom, degiskenler, derinlik)
+            nedenler += n_
+            adlar.append(ad)
+            if derinlik < 3:
+                for ic in kom.ic:  # komut ikamesinin içi de çalışır: $(sudo reboot)
+                    nedenler += _metin_riskleri(ic, derinlik + 1)
+        indir = next((n for n, a in enumerate(adlar) if a in ("curl", "wget")), None)
+        if indir is not None and any(a in _KABUK or a in _YETKI for a in adlar[indir + 1:]):
+            nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
     return nedenler
 
 
 def riskli_komut(metin):
     """Metin yıkıcı bir kabuk komutu kalıbına uyuyor mu? → neden metni | None. Yalnız METNE bakar; hedef pencerenin
-    uçbirim olup olmadığı (ucbirim_mi) çağıranda denetlenir. Dar, gerekçeli kalıplar: geri alınamaz silme (rm -r),
-    yetki yükseltme (sudo/doas/pkexec/run0), indirileni kabuğa verme, disk biçimlendirme/üzerine yazma, çatal bombası,
-    kökte toplu izin/sahiplik değişikliği, kapatma/yeniden başlatma/askıya alma, zorla git push, :w !sudo."""
+    uçbirim olup olmadığı (ucbirim_mi) çağıranda denetlenir. Metin kabuk kurallarıyla sözcüklere ayrılır (tırnak/ters
+    bölü kaldırılır, $'…' açılır, komut ikamesinin içi ayrıca denetlenir); kabuk anahtar sözcükleri ({ } ! if then do…),
+    değişken atamaları ve bilinmeyen $DEĞİŞKEN komut adı atlanır, aynı metindeki atama çözülür (S=sudo; $S reboot);
+    busybox X → X; sh/bash -c, eval, env -S içi ve python -c / perl -e kodu yeniden denetlenir.
+    Dar, gerekçeli kalıplar: geri alınamaz silme (rm -r, find -delete, find -exec rm), yetki yükseltme
+    (sudo/doas/pkexec/run0), indirileni kabuğa verme, disk biçimlendirme/üzerine yazma, çatal bombası, kökte toplu
+    izin/sahiplik değişikliği, kapatma/yeniden başlatma/askıya alma, zorla git push, :w !sudo."""
     if not metin or not metin.strip():
         return None
     nedenler = list(dict.fromkeys(_metin_riskleri(metin)))
@@ -444,10 +850,17 @@ def girdi_turu(satirlar):
 
 def girdi_seviye_denetle(k, satirlar):
     """Arka uçların Girdi.gonder'i, denetle(k, desen)'ten hemen sonra çağırır (iki arka uçta aynı): gönderilecek
-    satırların türüne göre uygulama erişim seviyesi. Ayar satırları (typedelay/typehold) denetlenmez."""
+    satırların türüne göre uygulama erişim seviyesi. Ayar satırları (typedelay/typehold) denetlenmez. Masaüstü
+    kipinde klavye girdisi etkin pencereye gider: o pencere ajanın kendi istemcisiyse ya da onaysız bir sistem
+    istemiyse (polkit, KWallet, parola sorucusu…) burada durulur (fare girdisini imlec_alti_denetle denetler)."""
     tur = girdi_turu(satirlar)
     if tur:
         seviye_denetle(k, tur)
+    if tur == "klavye" and (k == EKRAN or not k):
+        a = sec().aktif()
+        if a:
+            kendi_istemci_denetle(a)
+            sistem_istemi_denetle(a)
 
 
 # ---------------------------------------------------------------- pencere / başlık / sınıf kilidi
@@ -460,8 +873,17 @@ def sinif_denetle(k):
                 sinif=repr(sinif), desen=SINIF_DESEN))
 
 
+def hedef_pencere_denetle(k):
+    """Bir pencereye girdi gitmeden önceki pencere kuralları (başlık/sınıf kilidi hariç): yasak (10), ajanın kendi
+    istemcisi (10), onaysız sistem istemi (10). Tıklamanın düştüğü pencere (imleç altı) için de kullanılır."""
+    yasak_denetle(k)
+    kendi_istemci_denetle(k)
+    sistem_istemi_denetle(k)
+
+
 def denetle(k, desen):
-    """Girdi göndermeden HEMEN önce: pencere hâlâ aktif mi, yasak değil mi, başlık (sekme) doğru mu."""
+    """Girdi göndermeden HEMEN önce: pencere hâlâ aktif mi, yasak değil mi, ajanın kendi istemcisi ya da onaysız
+    sistem istemi değil mi, başlık (sekme) doğru mu."""
     au = sec()
     if k == EKRAN:  # masaüstü kipi: etkin pencere yasak olmasın; -b verildiyse etkin pencerenin başlığı uysun
         a = au.aktif()
@@ -480,10 +902,11 @@ def denetle(k, desen):
 
 
 def pencere_denetle(k, desen):
-    """denetle'nin pencere kilitleri, ETKİN pencere şartı OLMADAN: yasak pencere (10), başlık (4) ve sınıf (4) kilidi.
-    Odağı almayan yollar (erişilebilirlik eylemi: erisim.py) için; fare/klavye yolunun denetle()'siyle aynı sonuç."""
+    """denetle'nin pencere kilitleri, ETKİN pencere şartı OLMADAN: yasak pencere (10), ajanın kendi istemcisi (10),
+    onaysız sistem istemi (10), başlık (4) ve sınıf (4) kilidi. Odağı almayan yollar (erişilebilirlik eylemi:
+    erisim.py) için; fare/klavye yolunun denetle()'siyle aynı sonuç."""
     au = sec()
-    yasak_denetle(k)
+    hedef_pencere_denetle(k)
     if desen:
         b = au.baslik(k)
         if not re.search(desen, b, re.I):
@@ -494,8 +917,9 @@ def pencere_denetle(k, desen):
 
 def imlec_alti_denetle(k, px=None, py=None):
     """mouseto'dan sonra, tıklamadan ÖNCE (tek sorgu): (1) imleç gerçekten hedef noktada mı — kullanıcı
-    arada fareyi oynattıysa tıklama başka yere düşerdi → 12; (2) altındaki pencere hedef mi? Yasak → 10; başka
-    uygulamanın penceresi (bildirim, üstte duran pencere) → 3. Aynı uygulamanın açılır menüsü serbest."""
+    arada fareyi oynattıysa tıklama başka yere düşerdi → 12; (2) altındaki pencere hedef mi? Yasak / ajanın kendi
+    istemcisi / onaysız sistem istemi → 10; başka uygulamanın penceresi (bildirim, üstte duran pencere) → 3. Aynı
+    uygulamanın açılır menüsü serbest."""
     au = sec()
     fx, fy, w = au.fare()
     if px is not None and fx is not None and (abs(fx - px) > 2 or abs(fy - py) > 2):
@@ -505,7 +929,7 @@ def imlec_alti_denetle(k, px=None, py=None):
         raise Dur(3, _("imlecin altındaki pencere doğrulanamadı; tıklanmadı"))
     if w == k:
         return
-    yasak_denetle(w)
+    hedef_pencere_denetle(w)
     seviye_denetle(w, "fare")  # imlecin altındaki başka pencere 'goruntule' seviyesinde olabilir
     if k == EKRAN:
         return
@@ -521,6 +945,7 @@ _EYLEM = threading.local()  # iş parçacığı başına: bu eylem için insan o
 def eylem_basladi():
     """Her eylemin başında (eylem.girdi_al) çağrılır: önceki eylemin onayı yeni eyleme TAŞINMAZ."""
     _EYLEM.onaylandi = False
+    _EYLEM.sistem_onay = set()  # bu eylemde onaylanan sistem istemi pencereleri
 
 
 def _panelden_onay(eylem, hedef, ayrinti, goruntu=None):
@@ -550,14 +975,17 @@ def hedef_goruntusu(k, nokta=None):
 
         from .gorsel import pencere_goruntusu
         if nokta is None:
-            im, _geo, _kok = pencere_goruntusu(k)
+            im, _geo, kok = pencere_goruntusu(k)
+            bolge = (kok[0], kok[1], im.width, im.height)
             im = im.copy()
             im.thumbnail((640, 400))
+            im.info["deskhand_bolge"] = bolge  # kırpılan bölge (pencere pikseli): onay sonrası doğrulama için
             return im
         x, y = round(nokta[0]), round(nokta[1])
         gw, gh = ONAY_GORUNTU
         im, _geo, (bx, by) = pencere_goruntusu(k, (x - gw // 2, y - gh // 2, gw, gh))
         im = im.convert("RGB")
+        im.info["deskhand_bolge"] = (bx, by, im.width, im.height)
         d = ImageDraw.Draw(im)
         px, py = x - bx, y - by
         d.rectangle([px - 14, py - 14, px + 14, py + 14], outline=(230, 30, 30), width=3)
@@ -699,6 +1127,231 @@ def onayli_gecerli(onayli):
     """--onayli (kullanıcı sohbette açıkça onayladı) geçerli mi? Gözetimsiz kipte sohbet/insan yoktur: --onayli
     sayılmaz, onay gerektiren her eylem reddedilir (onay.iste_sonuc 'gozetimsiz')."""
     return bool(onayli) and not gozetimsiz()
+
+
+# ---------------------------------------------------------------- ajanın kendi istemcisi (deskhand/kendi.py)
+
+def _pencere_pid(au, k):
+    f = getattr(au, "pid", None)
+    if f is None:
+        return None
+    try:
+        return f(k) or None
+    except Dur:
+        return None
+
+
+def kendi_istemci_denetle(k):
+    """Pencere, Deskhand'i çalıştıran ajanın KENDİ istemcisi mi (sahibi ata süreç: Claude Code'un uçbirimi…)? → Dur 10.
+    Ajan kendi izin istemine tuş/yazı/tık gönderip kendini onaylayamasın. Okuma/ekran görüntüsü serbesttir."""
+    if not k or k == EKRAN:
+        return
+    from . import kendi
+    au = sec()
+    pid = _pencere_pid(au, k)
+    sinif = au.sinif(k)
+    r = kendi.kendi_mi(pid, sinif, au.ad, ucbirim_mi)
+    if not r:
+        return
+    tur, ayr = r
+    neden = {"pid": _("pencerenin sahibi süreç ({pid}) bu ajanı çalıştıran süreç zincirinde").format(pid=ayr),
+             "coklayici": _("uçbirim çoklayıcısı (tmux/screen/zellij) çözülemedi: tüm uçbirim pencereleri korunur"),
+             "sinif": _("PID'i bilinmeyen uçbirim penceresi, ajanın uçbirimiyle aynı türde")}[tur]
+    raise Dur(10, _("AJANIN KENDİ İSTEMCİSİ: {baslik} (sınıf {sinif}): {neden}; ajan kendi izin istemini "
+                    "onaylayamasın diye bu pencereye hiçbir girdi gönderilmez (okuma serbest)").format(
+        baslik=repr(au.baslik(k)), sinif=repr(sinif), neden=neden))
+
+
+# ---------------------------------------------------------------- sistem yetki/parola istemleri
+
+# Sistem yetki / parola / izin istemleri: YASAK değil, her girdi insan onayı ister (onaysız 10, gözetimsiz kipte ret).
+# Tek sabit liste; pencere SINIFINDA ve sahibi sürecin adında (comm 15 karakterle kısalır: polkit-kde-auth,
+# xdg-desktop-por) sözcük olarak aranır.
+SISTEM_ISTEMLERI = (
+    r"polkit[\w-]*", r"lxpolkit", r"lxqt-policykit[\w-]*", r"hyprpolkitagent", r"kwalletd\d*", r"ksecretd",
+    r"kwallet-query", r"ksshaskpass\d*", r"(?:x11-)?ssh-askpass[\w-]*", r"pinentry[\w-]*", r"xdg-desktop-por[\w-]*",
+    r"org\.freedesktop\.impl\.portal[\w.-]*", r"kdesu(?:do)?", r"gcr-prompter", r"sudo", r"pkexec", r"run0",
+)
+_SISTEM_ISTEMI = re.compile(r"(?<![a-z0-9])(?:" + "|".join(SISTEM_ISTEMLERI) + r")(?![a-z0-9])", re.I)
+_SISTEM_ONBELLEK = {}  # (arka uç, kimlik) → (zaman, ad | None)
+
+
+def sistem_istemi_mi(k):
+    """Pencere bir sistem yetki/parola/izin istemi mi (polkit aracısı, KWallet, ksshaskpass/pinentry, xdg-desktop-portal
+    izin diyaloğu, kdesu)? → tanınan ad | None. Sınıf + sahibi sürecin adı (comm/exe); 2 sn önbellek."""
+    if not k or k == EKRAN:
+        return None
+    import time as _t
+    au = sec()
+    anahtar = (au.ad, k)
+    kayit = _SISTEM_ONBELLEK.get(anahtar)
+    if kayit and _t.monotonic() - kayit[0] < 2.0:
+        return kayit[1]
+    adlar = [au.sinif(k)]
+    pid = _pencere_pid(au, k)
+    if pid:
+        from . import kendi
+        adlar += list(kendi.surec_adi(pid))
+    ad = next((m.group(0) for m in (_SISTEM_ISTEMI.search(a or "") for a in adlar) if m), None)
+    if len(_SISTEM_ONBELLEK) > 256:
+        _SISTEM_ONBELLEK.clear()
+    _SISTEM_ONBELLEK[anahtar] = (_t.monotonic(), ad)
+    return ad
+
+
+def sistem_istemi_denetle(k):
+    """Girdiden HEMEN önce: sistem istemine bu eylemde onay alınmadıysa Dur 10 (onay eylem başında
+    sistem_istemi_engel ile sorulur; sorulmamış her yol burada güvenli tarafta durur)."""
+    ad = sistem_istemi_mi(k)
+    if ad and k not in getattr(_EYLEM, "sistem_onay", set()):
+        raise Dur(10, _("SİSTEM İSTEMİ: {baslik} ({ad}) bir yetki/parola/izin istemi; girdi kullanıcının onayını ister "
+                        "(bu eylem için onay alınmadı)").format(baslik=repr(sec().baslik(k)), ad=ad), tur="hassas")
+
+
+def sistem_istemi_engel(k, onayli, ne, goruntu_al=True):
+    """Hedef pencere sistem istemiyse insan onayı (--onayli yoksa panelden; gözetimsiz kipte ret) → Dur 10. Onay bu
+    eylem boyunca o pencere için geçerlidir. → sistem istemi mi (onaylandı)."""
+    ad = sistem_istemi_mi(k)
+    if not ad:
+        return False
+    if not hasattr(_EYLEM, "sistem_onay"):
+        _EYLEM.sistem_onay = set()
+    if k in _EYLEM.sistem_onay:
+        return True
+    if not onayli_gecerli(onayli):
+        b = sec().baslik(k)
+        goruntu = None if getattr(_EYLEM, "onaylandi", False) or not goruntu_al else hedef_goruntusu(k)
+        izin, neden = _panelden_onay(_("Sistem istemine girdi: {ad}").format(ad=ad), b,
+                                     _("Bu pencere bir sistem yetki/parola/izin istemi ({ad}). Ajan ona {ne} göndermek "
+                                       "istiyor.").format(ad=ad, ne=ne), goruntu)
+        if not izin:
+            raise Dur(10, _("SİSTEM İSTEMİ ({ad} ← {baslik}): yetki/parola/izin istemine {ne} kullanıcının onayını "
+                            "ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
+                ad=ad, baslik=repr(b), ne=ne, neden=neden), tur="hassas")
+    _EYLEM.sistem_onay.add(k)
+    return True
+
+
+# ---------------------------------------------------------------- pano: Deskhand'in yazdığı metinler, yapıştırma
+
+PANO_OZET_SAYI = 32
+_KENDI_PANO_BELLEK = []
+
+
+def _pano_ozeti(metin):
+    import hashlib
+    return hashlib.sha256(metin.encode()).hexdigest()
+
+
+def _pano_ozet_yolu():
+    return os.path.join(yollar.runtime_dir(), "pano-ozetleri")
+
+
+def kendi_pano_ekle(metin):
+    """Deskhand'in (bu oturumda: MCP sunucusu ya da CLI `pano yaz`) panoya yazdığı metnin ÖZETİ (içerik tutulmaz):
+    süreç belleğinde + RUNTIME_DIR/pano-ozetleri (0600, son PANO_OZET_SAYI). Bu metni okumak/yapıştırmak onay istemez."""
+    if not metin:
+        return
+    oz = _pano_ozeti(metin)
+    _KENDI_PANO_BELLEK.append(oz)
+    del _KENDI_PANO_BELLEK[:-PANO_OZET_SAYI]
+    try:
+        import fcntl
+        yol = _pano_ozet_yolu()
+        os.makedirs(os.path.dirname(yol), mode=0o700, exist_ok=True)
+        fd = os.open(yol, os.O_RDWR | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "r+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            satirlar = [l.strip() for l in f.read().split() if l.strip()]
+            satirlar = (satirlar + [oz])[-PANO_OZET_SAYI:]
+            f.seek(0)
+            f.truncate()
+            f.write("\n".join(satirlar) + "\n")
+    except OSError:
+        pass
+
+
+def kendi_pano_mu(metin):
+    """Metin Deskhand'in bu oturumda panoya yazdığı metinlerden biri mi?"""
+    if metin is None:
+        return False
+    oz = _pano_ozeti(metin)
+    if oz in _KENDI_PANO_BELLEK:
+        return True
+    try:
+        with open(_pano_ozet_yolu()) as f:
+            return oz in f.read().split()
+    except OSError:
+        return False
+
+
+_OKUNAMADI = object()
+
+
+def yapistirma_engel(k, onayli, kaynak="pano"):
+    """kde (kullanıcının gerçek panosu): yapıştırma kısayolu (ctrl+v, ctrl+shift+v, shift+insert) ya da orta tık
+    (kaynak="secim": birincil seçim) panodaki metni hedefe yazar → pano okuma onayının arka kapısı olmasın: pano boş
+    değilse ve Deskhand'in yazdığı metin değilse insan onayı (okunamıyorsa da). Deskhand'in kendi yapıştırarak yazma
+    yolu (eylem._yapistirarak_yaz) bu denetimden geçmez. → onay gerekti mi (onaylandı)."""
+    au = sec()
+    if au.ad != "kde":
+        return False
+    try:
+        metin = au.pano_oku() if kaynak == "pano" else getattr(au, "secim_oku", lambda: _OKUNAMADI)()
+    except Dur:
+        metin = _OKUNAMADI
+    if metin is None or (metin is not _OKUNAMADI and kendi_pano_mu(metin)):
+        return False
+    if onayli_gecerli(onayli):
+        return True
+    b = au.baslik(k) if k and k != EKRAN else ""
+    uzunluk = "?" if metin is _OKUNAMADI else len(metin)
+    ne = _("panodan yapıştırma") if kaynak == "pano" else _("orta tıkla seçimi yapıştırma")
+    izin, neden = _panelden_onay(_("Panoyu yapıştır"), b, _("Ajan kullanıcının panosundaki metni ({n} karakter) bu "
+                                                          "pencereye yapıştırmak istiyor ({ne}).").format(n=uzunluk, ne=ne))
+    if not izin:
+        raise Dur(10, _("HASSAS pano: {ne} kullanıcının panosunu ajanın görebileceği yere taşır; kullanıcının onayını "
+                        "ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
+            ne=ne, neden=neden), tur="hassas")
+    return True
+
+
+def parola_alani_engel(k, onayli, uzunluk, ne):
+    """Hedef/odaklı öge bir PAROLA alanı (AT-SPI rolü 'password text'): yazı / yapıştırma / değer yazma insan onayı
+    ister (--onayli yoksa panelden; red/gözetimsiz → 10). Metin hiçbir iletiye/günlüğe/onay isteğine yazılmaz: yalnız
+    uzunluğu. → True (onaylandı)."""
+    if onayli_gecerli(onayli):
+        return True
+    b = sec().baslik(k) if k and k != EKRAN else ""
+    izin, neden = _panelden_onay(_("Parola alanına yaz"), b, _("Ajan bir parola alanına {n} karakter yazmak istiyor "
+                                                              "({ne}).").format(n=uzunluk, ne=ne))
+    if not izin:
+        raise Dur(10, _("HASSAS: parola alanına {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça "
+                        "onayladıysa --onayli ile tekrarla").format(ne=ne, neden=neden), tur="hassas")
+    return True
+
+
+# ---------------------------------------------------------------- insan önceliği (girdi nesnesi dışındaki yollar)
+
+def insan_onceligi(ne, azami=8.0):
+    """Girdi nesnesi kullanmayan yollar (pencere yönetimi, pencere kapatma, pano yazma, erişilebilirlik eylemi):
+    kullanıcı klavye/fare kullanıyorsa (kde) ya da Devral açıksa (sanal) durgunluğu bekle (en çok `azami` sn), sonra
+    Dur 12. `ne`: yapılmayan eylemin adı (çevrilmiş)."""
+    import sys as _sys
+    import time as _t
+    from .hata import dur_denetle
+    au = sec()
+    bitis = _t.monotonic() + azami
+    uyarildi = False
+    while au.insan_var_mi():
+        if not uyarildi:
+            print(_("bekleniyor: kullanıcı bilgisayarı kullanıyor…"), file=_sys.stderr)
+            uyarildi = True
+        if _t.monotonic() >= bitis:
+            raise Dur(12, _("kullanıcı {sn} sn boyunca bilgisayarı kullandı (insan önceliği); {ne} yapılmadı").format(
+                sn=f"{azami:.0f}", ne=ne))
+        dur_denetle()
+        _t.sleep(0.3)
 
 
 # ---------------------------------------------------------------- DUR anahtarı

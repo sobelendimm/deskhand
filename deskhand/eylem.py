@@ -16,9 +16,9 @@ from . import yollar
 from .arka_uc import EKRAN, ArkaUc, sec
 from .gorsel import bolge_coz, pencere_goruntusu, renk_alanlari, simge_bul_ic
 from .gunluk import gunluk
-from . import guvenlik
-from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, imlec_alti_denetle, onay_tusu_mu, yasak_denetle,
-                       yazi_onay_ister_mi)
+from . import guvenlik, ucbirim
+from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, hedef_pencere_denetle,
+                       imlec_alti_denetle, onay_tusu_mu, yasak_denetle, yazi_onay_ister_mi)
 from .hata import Dur, dur_denetle
 from .i18n import N_, _
 from .insan import HARF_SN
@@ -82,9 +82,25 @@ def _paylasilan():
     return getattr(_DIZI, "g", None)
 
 
+def _bekleyen_onay_kapisi():
+    """Başka bir süreç (ör. MCP sunucusu) bu masaüstü için insan onayı beklerken bu süreç girdi göndermesin: onay
+    diyaloğundaki hedef araya giren girdiyle değişebilirdi → Dur 7. `onay.bekleyen_var` yoksa (eski onay modülü) yok."""
+    try:
+        from . import onay
+    except Exception:  # noqa: BLE001
+        return
+    f = getattr(onay, "bekleyen_var", None)
+    if f is None:
+        return
+    import os
+    if f(_au().ad, haric_pid=os.getpid()):
+        raise Dur(7, _("onay bekleniyor: başka bir Deskhand sürecinin insan onayı sürerken girdi gönderilmez"))
+
+
 def girdi_al(etiket="", gizli=False):
     """Girdi nesnesi: arka ucun girdisi, üst katmanın güvenlik denetimi (guvenlik.denetle) bağlı."""
     guvenlik.eylem_basladi()
+    _bekleyen_onay_kapisi()
     pg = _paylasilan()
     if pg is not None:
         pg.etiket, pg.gizli = f"dizi: {etiket}", gizli
@@ -167,6 +183,8 @@ def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod
     (hata, kesinti, DUR) `zorla` ile yapılır (basili_bekle/k_bas ile aynı güvence)."""
     if mod:
         guvenlik.seviye_denetle(k, "klavye")  # değiştirici tuş basılı tıklama klavye girdisidir: 'tikla' seviyesinde yok
+    if dugme == "orta":  # kde: orta tık birincil seçimi yapıştırır → pano okuma onayının arka kapısı olmasın
+        guvenlik.yapistirma_engel(k, getattr(g, "onayli", False), "secim")
     geo = geo or _au().geometri(k)
     fx, fy, px, py = ekran_noktasi(k, x, y, geo)
     _au().one_getir(k)
@@ -174,8 +192,15 @@ def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod
         raise Dur(8, _("pencere taşındı ya da boyutu değişti; tıklanmadı"))
     g.gonder(k, desen, f"mouseto {fx:.6f} {fy:.6f}")
     time.sleep(0.04)  # imleç üzerine gelme (hover) olayı işlensin
+    if k == EKRAN:  # masaüstü kipi: noktadaki pencere bir sistem istemiyse (polkit, KWallet…) önce insan onayı
+        w = _au().fare()[2]
+        if w and guvenlik.sistem_istemi_mi(w):
+            guvenlik.sistem_istemi_engel(w, getattr(g, "onayli", False), _("tıklama"))
     imlec_alti_denetle(k, px, py)
+    onay_hedefi_dogrula(g, k, x, y)
     g.son_fare = (px, py)
+    if k != EKRAN:
+        ucbirim.tampon_isle(_au(), k, kirli=True)  # uçbirimde tık imleci taşıyabilir: satır artık bilinmez
     tus = TIKLA_TUS[dugme]
     mod = list(mod or ())
     bastik = []
@@ -213,6 +238,8 @@ KAYDIR_YON = {"asagi": ("wheel", -1), "yukari": ("wheel", 1), "sag": ("hwheel", 
 
 
 def kaydir_ic(g, k, desen, yon, adim, nokta=None):
+    if k != EKRAN:
+        guvenlik.sistem_istemi_engel(k, False, _("kaydırma"))
     X, Y, W, H = geo = _au().geometri(k)
     x, y = nokta or (W // 2, H // 2)
     fx, fy, px, py = ekran_noktasi(k, x, y, geo)
@@ -348,13 +375,29 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
 def yaz_ic(g, k, desen, metin, onayli=False):
     metin = metin.replace("\r\n", "\n").replace("\r", "\n")
     guvenlik.seviye_denetle(k, "klavye")  # uygulama erişim seviyesi: onay diyaloğundan ÖNCE (boşuna sormasın)
+    onay = False
     if yazi_onay_ister_mi(metin) and _yazi_hassas(g, k, onayli, metin):  # yazmadan ÖNCE (bir eylem = bir onay)
-        g.etiket += " --onayli"
+        onay = True
+    # uçbirim ENTER KAPISI: yazının ilk satırı mevcut giriş satırına eklenip çalışacak (parça parça yazılmış komut)
+    if "\n" in metin and ucbirim.enter_kapisi(k, onayli, ek=metin.split("\n", 1)[0], gizli=g.gizli):
+        onay = True
+    if onay:
+        _onayli_etiket(g)
         _au().one_getir(k)  # onay diyaloğu odağı almış olabilir
-    if yapistirarak_mi(metin):
-        if _yapistirarak_yaz(g, k, desen, metin, onayli):
-            return
-        metin = yazima_hazirla(metin)  # pano yok: eski yol (yedekli karakterler değişir, yedeği yoksa DUR)
+    tamam = False
+    try:
+        if yapistirarak_mi(metin):
+            if _yapistirarak_yaz(g, k, desen, metin, onayli):
+                tamam = True
+                return
+            metin = yazima_hazirla(metin)  # pano yok: eski yol (yedekli karakterler değişir, yedeği yoksa DUR)
+        _harf_harf_yaz(g, k, desen, metin, onayli)
+        tamam = True
+    finally:  # uçbirim tamponu: yarıda kesilen yazıda satırın içeriği bilinmez
+        ucbirim.tampon_isle(_au(), k, yazi=metin if tamam else None, kirli=not tamam, onayli=onay and tamam)
+
+
+def _harf_harf_yaz(g, k, desen, metin, onayli):
     g.gonder(k, desen, "typedelay 4", "typehold 6")
     # kelime + ardındaki boşluk birer parça; uzun kelimeler 6 harfte bölünür (sızıntı üst sınırı küçük kalsın)
     parcalar = []
@@ -376,6 +419,10 @@ def yaz_ic(g, k, desen, metin, onayli=False):
             for c in p:
                 if g.kesildi:
                     e = g.kesildi
+                    if g.gizli:  # gizli yazının harfleri iletiye/günlüğe taşınmaz: yalnız uzunluk
+                        raise Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
+                                           "yeni yere gitmiş olabilir, oraya bak").format(
+                            mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
                     raise Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
                                        "({son}) yeni yere gitmiş olabilir, oraya bak").format(
                         mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin), son=repr(metin[max(0, yazilan - 2):yazilan])))
@@ -488,12 +535,51 @@ def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=()):
     """Tıklanacak nokta ve oradaki yazı belli olduktan SONRA tek onay (bir eylem = bir onay): ödeme sayfası ve/veya
     hassas düğme. Onay isteği noktadaki yazıyı + hassas düğme metnini + çevresinin küçük görüntüsünü taşır."""
     guvenlik.seviye_denetle(k, "fare")  # erişim seviyesi: onay diyaloğundan ÖNCE
+    g.onayli = onayli
+    if k != EKRAN and guvenlik.sistem_istemi_engel(k, onayli, ne):  # polkit/KWallet/parola sorucusu: onay
+        _onayli_etiket(g)
     metinler = [*ek_metinler, *yakin]
+    once = getattr(guvenlik._EYLEM, "onaylandi", False)
+    panelden = not guvenlik.onayli_gecerli(onayli)
     if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=(x, y)):  # True = hassas sayfa VE onaylandı
         _onayli_etiket(g)
         onayli = True
     if hassas_engel(onayli, *metinler, hedef=_au().baslik(k), k=k, nokta=(x, y)):
         _onayli_etiket(g)
+    if panelden and not once and getattr(guvenlik._EYLEM, "onaylandi", False):
+        # panelden onay verildi: tıklamadan hemen önce noktadaki yazı yeniden okunup onaylananla karşılaştırılır
+        g.onay_hedefi = (round(x), round(y), [m for m in metinler if m])
+
+
+ONAY_BENZERLIK = 0.85  # onay verilen hedefteki yazı ile tıklamadan hemen önceki yazının en düşük benzerliği
+
+
+def ayni_hedef_mi(onaylanan, simdiki):
+    """Onay anındaki yazılar ile şimdiki yazılar aynı hedefi mi gösteriyor (OCR gürültüsüne dayanıklı bulanık
+    karşılaştırma)? Onay anında yazı yoksa şimdi de olmamalı."""
+    import difflib
+    from .ocr import katla
+    a = [katla(t).strip() for t in onaylanan if t and t.strip()]
+    b = [katla(t).strip() for t in simdiki if t and t.strip()]
+    if not a:
+        return not b
+    if not b:
+        return False
+    return max(difflib.SequenceMatcher(None, x, y).ratio() for x in a for y in b) >= ONAY_BENZERLIK
+
+
+def onay_hedefi_dogrula(g, k, x, y):
+    """Hassas tık panelden onaylandıysa, tıklamadan HEMEN önce noktadaki yazı yeniden okunur; onaylanandan farklıysa
+    (onay beklenirken sayfa/düğme değişti) tık yapılmaz → Dur 10."""
+    h = getattr(g, "onay_hedefi", None)
+    if not h or (h[0], h[1]) != (round(x), round(y)):
+        return
+    g.onay_hedefi = None
+    simdi = nokta_metni(k, x, y)
+    if not ayni_hedef_mi(h[2], simdi):
+        raise Dur(10, _("onay verilen hedef değişti: noktadaki yazı artık {simdi} (onaylanan: {onaylanan}); "
+                        "tıklanmadı").format(simdi=" | ".join(simdi) or _("(yok)"),
+                                             onaylanan=" | ".join(h[2]) or _("(yok)")))
 
 
 def k_tikla(a):
@@ -565,6 +651,24 @@ def tus_coz(kombinasyon, ayri_tuslar=False):
     return " ".join(cikti)
 
 
+def _tus_onaylari(g, k, onayli, kombinasyon, birlikte=False):
+    """tus/bas onayları (bir eylem = bir onay): sistem istemi, riskli tuş, yapıştırma (kde: kullanıcının panosu),
+    ödeme sayfasında Enter/boşluk, uçbirimde satırı çalıştıran tuş (Enter kapısı)."""
+    if guvenlik.sistem_istemi_engel(k, onayli, _("tuş")):
+        _onayli_etiket(g)
+    if guvenlik.riskli_tus_engel(k, onayli, kombinasyon, birlikte=birlikte):  # ctrl+alt+del, meta+l…
+        _onayli_etiket(g)
+    birlesik = "+".join(kombinasyon.split()) if birlikte else kombinasyon  # bas: tuşlar aynı anda basılı
+    if guvenlik.yapistir_tusu_mu(birlesik) and guvenlik.yapistirma_engel(k, onayli):
+        _onayli_etiket(g)
+    # Enter/boşluk ÇÖZÜLMÜŞ tuşa göre (x:Return, k:28, kpenter… dahil); onay öne getirmeden önce sorulur
+    if onay_tusu_mu(kombinasyon) and hassas_sayfa_engel(
+            k, onayli, _("Enter/boşluk"), ek=_("tuş: {kombinasyon}").format(kombinasyon=kombinasyon)):
+        _onayli_etiket(g)
+    if ucbirim.tus_dizisi_kapisi(k, onayli, birlesik):
+        _onayli_etiket(g)
+
+
 def k_tus(a):
     kombinasyon = tus_coz(a.kombinasyon)
     if a.kimlik == EKRAN:  # masaüstü kipi: tuş o an etkin pencereye gider → ona kilitlen
@@ -575,17 +679,28 @@ def k_tus(a):
     g = girdi_al(f"tus {kombinasyon}")
     try:
         guvenlik.seviye_denetle(a.kimlik, "klavye")  # erişim seviyesi: onay diyaloğundan ÖNCE
-        if guvenlik.riskli_tus_engel(a.kimlik, getattr(a, "onayli", False), kombinasyon):  # ctrl+alt+del, meta+l…
-            _onayli_etiket(g)
-        # Enter/boşluk ÇÖZÜLMÜŞ tuşa göre (x:Return, k:28, kpenter… dahil); onay öne getirmeden önce sorulur
-        if onay_tusu_mu(kombinasyon) and hassas_sayfa_engel(
-                a.kimlik, a.onayli, _("Enter/boşluk"), ek=_("tuş: {kombinasyon}").format(kombinasyon=kombinasyon)):
-            g.etiket += " --onayli"
+        _tus_onaylari(g, a.kimlik, getattr(a, "onayli", False), kombinasyon)
         _au().one_getir(a.kimlik)
-        g.gonder(a.kimlik, a.baslik, f"key {kombinasyon}")
+        try:
+            g.gonder(a.kimlik, a.baslik, f"key {kombinasyon}")
+        except Dur:
+            ucbirim.tampon_isle(_au(), a.kimlik, kirli=True)
+            raise
+        ucbirim.tampon_isle(_au(), a.kimlik, tus=kombinasyon)
     finally:
         girdi_birak(g)
     print(_("tuş: {kombinasyon}").format(kombinasyon=kombinasyon))
+
+
+def _parola_alani_mi(k):
+    """Pencerede odaklı öge AT-SPI'de parola alanı mı? (erişilebilirlik kapalıysa açılmaz: bilinmez → False)"""
+    if k == EKRAN or not k:
+        return False
+    try:
+        from .erisim import odakli_parola_mi
+        return odakli_parola_mi(k)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def k_yaz(a):
@@ -599,8 +714,16 @@ def k_yaz(a):
         yasak_denetle(a.kimlik)
     g = girdi_al(f"yaz {len(metin)} karakter", gizli=a.gizli)
     try:
+        onayli = getattr(a, "onayli", False)
+        if guvenlik.sistem_istemi_engel(a.kimlik, onayli, _("yazı")):
+            _onayli_etiket(g)
+        if _parola_alani_mi(a.kimlik):  # odaklı öge parola alanı: metin kendiliğinden gizli + insan onayı
+            g.gizli = True
+            if guvenlik.parola_alani_engel(a.kimlik, onayli, len(metin), _("yazı")):
+                _onayli_etiket(g)
+                onayli = True
         _au().one_getir(a.kimlik)
-        yaz_ic(g, a.kimlik, a.baslik, metin, getattr(a, "onayli", False))
+        yaz_ic(g, a.kimlik, a.baslik, metin, onayli)
     finally:
         girdi_birak(g)
 
@@ -628,11 +751,8 @@ def k_bas(a):
     g = girdi_al(f"bas {kombinasyon} {a.sure} sn")
     try:
         guvenlik.seviye_denetle(a.kimlik, "klavye")
-        if guvenlik.riskli_tus_engel(a.kimlik, getattr(a, "onayli", False), kombinasyon, birlikte=True):
-            _onayli_etiket(g)
-        if onay_tusu_mu(kombinasyon) and hassas_sayfa_engel(
-                a.kimlik, a.onayli, _("Enter/boşluk"), ek=_("tuş: {kombinasyon}").format(kombinasyon=kombinasyon)):
-            g.etiket += " --onayli"
+        _tus_onaylari(g, a.kimlik, getattr(a, "onayli", False), kombinasyon, birlikte=True)
+        ucbirim.tampon_isle(_au(), a.kimlik, kirli=True)  # basılı tuş tekrarlar: satırın içeriği bilinmez
         _au().one_getir(a.kimlik)
         g.gonder(a.kimlik, a.baslik, f"keydown {kombinasyon}")
         if g.etk is not None:  # ölçüm: basılı tuş ~0,57 sn sonra otomatik TEKRARLANIR ve bırakılana dek etkinlik
@@ -651,6 +771,8 @@ def k_fare(a):
     """Fareyi noktaya götür, TIKLAMA (üzerine gelme: açıklama baloncuğu, menü vurgusu)."""
     g = girdi_al(f"fare ({round(a.x)},{round(a.y)})")
     try:
+        if a.kimlik != EKRAN:
+            guvenlik.sistem_istemi_engel(a.kimlik, False, _("fare hareketi"))
         geo = _au().geometri(a.kimlik)
         fx, fy, px, py = ekran_noktasi(a.kimlik, a.x, a.y, geo)
         _au().one_getir(a.kimlik)
@@ -664,38 +786,68 @@ def k_fare(a):
 
 
 def k_surukle(a):
-    """x1,y1'de bas → sürede x2,y2'ye götür → bırak (konveyör çekme, seçim kutusu, eşya taşıma)."""
+    """x1,y1'de bas → sürede x2,y2'ye götür → bırak (konveyör çekme, seçim kutusu, eşya taşıma). BİTİŞ noktası da
+    başlangıç gibi denetlenir: onaydan önce iki noktanın yazısı (hassas düğme/ödeme sayfası, sistem istemi, seviye),
+    bırakmadan HEMEN önce imlecin altındaki pencere (yasak / ajanın kendi istemcisi / onaysız sistem istemi / başka
+    uygulama → bırakılmaz: imleç başlangıca geri götürülüp bırakılır = sürükleme iptal). Ara hareketlerde gözcü
+    (etkin pencere, başlık kilidi, DUR)."""
     tus = {"sol": "left", "sag": "right", "orta": "middle"}[a.dugme]
     g = girdi_al(f"surukle ({round(a.x1)},{round(a.y1)})→({round(a.x2)},{round(a.y2)}) {a.dugme}")
     try:
         geo = _au().geometri(a.kimlik)
         f1x, f1y, p1x, p1y = ekran_noktasi(a.kimlik, a.x1, a.y1, geo)
-        *_x, p2x, p2y = ekran_noktasi(a.kimlik, a.x2, a.y2, geo)
-        hassas_nokta(g, a.kimlik, a.onayli, _("sürükleme"), a.x1, a.y1, nokta_metni(a.kimlik, a.x1, a.y1))
+        f2x, f2y, p2x, p2y = ekran_noktasi(a.kimlik, a.x2, a.y2, geo)
+        yakin1 = nokta_metni(a.kimlik, a.x1, a.y1)
+        yakin2 = nokta_metni(a.kimlik, a.x2, a.y2) if a.kimlik != EKRAN else []
+        # tek onay (bir eylem = bir onay): başlangıç ve BİTİŞ noktasının yazıları birlikte
+        hassas_nokta(g, a.kimlik, a.onayli, _("sürükleme"), a.x1, a.y1, yakin1, ek_metinler=yakin2)
+        g.onay_hedefi = None  # bitiş de onaylı metne dahil; tık doğrulaması yok (sürüklemede nokta iki tane)
         _au().one_getir(a.kimlik)
         g.gonder(a.kimlik, a.baslik, f"mouseto {f1x:.6f} {f1y:.6f}")
         time.sleep(0.04)
         imlec_alti_denetle(a.kimlik, p1x, p1y)
         g.gonder(a.kimlik, a.baslik, f"buttondown {tus}")
+        birakildi = False
         try:
+            if a.kimlik != EKRAN:  # gözcü: etkin pencere + başlık kilidi (fareyi biz oynatıyoruz: fare izlenmez)
+                try:
+                    g.izle(a.kimlik, a.baslik, fare_izle=False)
+                except TypeError:
+                    g.izle(a.kimlik, a.baslik)
             adim = max(5, int(a.sure / 0.02))
             for i in range(1, adim + 1):
                 t = i / adim
                 x, y = a.x1 + (a.x2 - a.x1) * t, a.y1 + (a.y2 - a.y1) * t
                 fx, fy, *_x = ekran_noktasi(a.kimlik, x, y, geo)
-                g.ham(f"mouseto {fx:.6f} {fy:.6f}")
+                g.ham(f"mouseto {fx:.6f} {fy:.6f}")  # gözcü kesintisi (kesildi) burada Dur fırlatır
                 time.sleep(a.sure / adim)
                 if a.kimlik != EKRAN and _au().aktif() != a.kimlik:
                     raise Dur(3, _("sürüklerken aktif pencere değişti → {baslik}; bırakıldı").format(
                         baslik=repr(_au().baslik(_au().aktif()))))
             time.sleep(0.03)
+            g.izle_bitir()
+            if g.kesildi:
+                raise g.kesildi
             f = _au().fare()[:2]
             if f[0] is not None and (abs(f[0] - p2x) > 3 or abs(f[1] - p2y) > 3):
                 raise Dur(12, _("sürükleme sonunda imleç hedefte değil ({imlec} ≠ {hedef}): kullanıcı fareyi oynattı; "
                                 "bırakıldı").format(imlec=f, hedef=(p2x, p2y)))
-        finally:
+            # bırakmadan HEMEN önce: bitiş noktasının altındaki pencere (yasak / kendi istemci / sistem istemi / başka
+            # uygulama) + DUR + seviye
+            dur_denetle()
+            imlec_alti_denetle(a.kimlik, p2x, p2y)
+            if a.kimlik != EKRAN:
+                hedef_pencere_denetle(a.kimlik)
             g.zorla(f"buttonup {tus}")
+            birakildi = True
+        finally:
+            g.izle_bitir()
+            if not birakildi:  # bitişte bırakılmaz: başlangıca geri götürüp bırak (sürükleme iptal)
+                g.zorla(f"mouseto {f1x:.6f} {f1y:.6f}")
+                time.sleep(0.02)
+                g.zorla(f"buttonup {tus}")
         g.son_fare = (p2x, p2y)
+        ucbirim.tampon_isle(_au(), a.kimlik, kirli=True)
     finally:
         girdi_birak(g)
     print(_("sürüklendi ({dugme}): ({x1},{y1}) → ({x2},{y2}) {sn} sn").format(
@@ -760,6 +912,14 @@ def adimlari_calistir(a, satirlar, etiket="dizi", etk=None, onek=""):
         pg.kapat()
 
 
+def hedef_pencere_denetle_onayli(k, onayli, ne):
+    """Girdi nesnesi kullanmayan pencere eylemleri (kapat, pencere yönetimi): yasak, ajanın kendi istemcisi (10),
+    sistem istemine insan onayı (onaysız 10)."""
+    yasak_denetle(k)
+    guvenlik.kendi_istemci_denetle(k)
+    guvenlik.sistem_istemi_engel(k, onayli, ne)
+
+
 def k_kapat(a):
     """Pencereyi kapatır (pencere yöneticisi ile, alt+F4 gibi). Başlık kilidi ZORUNLU; yasak pencere kapanmaz.
     Neden: bazı tarayıcılarda son sekme ctrl+w ile kapanınca pencere başlangıç sayfası olarak açık kalıyor."""
@@ -767,10 +927,16 @@ def k_kapat(a):
         raise Dur(1, _("masaüstü kapatılamaz; pencere kimliği/adı ver"))
     if not a.baslik:
         raise Dur(1, _("kapat için -b <başlık deseni> zorunlu (yanlış pencere kapanmasın)"))
+    dur_denetle()
+    guvenlik.eylem_basladi()
+    hedef_pencere_denetle_onayli(a.kimlik, getattr(a, "onayli", False), _("pencere kapatma"))
     guvenlik.seviye_denetle(a.kimlik, "klavye")  # pencereyi kapatmak fare/klavye ötesi bir eylem: 'tam' ister
     b = _au().baslik(a.kimlik)
     if not re.search(a.baslik, b, re.I):
         raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); kapatılmadı").format(baslik=repr(b), desen=a.baslik))
+    guvenlik.insan_onceligi(_("pencere kapatma"))  # kullanıcı klavye/fare kullanıyorsa bekle, sonra 12
+    dur_denetle()
+    hedef_pencere_denetle(a.kimlik)
     _au().kapat(a.kimlik)
     gunluk(f"kapat | [{b}] | windowclose")
     for _i in range(30):
@@ -809,7 +975,8 @@ def pencere_yonet(k, islem, x=None, y=None, g=None, h=None, desen=None):
     if k == EKRAN:
         raise Dur(1, _("masaüstü kipi taşınamaz/boyutlandırılamaz; pencere kimliği/adı ver"))
     au = _au()
-    yasak_denetle(k)
+    guvenlik.eylem_basladi()
+    hedef_pencere_denetle_onayli(k, False, _("pencere yönetimi"))
     guvenlik.sinif_denetle(k)
     guvenlik.seviye_denetle(k, "fare")  # pencereyi oynatmak girdi sayılır: 'goruntule' seviyesinde yok
     b = au.baslik(k)
@@ -836,6 +1003,9 @@ def pencere_yonet(k, islem, x=None, y=None, g=None, h=None, desen=None):
         raise Dur(2, _("hedef pencere ekran alanının dışına taşıyor: konum {x},{y} boyut {g}x{h}; ekran alanı "
                        "{x0},{y0}..{x1},{y1}").format(x=hedef[0], y=hedef[1], g=hedef[2], h=hedef[3],
                                                       x0=ex0, y0=ey0, x1=ex1, y1=ey1))
+    guvenlik.insan_onceligi(_("pencere işlemi"))  # kullanıcı klavye/fare kullanıyorsa bekle, sonra 12
+    dur_denetle()
+    guvenlik.hedef_pencere_denetle(k)  # onay beklenmiş olabilir: yeniden
     if islem == "tasi":
         au.tasi(k, hedef[0], hedef[1])
         geo = _geo_bekle(k, lambda c: abs(c[0] - hedef[0]) <= 1 and abs(c[1] - hedef[1]) <= 1)

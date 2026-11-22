@@ -36,7 +36,8 @@ def calis(*a):
     return subprocess.run(a, capture_output=True, text=True).stdout.strip()
 
 
-_KD_OKUMA = {"getactivewindow", "getwindowgeometry", "getwindowname", "getwindowclassname", "getmouselocation"}
+_KD_OKUMA = {"getactivewindow", "getwindowgeometry", "getwindowname", "getwindowclassname", "getmouselocation",
+             "getwindowpid"}
 
 
 def kd(*a):
@@ -248,13 +249,72 @@ def spectacle_goruntusu():
 KORUMA_ARALIK = 0.25  # harf harf yazı/sürüklemede (ham) ekran koruması en çok bu aralıkla yeniden denetlenir
 
 
+KILIT_ARALIK = 0.5  # oturum kilidi durumu en çok bu sıklıkla sorulur (girdi gönderimi başına ~3 ms busctl)
+_KILIT = {"zaman": -1e9, "durum": None}
+
+
+def _busctl_bool(*argv):
+    """busctl çıktısı 'b true' / 'v b false' → bool | None (okunamadı)."""
+    try:
+        r = subprocess.run(["busctl", *argv], capture_output=True, text=True, timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    t = r.stdout.split()
+    if t and t[-1] in ("true", "false"):
+        return t[-1] == "true"
+    return None
+
+
+def oturum_kilidi_oku():
+    """Oturum kilitli mi? org.freedesktop.ScreenSaver.GetActive (oturum veri yolu), olmazsa logind LockedHint
+    (önce 'auto' oturum, sonra $XDG_SESSION_ID). YALNIZ okur. → True | False | None (okunamadı)."""
+    d = _busctl_bool("--user", "call", "org.freedesktop.ScreenSaver", "/ScreenSaver", "org.freedesktop.ScreenSaver",
+                     "GetActive")
+    if d is not None:
+        return d
+    yollar_ = ["/org/freedesktop/login1/session/auto"]
+    sid = os.environ.get("XDG_SESSION_ID")
+    if sid and re.fullmatch(r"[\w-]+", sid):
+        yollar_.append(f"/org/freedesktop/login1/session/{sid.replace('-', '_2d')}")
+    for yol in yollar_:
+        d = _busctl_bool("call", "org.freedesktop.login1", yol, "org.freedesktop.DBus.Properties", "Get", "ss",
+                         "org.freedesktop.login1.Session", "LockedHint")
+        if d is not None:
+            return d
+    return None
+
+
+KILIT_SORGU = oturum_kilidi_oku  # testler taklit eder
+
+
+def kilit_denetle(ne):
+    """Oturum kilitliyse (ya da durumu okunamıyorsa: kapalı-başarısız) kullanıcının ekranına HİÇBİR girdi gitmez →
+    Dur 15. Kilit ekranına yanlışlıkla giden yazı parola denemesi sayılır ve hesabı kilitleyebilir (faillock).
+    --ekranimda bunu AŞMAZ."""
+    simdi = time.monotonic()
+    if simdi - _KILIT["zaman"] > KILIT_ARALIK or _KILIT["durum"] is not False:
+        _KILIT["durum"] = KILIT_SORGU()
+        _KILIT["zaman"] = simdi
+    d = _KILIT["durum"]
+    if d is True:
+        raise Dur(KULLANICI_MESGUL, _("oturum kilitli: kilit ekranına girdi gönderilmez ({ne}); kullanıcı oturumu "
+                                      "açınca yeniden dene ya da görünmez masaüstünde yap (--arka)").format(ne=ne))
+    if d is None:
+        raise Dur(KULLANICI_MESGUL, _("oturum kilidi durumu okunamadı (ScreenSaver / logind): güvenli tarafta girdi "
+                                      "gönderilmez ({ne})").format(ne=ne))
+
+
 def on_plan_korumasi(ne):
     """Kullanıcının ekranına müdahaleden HEMEN önce (her gönderimde; ~2-10 ms):
+    - oturum kilitliyse (ya da kilit durumu okunamıyorsa) HİÇBİR şey yapılmaz (15; --ekranimda aşmaz).
     - kullanıcıya bildirimle "nerede yapılsın?" soruluyorsa (RUNTIME_DIR/karar-bekliyor) ön plan girdisi YOK (12):
       ajan "Ekranımda yap" düğmesine kendisi basamasın. --ekranimda bunu AŞMAZ.
     - kullanıcı oyunda/film izliyorsa ekranına müdahale YOK (15; --ekranimda ya da bildirimde "Ekranımda yap" ile
       serbest). Görünmez masaüstü (--arka) etkilenmez."""
     from .. import mesgul
+    kilit_denetle(ne)
     if mesgul.karar_bekliyor():
         raise Dur(INSAN, _("kullanıcıya nerede yapılacağı soruluyor (bildirim açık): yanıtlayana dek ekranına girdi "
                            "gönderilmez ({ne})").format(ne=ne))
@@ -394,8 +454,9 @@ class Girdi:
             self.etk.kendi_girdi(bas, time.monotonic() + girdi_suresi(satirlar))
             self.son_etk = time.monotonic()
 
-    def izle(self, k, desen):
-        """Yazı GÖZCÜSÜ (~10 ms): etkin pencere, başlık (sekme) ve FARE. Değişince bayrak kalkar, yazı bir
+    def izle(self, k, desen, fare_izle=True):
+        """Yazı GÖZCÜSÜ (~10 ms): etkin pencere, başlık (sekme) ve FARE (fare_izle=False: sürükleme — fareyi biz
+        oynatıyoruz). Değişince bayrak kalkar, yazı bir
         sonraki HARFTEN önce durur. dotool ÖLDÜRÜLMEZ (yarım kalan tuş basılı kalabilir). Neden (ölçüm):
         kelime ortasında sekme değişince kalanı yeni sekmeye sızıyordu (8'de 3, 2-5 harf); harf harf + gözcü →
         10'da 1, 1 harf. Fare kıpırdarsa = insan bilgisayarı kullanıyor → dur (insan önceliği)."""
@@ -418,7 +479,7 @@ class Girdi:
                     neden = (3, _("aktif pencere değişti → {baslik}").format(baslik=repr(baslik(a))))
                 elif desen and not re.search(desen, b or kd("getwindowname", k), re.I):
                     neden = (4, _("başlık değişti: {baslik} (beklenen /{desen}/)").format(baslik=repr(baslik(k)), desen=desen))
-                elif f[0] is not None and f0[0] is not None and f != f0:
+                elif fare_izle and f[0] is not None and f0[0] is not None and f != f0:
                     neden = (12, _("kullanıcı fareyi oynattı (insan önceliği)"))
                 if neden:
                     self.kesildi = Dur(*neden)
@@ -611,6 +672,19 @@ def pano_oku():
     return veri.decode(errors="replace")
 
 
+def secim_oku():
+    """Birincil seçimin (PRIMARY: orta tıkla yapıştırılan) metni; boş ya da metin dışıysa None."""
+    kod, veri, _err = _wl(["wl-paste", "--primary", "--list-types"])
+    if kod != 0:
+        return None
+    turler = [t.strip() for t in veri.decode(errors="replace").splitlines() if t.strip()]
+    tur = _metin_turu(turler)
+    if tur is None:
+        return None
+    kod, veri, _err = _wl(["wl-paste", "--primary", "--no-newline", "--type", tur])
+    return veri.decode(errors="replace") if kod == 0 else None
+
+
 def pano_yaz(metin, hassas=True):
     """Panoyu `metin` yap (wl-copy; "" → --clear). hassas: --sensitive (Klipper geçmişine yazılmaz). DUR + ön plan
     koruması (kullanıcı oyunda/film izliyorsa 15): pano da kullanıcının ekranına/oturumuna müdahaledir."""
@@ -703,7 +777,19 @@ class KdeArkaUc(ArkaUc):
         return sinif(k)
 
     def pid(self, k):
-        return kd("getwindowpid", k) if k and k != EKRAN else ""
+        """Pencerenin sahibi süreç (kdotool getwindowpid; Wayland istemcisinde KWin soket kimliğinden). Kimlikler
+        ({uuid}) yeniden kullanılmaz: başarılı sonuç önbellekte tutulur."""
+        if not k or k == EKRAN:
+            return ""
+        onbellek = self.__dict__.setdefault("_pidler", {})
+        if k not in onbellek:
+            p = kd("getwindowpid", k).strip()
+            if not p.isdigit():
+                return ""
+            if len(onbellek) > 512:
+                onbellek.clear()
+            onbellek[k] = p
+        return onbellek[k]
 
     def aktif(self):
         return aktif()
@@ -788,6 +874,10 @@ class KdeArkaUc(ArkaUc):
     # -------- pano (wl-clipboard; docs/ARCHITECTURE.md §2)
     def pano_oku(self):
         return pano_oku()
+
+    def secim_oku(self):
+        """Birincil seçimin (orta tıkla yapıştırılan) metni; boşsa None."""
+        return secim_oku()
 
     def pano_yaz(self, metin, hassas=True):
         pano_yaz(metin, hassas)

@@ -1174,7 +1174,7 @@ class SanalGirdi:
         self.son_etk = time.monotonic()
 
     # -------- gözcü
-    def izle(self, k: str, desen: str | None) -> None:
+    def izle(self, k: str, desen: str | None, fare_izle: bool = True) -> None:
         """Yazı GÖZCÜSÜ (~8 ms): etkin pencere, başlık, DUR, Devral. Değişince bayrak kalkar; ham() bir sonraki
         satırdan (harften) önce durur. Kendi X bağlantısıyla (python-xlib iş parçacığı güvenli değil)."""
         self.izle_bitir()

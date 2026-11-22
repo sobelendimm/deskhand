@@ -20,6 +20,7 @@ import time
 import types
 
 from .arka_uc import EKRAN, sec
+from . import guvenlik, ucbirim
 from .eylem import _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, tikla_ic
 from .gunluk import gunluk
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, seviye_denetle,
@@ -228,8 +229,27 @@ def _girmeyen_ipucu(pid):
 
 # ---------------------------------------------------------------- pencere / ağaç (libatspi'nin bağlı olduğu yerde)
 
+def _surec_akrabasi(a, b):
+    """İki PID aynı uygulamanın süreç ağacında mı (eşit, biri diğerinin atası)? Çok süreçli uygulamalar (tarayıcı,
+    Electron) erişilebilirlik ağacını penceresinin sahibinden farklı bir süreçten bildirebilir."""
+    from . import kendi
+    try:
+        a, b = int(a), int(b)
+    except (TypeError, ValueError):
+        return False
+    if a == b:
+        return True
+    return any(p == b for p, _c in kendi.atalar(a)[1:]) or any(p == a for p, _c in kendi.atalar(b)[1:])
+
+
 def _cerceve_bul(Atspi, pid, baslik):
-    """Pencere → AT-SPI çerçevesi (önce aynı PID'nin pencereleri, başlık benzerliğiyle)."""
+    """Pencere → AT-SPI çerçevesi: YALNIZ hedef pencerenin PID'inden (çok süreçli uygulamada aynı süreç ağacından:
+    ata/torun) seçilir; aynı süreçte birden çok çerçeve varsa başlık benzerliğiyle. Başka uygulamanın çerçevesine
+    başlık benzerliğiyle düşülmez (denetimler X/KWin penceresinde yapılır, eylem BAŞKA uygulamada olurdu): PID
+    bilinmiyor ya da eşleşme yoksa Dur 6. → (çerçeve, uygulama pid, uygulama adı)."""
+    if not pid:
+        raise Dur(6, _("pencerenin süreç kimliği (PID) bilinmiyor: erişilebilirlik çerçevesi güvenle eşlenemez ({baslik})"
+                       ).format(baslik=repr(baslik)), tur="agacta_yok")
     adaylar = []
     masa = Atspi.get_desktop(0)
     for i in range(masa.get_child_count()):
@@ -237,7 +257,11 @@ def _cerceve_bul(Atspi, pid, baslik):
         if app is None:
             continue
         try:
-            ayni = bool(pid) and str(app.get_process_id()) == str(pid)
+            app_pid = app.get_process_id()
+            if not _surec_akrabasi(app_pid, pid):
+                continue
+            tam = str(app_pid) == str(pid)
+            app_ad = app.get_name() or ""
             cerceveler = [app.get_child_at_index(j) for j in range(app.get_child_count())]
         except Exception:
             continue
@@ -250,15 +274,39 @@ def _cerceve_bul(Atspi, pid, baslik):
                 continue
             benz = 1.0 if ad and (ad == baslik or ad in baslik or baslik in ad) else \
                 difflib.SequenceMatcher(None, katla(ad), katla(baslik)).ratio()
-            adaylar.append((ayni, benz, f))
-    ayni_pid = [x for x in adaylar if x[0]]
-    if len(ayni_pid) == 1:
-        return ayni_pid[0][2]
-    secim = sorted(ayni_pid or [x for x in adaylar if x[1] >= 0.9], key=lambda x: -x[1])
-    if not secim:
+            adaylar.append((tam, benz, f, app_pid, app_ad))
+    if not adaylar:
         raise Dur(6, _("pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): {ipucu}").format(
             baslik=repr(baslik), pid=pid, ipucu=_girmeyen_ipucu(pid)), tur="agacta_yok")
-    return secim[0][2]
+    secim = sorted(adaylar, key=lambda x: (not x[0], -x[1]))[0]
+    return secim[2], secim[3], secim[4]
+
+
+def _cerceve_denetle(app_pid, app_ad, cerceve_ad, islem):
+    """Seçilen çerçevenin KENDİ kimliğiyle denetim (X/KWin penceresinin denetimi yetmez): Deskhand paneli/onay
+    diyaloğu sürecine ait çerçeve her zaman 10; yasak desen (uygulama adı / çerçeve adı) 10; eylem/değer yazmada
+    ayrıca ajanın kendi istemcisi (10), uygulama erişim seviyesi (10). Okumada (tara/incele) yalnız panel + yasak."""
+    from . import guvenlik, kendi, onay
+    try:
+        panel = onay.panel_pid()
+    except Exception:  # noqa: BLE001
+        panel = None
+    if panel and str(app_pid) == str(panel):
+        raise Dur(10, _("YASAK: erişilebilirlik çerçevesi Deskhand panelinin/onay diyaloğunun sürecine ait"))
+    for d in guvenlik.yasak_desenler():
+        if re.search(d, cerceve_ad or "", re.I) or re.search(d, app_ad or "", re.I):
+            raise Dur(10, _("YASAK pencere (erişilebilirlik çerçevesi): {baslik} (uygulama {uygulama}) /{desen}/ ile "
+                            "eşleşti; hiçbir girdi gönderilmez").format(baslik=repr(cerceve_ad), uygulama=repr(app_ad),
+                                                                         desen=d))
+    if islem not in ("eylem", "yaz"):
+        return
+    if kendi.kendi_mi(app_pid, "", "sanal", lambda s: False):  # yalnız PID kuralı (sınıf yedeği pencerede yapıldı)
+        raise Dur(10, _("AJANIN KENDİ İSTEMCİSİ: erişilebilirlik çerçevesi ({baslik}) bu ajanı çalıştıran süreç "
+                        "zincirindeki bir sürece ait; girdi gönderilmez").format(baslik=repr(cerceve_ad)))
+    s = guvenlik.seviye_coz(cerceve_ad or "", app_ad or "")
+    if s == 0 or (s == 1 and islem == "yaz"):
+        raise Dur(10, _("UYGULAMA SEVİYESİ (erişilebilirlik çerçevesi): {baslik} ({uygulama}) bu eylemi kabul etmiyor"
+                        ).format(baslik=repr(cerceve_ad), uygulama=repr(app_ad)))
 
 
 def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri):
@@ -384,6 +432,12 @@ def oge_deger_yaz(oge, metin):
     if et is not None:
         if not et.set_text_contents(metin):
             raise Dur(6, _("metin yazılamadı (alan salt okunur ya da devre dışı)"))
+        try:
+            parola = oge.get_role_name() == "password text"
+        except Exception:  # noqa: BLE001
+            parola = False
+        if parola:  # parola alanının değeri ASLA okunmaz (doğrulama için bile)
+            return {"yontem": "EditableText", "dogrulandi": None}
         ti = oge.get_text_iface()
         okunan = _modul().Text.get_text(ti, 0, -1) if ti is not None else None
         return {"yontem": "EditableText", "dogrulandi": None if okunan is None else okunan == metin}
@@ -392,11 +446,10 @@ def oge_deger_yaz(oge, metin):
         try:
             deger = float(metin.strip().replace(",", "."))
         except ValueError:
-            raise Dur(1, _("bu öge sayısal değer ister: {metin}").format(metin=repr(metin)))
+            raise Dur(1, _("bu öge sayısal değer ister ({n} karakterlik metin sayı değil)").format(n=len(metin)))
         en_az, en_cok = vi.get_minimum_value(), vi.get_maximum_value()
         if not en_az <= deger <= en_cok:
-            raise Dur(1, _("değer aralık dışı ({en_az}..{en_cok}): {deger}").format(
-                en_az=en_az, en_cok=en_cok, deger=deger))
+            raise Dur(1, _("değer aralık dışı ({en_az}..{en_cok})").format(en_az=en_az, en_cok=en_cok))
         if not vi.set_current_value(deger):
             raise Dur(6, _("değer yazılamadı (öge salt okunur ya da devre dışı)"))
         return {"yontem": "Value", "dogrulandi": abs(vi.get_current_value() - deger) < 1e-6}
@@ -428,10 +481,24 @@ def oge_incele(oge):
 def _atspi_is(istek):
     """libatspi'nin bu süreçte bağlı olduğu yerde iş yürüt. istek: {a11y, pid, baslik, islem, ...}; JSON uyumlu."""
     Atspi = _atspi(istek["a11y"])
-    cerceve = _cerceve_bul(Atspi, istek["pid"], istek["baslik"])
+    cerceve, app_pid, app_ad = _cerceve_bul(Atspi, istek["pid"], istek["baslik"])
     islem = istek["islem"]
+    try:
+        cerceve_ad = cerceve.get_name() or ""
+    except Exception:  # noqa: BLE001
+        cerceve_ad = ""
+    _cerceve_denetle(app_pid, app_ad, cerceve_ad, islem)
+    beklenen = istek.get("cerceve_kimlik")
+    if beklenen and _nesne_kimligi(cerceve) not in (None, tuple(beklenen)):
+        raise Dur(8, _("erişilebilirlik çerçevesi tarandıktan sonra değişti (başka nesne): yeniden ara"))
+    if islem == "satir":
+        return _imlec_satirlari(Atspi, cerceve)
+    if islem == "odak_parola":
+        return _odakli_parola(Atspi, cerceve)
     if islem == "tara":
-        return _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"])
+        r = _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"])
+        r["cerceve_kimlik"] = _nesne_kimligi(cerceve)
+        return r
     oge = _yoldan_bul(Atspi, cerceve, istek["yol"], istek["rol"], istek["ad"])
     if islem == "incele":
         return oge_incele(oge)
@@ -440,6 +507,97 @@ def _atspi_is(istek):
     if islem == "yaz":
         return oge_deger_yaz(oge, istek["metin"])
     raise Dur(1, f"bilinmeyen erişilebilirlik işlemi: {islem}")
+
+
+def _nesne_kimligi(o):
+    """AT-SPI nesnesinin kimliği: (veri yolu adı, nesne yolu) — ikisi BİRLİKTE (aynı nesne yolu başka uygulamada da
+    olabilir). Okunamazsa None."""
+    try:
+        app = o.get_application() if hasattr(o, "get_application") else None
+        ad = getattr(getattr(o, "app", None), "bus_name", None) or (getattr(app, "bus_name", None) if app else None)
+        yol = getattr(o, "path", None)
+        return (str(ad), str(yol)) if ad and yol else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _uclar(Atspi, cerceve, kosul, en_cok=4000, sure=0.4):
+    """Çerçevede GÖRÜNEN ögeler arasında kosul(o, rol, durumlar) sağlayan ilk öge (zaman/öge sınırlı DFS) | None."""
+    S = Atspi.StateType
+    t0 = time.monotonic()
+    yigin, sayi = [cerceve], 0
+    while yigin and sayi < en_cok and time.monotonic() - t0 < sure:
+        o = yigin.pop()
+        sayi += 1
+        try:
+            ss = o.get_state_set()
+            rol = o.get_role_name()
+            if kosul(o, rol, ss, S):
+                return o
+            if o is not cerceve and not ss.contains(S.SHOWING):
+                continue
+            n = min(o.get_child_count(), 400)
+        except Exception:  # noqa: BLE001
+            continue
+        for i in range(n - 1, -1, -1):
+            try:
+                c = o.get_child_at_index(i)
+            except Exception:  # noqa: BLE001
+                c = None
+            if c is not None:
+                yigin.append(c)
+    return None
+
+
+def _imlec_satirlari(Atspi, cerceve):
+    """Uçbirim ögesinin (rol 'terminal') imleç satırı + önceki iki satır → [satır] | None. Yalnız uçbirim rolü
+    okunur (başka metin alanlarının değeri okunmaz)."""
+    o = _uclar(Atspi, cerceve, lambda o, rol, ss, S: rol == "terminal" and ss.contains(S.FOCUSED)) or \
+        _uclar(Atspi, cerceve, lambda o, rol, ss, S: rol == "terminal")
+    if o is None:
+        return None
+    ti = o.get_text_iface()
+    if ti is None:
+        return None
+    T = Atspi.Text
+    imlec = T.get_caret_offset(ti)
+    if imlec is None or imlec < 0:
+        return None
+    once = T.get_text(ti, max(0, imlec - 2000), imlec) or ""
+    sonra = (T.get_text(ti, imlec, imlec + 400) or "").split("\n", 1)[0]
+    satirlar = (once + sonra).split("\n")
+    return [x for x in satirlar[-3:]]
+
+
+def _odakli_parola(Atspi, cerceve):
+    """Çerçevede odaklı öge parola alanı mı (rol 'password text')? Değeri OKUNMAZ."""
+    o = _uclar(Atspi, cerceve, lambda o, rol, ss, S: ss.contains(S.FOCUSED) and rol in ("password text", "text",
+                                                                                          "entry", "terminal"))
+    try:
+        return bool(o is not None and o.get_role_name() == "password text")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def imlec_satirlari(k):
+    """Uçbirim penceresinin giriş satırı (Enter kapısı; ucbirim.py). Erişilebilirliği AÇMAZ. → [satır] | None."""
+    try:
+        r = _atspi_calistir(_pencere_istegi(k, "satir"))
+    except Dur:
+        return None
+    return r or None
+
+
+def odakli_parola_mi(k):
+    """Pencerede odaklı öge parola alanı mı? Erişilebilirlik kapalıysa AÇMAZ (bilinmez → False)."""
+    try:
+        if not erisim_acik():
+            return False
+        return bool(_atspi_calistir(_pencere_istegi(k, "odak_parola")))
+    except Dur:
+        return False
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _yardimci_ana():
@@ -494,6 +652,10 @@ def _pencere_istegi(k, islem, **ek):
         raise Dur(1, _("erişilebilirlik ağacı pencere ister (masaüstü kipi değil)"))
     au = sec()
     pid = au.pid(k) if hasattr(au, "pid") else ""
+    try:
+        pid = int(pid) if pid not in (None, "") else ""
+    except (TypeError, ValueError):
+        pid = ""
     return {"a11y": _a11y_adresi(), "pid": str(pid or ""), "baslik": au.baslik(k), "islem": islem, **ek}
 
 
@@ -506,6 +668,9 @@ def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400):
     while True:
         try:
             r = _atspi_calistir(istek)
+            if r.get("cerceve_kimlik"):
+                for o in r["ogeler"]:
+                    o["cerceve"] = r["cerceve_kimlik"]
             return r["ogeler"], r["sure"]
         except Dur as e:
             if getattr(e, "tur", None) != "agacta_yok" or time.monotonic() >= bitis:
@@ -514,7 +679,7 @@ def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400):
 
 
 def _oge_istegi(k, o, islem, **ek):
-    return _pencere_istegi(k, islem, yol=o["yol"], rol=o["rol"], ad=o["ad"], **ek)
+    return _pencere_istegi(k, islem, yol=o["yol"], rol=o["rol"], ad=o["ad"], cerceve_kimlik=o.get("cerceve"), **ek)
 
 
 def erisim_ara(ogeler, ad, rol=None):
@@ -651,19 +816,9 @@ INSAN_BEKLE_AZAMI = 8.0  # kullanıcı bilgisayarı kullanıyorsa en çok bu kad
 
 def _insan_onceligi():
     """İNSAN ÖNCELİĞİ (12), fare/klavye yolundaki kuralla aynı: kde'de kullanıcı klavye/fare kullanıyorsa durgunluğu
-    bekle (en çok INSAN_BEKLE_AZAMI sn), sonra vazgeç; sanalda yalnız 'Devral' açıkken (ilk girdideki gibi bekle → 12)."""
-    au = sec()
-    bitis = time.monotonic() + INSAN_BEKLE_AZAMI
-    uyarildi = False
-    while au.insan_var_mi():
-        if not uyarildi:
-            print(_("bekleniyor: kullanıcı bilgisayarı kullanıyor…"), file=sys.stderr)
-            uyarildi = True
-        if time.monotonic() >= bitis:
-            raise Dur(12, _("kullanıcı {sn} sn boyunca bilgisayarı kullandı (insan önceliği); erişilebilirlik eylemi "
-                            "yapılmadı").format(sn=f"{INSAN_BEKLE_AZAMI:.0f}"))
-        dur_denetle()
-        time.sleep(0.3)
+    bekle (en çok INSAN_BEKLE_AZAMI sn), sonra vazgeç; sanalda yalnız 'Devral' açıkken (guvenlik.insan_onceligi)."""
+    from .guvenlik import insan_onceligi
+    insan_onceligi(_("erişilebilirlik eylemi"), azami=INSAN_BEKLE_AZAMI)
 
 
 def _atspi_korumalari(k, desen, tur="fare"):
@@ -706,6 +861,9 @@ def _eylem_baglami(a, tur="fare"):
     eylem_basladi()
     if a.kimlik == EKRAN:
         raise Dur(1, _("erişilebilirlik eylemi pencere ister (masaüstü kipi değil)"))
+    from .guvenlik import sistem_istemi_engel
+    sistem_istemi_engel(a.kimlik, getattr(a, "onayli", False),
+                        _("erişilebilirlik eylemi") if tur == "fare" else _("değer yazma"), goruntu_al=False)
     _atspi_korumalari(a.kimlik, a.baslik, tur)  # ağaca bile bakmadan: yasak/kilitli pencerede hiçbir şey
     ogeler, sure = erisim_ogeleri(a.kimlik)
     o, kademe = _oge_secimi(a, ogeler, sure)
@@ -753,13 +911,20 @@ def k_ogeye_yaz(a):
     bilgi = _atspi_calistir(_oge_istegi(k, o, "incele"))
     if not bilgi["yazilabilir"]:
         raise Dur(6, _("öge yazılabilir değil (EditableText ya da Value arayüzü yok): '{ad}'").format(ad=o["ad"]))
-    gizli = bool(getattr(a, "gizli", False)) or bilgi["rol"] == "password text"
+    parola = bilgi["rol"] == "password text"
+    gizli = bool(getattr(a, "gizli", False)) or parola  # parola alanına giden metin kendiliğinden gizli
     etiket = f"ogeye-yaz '{a.ad}' {len(metin)} karakter"
+    onayli = a.onayli
+    if parola and guvenlik.parola_alani_engel(k, onayli, len(metin), _("değer yazma")):
+        etiket += " --onayli"
     if yazi_onay_ister_mi(metin):  # yazmadan ÖNCE (bir eylem = bir onay); Enter/Tab/boşluk = formu gönderme riski
         g = types.SimpleNamespace(gizli=gizli)
-        if _yazi_hassas(g, k, a.onayli, metin, goruntu_al=False):
+        if _yazi_hassas(g, k, onayli, metin, goruntu_al=False):
             etiket += " --onayli"
+    if "\n" in metin and ucbirim.enter_kapisi(k, onayli, ek=metin.split("\n", 1)[0], gizli=gizli, goruntu_al=False):
+        etiket += " --onayli"
     _atspi_korumalari(k, a.baslik, "klavye")  # onay beklenmiş olabilir
+    ucbirim.tampon_isle(sec(), k, kirli=True)  # değer doğrudan yazıldı: satırın içeriği artık bilinmez
     r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
     goster = f"***({len(metin)})" if gizli else repr(metin if len(metin) <= 200 else metin[:197] + "…")
     _atspi_gunluk(k, etiket, f"atspi set-text {goster}")

@@ -27,6 +27,8 @@ deskhand/
   guvenlik.py      yasak pencereler, hassas düğme, ödeme sayfası, riskli tuş/uçbirim komutu onayı, uygulama erişim
                    seviyeleri, başlık/sınıf kilidi, denetle(), DUR anahtarı
   insan.py         Wayland etkinlik izleyici (ekran-etkinlik C yardımcısı) + insan_bekle
+  kendi.py         ajanın kendi istemcisi: ata süreç kümesi (/proc), tmux istemcileri, ön plan süreci (§4)
+  ucbirim.py       uçbirim Enter kapısı: giriş satırı okuma (AT-SPI/OCR) + yazı tamponu (§4)
   ocr.py           oku, satirla, ara, derin_oku, önbellek, ön işleme
   gorsel.py        simge (NCC), renk alanları, ızgara
   eylem.py         tikla/yaz/tus/kaydir/bas/surukle/dizi: arka uçtan BAĞIMSIZ üst katman
@@ -125,7 +127,7 @@ satırlarını `RUNTIME_DIR/girdi.sock` üzerinden ona gönderir, kendi dotool'u
 kurulumu yok). Protokol: `merhaba 1 <düzen> <varyant|->` → `tamam 1 <pid>`; `parti <n>` + n satır → `tamam` |
 `mesgul <sn>` | `hata <kod> <mesaj>`; `bekle` → girdi bitince `tamam <n>` + n dotool uyarısı. Bir `gonder()` çağrısı
 TEK partidir (atomik, başka bağlantının satırlarıyla karışmaz). İstemcideki denetimlerin HEPSİ (DUR, `denetle`, ön plan
-koruması, insan önceliği, gözcü, kendi-girdi penceresi) aynen istemcide kalır; `mesgul` gelince istemci tüm
+koruması, insan önceliği, gözcü, ajanın kendi istemcisi, oturum kilidi) aynen istemcide kalır; `mesgul` gelince istemci tüm
 denetimleri yeniden yapıp tekrar dener. Merkez yoksa ya da el sıkışma başarısızsa `Girdi` kendi dotool'unu açar
 (iç geri düşme: panel kapalıyken). Klavye düzeni farklıysa merkez boştayken dotool'u yeni düzenle yeniden açar.
 
@@ -154,6 +156,64 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   (imza değişmez) ve `guvenlik.yazi_onay_ister_mi` üzerinden akar: yazmadan ÖNCE yapılır (Enter ayrı gönderilse bile
   komut metni yakalanır), parça parça/yapıştırarak yazan her yol aynı işlevi kullanmalıdır. Onay isteği komutu
   (kısaltılmış; `--gizli` ise yalnız uzunluğu), nedeni ve sınıfı taşır. Uçbirim olmayan pencerede metin sıradan yazıdır.
+  `riskli_komut` metni kabuk kurallarıyla sözcüklere ayırır (tırnak/ters bölü kaldırılır, `$'…'` açılır, `$(…)`/`` `…` ``/
+  `<(…)` içi ayrıca denetlenir); kabuk anahtar sözcükleri (`{ } ! if then do else elif while until time`), atamalar ve
+  bilinmeyen `$DEĞİŞKEN` komut adı atlanır, aynı metindeki atama çözülür (`S=sudo; $S reboot`), küme açılımı
+  (`{sudo,reboot}`), `busybox`/`toybox X` → X, sarmalayıcıların argümanlı seçenekleri (`env -u AD`, `nice -n 5`,
+  `timeout -s 9 5`), `env -S`, `find … -delete` / `-exec rm`, `sh/bash -c` (ve `-lc` gibi kümeler), `eval`, `python -c` /
+  `perl -e` / `ruby -e` / `node -e` kodunda dosya silme, komut çalıştırma ya da dinamik kod (`__import__`, `eval`…).
+- **Uçbirim ENTER KAPISI** (`deskhand/ucbirim.py`; parça parça yazılmış komut: `sud` + `o reboot` + Enter). Uçbirim
+  sınıflı pencereye satırı çalıştıran bir tuş (enter, kpenter, linefeed, `x:Return`, `k:28`, ctrl+j/ctrl+m/ctrl+o; yazının
+  içindeki `\n`) gitmeden HEMEN önce o anki giriş satırı okunur — erişilebilirlik ZATEN açıksa AT-SPI (rolü `terminal` olan
+  ögenin imleç satırı + önceki iki satır; erişilebilirlik bunun için açılmaz), yoksa pencerenin OCR'ı (en alttaki üç yazılı
+  satır; istem işaretinden sonrası ve sarılmış satırların birleşimi aday) — ve `riskli_komut`'tan geçer; yıkıcıysa onay
+  (yoksa 10). Yazının içindeki Enter'lar için kapı yazmadan ÖNCE sorulur (satır = okunan/tampon + ilk satır). Yedek TAMPON:
+  `RUNTIME_DIR/ucbirim/<sha1(arka uç:pencere:pid)>.json` (0600, dizin 0700, flock): yazdırılabilir tuşlar ve `type`
+  eklenir, BackSpace siler; Enter/ctrl+c/ctrl+u/Esc temizler; ok tuşları, ctrl+a/e/r/w, Tab, tık, orta tık, yapıştırma
+  "kirli" yapar. Yeni pencere, başka uçbirim penceresine geçiş ve 120 sn hareketsizlik de "kirli" yapar (bilinçli: temiz
+  saymak aradaki insan düzenlemesini ve parçalı yazmayı gözden kaçırırdı). Kirliyken satır okunamıyorsa Enter onay ister.
+  Yazılırken onaylanmış komut (`--onayli` ya da panel) aynı satırda Enter'da yeniden sorulmaz. Ön plandaki süreç kabuk
+  değilse (pencere PID → uçbirimin çocukları → `/proc/<kabuk>/stat` tpgid; vim, less, REPL) kapı uygulanmaz; ssh, tmux,
+  kapsayıcı kabuğu (docker/podman/distrobox…) ise uygulanır; PID bilinmiyorsa uygulanır. Kapsanan yollar: `tus`/`bas`,
+  `yaz` (harf harf + yapıştırarak), `dizi`/akış adımları, AT-SPI değer yazma.
+- **Ajanın kendi istemcisi** (`deskhand/kendi.py`): Deskhand süreci (CLI ve MCP sunucusu) `/proc/<pid>/stat` ppid ile
+  1'e kadar yürür (oturum altyapısı — systemd, kwin, plasmashell, krunner… — hariç); MCP sunucusunda küme 15 sn'de bir
+  tazelenir. Penceresinin sahibi PID'i (kde: `kdotool getwindowpid`; sanal: `_NET_WM_PID`) bu kümedeyse o pencereye HER
+  girdi 10 ("ajanın kendi istemcisi"; ajan kendi izin istemini onaylayamasın); okuma/ekran görüntüsü serbest. Uçbirimler çoğu
+  zaman TEK süreçte çok pencere tutar (Ghostty, Konsole): o sürecin TÜM pencereleri kapsanır. Zincirde tmux varsa `$TMUX`
+  soketiyle salt okunur `tmux list-clients -F '#{client_pid}'` → istemcilerin ataları (öykünücü) eklenir; çözülemezse
+  (screen, zellij, dtach, tmux sorgusu başarısız) TÜM uçbirim sınıflı pencereler (kde). PID'i bilinmeyen pencereler (kde):
+  ortam ipuçları (`KONSOLE_DBUS_WINDOW`, `WINDOWID`, `TERM_PROGRAM`, `GHOSTTY_RESOURCES_DIR`, `KITTY_PID`,
+  `ALACRITTY_WINDOW_ID`) ve zincirdeki öykünücünün adı → o sınıftaki PID'siz uçbirim pencereleri de. ssh üzerinden bağlanan
+  uzak istemci kapsam dışıdır. Görünmez masaüstündeki pencereler ajanın istemcisi olamaz: orada yalnız PID kuralı vardır
+  (doğal olarak boşa çıkar). Denetim yerleri: `denetle`, `pencere_denetle` (AT-SPI), `imlec_alti_denetle` (tıklamanın/
+  sürüklemenin düştüğü pencere), masaüstü kipinde klavye girdisinin gittiği etkin pencere (`girdi_seviye_denetle`),
+  `pencere_yonet`, `k_kapat`, AT-SPI çerçevesinin süreci; yapıştırarak yazma her parçada `denetle`'den geçer.
+- **Sistem yetki/parola/izin istemleri → insan onayı** (yasak değil): polkit kimlik doğrulama aracısı, KWallet
+  (`kwalletd5/6`, `ksecretd`), parola sorucuları (`ksshaskpass`, `pinentry-*`, `ssh-askpass`), `xdg-desktop-portal-*` izin
+  diyalogları (`org.freedesktop.impl.portal…`), `kdesu`/`sudo`/`pkexec` istemleri (`guvenlik.SISTEM_ISTEMLERI`, tek sabit
+  liste; pencere sınıfında ve sahibi sürecin adında). Bu pencerelere her tür girdi (fare, klavye, yapıştırma, AT-SPI
+  eylemi/değer yazma, sürükleme, pencere yönetimi, kapatma) eylem başında onay ister (`sistem_istemi_engel`; CLI
+  `--onayli`, MCP'de her zaman panel, gözetimsiz kipte ret); onay o eylem boyunca o pencere için geçerlidir. Her gönderimden
+  hemen önce `sistem_istemi_denetle` onaysız istemde 10 verir — girdinin DÜŞTÜĞÜ ekran noktasındaki pencere için de
+  (`imlec_alti_denetle`: başka pencere hedeflenip noktada istem açıksa izin olsa bile ret; masaüstü kipindeki tıkta noktadaki
+  isteme onay sorulur).
+- **Yapıştırma = pano okuma** (kde): `ctrl+v`, `ctrl+shift+v`, `shift+insert` ve orta tık (birincil seçim) kullanıcının
+  panosunu ajanın görebileceği yere taşır: pano boş değilse ve Deskhand'in bu oturumda yazdığı metin değilse
+  (`guvenlik.kendi_pano_ekle/kendi_pano_mu`: süreç belleği + `RUNTIME_DIR/pano-ozetleri`, 0600, yalnız sha256) onay ister
+  (okunamıyorsa da). Deskhand'in kendi yapıştırarak yazma yolu (`eylem._yapistirarak_yaz`) muaftır. Sanal masaüstünün
+  panosu ayrıdır: denetim yok.
+- **Parola alanı** (AT-SPI rolü `password text`, değer yazmada hedef öge, klavyeyle yazmada odaklı öge — erişilebilirlik
+  açıksa): yazı / yapıştırma / değer yazma onay ister (CLI `--onayli`); değeri ASLA okunmaz (doğrulama için bile); metin
+  günlüğe, hata iletisine, onay isteğine yazılmaz (yalnız uzunluk), `--gizli` verilmemiş olsa bile kendiliğinden gizlidir.
+- **Oturum kilidi** (kde): `org.freedesktop.ScreenSaver.GetActive` (yoksa logind `LockedHint`) kilitli ya da okunamıyorsa
+  kullanıcının ekranına hiçbir girdi gitmez (15, "oturum kilitli"; kapalı-başarısız; `--ekranimda` aşmaz): kilit ekranına
+  yanlışlıkla giden yazı parola denemesi sayılır ve hesabı kilitleyebilir. Durum 0,5 sn önbellekte; sanal masaüstünde yok.
+- **Onay verilen hedef değişmesin**: hassas tık panelden onaylandıysa tıklamadan HEMEN önce noktadaki yazı yeniden OCR'lanıp
+  onay isteğindeki yazıyla bulanık karşılaştırılır (benzerlik < 0,85 → tık yapılmaz, 10 "onay verilen hedef değişti").
+- **Sürükleme bitişi** başlangıç gibi denetlenir: tek onay iki noktanın yazısını taşır; ara hareketlerde gözcü (etkin
+  pencere + başlık kilidi); bırakmadan hemen önce bitiş noktasının altındaki pencere (yasak / kendi istemci / onaysız
+  sistem istemi / başka uygulama) — uymazsa imleç başlangıca götürülüp bırakılır (sürükleme iptal).
 - **Uygulama erişim seviyeleri** (varsayılan YOK): `CONFIG_DIR/uygulama-seviyeleri.txt`, satır `DESEN = goruntule | tikla |
   tam` (DESEN yasak listesindeki gibi başlık/sınıf regex'i; İngilizce eş adlar view/click/full). goruntule = hiçbir
   girdi yok (10; okuma/ekran görüntüsü serbest), tikla = fare serbest, klavye (yaz/tuş/bas) ve pencere kapatma yok (10),
@@ -206,10 +266,17 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   başlatılır (denetimsiz girdi sürmez). DUR açılınca tüm bağlantıların basılıları bırakılır, kuyrukta girdi varsa
   dotool yeniden başlatılır (kuyruk düşer). Panel ölürse dotool'un girişi kapanır, dotool çıkar, aygıt yok olur.
 - İnsan önceliği (12): kde arka ucunda kullanıcı klavye/fareyi kullanıyorsa; sanalda yalnız "Devral" açıkken.
+- Pencere yönetimi, pencere kapatma ve (kde) pano yazma da insan önceliğine (12) uyar (`guvenlik.insan_onceligi`);
+  kapatma DUR'a (13) bakar.
 - Kullanıcı meşgulken ön plan yok (15): kde arka ucu girdi, pencere öne getirme ve uygulama açmadan önce
   `mesgul.ekran_korumasi()` çağırır. Etkin pencere tam ekran / oyun biçimli ya da MPRIS'te video çalıyorsa
   Dur(15). İstisna yalnız kullanıcının açık izni (`--ekranimda`, `DESKHAND_EKRANIMDA=1` ya da bildirimdeki
   "Ekranımda yap" düğmesi → 10 dk). Sanal masaüstü etkilenmez.
+- **AT-SPI çerçevesi yalnız hedef pencerenin PID'inden** seçilir (çok süreçli uygulamada aynı süreç ağacından: ata/torun);
+  bulunamazsa ya da PID bilinmiyorsa Dur 6 — başka uygulamanın çerçevesine başlık benzerliğiyle düşülmez. Seçilen
+  çerçevenin kendi kimliği de denetlenir: Deskhand paneli/onay diyaloğu sürecine ait çerçeve her zaman 10 (okuma dahil),
+  yasak desen (uygulama adı/çerçeve adı) 10; eylem/değer yazmada ajanın kendi istemcisi ve uygulama erişim seviyesi.
+  Ağaç taramasında çerçevenin kimliği (veri yolu adı + nesne yolu, BİRLİKTE) saklanır; eylemde başka nesneyse Dur 8.
 - Erişilebilirlik eylem yolu (`ogeye-tikla --eylem`, `ogeye-yaz`; `erisim.py`): gerçek fare/klavye girdisi ve odak yoktur,
   bu yüzden fare yolundaki denetimler (imleç altı hariç) AÇIKÇA uygulanır: DUR (13), yasak pencere (10), başlık/sınıf
   kilidi (4), hassas düğme adı / ödeme sayfası (10 ya da panelden onay; onay isteği görüntüsüzdür), kde'de oyun/film
