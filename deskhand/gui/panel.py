@@ -259,9 +259,36 @@ class Panel(QObject):
         dlg.raise_()
         return dlg
 
+    def _masa_sec(self, masa: str) -> None:
+        """Panelin Arka plan sekmesini (önizleme, Devral, başlat/durdur) `masa` görünmez masaüstüne çevir ("" =
+        varsayılan). Panel sürecinin bağlamıdır (masalar.secili ← DESKHAND_MASAUSTU); açık Devral önce kapanır (bayrak
+        eski masaüstünün dosyasından silinsin)."""
+        from .. import masalar
+        try:
+            masa = masalar.dogrula(masa or "", ayrilmis_serbest=True)
+        except Exception:  # noqa: BLE001 - geçersiz ad: varsayılan
+            masa = ""
+        if masalar.secili() == masa:
+            return
+        arka = self.pencere.arka
+        if arka.b_devral.isChecked():
+            arka.b_devral.setChecked(False)
+        if masa:
+            os.environ[masalar.ORTAM] = masa
+        else:
+            os.environ.pop(masalar.ORTAM, None)
+        try:
+            s = arka.m.durum() if arka.m is not None else None
+        except Exception:  # noqa: BLE001
+            s = None
+        arka.sanal_guncelle(s)
+
     def devral_ac(self, _istek_id: str = ""):
         """İnsan doğrulaması devri: panel Arka plan sekmesinde Devral açılır (önizleme + girdi aktarımı; ajan bekler);
-        insan sınamayı çözer, diyalogda Bitti der. Devral'ı panel (yerleşik yasak pencere) açar: ajan açamaz."""
+        insan sınamayı çözer, diyalogda Bitti der. Devral'ı panel (yerleşik yasak pencere) açar: ajan açamaz. Sekme
+        önce isteğin görünmez masaüstüne çevrilir (adlı masaüstündeki devir de çözülebilsin)."""
+        dlg = self.diyaloglar.get(_istek_id)
+        self._masa_sec((getattr(dlg, "istek", None) or {}).get("masa", "") if dlg is not None else "")
         self.arka_goster()
         b = self.pencere.arka.b_devral
         if b.isEnabled() and not b.isChecked():
@@ -282,6 +309,7 @@ class Panel(QObject):
             b = self.pencere.arka.b_devral
             if b.isChecked():
                 b.setChecked(False)
+            self._masa_sec("")  # devir bitti: Arka plan sekmesi varsayılan masaüstüne döner
         QTimer.singleShot(50, self.izleyici.yenile)
 
     # -------- pencere

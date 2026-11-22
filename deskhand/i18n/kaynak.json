@@ -603,7 +603,7 @@
   "gui/metinler.py:220"
  ],
  "Bir görev zaten çalışıyor (başka bir panel ya da komuttan).": [
-  "gorev.py:511"
+  "gorev.py:512"
  ],
  "Bir görev zaten çalışıyor.": [
   "gorev.py:421"
@@ -624,7 +624,7 @@
   "gorev.py:421"
  ],
  "Bitmesini bekleyin.": [
-  "gorev.py:512"
+  "gorev.py:513"
  ],
  "Bitti": [
   "gui/metinler.py:127"
@@ -993,13 +993,13 @@
   "gorev.py:443"
  ],
  "Görev kilidi açılamadı: {hata}": [
-  "gorev.py:514"
+  "gorev.py:515"
  ],
  "Görev metnine parola ya da kart numarası yazmayın.": [
   "gui/metinler.py:298"
  ],
  "Görev sonuç vermeden bitti.": [
-  "gorev.py:617"
+  "gorev.py:618"
  ],
  "Görev tamamlanamadı.": [
   "gui/metinler.py:250"
@@ -1008,7 +1008,7 @@
   "gui/metinler.py:33"
  ],
  "Görev {dk} dakikayı aştı, durduruldu.": [
-  "gorev.py:604"
+  "gorev.py:605"
  ],
  "Görev çalışırken görünmez masaüstü burada canlı görünür.": [
   "gui/metinler.py:254"
@@ -1032,10 +1032,10 @@
   "gui/metinler.py:243"
  ],
  "Görevin açtığı görünmez masaüstü kapatıldı (oturum kopyaları silindi).": [
-  "gorev.py:640"
+  "gorev.py:641"
  ],
  "Görevin indirdiği dosyalar ({n}): {dosyalar} — klasör: {klasor}": [
-  "gorev.py:621"
+  "gorev.py:622"
  ],
  "Görünmez masaüstü açık": [
   "gui/metinler.py:293"
@@ -1056,7 +1056,7 @@
   "gui/metinler.py:278"
  ],
  "Görünmez masaüstü kapatılamadı: {hata}": [
-  "gorev.py:642"
+  "gorev.py:643"
  ],
  "Görünmez masaüstü kapatılamadı; görev başlatılmadı.": [
   "gorev.py:448"
@@ -1534,7 +1534,7 @@
  ],
  "Terminalde `claude` çalıştırıp /login ile giriş yapın.": [
   "gorev.py:307",
-  "gorev.py:610"
+  "gorev.py:611"
  ],
  "Tuş": [
   "gui/metinler.py:202"
@@ -1695,7 +1695,7 @@
   "gorev.py:429"
  ],
  "`claude` {kod} koduyla çıktı.": [
-  "gorev.py:611"
+  "gorev.py:612"
  ],
  "adlı görünmez masaüstü yalnız KWin türünde açılabilir ({neden})": [
   "masaustu.py:663"

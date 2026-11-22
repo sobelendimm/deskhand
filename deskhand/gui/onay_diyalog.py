@@ -96,7 +96,9 @@ class OnayDiyalog(QDialog):
         self.l_hedef = deger(istek.get("hedef", ""))
         self.l_masaustu = deger("")
         ms = istek.get("masaustu", "ekran")
-        self.mt.fn(lambda: self.l_masaustu.setText(_(T.MASAUSTU[ms]) if ms in T.MASAUSTU else str(ms or "")))
+        masa = str(istek.get("masa") or "") if ms == "arka" else ""  # adlı görünmez masaüstü (çoklu masaüstü)
+        self.mt.fn(lambda: self.l_masaustu.setText(
+            (_(T.MASAUSTU[ms]) if ms in T.MASAUSTU else str(ms or "")) + (f" — {masa}" if masa else "")))
 
         def satir(msgid: str, alan: QLabel):
             e = QLabel()

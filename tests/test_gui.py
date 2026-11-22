@@ -280,6 +280,24 @@ kontrol("ilk günlük satırları Etkinlik'te", w.etkinlik.model.rowCount() == 2
 w.show()
 bekle(lambda: w.isVisible())
 
+# ---- çoklu masaüstü: onay devrindeki Devral, Arka plan sekmesini isteğin masaüstüne çevirir; karar → varsayılan
+from deskhand import masalar as _ml  # noqa: E402
+
+
+class _SahteDiyalog:
+    istek = {"id": "x1", "masa": "b2", "masaustu": "arka"}
+
+
+p.diyaloglar["x1"] = _SahteDiyalog()
+p.devral_ac("x1")
+kontrol("çoklu masaüstü: devral_ac → panel bağlamı isteğin masaüstü (b2), Devral yolu onun",
+        _ml.secili() == "b2" and D.devral_yolu() == _ml.devral_yolu("b2"))
+p._devral_acan = "x1"
+p._karar("x1", "")
+kontrol("çoklu masaüstü: devir kararı → panel varsayılan masaüstüne döndü", _ml.secili() == "" and
+        os.environ.get(_ml.ORTAM) is None)
+w.show()
+
 # ---- tek örnek: ikinci başlatma mevcut olanı öne getirir
 w.hide()
 kontrol("ikinci tek_ornek → None (mevcut panele mesaj)", tek_ornek() is None)

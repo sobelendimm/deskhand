@@ -153,7 +153,7 @@ def calisma_koku() -> str:
 def _masaustu_acik() -> bool:
     try:
         from . import masaustu
-        return masaustu.durum_oku() is not None
+        return masaustu.durum_oku("") is not None  # görev HEP varsayılan masaüstünde (panelin bağlamından bağımsız)
     except Exception:  # noqa: BLE001
         return True  # bilinemiyorsa kapatma
 
@@ -443,7 +443,7 @@ class Gorev:
                                       _("Görev kendi temiz masaüstünde çalışır: açık masaüstündeki pencereler "
                                         "kapatılır."), kod="masaustu_acik")
                 from . import masaustu
-                masaustu.masaustu_durdur()
+                masaustu.masaustu_durdur("")
                 if _masaustu_acik():
                     raise GorevHatasi(_("Görünmez masaüstü kapatılamadı; görev başlatılmadı."), kod="masaustu_acik")
             gorev_kipi.indirme_dizini_bosalt()  # önceki görevin indirdikleri bu görevin tarayıcısına görünmesin
@@ -494,6 +494,7 @@ class Gorev:
         # girişini ~/.claude/.credentials.json'dan (OAuth) okur; yalnız kendi giriş değişkeni kalır
         o = gorev_kipi.ortam_temizle(o, gorev_kipi.CLAUDE_ORTAM_IZINLI)
         o["DESKHAND_GERCEK_EKRAN"] = "kapali"  # claude'un tüm alt süreçleri (MCP dahil) gerçek ekrana kilitli
+        o.pop("DESKHAND_MASAUSTU", None)  # görev HEP varsayılan masaüstünde (panel Devral için başka masaya geçmiş olsa da)
         for k in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):  # iç içe oturum işareti
             o.pop(k, None)
         o.update(CLAUDE_ORTAM_EK)
@@ -634,9 +635,9 @@ class Gorev:
         silinir), sonra masaüstü ayrımını kaldır. Görevin olmayan masaüstüne dokunulmaz."""
         try:
             from . import masaustu
-            if self._masaustu_onceden or not _masaustu_acik() or not (masaustu.durum_oku() or {}).get("gorev"):
+            if self._masaustu_onceden or not _masaustu_acik() or not (masaustu.durum_oku("") or {}).get("gorev"):
                 return
-            masaustu.masaustu_durdur()
+            masaustu.masaustu_durdur("")
             self._yay(olay("metin", _("Görevin açtığı görünmez masaüstü kapatıldı (oturum kopyaları silindi).")))
         except Exception as e:  # noqa: BLE001
             self._yay(olay("hata", _("Görünmez masaüstü kapatılamadı: {hata}").format(hata=e), kod="masaustu"))

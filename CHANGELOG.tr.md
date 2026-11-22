@@ -2,7 +2,7 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
-## Yayımlanmamış
+## 0.8.0 (22 Kasım 2026)
 
 - **Çoklu görünmez masaüstü (çekirdek).** Aynı anda birden çok görünmez masaüstü açılabilir (KWin türü; en çok
   `[masaustu] azami = 3`, 1..6): her Claude/MCP oturumu kendi masaüstüne kendiliğinden bağlanır (ilk oturum
@@ -14,6 +14,16 @@
 - **Düzeltme: bir masaüstünü durdurmak başkasının tarayıcı kopyalarını silmez.** Oturum kopyaları ve Flatpak
   örnek kaydı masaüstü başına ayrıldı; `dinle` (listen) yalnız bağlı olduğu masaüstünün sesini kaydeder.
 - **Bekleyen onay yalnız kendi masaüstünü kilitler** (bir masaüstündeki CAPTCHA devri ötekini durdurmaz).
+- **Kendi terminalinden çalışan sen her masaüstüne erişirsin.** Ata zincirinde Claude olmayan `deskhand`/`ekran
+  --background` çağrısı (terminal, KDE kısayolu) panel gibi izinlidir; başka bir Claude oturumunun komutları başkasının
+  masaüstüne erişemez (Dur 14). Bu ajanlar arası bir düzen kuralıdır, güvenlik sınırı değildir.
+- **Görev kipi çoklu masaüstüyle uyumlu.** Panel görevi her zaman varsayılan masaüstünde yürütür (sohbetteki Claude
+  varsayılanı tutuyor olsa bile); görev sürerken başka oturumlar ona erişemez, görev bitince eski sahibine döner.
+- **Panel: başka masaüstündeki insan doğrulaması da çözülebilir.** Onay penceresi masaüstünün adını gösterir; "Devral"
+  Arka plan sekmesini o masaüstüne çevirir, iş bitince varsayılana döner.
+- Sağlamlaştırma: MCP sunucusu Claude oturumu kapanıp sahipsiz kalınca masaüstüne bağlanmaz; sahiplik kaydı PID ad
+  alanını taşır (başka ad alanındaki kayıt "boş" sayılmaz); Flatpak örneği yalnız kesin PID eşleşmesiyle kaydedilir
+  (iki masaüstü aynı Flatpak uygulamasını açınca biri ötekinin örneğini kapatmaz).
 
 ## 0.7.1 (22 Kasım 2026)
 
