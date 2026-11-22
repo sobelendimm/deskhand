@@ -231,7 +231,7 @@ class OnayDiyalog(QDialog):
             self._bitir("geri")  # isteyen vazgeçti / zaten yanıtlandı
             return
         self.cubuk.setValue(int(1000 * max(0.0, min(1.0, k / self.toplam))))
-        self.l_kalan.setText(_(T.D_KALAN).format(s=sure_metni(k)))
+        self.l_kalan.setText(_(T.D_KALAN_DEVIR if self.devir else T.D_KALAN).format(s=sure_metni(k)))
 
     def _karar(self, karar: str, neden: str | None = None, kapat: bool = True):
         if self.bitti:

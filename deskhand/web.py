@@ -303,15 +303,18 @@ def _rol_kumesi(roller) -> set[str] | None:
     return kume
 
 
+_CERCEVE_EK = frozenset({"label", "static", "heading", "paragraph", "image", "text"})  # iframe içi metin ögeleri (cerceve_metni)
+
+
 def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str] | None, gorunur: bool,
-          en_cok_dugum: int = 30000):
+          en_cok_dugum: int = 30000, cerceve_metni: bool = False):
     """Çerçeveden başlayıp etkin (SHOWING) belge(ler)in ögelerini topla → (ham ögeler, belgeler, düğüm sayısı).
     Seviye seviye iki boru hattı turu: (1) rol + ad + durum, (2) gerekenlere alt ögeler + kutu (+ belge adresi).
     Tarayıcı arayüzünde yalnız görünen dallardan belgeye inilir (arka plan sekmelerinin belgeleri atlanır); belge
     içinde gorunur=True ise görünmeyen (SHOWING olmayan) dallara inilmez. Görüş alanı: en yakın çerçeve/belge kutusu
     (iframe'de üst alanla kesişimi) — kaydırma alanı dışındaki öge gorunur=False olur."""
     istenen = roller if roller is not None else ETKILESIMLI
-    seviye = [(cerceve, (), 0, None)]  # (yol, belge sırası anahtarı, belge derinliği, görüş alanı)
+    seviye = [(cerceve, (), 0, None, "")]  # (yol, belge sırası anahtarı, belge derinliği, görüş alanı, belge adresi)
     ogeler, belgeler, sayi = [], [], 0
     while seviye and sayi < en_cok_dugum:
         sayi += len(seviye)
@@ -320,7 +323,7 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
             m += [_m(bus, y, ERISIM, "GetRoleName"), _ozellik(bus, y, "Name"), _m(bus, y, ERISIM, "GetState")]
         r = yol.toplu(m)
         isler, ikinci = [], []
-        for i, (y, anahtar, derin, alan) in enumerate(seviye):
+        for i, (y, anahtar, derin, alan, badres) in enumerate(seviye):
             rol = _deg(r[3 * i], "") or ""
             d = _durumlar(r[3 * i + 2])
             if not rol or "defunct" in d:
@@ -332,12 +335,12 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
                 inilir = rol not in _KROM_BUDA and rol not in _YAPRAK and ("showing" in d or y == cerceve)
                 ister = False
             else:
-                ister = rol in istenen
+                ister = rol in istenen or (cerceve_metni and derin > 1 and rol in _CERCEVE_EK)
                 inilir = (rol not in _YAPRAK and not (rol == "combo box" and "expanded" not in d)
                           and (belge or not gorunur or "showing" in d))
             kutu_ister = ister or belge or rol == "internal frame"
             isler.append((y, anahtar, derin, alan, rol, (_ozd(r[3 * i + 1], "") or "").strip(), d, inilir, ister,
-                          kutu_ister, belge))
+                          kutu_ister, belge, badres))
             if inilir:
                 ikinci.append(_m(bus, y, ERISIM, "GetChildren"))
             if kutu_ister:
@@ -346,7 +349,7 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
                 ikinci.append(_m(bus, y, "org.a11y.atspi.Document", "GetAttributes"))
         r2 = yol.toplu(ikinci)
         j, yeni = 0, []
-        for (y, anahtar, derin, alan, rol, ad, d, inilir, ister, kutu_ister, belge) in isler:
+        for (y, anahtar, derin, alan, rol, ad, d, inilir, ister, kutu_ister, belge, badres) in isler:
             cocuk = kutu = None
             if inilir:
                 cocuk, j = _deg(r2[j]), j + 1
@@ -359,14 +362,15 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
                 oz, j = (_deg(r2[j], {}) or {}), j + 1
                 belgeler.append({"ad": ad, "adres": oz.get("DocURL", ""), "durum": d, "derinlik": derin + 1, "kutu": kutu})
                 alt_derin = derin + 1
+                badres = oz.get("DocURL", "") or ""  # çocuklar bu belgeye ait (insan doğrulaması: çerçeve adresi)
             if kutu and (belge or rol == "internal frame"):
                 alt_alan = _kesisim(alan, kutu)
             if ister:
                 ogeler.append({"_yol": y, "_anahtar": anahtar, "_alan": alan, "_d": d, "_kutu": kutu,
-                               "_derin": derin, "rol": rol, "ad": ad})
+                               "_derin": derin, "_adres": badres, "rol": rol, "ad": ad})
             for n, (b_, cy) in enumerate(cocuk or ()):
                 if b_ == bus:
-                    yeni.append((cy, anahtar + (n,), alt_derin, alt_alan))
+                    yeni.append((cy, anahtar + (n,), alt_derin, alt_alan, badres))
         seviye = yeni
     return ogeler, belgeler, sayi
 
@@ -407,6 +411,8 @@ def _bicimle(o, ad_siniri, bus=None) -> dict:
              "gorunur": o["_gorunur"]}
     if o["_derin"] > 1:
         sonuc["cerceve"] = o["_derin"] - 1  # iç içe belge (iframe) derinliği
+        if o.get("_adres"):
+            sonuc["_belge_adres"] = o["_adres"]  # ögenin ait olduğu iç belgenin adresi (iç alan: ajana çıkmaz)
     if hassas_mi(ad):
         sonuc["hassas"] = True
     if bus:  # erişilebilirlik eylemi için nesne adresi (iç alan; varsayılan çıktıda yok) + belge içi çocuk-sıra
@@ -456,7 +462,7 @@ def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> N
 # ---------------------------------------------------------------- dış arayüz
 
 def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_AD_SINIRI, ayrinti=True,
-        yol_ver=False) -> dict:
+        yol_ver=False, cerceve_metni=False) -> dict:
     """Sayfa ögeleri + sayfalama bilgisi. → {"ogeler": [...], "toplam": n, "atla": a, "sonraki": a2 | None,
     "sayfa": sayfa bilgisi, "sure": sn, "dugum": yürünen düğüm}. Ögeler belge sırasında.
 
@@ -464,11 +470,13 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
     roller: AT-SPI rol adları ya da takma adlar ("düğme", "bağlantı", "giriş", "başlık"…); None = etkileşimli ögeler
     gorunur: True = yalnız görünür (kaydırma alanı içinde, gizli değil); False = görünmeyenler de (gorunur: false)
     en_cok / atla: sayfalama (en_cok=0: hepsi); ad_siniri: ad kırpma (0 = kırpma); ayrinti: href / değer / seçili seçenek
-    yol_ver: ögelere erişilebilirlik kimliği (_bus + _yol: İKİSİ BİRLİKTE; yalnız yol başka uygulamaya gidebilir) ekle"""
+    yol_ver: ögelere erişilebilirlik kimliği (_bus + _yol: İKİSİ BİRLİKTE; yalnız yol başka uygulamaya gidebilir) ekle
+    cerceve_metni: iç belgelerde (iframe) rolden bağımsız metin ögeleri de gelsin (insan doğrulaması: "Success!" işareti)"""
     t0 = time.monotonic()
     au, yol, bus, cerceve, koord, koken, konum = _baglam(k)
     try:
-        ham, belgeler, dugum = _yuru(yol, bus, cerceve, koord, koken, _rol_kumesi(roller), gorunur)
+        ham, belgeler, dugum = _yuru(yol, bus, cerceve, koord, koken, _rol_kumesi(roller), gorunur,
+                                     cerceve_metni=cerceve_metni)
         for o in ham:
             o["_gorunur"] = ("showing" in o["_d"] and "visible" in o["_d"] and _icinde(o["_kutu"], o["_alan"]))
         ham = [o for o in ham if o["_kutu"] or not gorunur]
@@ -489,7 +497,8 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
         ust = min(belgeler, key=lambda b: b["derinlik"]) if belgeler else None
         sayfa = _sayfa_ozeti(ust, au.baslik(k), len(belgeler))
         sayfa["konum"] = konum  # hangi koordinat çerçevesinde geldiği (None = doğrulanamadı)
-        ic = [{"ad": b["ad"], "adres": b["adres"]} for b in belgeler if b["derinlik"] > 1][:12]
+        ic = [{"ad": b["ad"], "adres": b["adres"], "kutu": list(b["kutu"]) if b.get("kutu") else None}
+              for b in belgeler if b["derinlik"] > 1][:12]
         if ic:  # gömülü belgeler (iframe): insan doğrulaması algısı (dogrulama_sinamasi) adreslerine bakar
             sayfa["cerceveler"] = ic
         sayfa["konum_dogrulandi"] = konum is not None

@@ -21,7 +21,8 @@ import types
 
 from .arka_uc import EKRAN, sec
 from . import guvenlik, ucbirim
-from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, sistem_istemi_on,
+from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, insan_dogrulama_nokta,
+                    sistem_istemi_on,
                     sistem_istemi_onay, tikla_ic)
 from .gunluk import gunluk
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, seviye_denetle,
@@ -1049,6 +1050,7 @@ def _hassas_oge(k, onayli, ne, o, bilgi, ek_metinler=(), ek_basliklar=()):
     metinler = [*ek_metinler, o["ad"], bilgi.get("aciklama", ""), *bilgi.get("cocuklar", [])]
     metinler = [m for m in metinler if m]
     nokta = (o["cx"], o["cy"]) if o.get("cx") is not None else None
+    insan_dogrulama_nokta(k, nokta[0] if nokta else None, nokta[1] if nokta else None, metinler)  # CAPTCHA kapısı
     onayli_oldu = False
     if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=nokta, goruntu_al=False, ek_basliklar=ek_basliklar):
         onayli, onayli_oldu = True, True
@@ -1327,6 +1329,7 @@ def k_ogeye_yaz(a):
     metin = a.metin.replace("\r\n", "\n").replace("\r", "\n")
     o, kademe, sure = _eylem_baglami(a, "klavye")
     k = a.kimlik
+    insan_dogrulama_nokta(k, o.get("cx"), o.get("cy"), [a.ad, o.get("ad")])  # CAPTCHA alanına değer yazılmaz
     bilgi = _atspi_calistir(_oge_istegi(k, o, "incele"))
     if not bilgi["yazilabilir"]:
         raise Dur(6, _("öge yazılabilir değil (EditableText ya da Value arayüzü yok): '{ad}'").format(ad=o["ad"]))

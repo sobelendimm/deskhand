@@ -262,6 +262,7 @@ class Panel(QObject):
         b = self.pencere.arka.b_devral
         if b.isEnabled() and not b.isChecked():
             b.setChecked(True)
+            self._devral_acan = _istek_id  # bu diyaloğun açtığı Devral: karar verilince (Bitti/Vazgeç/süre) kapanır
 
     def diyalog_one(self, istek_id: str):
         dlg = self.diyaloglar.get(istek_id)
@@ -272,6 +273,11 @@ class Panel(QObject):
 
     def _karar(self, istek_id: str, _neden: str):
         self.diyaloglar.pop(istek_id, None)
+        if getattr(self, "_devral_acan", None) == istek_id:  # devir bitti: Devral açık kalıp ajanı/kullanıcıyı şaşırtmasın
+            self._devral_acan = None
+            b = self.pencere.arka.b_devral
+            if b.isChecked():
+                b.setChecked(False)
         QTimer.singleShot(50, self.izleyici.yenile)
 
     # -------- pencere

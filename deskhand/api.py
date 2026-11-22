@@ -383,14 +383,19 @@ def web_oku(k: str, sorgu: str | None = None, rol: str | None = None, gizliler: 
                 e[dst] = o[src]
         if o.get("hassas"):
             e["sensitive"] = True
+        if o.get("_belge_adres"):  # ajana ADRES verilmez: yalnız algılanan sınama türü (insan doğrulaması algısı)
+            from .dogrulama_sinamasi import adres_turu
+            if adres_turu(o["_belge_adres"]):
+                e["frame_kind"] = adres_turu(o["_belge_adres"])
         ogeler.append(e)
     sf = s["sayfa"]
     sayfa = {"title": sf["baslik"], "url": sf["adres"], "loading": sf["yukleniyor"], "frames": sf["belge"],
              "position_verified": bool(sf.get("konum_dogrulandi"))}
     if sf.get("hassas_sayfa"):
         sayfa["sensitive_page"] = True
-    if sf.get("cerceveler"):  # gömülü belgeler (iframe): insan doğrulaması algısı (dogrulama_sinamasi)
-        sayfa["frame_documents"] = sf["cerceveler"]
+    if sf.get("cerceveler"):  # gömülü belgeler (iframe): ajana TAM adres verilmez, yalnız tür + alan adı (gizlilik)
+        from .dogrulama_sinamasi import cerceve_ozeti
+        sayfa["frame_documents"] = cerceve_ozeti(sf["cerceveler"])
     return {"items": ogeler, "total": s["toplam"], "next": s["sonraki"], "page": sayfa, "seconds": s["sure"]}
 
 

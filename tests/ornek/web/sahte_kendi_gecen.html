@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Just a moment...</title></head>
+<body style="font: 14px sans-serif; margin: 12px">
+<h1 id="b">example.test</h1>
+<iframe id="f" title="Widget containing a Cloudflare security challenge" src="sahte_sinama_cerceve.html" width="320" height="90"></iframe>
+<script>
+// ara sayfa kendiliğinden geçer (yönetilen Turnstile ~5 sn): çerçeve kalkar, başlık değişir, ADRES aynı kalır
+setTimeout(function () {
+  document.getElementById("f").remove();
+  document.title = "Hos geldiniz";
+  document.getElementById("b").textContent = "Hos geldiniz";
+}, 5000);
+</script>
+</body>
+</html>

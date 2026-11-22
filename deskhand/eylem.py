@@ -16,7 +16,7 @@ from . import yollar
 from .arka_uc import EKRAN, ArkaUc, sec
 from .gorsel import bolge_coz, pencere_goruntusu, renk_alanlari, simge_bul_ic
 from .gunluk import gunluk
-from . import guvenlik, ucbirim
+from . import dogrulama_sinamasi, guvenlik, ucbirim
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, hedef_pencere_denetle,
                        imlec_alti_denetle, onay_tusu_mu, yasak_denetle, yazi_onay_ister_mi)
 from .hata import Dur, dur_denetle
@@ -576,11 +576,28 @@ def sistem_istemi_on(g, k, onayli, ne=None):
         _onayli_etiket(g)
 
 
+def insan_dogrulama_nokta(k, x, y, metinler=()):
+    """İnsan doğrulaması (CAPTCHA) kapısı, FARE: koordinat/metin/öge/simge/renk/web/sürükleme başlangıcı ve bitişi hep buradan
+    geçer (CLI, MCP ve akış). Nokta sınama kutusundaysa Dur(18): hiçbir şey gönderilmez, çözülmez/atlatılmaz."""
+    r = dogrulama_sinamasi.nokta_engeli(k, x, y, metinler)
+    if r is not None:
+        raise dogrulama_sinamasi.dur(r)
+
+
+def insan_dogrulama_klavye(k):
+    """İnsan doğrulaması (CAPTCHA) kapısı, KLAVYE: sayfanın tamamı sınamaysa ya da odak sınama kutusundaysa (onay kutusu,
+    kaydırıcı, çerçeve içi, resimli güvenlik kodu alanı) Dur(18). Sınama durumu yoksa ek maliyet yok."""
+    r = dogrulama_sinamasi.klavye_engeli(k)
+    if r is not None:
+        raise dogrulama_sinamasi.dur(r)
+
+
 def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=(), ek_basliklar=()):
     """Tıklanacak nokta ve oradaki yazı belli olduktan SONRA tek onay (bir eylem = bir onay): ödeme sayfası ve/veya
     hassas düğme. Onay isteği noktadaki yazıyı + hassas düğme metnini + çevresinin küçük görüntüsünü taşır.
     ek_basliklar: pencere başlığına ek denetlenen sayfa başlıkları (web belge başlığı)."""
     guvenlik.seviye_denetle(k, "fare")  # erişim seviyesi: onay diyaloğundan ÖNCE
+    insan_dogrulama_nokta(k, x, y, [*ek_metinler, *yakin])  # CAPTCHA: tıklanan NOKTA sınama kutusundaysa 18 (çözülmez)
     g.onayli = onayli
     if k != EKRAN and guvenlik.sistem_istemi_engel(k, onayli, ne):  # polkit/KWallet/parola sorucusu: onay
         _onayli_etiket(g)
@@ -762,6 +779,7 @@ def k_tus(a):
     g = girdi_al(f"tus {kombinasyon}")
     try:
         guvenlik.seviye_denetle(a.kimlik, "klavye")  # erişim seviyesi: onay diyaloğundan ÖNCE
+        insan_dogrulama_klavye(a.kimlik)
         onaylar = _tus_onaylari(g, a.kimlik, getattr(a, "onayli", False), kombinasyon)
         _au().one_getir(a.kimlik)
         try:
@@ -812,6 +830,7 @@ def k_yaz(a):
     g = girdi_al(f"yaz {len(metin)} karakter", gizli=a.gizli)
     try:
         onayli = getattr(a, "onayli", False)
+        insan_dogrulama_klavye(a.kimlik)
         if guvenlik.sistem_istemi_engel(a.kimlik, onayli, _("yazı")):
             _onayli_etiket(g)
         if _parola_alani_mi(a.kimlik):  # odaklı öge parola alanı: metin kendiliğinden gizli + insan onayı
@@ -855,6 +874,7 @@ def k_bas(a):
     g = girdi_al(f"bas {kombinasyon} {a.sure} sn")
     try:
         guvenlik.seviye_denetle(a.kimlik, "klavye")
+        insan_dogrulama_klavye(a.kimlik)
         _tus_onaylari(g, a.kimlik, getattr(a, "onayli", False), kombinasyon, birlikte=True)
         ucbirim.tampon_isle(_au(), a.kimlik, kirli=True)  # basılı tuş tekrarlar: satırın içeriği bilinmez
         _au().one_getir(a.kimlik)
@@ -906,6 +926,7 @@ def k_surukle(a):
         yakin2 = nokta_metni(a.kimlik, a.x2, a.y2) if a.kimlik != EKRAN else []
         # tek onay (bir eylem = bir onay): başlangıç ve BİTİŞ noktasının yazıları birlikte
         hassas_nokta(g, a.kimlik, a.onayli, _("sürükleme"), a.x1, a.y1, yakin1, ek_metinler=yakin2)
+        insan_dogrulama_nokta(a.kimlik, a.x2, a.y2)  # bitiş noktası da sınama kutusunda olamaz
         g.onay_hedefi = None  # bitiş de onaylı metne dahil; tık doğrulaması yok (sürüklemede nokta iki tane)
         _au().one_getir(a.kimlik)
         g.gonder(a.kimlik, a.baslik, f"mouseto {f1x:.6f} {f1y:.6f}")

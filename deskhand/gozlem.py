@@ -83,6 +83,8 @@ def web_ogesi(o: dict, etkilesimli_roller) -> dict:
         e["gorunmez"] = True
     if o.get("cerceve"):
         e["cerceve"] = o["cerceve"]  # iç içe belge (iframe) derinliği: insan doğrulaması algısı kullanır
+    if o.get("_belge_adres"):
+        e["belge_adres"] = o["_belge_adres"]  # ögenin ait olduğu iframe belgesinin adresi (yalnız iç algı; ajana çıkmaz)
     if o.get("deger") and o["rol"] != "password text":
         e["deger"] = temiz(o["deger"])
     if o.get("href"):

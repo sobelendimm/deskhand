@@ -20,7 +20,7 @@ KULLANICI_DUR = 13
 SANAL_KAPALI = 14
 KULLANICI_MESGUL = 15  # kullanıcı oyunda / film izliyor: ekranına müdahale yok
 OTURUM_POLITIKASI = 16  # uygulama arka planda açılamaz (kullanıcının ekranında açık / yalnız ön plan)
-INSAN_DOGRULAMA = 17  # insan doğrulaması (CAPTCHA) sınaması: ajan girdisi reddedildi, kullanıcıya devret (request_human)
+INSAN_DOGRULAMA = 18  # insan doğrulaması (CAPTCHA) sınaması: ajan girdisi reddedildi, kullanıcıya devret (request_human)
 
 
 class Dur(Exception):

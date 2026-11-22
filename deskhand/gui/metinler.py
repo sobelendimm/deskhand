@@ -99,7 +99,13 @@ O_BOS = N_("Bekleyen onay isteği yok.")
 O_AC = N_("Diyaloğu aç")
 O_KARAR = {"izin": N_("izin verildi"), "red": N_("reddedildi"), "sure": N_("süre doldu"),
            "panel-yok": N_("panel kapalıydı"), "panel-kapandi": N_("panel kapandı"), "dur": N_("DUR nedeniyle red"),
-           "gozetimsiz": N_("gözetimsiz kip: red"), "hata": N_("hata"), "bekliyor": N_("bekliyor"), "geri": N_("istek geri çekildi")}
+           "gozetimsiz": N_("gözetimsiz kip: red"), "hata": N_("hata"), "bekliyor": N_("bekliyor"), "geri": N_("istek geri çekildi"),
+           # insan doğrulaması devri (request_human): "izin" değil, iş kullanıcıya devredildi
+           "devir-tamam": N_("devir tamam"), "devir-kosul": N_("devir tamam (sınama kalktı)"),
+           "devir-red": N_("devir: vazgeçildi"), "devir-sure": N_("devir: süre doldu"),
+           "devir-panel-yok": N_("devir: panel kapalıydı"), "devir-panel-kapandi": N_("devir: panel kapandı"),
+           "devir-dur": N_("devir: DUR"), "devir-gozetimsiz": N_("devir: gözetimsiz kip"),
+           "devir-hata": N_("devir: hata"), "devir-kanal": N_("devir: kanal doğrulanamadı")}
 MASAUSTU = {"ekran": N_("Ekranınız"), "arka": N_("Arka plan (görünmez masaüstü)")}
 
 # ---- onay diyaloğu
@@ -110,6 +116,7 @@ D_MASAUSTU = N_("Masaüstü")
 D_AYRINTI = N_("Ayrıntı")
 D_ISTEYEN = N_("İsteyen süreç")
 D_KALAN = N_("Kalan süre: {s} — yanıt vermezseniz reddedilir")
+D_KALAN_DEVIR = N_("Kalan süre: {s} — gelmezseniz devir iptal olur; hiçbir girdi gönderilmez")
 D_IZIN = N_("Bir kez izin ver")
 D_RED = N_("Reddet")
 D_NOT = N_("İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.")

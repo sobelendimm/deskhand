@@ -143,7 +143,9 @@ YARDIM_CIKIS = (
     N_("11 akış hata ekranı / 'dur' adımı, 12 kullanıcı bilgisayarı kullanıyor (insan önceliği),\n"
        "13 kullanıcı DUR dedi (ekran resume), 14 sanal masaüstü kullanılamıyor,\n"
        "15 kullanıcı oyunda/film izliyor (ekranına müdahale yok; --background),\n"
-       "16 uygulama arka planda açılamaz (kullanıcının ekranında açık ya da yalnız ön plan);\n"
+       "16 uygulama arka planda açılamaz (kullanıcının ekranında açık ya da yalnız ön plan),\n"
+       "18 insan doğrulaması (CAPTCHA) sınaması: girdi gönderilmedi, çözülmez/atlatılmaz; kullanıcıya devret\n"
+       "(MCP: request_human; CLI: kullanıcıya haber ver);\n"
        "karar: 0 on, 20 arka, 21 sonra"),
 )
 

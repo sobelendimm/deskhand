@@ -620,10 +620,10 @@ uymadı · 5 belirsiz (birden çok eşleşme) · 6 bulunamadı · 7 zaman aşım
 9 araç eksik (dotool/tesseract/Xvfb…) · 10 yasak/hassas · 11 akış hata ekranı · 12 insan kullanıyor ·
 **13 kullanıcı DUR dedi** · **14 sanal masaüstü kapalı** · **15 kullanıcı oyunda/film izliyor, ekranına müdahale yok** ·
 **16 uygulama arka planda açılamaz** (kullanıcının ekranında açık ya da yalnız ön plan) ·
-**17 insan doğrulaması (CAPTCHA) bekliyor: ajan girdisi reddedildi, kullanıcıya devret (`request_human`)** ·
+**18 insan doğrulaması (CAPTCHA) bekliyor: ajan girdisi reddedildi, kullanıcıya devret (`request_human`)** ·
 20 / 21 `decide` karar kodları: 0 = kullanıcının ekranı, 20 = arka plan, 21 = sonra.
 
-Çağıran otomasyon 10, 12, 13, 15, 16 ve 17'de durmalı ve kullanıcıya haber vermelidir. MCP yüzeyinde aynı kodlar
+Çağıran otomasyon 10, 12, 13, 15, 16 ve 18'de durmalı ve kullanıcıya haber vermelidir. MCP yüzeyinde aynı kodlar
 `[kod] ad: ayrıntı` hatası olarak görünür. Bu tablo README'deki "Exit codes" tablosuyla tutarlı tutulur.
 
 ## 6. Çalışma kuralları
@@ -820,25 +820,44 @@ onay sorulur.
 **Politika (değişmez):** CAPTCHA / "insan olduğunuzu doğrulayın" sınamaları ÇÖZÜLMEZ ve atlatılmaz (görsel, sesli ya da
 başka yolla). Deskhand yalnız algılar, ajan girdisini reddeder, kullanıcıya devreder, çözülünce devam eder.
 
-- **Algı** (`deskhand/dogrulama_sinamasi.py`, saf; yalnız metin geçmesi YETMEZ). Kaynaklar: (1) pencere/sayfa başlığı
-  "Just a moment…", "Bir dakika lütfen…", "Attention Required", "Verifying you are human" (sayfanın tamamı sınama:
-  `cloudflare_interstitial`); (2) gömülü belge (iframe) adresi: `google.com/recaptcha`, `hcaptcha.com`,
-  `challenges.cloudflare.com`, `arkoselabs`/`funcaptcha`, `geetest` (görünmez `size=invisible` reCAPTCHA v3 rozeti
-  sayılmaz; `web.oku` bu adresleri `sayfa.cerceveler` ile verir); (3) öge adı + rol: onay kutusu/düğme/kaydırıcı
-  "I'm not a robot", "Ben robot değilim", "Verify you are human", "İnsan olduğunuzu doğrulayın", "Slide to verify"…
-  ya da satıcı adı (reCAPTCHA, hCaptcha, Turnstile…); iframe içindeyse her rol; üst düzey bağlantı/başlık/paragraf
-  (blog yazısı) sayılmaz; (4) OCR: yalnız kısa, tek başına duran satır (düşük güven). Sonuç `human_verification:
-  {detected, kind, window, hint}` (+ düşük güvende `confidence`); `observe`, `read_text`, `wait_for`, `click`,
-  `type_text`, `press_key`, `drag` sonuçlarında. Algı pencere başına 5 dk saklanır (`kaydet/durum`).
-- **Reddetme:** sınama ögesine (ref bayrağı `!human-verification`, metin/öge adı, sınama kutusu içindeki koordinat) ve
-  sayfanın tamamı sınamaysa hedefsiz klavyeye `click/drag/type_text/press_key` → **kod 17**, `sent: nothing_sent`,
-  hata yapısında `human_verification`. Sayfanın geri kalanı okunabilir ve kullanılabilir.
+- **Algı** (`deskhand/dogrulama_sinamasi.py`; `incele` saf; yalnız metin geçmesi YETMEZ). Kaynaklar: (1) gömülü belge
+  (iframe) adresi: `google.com/recaptcha`, `hcaptcha.com`, `challenges.cloudflare.com`, `arkoselabs`/`funcaptcha`,
+  `geetest` (görünmez reCAPTCHA v3 rozeti `size=invisible` ve hCaptcha `#frame=checkbox-invisible` muaf). `web.oku` her
+  ÖGEYE ait belgenin adresini (`_belge_adres`) taşır: yalnız sınama belgesinin ögeleri işaretlenir (YouTube gömmesi,
+  Stripe kart alanı, sohbet kutusu etkilenmez) ve o iframe'in TÜM kutusu sınama alanıdır (onay kutusunun yanındaki etikete
+  tıklamak da kutuyu işaretler); (2) öge adı + rol: "I'm not a robot", "Ben robot değilim", "Verify you are human",
+  "Slide to verify"… (çerçeve DIŞINDA en çok 6 sözcüklü etiket; "Require human verification" / "Move the slider to set the
+  price" / "Enable CAPTCHA" ayarları sayılmaz), satıcı adı (reCAPTCHA, hCaptcha, Turnstile…) yalnız gömülü belgede;
+  (3) klasik resimli metin CAPTCHA'sı: "Güvenlik kodu / Doğrulama kodu / captcha" adlı giriş alanı + yakında resim (ya da
+  "resimdeki karakterler" ifadesi); SMS/e-posta/uygulama (2FA) bağlamındaki resimsiz kod alanı sayılmaz; (4) başlık
+  "Just a moment…", "Attention Required"… TEK BAŞINA yetmez: sınama çerçevesi/ögesi ya da Cloudflare adresi (`/cdn-cgi/`,
+  `__cf_chl`) ile birlikte sayfanın tamamı sınama olur (`cloudflare_interstitial`); (5) OCR: yalnız kısa satır, kalıp
+  satırın ≥%60'ı (düşük güven). ÇÖZÜLMÜŞ sınama (işaretli onay kutusu, Turnstile "Success!") sayılmaz.
+  Sonuç `human_verification: {detected, kind, window, hint}`; `observe`, `read_text`, `wait_for`, `click`, `type_text`,
+  `press_key`, `drag` sonuçlarında. `read_text` iframe'lerin TAM adresini vermez (yalnız tür + alan adı); kritik
+  bildirimde sayfa başlığı değil alan adı yazılır.
+- **Durum**: pencere kimliği + başlık/adres anahtarıyla `RUNTIME_DIR/insan-dogrulama.json` (0600, flock) — CLI ve MCP
+  süreçleri aynı kutuları görür. Başlık/adres değişince ya da 300 sn sonra silinir. "Sınama yok" sonucu ~10 sn önbellekte.
+- **Reddetme (ÇEKİRDEK kapı)**: fare yollarının TEK ortak noktası `eylem.hassas_nokta` (koordinat, metin, öge, simge,
+  renk, web, sürükleme başlangıcı; sürükleme bitişi ve `erisim._hassas_oge` ile `ogeye-yaz` de) `nokta_engeli`'ni çağırır:
+  tıklanan NOKTA sınama kutusundaysa (ya da kısa metin sınama cümlesiyse) **Dur(18)** — gözlemsiz çağrı, CLI (`ekran
+  click`), MCP ve akış adımları hep aynı kapıdan geçer. Klavye (`k_tus`/`k_yaz`/`k_bas`): sayfanın tamamı sınamaysa ya da
+  ODAK sınama kutusundaysa (Tab+Boşluk ile işaretleme dahil) 18. Durum yoksa ve pencere tarayıcıysa girdiden ÖNCE bir kez
+  taranır (tarama ~`hazir`; "yok" 10 sn önbellek). MCP'de ek olarak ref bayrağı (`!human-verification`) ve metin hedefi;
+  `batch` adım hatasında `human_verification`. **kod 18**, `sent: nothing_sent`.
 - **Devir** (`request_human(reason, window, timeout_s=600)`): KDE bildirimi (`mesgul.bildir`, kritik) + onay
   kanalında `tur="devir"` isteği (panel diyaloğu: **Devral** [yalnız arka plan masaüstü; panelin mevcut Devral'ı:
   önizleme + girdi aktarımı], **Bitti**, **Vazgeç**). Bekleme boyunca o masaüstüne ajan girdisi kapalıdır ([7]);
   istek yalnız panelden (SO_PEERCRED ile doğrulanmış kanal, §8: Bitti = izin) ya da sayfanın kendisinden (başta var
-  olan sınama işareti art arda 2 yoklamada yok → `resolved_by=challenge_cleared`) kapanır; ajan kendi isteğini
-  kapatamaz. Sonuç: `resolved | timeout | declined | unavailable` (panel kapalı, gözetimsiz kip, DUR). `resolved`
-  sonrası işaret hâlâ varsa `still_detected: true`. Zaman aşımı 10 dk (en çok 60).
-- **Sınırlar:** yeni CAPTCHA türleri algıdan kaçabilir (araç sonuçlarına her işlemden sonra yeniden bakılır); CLI
-  (`ekran click ...`) bu kapıdan geçmez, kapı MCP yüzeyindedir.
+  olan sınama işareti sayfa OKUNURKEN ve ADRES değişmeden art arda 2 yoklamada yok → `resolved_by=challenge_cleared`;
+  okunamayan sayfa ya da değişen adres "kayboldu" sayılmaz) kapanır; ajan kendi isteğini kapatamaz. Sonuç: `resolved |
+  timeout | declined | unavailable`. `resolved` sonrası işaret hâlâ varsa `still_detected: true`; kullanıcı Bitti dedikten
+  sonra AYNI sınama (adres + çerçeve kümesi) için uyarı ve yeniden çağrı bastırılır (`suppressed`; girdi kapısı AÇIK kalır).
+  Kendiliğinden geçen sınamalar (Cloudflare ara sayfası, yönetilen Turnstile) için bildirimden önce ~10 sn yalnız
+  yoklanır; bildirim panel canlı/gözetimli/DUR yoksa gönderilir, kullanıcı oyunda/tam ekrandaysa sessizdir. Atomik devir
+  kaydı (eşzamanlı ikinci istek [7]); ret/zaman aşımından sonra aynı pencere için 60 sn içinde yeni istek ret
+  (`retry_after_s`). `bekleyen_var` devir isteklerini 3600 sn'ye kadar canlı sayar (bekleme boyunca BAŞKA süreçlerin
+  girdisi de kapalı). Günlük/geçmişte etiket `devir-tamam` ("onay izin" değil); "Bitti/Vazgeç/süre" ile diyaloğun açtığı
+  Devral kapanır.
+- **Sınırlar:** yeni CAPTCHA türleri algıdan kaçabilir; ağaç okunamazsa (erişilebilirlik kapalı) algı yoktur — tarayıcı
+  yolları zaten konumu doğrulanamayan ögeye tıklamaz (fail-closed). Klavye odak sorgusu tarayıcı sayfaları içindir.

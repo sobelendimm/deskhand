@@ -612,7 +612,7 @@ class OnaylarSekmesi(QWidget):
         for j, v in enumerate(vals):
             it = QTableWidgetItem(v)
             if j == 4:
-                it.setIcon(nokta(YESIL if g["sonuc"] == "izin" else KIRMIZI, 6))
+                it.setIcon(nokta(YESIL if g["sonuc"] in ("izin", "devir-tamam", "devir-kosul") else KIRMIZI, 6))
             self.t_gecmis.setItem(satir, j, it)
 
     def tazele(self) -> None:

@@ -67,6 +67,8 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "kosul": N_("beklenen koşul gerçekleşti (insan doğrulaması sayfadan kalktı)"),
 }
 TUR_DEVIR = "devir"           # istek türü: insan doğrulaması devri (panelde "Devral / Bitti / Vazgeç"; izin = Bitti)
+DEVIR_EN_COK = 3600.0         # insan devri isteğinin en uzun ömrü (request_human timeout_s üst sınırı): bekleme boyunca BAŞKA
+                              # süreçlerin girdisi de kapalı kalır (bekleyen_var bu sınıra kadar "sahte" saymaz)
 KONTROL_ARALIK = 3.0          # isteyen `kontrol` işlevini en çok bu sıklıkta çağırır (sn)
 KARARLAR = ("izin", "red")
 _ID = re.compile(r"[0-9a-f]{32}")
@@ -366,7 +368,7 @@ class _Kanal:
             self._yanitlanan[istek_id] = simdi
             for k in [k for k, t in self._yanitlanan.items() if simdi - t > 3600]:
                 del self._yanitlanan[k]
-            for k in [k for k, (_kr, t) in self._kararlar.items() if simdi - t > VARSAYILAN_SURE + ESKI_PAY]:
+            for k in [k for k, (_kr, t) in self._kararlar.items() if simdi - t > DEVIR_EN_COK + ESKI_PAY]:
                 del self._kararlar[k]
             c = self._bekleyen.pop(istek_id, None)
             if c is None:
@@ -534,7 +536,8 @@ def bekleyen_var(masaustu: str, haric_pid: int | None = None, simdi: float | Non
     for d in bekleyenler(simdi):
         if d["masaustu"] != masaustu or d["pid"] <= 0 or d["pid"] == haric_pid:
             continue
-        if d["son_zaman"] - d["zaman"] > VARSAYILAN_SURE + ESKI_PAY:
+        sinir = (DEVIR_EN_COK if d.get("tur") == TUR_DEVIR else VARSAYILAN_SURE) + ESKI_PAY
+        if d["son_zaman"] - d["zaman"] > sinir:
             continue
         return True
     return False
@@ -551,10 +554,14 @@ def _dur_acik() -> bool:
     return os.path.exists(dur_dosyasi())
 
 
-def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str) -> None:
+DEVIR_ETIKET = {"izin": "devir-tamam", "kosul": "devir-kosul"}  # insan devri: "onay izin" DEĞİL (izin verilmedi, iş devredildi)
+
+
+def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str, tur: str = "") -> None:
     from .gunluk import gunluk
     yer = "arka sanal " if masaustu == "arka" else ""
-    gunluk(f"onay {sonuc.neden} | {yer}[{hedef}] | {eylem}")
+    neden = DEVIR_ETIKET.get(sonuc.neden, f"devir-{sonuc.neden}") if tur == TUR_DEVIR else sonuc.neden
+    gunluk(f"onay {neden} | {yer}[{hedef}] | {eylem}")
 
 
 def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran", sure: float = VARSAYILAN_SURE,
@@ -570,7 +577,7 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
 
     def bitir(s: OnaySonucu) -> OnaySonucu:
         if gunluge_yaz:
-            _kaydet_gunluk(s, eylem, hedef, masaustu)
+            _kaydet_gunluk(s, eylem, hedef, masaustu, tur)
         return s
 
     if gozetimsiz():  # başında insan yok: panel diyaloğu açılmaz, beklenmez (tek nokta: CLI, MCP, akış hep buradan)
