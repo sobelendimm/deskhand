@@ -827,6 +827,11 @@ async def duzeltme_a_testleri():
         kontrol("baslik_kilidi: ref başlığı verilince tam eşleşen desen (kimlikle değil anlık görüntüyle)",
                 s.baslik_kilidi(None, "{w}", "Eski [başlık]") == "^" + re.escape("Eski [başlık]") + "$" and
                 s.baslik_kilidi("^x$", "{w}", "Eski") == "^x$")
+        kd = s.degisiklik_toleransli("kw.txt — KWrite")
+        kontrol("kimlik başlık kilidi: düzenleyicinin 'kaydedilmedi' işareti (* ●) kilidi düşürmez, başka belge düşürür",
+                all(re.search(kd, t) for t in ("kw.txt — KWrite", "kw.txt * — KWrite", "*kw.txt — KWrite",
+                                                "● kw.txt — KWrite")) and
+                not any(re.search(kd, t) for t in ("başka.txt — KWrite", "kw.txt — Kate", "kw.txt — KWrite 2")), kd)
         au = sm.sifirla()
         r = await c.call_tool("observe", {"window": "KWrite", **F})
         m = re.search(r"\[(\d+)\] push button \"Kaydet\"", metin(r))

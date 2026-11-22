@@ -711,7 +711,20 @@ def baslik_kilidi(arg: str | None, k: str, ref_baslik: str | None = None) -> str
         return arg
     if ref_baslik is not None:
         return "^" + re.escape(ref_baslik) + "$"
-    return "^" + re.escape(api.arka().baslik(k)) + "$"
+    return degisiklik_toleransli(api.arka().baslik(k))
+
+
+_DEGISTI_ISARETI = r"(?:\s*[*●•])?"  # düzenleyicilerin "kaydedilmedi" işareti: "a.txt * — KWrite", "*a.txt", "● a.py"
+
+
+def degisiklik_toleransli(baslik: str) -> str:
+    """Kimlikle verilen pencerenin başlık kilidi: tam başlık, ama sözcük aralarında/başında/sonunda düzenleyicinin
+    "kaydedilmedi" işareti (* ● •) çıkıp kaybolabilir — yoksa ilk harf yazılınca başlık değişir, yazma kesilirdi."""
+    import re
+    parcalar = [re.escape(p) for p in re.sub(r"(?<=\S)\s*[*●•](?=\s|$)|^[*●•]\s*", " ", baslik).split()]
+    if not parcalar:
+        return "^" + re.escape(baslik) + "$"
+    return "^" + r"\s*[*●•]?\s*" + (_DEGISTI_ISARETI + r"\s+").join(parcalar) + _DEGISTI_ISARETI + r"\s*$"
 
 
 def _pencere_zorunlu(window: str | None) -> str:

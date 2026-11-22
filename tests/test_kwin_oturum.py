@@ -183,6 +183,19 @@ kontrol("ortam: Gecko (firefox) XWayland'den (GDK_BACKEND=x11, MOZ_ENABLE_WAYLAN
 kontrol("ortam: Gecko ipuçları yalnız Gecko programlarına (başkası yerel Wayland kalır; env ezer)",
         ko.gecko_ipuclari(["konsole"]) == {} and ko.gecko_ipuclari([]) == {} and ko.gecko_ipuclari(["firefox"])
         and {**ko.gecko_ipuclari(["firefox"]), "MOZ_ENABLE_WAYLAND": "1"}["MOZ_ENABLE_WAYLAND"] == "1")
+import tempfile as _tf  # noqa: E402
+with _tf.TemporaryDirectory() as _td:
+    _ff = os.path.join(_td, "ff.desktop")
+    _kw = os.path.join(_td, "kw.desktop")
+    with open(_ff, "w") as _f:
+        _f.write("[Desktop Entry]\nType=Application\nName=Firefox\nExec=/usr/lib/firefox/firefox %u\n")
+    with open(_kw, "w") as _f:
+        _f.write("[Desktop Entry]\nType=Application\nName=KWrite\nExec=kwrite %U\n")
+    kontrol("gecko ipucu MCP open_app yolunda da: `gio launch firefox.desktop` (Exec) ve `env V=1 firefox` tanınır; "
+            "kwrite girdisi tanınmaz",
+            ko.gecko_ipuclari(["gio", "launch", _ff, "http://x"]) == dict(ko.GECKO_IPUCLARI) and
+            ko.gecko_ipuclari(["env", "A=1", "firefox"]) == dict(ko.GECKO_IPUCLARI) and
+            ko.gecko_ipuclari(["gio", "launch", _kw]) == {})
 _chr = ["chromium", "--force-renderer-accessibility", "file:///x.html"]
 _cx, _ce = ko.chromium_x11(_chr)
 kontrol("ortam: Chromium/Electron ailesi (erişilebilirlik bayraklı) XWayland'den: bayrak bayrağın arkasına, ipucu env",

@@ -82,10 +82,30 @@ def chromium_x11(argv) -> tuple[list, dict]:
     return argv, {"ELECTRON_OZONE_PLATFORM_HINT": "x11"}
 
 
+def _program_adlari(argv) -> set[str]:
+    """Başlatılacak programın olası adları: MCP open_app `gio launch X.desktop` → girdinin Exec'i; `env [VAR=…]`
+    öneki atlanır; ad hem yazıldığı gibi hem PATH + sembolik bağ çözülmüş hâliyle (firefox → /usr/lib/firefox/firefox)."""
+    argv = [str(a) for a in (argv or [])]
+    if len(argv) >= 3 and os.path.basename(argv[0]) == "gio" and argv[1] == "launch" and argv[2].endswith(".desktop"):
+        from .uygulama import _desktop_exec
+        argv = [str(a) for a in (_desktop_exec(argv[2]) or [])]
+    while argv and os.path.basename(argv[0]) == "env":
+        argv = argv[1:]
+        while argv and (argv[0].startswith("-") or ("=" in argv[0] and not argv[0].startswith("/"))):
+            argv = argv[1:]
+    if not argv:
+        return set()
+    adlar = {os.path.basename(argv[0])}
+    yol = shutil.which(argv[0])
+    if yol:
+        adlar.add(os.path.basename(os.path.realpath(yol)))
+    return adlar
+
+
 def gecko_ipuclari(argv) -> dict:
-    """Başlatılan program bir Gecko tarayıcısıysa XWayland ipuçları (açıkça verilen env bunları ezer), değilse {}."""
-    ad = os.path.basename(str((argv or [""])[0]))
-    return dict(GECKO_IPUCLARI) if ad in GECKO_PROGRAMLAR else {}
+    """Başlatılan program bir Gecko tarayıcısıysa XWayland ipuçları (açıkça verilen env bunları ezer), değilse {}.
+    MCP open_app'in `gio launch firefox.desktop` yolu da (girdinin Exec'i) tanınır — ortam gio'dan uygulamaya geçer."""
+    return dict(GECKO_IPUCLARI) if _program_adlari(argv) & set(GECKO_PROGRAMLAR) else {}
 
 
 # ---------------------------------------------------------------- yolların / adreslerin gerçek değerleri
