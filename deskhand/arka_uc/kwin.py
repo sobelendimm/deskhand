@@ -115,6 +115,33 @@ def oturum_pencereleri(d: dict) -> list[tuple[str, str, tuple[int, int, int, int
     return sonuc
 
 
+def oturum_olcegi_ayarla(d: dict, olcek: int, env: dict, canli) -> str:
+    """KWin oturumunun TEK çıkışının ölçeğini kscreen-doctor ile ayarla (kwin_oturum._olcek_uygula; ham çağrılar yalnız
+    arka_uc/ içinde). env: kwin_oturum._ekran_ortami (YALNIZ oturumun Wayland soketi + özel veri yolu). canli(): KWin
+    öldüyse Dur fırlatır. → kscreen-doctor'ın son çıktısı (tanılama)."""
+    ks = arka_ortak.arac("kscreen-doctor", zorunlu=False)
+    if not ks:
+        raise hata.Dur(ARAC_EKSIK, _("ölçek 2 için kscreen-doctor gerekli (paket: libkscreen)"))
+
+    def calistir(*a):
+        canli()
+        try:
+            return subprocess.run([ks, *a], capture_output=True, text=True, timeout=10, env=env,
+                                  stdin=subprocess.DEVNULL)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise hata.Dur(ARAC_EKSIK, _("kscreen-doctor çalışmadı: {hata}").format(hata=e))
+    p = calistir("-j")
+    try:
+        cikislar = [c for c in json.loads(p.stdout or "{}").get("outputs", []) if c.get("enabled", True)]
+    except ValueError:
+        cikislar = []
+    if len(cikislar) != 1 or not re.fullmatch(r"[A-Za-z0-9_.-]+", str(cikislar[0].get("name", ""))):
+        raise hata.Dur(ARAC_EKSIK, _("oturum çıkışı bulunamadı (kscreen-doctor): {hata}").format(
+            hata=(p.stderr or p.stdout or "").strip()[-300:]))
+    p = calistir(f"output.{cikislar[0]['name']}.scale.{int(olcek)}")
+    return (p.stderr or p.stdout or "").strip()[-300:]
+
+
 def kimlik_yap(uuid: str) -> str:
     return f"{ARKA_ONEK}{uuid}"
 

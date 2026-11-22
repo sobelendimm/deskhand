@@ -60,6 +60,13 @@ Ajan ya da izin kipi ne derse desin, iki masaüstünde de aracın kendisi uygula
 `deskhand desktop start` görünmez bir masaüstü açar: Xvfb + openbox, varsayılan
 1920×1080, sizin oturumunuzdan ayrı.
 
+**Ürün görseli / keskin ekran görüntüsü için `deskhand desktop start --scale 2`** (MCP:
+`manage_desktop(action="start", scale=2)`; yalnız KWin türü). Uygulamalar aynı yerleşimde ve aynı
+koordinatlarla çalışır ama ekran iki kat pikselle çizilir: `deskhand screenshot --out urun.png`
+tam çözünürlüğü (ör. 1920×1080 masaüstünde 3840×2160) kaydeder, `--width 1280` küçültür. Firefox ve
+Chromium da 2× çizer. `deskhand desktop status` ölçeği gösterir; ölçeği değiştirmek için masaüstünü
+kapatıp yeniden açın.
+
 - **Size hiçbir şey ulaşmaz.** Ekranınıza girdi gitmez (arka plan arka ucu yalnız kendi X
   ekranıyla konuşabilir). Oradaki uygulamaların D-Bus'ı ayrıdır: bildirimleri ekranınıza
   düşmez, günlüğe yakalanır; sesleri sessiz bir çıkışa gider. Wayland değişkenleri

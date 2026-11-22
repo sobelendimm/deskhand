@@ -1330,7 +1330,7 @@ def get_status(
         _masa_bagla_arac()
     d = masaustu.durum() if _MASA["bagli"] or masalar.izinli_mi() else None
     s["background"] = {"running": d is not None, "size": list(d["boyut"][:2]) if d else None,
-                       "name": _MASA["ad"] if _MASA["bagli"] else None}
+                       "scale": masaustu.olcek(d) if d else None, "name": _MASA["ad"] if _MASA["bagli"] else None}
     try:
         if windows and d is not None and desktop in ("background", "auto"):
             with api.hedef("sanal"):
@@ -1382,15 +1382,18 @@ def manage_desktop(
     audio: Annotated[bool, Field(description="start: also set up the desktop's private silent audio output so apps "
                                              "opened afterwards can be heard with `listen` (their sound never reaches "
                                              "the user's speakers)")] = False,
+    scale: Annotated[Literal[1, 2], Field(description="start: 2 = HiDPI desktop (KWin only): same layout and "
+                                                      "coordinates, twice the pixels, sharper screenshots")] = 1,
 ) -> dict[str, Any]:
     """Start, stop or inspect the invisible background desktop (Xvfb). Start it before desktop="background" work if it
-    is not running ([14]). stop closes every window on it. Returns running, size and (status) its windows. Use
-    audio=true when you will need `listen` (video, voice messages): open the apps AFTER this."""
+    is not running ([14]). stop closes every window on it. Returns running, size, scale and (status) its windows. Use
+    audio=true when you will need `listen` (video, voice messages): open the apps AFTER this. scale=2 for sharp
+    screenshots (e.g. product images); coordinates stay the same."""
     ad = _masa_bagla_arac()
     try:
         if action == "start":
             hata.dur_denetle()
-            d = masaustu.masaustu_baslat(size, ad=ad, oto=_MASA["oto"])
+            d = masaustu.masaustu_baslat(size, ad=ad, oto=_MASA["oto"], olcek=scale)
             uyarilar = list(d.get("uyarilar") or [])
             if audio:
                 with kilitli():
@@ -1398,7 +1401,8 @@ def manage_desktop(
                 if uyari:
                     uyarilar.append(uyari)
             return {"status": "already_running" if d.get("zaten") else "started", "running": True, "name": ad,
-                    "size": list(d["boyut"][:2]), "warnings": uyarilar, "audio": bool(audio and not uyari)}
+                    "size": list(d["boyut"][:2]), "scale": masaustu.olcek(d), "warnings": uyarilar,
+                    "audio": bool(audio and not uyari)}
         if action == "stop":
             with kilitli():
                 ok, notlar = masaustu.masaustu_durdur(ad)
@@ -1413,7 +1417,8 @@ def manage_desktop(
             return {"status": "not_running", "running": False, "name": ad}
         with api.hedef("sanal"):
             pen = api.pencereler()
-        return {"status": "running", "running": True, "name": ad, "size": list(d["boyut"][:2]), "windows": pen,
+        return {"status": "running", "running": True, "name": ad, "size": list(d["boyut"][:2]),
+                "scale": masaustu.olcek(d), "windows": pen,
                 "health": d.get("saglik") or {}}
     except hata.Dur as e:
         raise ToolError(hata_metni(e)) from None
@@ -1592,7 +1597,10 @@ def screenshot(
             else:
                 bolge = list(region)
         with kilitli(), api.okuma(k):
-            im, geo, kok, maskeler = api.goruntu_al(k, bolge)
+            # tam çözünürlük (ölçek 2 masaüstü: iki kat piksel) → max_edge'e küçültülür: aynı boyutta daha keskin
+            im, geo, kok, maskeler = api.goruntu_al(k, bolge, tam=True)
+        from .gorsel import piksel_olcegi
+        f = piksel_olcegi(im)  # görüntü pikseli / pencere pikseli (küçültmeden önce)
         olcek = api.olcek_hesapla(*im.size, max_edge)
         if olcek < 1.0:
             from PIL import Image
@@ -1604,13 +1612,13 @@ def screenshot(
                     x, y_, g, h = m_["box"]
                     d.rectangle([int(x * olcek), int(y_ * olcek), int((x + g) * olcek + 1), int((y_ + h) * olcek + 1)],
                                 fill=(0, 0, 0))
-        sid = cekim_kaydet(k, api.arka().ad, geo, kok, olcek, im.size)
+        sid = cekim_kaydet(k, api.arka().ad, geo, kok, olcek * f, im.size)
         tampon = io.BytesIO()
         if format == "jpeg":
             im.convert("RGB").save(tampon, "JPEG", quality=80)
         else:
             im.save(tampon, "PNG", optimize=True)
-        meta = {**bilgi, "shot_id": sid, "width": im.width, "height": im.height, "scale": round(olcek, 4),
+        meta = {**bilgi, "shot_id": sid, "width": im.width, "height": im.height, "scale": round(olcek * f, 4),
                 "window": api.pencere_bilgi(k), "region_origin": list(kok),
                 "redacted": [{"box": [round(v * olcek) for v in m["box"]]} for m in maskeler]}
         return CallToolResult(content=[

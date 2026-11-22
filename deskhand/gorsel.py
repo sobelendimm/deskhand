@@ -26,19 +26,21 @@ def bolge_coz(s):
     return v
 
 
-def pencere_goruntusu(k, bolge=None, kararli=False):
+def pencere_goruntusu(k, bolge=None, kararli=False, tam=False):
     """→ (görüntü, pencere geometrisi, bölge kökü). Görüntü pikseli + kök = pencere koordinatı.
+    tam=True: ekranın FİZİKSEL çözünürlüğü (ölçek 2 masaüstünde iki kat piksel; küçültülmez): görüntü pikseli =
+    (pencere koordinatı − kök) × piksel_olcegi(im). tam=False (varsayılan): mantıksal piksel (eski davranış).
     kararli=True: içerik DURANA dek bekle (en çok 1,5 sn): tarayıcının yumuşak kaydırması sürerken okunan konuma
     tıklamak, sayfa kaymaya devam ettiği için bir üst satırdaki alanı tıklıyordu (gerçek ekran testi: yazı
     'Not alanı' yerine 'E-posta' kutusuna gitti). Tıklama/hassas denetim yolları bunu kullanır."""
-    im, geo, kok = _pencere_goruntusu(k, bolge)
+    im, geo, kok = _pencere_goruntusu(k, bolge, tam)
     if not kararli:
         return im, geo, kok
     from .ocr import ayni_konum
     bitis = time.monotonic() + 1.5
     while time.monotonic() < bitis:
         time.sleep(0.1)
-        im2, geo2, kok2 = _pencere_goruntusu(k, bolge)
+        im2, geo2, kok2 = _pencere_goruntusu(k, bolge, tam)
         durdu = geo2 == geo and ayni_konum(im, im2)
         im, geo, kok = im2, geo2, kok2
         if durdu:
@@ -46,23 +48,33 @@ def pencere_goruntusu(k, bolge=None, kararli=False):
     return im, geo, kok
 
 
-def _pencere_goruntusu(k, bolge=None):
+def piksel_olcegi(im) -> float:
+    """pencere_goruntusu(tam=True) görüntüsünde bir mantıksal pikselin kaç görüntü pikseli olduğu (ölçek 2 → 2.0)."""
+    return float(im.info.get("deskhand_olcek", 1.0))
+
+
+def _pencere_goruntusu(k, bolge=None, tam_coz=False):
     au = sec()
     au.one_getir(k)
     geo = au.geometri(k)
     X, Y, W, H = geo
     sx0, sy0, sx1, sy1 = au.ekran_alani()
     tam = au.goruntu()
-    if tam.size != (sx1 - sx0, sy1 - sy0):  # ekran ölçeği ≠ 1: fiziksel piksel → mantıksal koordinat
-        tam = tam.resize((sx1 - sx0, sy1 - sy0), Image.LANCZOS)
+    f = 1.0
+    if tam.size != (sx1 - sx0, sy1 - sy0):  # ekran ölçeği ≠ 1: fiziksel piksel
+        if tam_coz:
+            f = tam.width / (sx1 - sx0)  # fiziksel çözünürlük korunur; kesim kutuları ölçeklenir
+        else:  # → mantıksal koordinat
+            tam = tam.resize((sx1 - sx0, sy1 - sy0), Image.LANCZOS)
     if k != EKRAN and au.aktif() != k:
         raise Dur(3, _("görüntü alınırken pencere değişti → {baslik}").format(baslik=repr(au.baslik(au.aktif()))))
-    im = tam.crop((X - sx0, Y - sy0, X - sx0 + W, Y - sy0 + H))
+    im = tam.crop(tuple(round(v * f) for v in (X - sx0, Y - sy0, X - sx0 + W, Y - sy0 + H)))
     bx = by = 0
     if bolge:
         bx, by, bw, bh = bolge
         bx, by = max(0, min(bx, W - 1)), max(0, min(by, H - 1))
-        im = im.crop((bx, by, min(W, bx + bw), min(H, by + bh)))
+        im = im.crop(tuple(round(v * f) for v in (bx, by, min(W, bx + bw), min(H, by + bh))))
+    im.info["deskhand_olcek"] = f
     return im, geo, (bx, by)
 
 
@@ -214,11 +226,14 @@ def renk_alanlari(im, renk, en_az=250):
 # ---------------------------------------------------------------- komutlar
 
 def k_foto(a):
-    im, geo, kok = pencere_goruntusu(a.kimlik, bolge_coz(a.bolge))
-    olcek = 1.0
+    # tam çözünürlük: ölçek 2 masaüstünde dosya iki kat pikselli (ürün görseli / keskin ekran görüntüsü);
+    # olcek = görüntü pikseli / pencere pikseli (--foto tıklama eşlemesi ve ızgara bununla)
+    im, geo, kok = pencere_goruntusu(a.kimlik, bolge_coz(a.bolge), tam=True)
+    olcek = piksel_olcegi(im)
     if a.genislik and im.width > a.genislik:
-        olcek = a.genislik / im.width
-        im = im.resize((a.genislik, max(1, round(im.height * olcek))), Image.LANCZOS)
+        k_ = a.genislik / im.width
+        olcek *= k_
+        im = im.resize((a.genislik, max(1, round(im.height * k_))), Image.LANCZOS)
     kenar = (0, 0)
     if a.izgara:
         im, kenar = ciz_izgara(im, a.izgara, kok, olcek)

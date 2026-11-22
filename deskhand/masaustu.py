@@ -612,14 +612,25 @@ def secilen_tur() -> tuple[str, bool, str]:
     return z, True, ""
 
 
+def olcek(d: dict | None) -> int:
+    """Masaüstünün ölçeği (1 ya da 2; Xvfb ve eski kayıtlar 1)."""
+    from .kwin_oturum import olcek_al
+    return olcek_al(d) if d and tur(d) == "kwin" else 1
+
+
+_masa_olcegi = olcek  # masaustu_baslat'ın `olcek` parametresi adı gölgeler
+
+
 def masaustu_baslat(boyut: str | None = None, openbox: bool = True, ad: str | None = None,
-                    oto: bool = False) -> dict:
+                    oto: bool = False, olcek: int = 1) -> dict:
     """Arka plan masaüstünü başlat (zaten açıksa durumunu döndürür): türü secilen_tur() belirler. KWin oturumu
     kendiliğinden seçilip AÇILAMAZSA Xvfb'ye düşülür (uyarıyla; yalnız varsayılan masaüstünde). Hata olursa başlatılan
     her şeyi kapatır. openbox: yalnız Xvfb türünde (KWin kendi pencere yöneticisidir). ad: masaüstü adı (None: bağlam,
     masalar.secili()); adlı masaüstü YALNIZ KWin türünde. oto: MCP'nin kendiliğinden açtığı masaüstü (sahibi ölünce
     kapanır). Aynı anda en çok [masaustu] azami masaüstü: aşılırsa Dur(7)."""
     from . import gorev_kipi
+    from .kwin_oturum import olcek_dogrula
+    olcek = olcek_dogrula(olcek)
     ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
     with masalar.masa_sabit(ad):
         oto_temizle(haric=(ad,))
@@ -631,6 +642,10 @@ def masaustu_baslat(boyut: str | None = None, openbox: bool = True, ad: str | No
             if d is not None:
                 d["zaten"] = True
                 d["ad"] = ad
+                if olcek != _masa_olcegi(d):  # açık masaüstünün ölçeği istenenden farklı: uyar (yeniden açılmaz)
+                    d["olcek_uyari"] = _("masaüstü zaten ölçek {acik} ile açık; ölçek {istenen} için önce kapatın").format(
+                        acik=_masa_olcegi(d), istenen=olcek)
+                    d.setdefault("uyarilar", []).append(d["olcek_uyari"])
                 return d
             eski = durum_oku()
             if eski is not None:  # ölü masaüstünden kalanlar (çökme): temizle
@@ -641,7 +656,7 @@ def masaustu_baslat(boyut: str | None = None, openbox: bool = True, ad: str | No
                     pass
             # sınır sayımı + başlatma + kayıt TEK genel kilitte: iki farklı ad aynı anda azami'yi aşamasın
             with _genel_baslatma_kilidi():
-                return _baslat_sinirli(ad, boyut, openbox, oto)
+                return _baslat_sinirli(ad, boyut, openbox, oto, olcek)
 
 
 @contextlib.contextmanager
@@ -652,7 +667,7 @@ def _genel_baslatma_kilidi():
         yield
 
 
-def _baslat_sinirli(ad: str, boyut: str | None, openbox: bool, oto: bool) -> dict:
+def _baslat_sinirli(ad: str, boyut: str | None, openbox: bool, oto: bool, olcek: int = 1) -> dict:
     """masaustu_baslat'ın kilit altındaki gövdesi (bağlam = ad): sınır, tür, başlatma, kayıt."""
     from . import gorev_kipi
     acik = [a for a in masalar.adlar() if a != ad and durum(saglik=False, ad=a) is not None]
@@ -664,11 +679,14 @@ def _baslat_sinirli(ad: str, boyut: str | None, openbox: bool, oto: bool) -> dic
     if ad != "" and t != "kwin":
         raise Dur(ARAC_EKSIK, _("adlı görünmez masaüstü yalnız KWin türünde açılabilir ({neden})").format(
             neden=_neden or "DESKHAND_ARKA_TUR=xvfb"))
+    if olcek != 1 and t != "kwin":  # Xvfb'nin çıkış ölçeği yok; uygulama başına bayrak güvenilir değil (Qt/GTK karışık)
+        raise Dur(ARAC_EKSIK, _("ölçek {olcek} yalnız KWin türünde (Xvfb'de çıkış ölçeği yok): {neden}").format(
+            olcek=olcek, neden=_neden or "DESKHAND_ARKA_TUR=xvfb"))
     if t == "kwin":
         try:
-            d = _kwin_baslat(boyut)
+            d = _kwin_baslat(boyut, olcek)
         except Dur as e:
-            if zorla or ad != "":
+            if zorla or ad != "" or olcek != 1:
                 raise
             from .gunluk import gunluk
             gunluk(f"masaustu | KWin oturumu açılamadı, Xvfb'ye düşüldü: {e.mesaj}")
@@ -694,7 +712,7 @@ def liste(temizle: bool = True) -> list[dict]:
     for ad in masalar.adlar():
         d = durum(saglik=False, ad=ad)
         sahip = masalar.sahip_oku(ad)
-        s.append({"ad": ad, "acik": d is not None, "tur": tur(d) if d else None,
+        s.append({"ad": ad, "acik": d is not None, "tur": tur(d) if d else None, "olcek": olcek(d) if d else None,
                   "oto": oto_mu(ad), "sahip_pid": sahip["pid"] if sahip else None,
                   "izinli": masalar.izinli_mi(ad)})
     return s
@@ -763,13 +781,13 @@ def _klavye_duzeni() -> tuple[str, str]:
     return "tr", ""
 
 
-def _kwin_baslat(boyut: str | None) -> dict:
+def _kwin_baslat(boyut: str | None, olcek: int = 1) -> dict:
     """Yalıtık KWin oturumu (kwin_oturum.baslat: kafes, sessiz ses + ses bekçisi, özel D-Bus, KWin, XWayland, hazır
     olma denetimi) + Xvfb yolundaki diğer güvenceler: özel veri yolu kancaları, oturumun KENDİ erişilebilirlik kayıt
     defteri (uygulamalardan ÖNCE), bildirim yakalayıcı. Hata olursa oturum kapatılır."""
     from . import kwin_oturum
     g, y, _derinlik = boyut_coz(boyut)
-    d = kwin_oturum.baslat((g, y), xwayland=True, duzen=_klavye_duzeni())
+    d = kwin_oturum.baslat((g, y), xwayland=True, duzen=_klavye_duzeni(), olcek=olcek)
     try:
         for kanca in list(OZEL_VERI_YOLU_KANCALARI):
             try:
@@ -1144,6 +1162,11 @@ def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, g
         # Flatpak uygulamasına WAYLAND varken X soketi verilmez (sandbox'ta X yok) → X11 bayrağı açılmazlığa yol açar.
         argv, chromium_env = (argv, {}) if _flatpak_run_mi(argv) else kwin_oturum.chromium_x11(argv)
         env = {**kwin_oturum.gecko_ipuclari(argv), **chromium_env, **(env or {})} or None
+        o = olcek(d)
+        # ölçek 2: XWayland istemcileri kendileri ölçekler (KWin [Xwayland] Scale) → keskin çizim. GTK (Firefox…)
+        # GDK_SCALE ile (kwin_oturum.uygulama_ortami), Chromium/Electron --force-device-scale-factor ile
+        if o != 1 and chromium_env and not any(str(a).startswith("--force-device-scale-factor") for a in argv):
+            argv.insert(argv.index(kwin_oturum.OZONE_X11_BAYRAGI) + 1, f"--force-device-scale-factor={o}")
     try:
         return korumali_baslat(d, argv, uygulama_ortami(d, env), uygulama_baglari(d), kopya=kopya, girdi=girdi,
                                ev=ev, **popen)
@@ -1191,6 +1214,9 @@ def _yazdir_durum(d: dict) -> None:
                 "ses {ses} | XWayland {xwayland} | GPU {gpu}").format(
             surum=d.get("kwin_surum") or "?", xwayland=d.get("xwayland") or _("yok"),
             gpu=d.get("gpu") or "?", **ortak))
+        if olcek(d) != 1:
+            print(_("ölçek {olcek}: ekran görüntüsü {fg}x{fy} piksel (koordinatlar {genislik}x{yukseklik})").format(
+                olcek=olcek(d), fg=g * olcek(d), fy=y * olcek(d), genislik=g, yukseklik=y))
     else:
         print(_("sanal masaüstü AÇIK: {ekran} {genislik}x{yukseklik} | kafes {kafes} (bellek {bellek}) | ses {ses} | "
                 "openbox {openbox}").format(openbox=_("var") if d.get("openbox") else _("yok"), **ortak))
@@ -1208,7 +1234,8 @@ def _yazdir_liste(s: list[dict]) -> None:
     for m in s:
         print(_("{ad}: {acik}{tur}{oto}{sahip}").format(
             ad=m["ad"] or _("(varsayılan)"), acik=_("AÇIK") if m["acik"] else _("kapalı"),
-            tur=f" ({m['tur']})" if m["tur"] else "", oto=_(" | otomatik") if m["oto"] else "",
+            tur=(f" ({m['tur']}, {_('ölçek')} {m['olcek']})" if (m.get("olcek") or 1) != 1 else f" ({m['tur']})")
+            if m["tur"] else "", oto=_(" | otomatik") if m["oto"] else "",
             sahip=(_(" | sahip PID {pid}").format(pid=m["sahip_pid"]) + ("" if m["izinli"] else _(" (başka oturum)")))
             if m["sahip_pid"] else ""))
 
@@ -1222,6 +1249,9 @@ def main(argv: list[str] | None = None) -> int:
                         boyut=VARSAYILAN_BOYUT))
     ap.add_argument(SECENEKLER["--openbox-yok"], "--openbox-yok", dest="openbox_yok", action="store_true",
                     help=h_("pencere yöneticisi başlatma"))
+    ap.add_argument("--scale", "--olcek", dest="olcek", type=int, choices=(1, 2), default=1,
+                    help=h_("2: HiDPI masaüstü (yalnız KWin): aynı düzen ve koordinatlar, iki kat piksel → keskin ekran "
+                            "görüntüsü (ürün görseli)"))
     ap.add_argument(SECENEKLER["--ad"], "--ad", dest="ad", metavar="AD", default=None,
                     help=h_("masaüstü adı (varsayılan: --desktop-name / $DESKHAND_MASAUSTU ya da varsayılan masaüstü)"))
     ap.add_argument("--json", action="store_true")
@@ -1236,12 +1266,14 @@ def main(argv: list[str] | None = None) -> int:
                 _yazdir_liste(s)
             return 0
         if a.islem == "baslat":
-            d = masaustu_baslat(a.boyut, openbox=not a.openbox_yok, ad=ad)
+            d = masaustu_baslat(a.boyut, openbox=not a.openbox_yok, ad=ad, olcek=a.olcek)
             if a.json:
                 print(json.dumps(d, ensure_ascii=False))
             else:
                 if d.get("zaten"):
                     print(_("zaten açık"))
+                    if d.get("olcek_uyari"):
+                        print(_("UYARI: {uyari}").format(uyari=d["olcek_uyari"]))
                 with masalar.masa_sabit(ad):
                     _yazdir_durum(durum() or d)
             return 0

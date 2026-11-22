@@ -2,6 +2,20 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
+## 0.8.2 (22 Kasım 2026)
+
+- **Yeni: 2× (HiDPI) görünmez masaüstü — keskin ekran görüntüsü.** Görünmez masaüstünden alınan görüntüler ürün
+  görsellerinde küçültülünce/büyütülünce piksellere ayrılıyordu (1× masaüstünde yazı 11-12 px). Artık
+  `deskhand desktop start --scale 2` (MCP: `manage_desktop(action="start", scale=2)`; `--desktop-name` ile de) aynı
+  mantıksal düzeni (pencere yerleşimi, tıklama koordinatları) iki kat pikselle çizer: `deskhand screenshot --out`
+  tam çözünürlüğü kaydeder (1280x800 masaüstünde 2560x1600), `--width` küçültür; MCP `screenshot` aynı boyutta
+  (varsayılan `max_edge` 1280) ama tam kareden küçültüldüğü için daha keskin döner, `shot_id` tıklamaları doğru
+  yere gider. Ölçülen: 14px metnin mürekkep yüksekliği 15 → 28 px; Firefox ve Chromium `devicePixelRatio` 2
+  (GDK_SCALE / `--force-device-scale-factor`), Qt uygulamaları kendiliğinden 2×. `desktop status`/`desktop list`,
+  `get_status` ve `manage_desktop` çıktısında `scale` görünür. Varsayılan ölçek 1 (davranış değişmedi). Yalnız KWin
+  türü: Xvfb'de açık iletiyle reddedilir. Sınır: OCR ve `observe` mantıksal (2×'ten küçültülmüş) görüntüyü okur;
+  ölçek değişikliği için masaüstü kapatılıp açılır; XWayland'deki GTK/Chromium dışı X11 uygulamaları küçük görünebilir.
+
 ## 0.8.1 (22 Kasım 2026)
 
 - **Düzeltme: yazı, kullanıcı dokunmadığı hâlde "kullanıcı klavye/fare kullandı" ile kesiliyordu.** Ön planda

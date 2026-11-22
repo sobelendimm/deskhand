@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
+import math
 import os
 import re
 import shlex
@@ -261,20 +262,28 @@ def _yasak_dikdortgenler(k: str, kok_ekran: tuple[int, int], boyut: tuple[int, i
     return sonuc
 
 
-def goruntu_al(k: str, bolge=None):
+def goruntu_al(k: str, bolge=None, tam: bool = False):
     """→ (görüntü, geo, kök, maskeler). Görüntü pikseli + kök = pencere koordinatı. Hedef yasaksa Dur(10);
-    görüntüye düşen diğer yasak pencereler siyah kutuyla örtülür (maskeler: görüntü pikseli)."""
-    from .gorsel import pencere_goruntusu
+    görüntüye düşen diğer yasak pencereler siyah kutuyla örtülür (maskeler: görüntü pikseli).
+    tam=True: fiziksel çözünürlük (ölçek 2 masaüstü: iki kat piksel); görüntü pikseli = (pencere koordinatı − kök)
+    × gorsel.piksel_olcegi(im), maskeler de görüntü pikselinde."""
+    from .gorsel import pencere_goruntusu, piksel_olcegi
     y = yasak_mi(k)
     if y:
         raise Dur(10, _("YASAK pencere: içeriği gösterilmez/okunmaz ({neden})").format(neden=y))
     bolge_s = ",".join(str(int(v)) for v in bolge) if bolge else None
     from .gorsel import bolge_coz
-    im, geo, kok = pencere_goruntusu(k, bolge_coz(bolge_s))
+    im, geo, kok = pencere_goruntusu(k, bolge_coz(bolge_s), tam=tam)
+    f = piksel_olcegi(im)
     au = arka()
     sx0, sy0, *_x = au.ekran_alani()
     kok_ekran = (geo[0] + kok[0], geo[1] + kok[1]) if k != EKRAN else (sx0 + kok[0], sy0 + kok[1])
-    maskeler = _yasak_dikdortgenler(k, kok_ekran, im.size)
+    maskeler = _yasak_dikdortgenler(k, kok_ekran, (math.ceil(im.width / f), math.ceil(im.height / f)))
+    if f != 1.0:  # mantıksal kutu → görüntü pikseli (kenarlar dışa yuvarlanır: maske eksik kalmasın)
+        for m in maskeler:
+            x, y_, g, h = m["box"]
+            x0, y0 = math.floor(x * f), math.floor(y_ * f)
+            m["box"] = [x0, y0, min(im.width, math.ceil((x + g) * f)) - x0, min(im.height, math.ceil((y_ + h) * f)) - y0]
     if maskeler:
         im = im.copy()
         d = ImageDraw.Draw(im)

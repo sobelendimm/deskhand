@@ -463,6 +463,8 @@ def uygulama_ortami(d: dict, env: dict | None = None, izinli: tuple = ()) -> dic
         e.pop("DISPLAY", None)
         e.pop("XAUTHORITY", None)
     e["DESKHAND_KWIN"] = d["kimlik"]
+    if olcek_al(d) != 1:  # ölçek 2: XWayland'deki GTK uygulamaları (Firefox) kendileri ölçeklesin (Wayland'de çıkış ölçeğiyle aynı)
+        e["GDK_SCALE"] = str(olcek_al(d))
     return e
 
 
@@ -626,8 +628,8 @@ def _kwin_bilgisi(d: dict) -> str:
 
 def _hazir_denetle(d: dict, k: subprocess.Popen) -> None:
     """Oturum "hazır" sayılmadan önce (KWin beklerken ölürse HEMEN hata): ScreenShot2 arayüzü yayında, bir kare
-    yakalanabiliyor ve boyutu oturum boyutu (ölçek 1: KWin'in çıkış deposu ölçeği ezmedi), EIS aygıtları hazır ve
-    bölgesi aynı boyut; KWin'in OpenGL oluşturucu adı kaydedilir."""
+    yakalanabiliyor ve boyutu oturum boyutu × ölçek (fiziksel), EIS aygıtları hazır ve bölgesi oturum boyutu
+    (mantıksal; ölçek 2'de _olcek_uygula'dan sonra); KWin'in OpenGL oluşturucu adı kaydedilir."""
     def oldu():
         if k.poll() is not None:
             raise Dur(ARAC_EKSIK, _("KWin hazırlanırken kapandı: {hata}").format(hata=_log_sonu(d["calisma"], "kwin")))
@@ -642,14 +644,16 @@ def _hazir_denetle(d: dict, k: subprocess.Popen) -> None:
     if not _bekle(ss2, 10, 0.05):
         raise Dur(ARAC_EKSIK, _("KWin ScreenShot2 arayüzü hazır olmadı"))
     hedef = tuple(d["boyut"][:2])
+    fiziksel = tuple(v * olcek_al(d) for v in hedef)  # ölçek 2: kare iki kat çözünürlükte, EIS bölgesi mantıksal
     son = None
     for _i in range(50):
         oldu()
         try:
             im = goruntu(d)
-            if im.size == hedef:
+            if im.size == fiziksel:
                 break
-            son = _("kare boyutu {boyut} ≠ oturum {hedef} (ölçek 1 değil?)").format(boyut=im.size, hedef=hedef)
+            son = _("kare boyutu {boyut} ≠ oturum {hedef} (ölçek {olcek})").format(
+                boyut=im.size, hedef=fiziksel, olcek=olcek_al(d))
         except Dur as e:
             son = e.mesaj
         time.sleep(0.05)
@@ -664,6 +668,40 @@ def _hazir_denetle(d: dict, k: subprocess.Popen) -> None:
     d["gpu"] = m.group(1).strip() if m else ""
     if not d["gpu"] or re.search(r"llvmpipe|softpipe|swrast", d["gpu"], re.I):
         d["uyarilar"].append(_("KWin donanım hızlandırması yok ({gpu}): yazılım çizimi").format(gpu=d["gpu"] or "?"))
+
+
+def _ekran_ortami(d: dict) -> dict:
+    """kscreen-doctor için asgari ortam: YALNIZ oturumun Wayland soketi (MUTLAK yol) ve özel veri yolu; libkscreen
+    arka ucu süreç İÇİNDE (KSCREEN_BACKEND_INPROCESS: kullanıcının veri yolundaki kscreen başlatıcısı kullanılmaz)."""
+    d = guvenli_kayit(d)
+    return {**kdotool_ortami(d), "WAYLAND_DISPLAY": d["wayland_yol"], "QT_QPA_PLATFORM": "wayland",
+            "KSCREEN_BACKEND": "KWayland", "KSCREEN_BACKEND_INPROCESS": "1"}
+
+
+def _olcek_uygula(d: dict, k: subprocess.Popen) -> None:
+    """Ölçek 2: `kwin_wayland --virtual --scale 2` çerçeve tamponunu iki kat (GEN·2 x YÜK·2) açar ama KWin'in çıkış
+    yapılandırma deposu yeni sanal çıkışa ölçek 1 verir (ölçüldü: EIS bölgesi 2560x1440, mantıksal düzen büyüdü).
+    Ölçeği oturumun KENDİ Wayland soketi üzerinden kscreen-doctor ile 2 yaparız (ham çağrı arka_uc/kwin.py'de) →
+    mantıksal ekran GENxYÜK, kare iki kat piksel. Depo oturumun kendi XDG_CONFIG_HOME'unda (kullanıcının ayarına
+    dokunulmaz). Bitti sayılması: EIS bölgesi mantıksal boyuta indi."""
+    from .arka_uc.kwin import oturum_olcegi_ayarla
+    o = olcek_al(d)
+
+    def canli():
+        if k.poll() is not None:
+            raise Dur(ARAC_EKSIK, _("KWin hazırlanırken kapandı: {hata}").format(hata=_log_sonu(d["calisma"], "kwin")))
+    ayrinti = oturum_olcegi_ayarla(d, o, _ekran_ortami(d), canli)
+    hedef = tuple(d["boyut"][:2])
+
+    def oldu():
+        canli()
+        try:
+            with Eis(d, zaman_asimi=3) as e:
+                return e.boyut == hedef
+        except Dur:
+            return False
+    if not _bekle(oldu, 5, 0.2):
+        raise Dur(ARAC_EKSIK, _("ölçek {olcek} uygulanamadı: {hata}").format(olcek=o, hata=ayrinti))
 
 
 def oncelik_durumu(pid) -> list[tuple[int, int, int]]:
@@ -782,6 +820,30 @@ def durum() -> dict | None:
     return max(canli, key=lambda d: d.get("baslangic", 0)) if canli else None
 
 
+OLCEKLER = (1, 2)
+
+
+def olcek_dogrula(olcek) -> int:
+    """Görünmez masaüstü ölçeği (HiDPI): 1 (varsayılan) ya da 2. 2'de mantıksal düzen aynı kalır (pencere
+    geometrisi, tıklama koordinatı, EIS bölgesi mantıksal piksel), çerçeve tamponu iki kat çözünürlükte çizilir."""
+    try:
+        o = int(olcek)
+    except (TypeError, ValueError):
+        o = 0
+    if o not in OLCEKLER or str(olcek).strip() not in ("1", "2", "1.0", "2.0"):
+        raise Dur(1, _("geçersiz ölçek: {deger} (1 ya da 2)").format(deger=repr(olcek)))
+    return o
+
+
+def olcek_al(d: dict | None) -> int:
+    """Kayıttaki ölçek (eski kayıtlarda alan yok → 1)."""
+    try:
+        o = int((d or {}).get("olcek") or 1)
+    except (TypeError, ValueError):
+        return 1
+    return o if o in OLCEKLER else 1
+
+
 def gerekli() -> dict:
     d = durum()
     if d is None:
@@ -792,28 +854,31 @@ def gerekli() -> dict:
 # ---------------------------------------------------------------- başlat
 
 def baslat(boyut: tuple[int, int] = (1920, 1080), xwayland: bool = True,
-           duzen: tuple[str, str] = ("tr", "")) -> dict:
+           duzen: tuple[str, str] = ("tr", ""), olcek: int = 1) -> dict:
     """Yalıtık KWin oturumunu başlat → bilgi dict'i. Hata olursa başlatılan her şeyi kapatır. GPU: render_sec()
     tümleşik GPU'yu seçtiyse onunla; o GPU'yla açılamazsa (sürücü/aygıt sorunu) bir kez KWin'in varsayılanıyla."""
     gpu = render_sec()
     if gpu is None:
-        return _baslat_tek(boyut, xwayland, duzen, None)
+        return _baslat_tek(boyut, xwayland, duzen, None, olcek)
     try:
-        return _baslat_tek(boyut, xwayland, duzen, gpu["dugum"])
+        return _baslat_tek(boyut, xwayland, duzen, gpu["dugum"], olcek)
     except Dur as e:
-        d = _baslat_tek(boyut, xwayland, duzen, None)
+        d = _baslat_tek(boyut, xwayland, duzen, None, olcek)
         d["uyarilar"].append(_("tümleşik GPU ({dugum}) ile açılamadı ({hata}); varsayılan GPU kullanılıyor").format(
             dugum=gpu["dugum"], hata=e.mesaj))
         return d
 
 
-def _baslat_tek(boyut, xwayland: bool, duzen: tuple[str, str], render_dugumu: str | None) -> dict:
+def _baslat_tek(boyut, xwayland: bool, duzen: tuple[str, str], render_dugumu: str | None, olcek: int = 1) -> dict:
     ok, neden = kullanilabilir()
     if not ok:
         raise Dur(ARAC_EKSIK, neden)
     g, y = int(boyut[0]), int(boyut[1])
     if not (320 <= g <= 8192 and 240 <= y <= 8192):
         raise Dur(1, _("geçersiz ekran boyutu: {boyut}").format(boyut=repr(boyut)))
+    olcek = olcek_dogrula(olcek)
+    if g * olcek > 8192 or y * olcek > 8192:
+        raise Dur(1, _("ekran boyutu × ölçek çok büyük: {boyut} × {olcek}").format(boyut=f"{g}x{y}", olcek=olcek))
     bellek = ao._bellek_siniri()
     takas = ao._takas_siniri() if bellek else None
     if bellek and not ao.arac("systemd-run", zorunlu=False):
@@ -824,7 +889,8 @@ def _baslat_tek(boyut, xwayland: bool, duzen: tuple[str, str], render_dugumu: st
     os.makedirs(os.path.dirname(cdir), mode=0o700, exist_ok=True)
     os.makedirs(cdir, mode=0o700)
     soket_adi = f"deskhand-{kimlik}"
-    d = {"surum": 1, "tur": "kwin", "kimlik": kimlik, "calisma": cdir, "boyut": [g, y], "duzen": list(duzen),
+    d = {"surum": 1, "tur": "kwin", "kimlik": kimlik, "calisma": cdir, "boyut": [g, y], "olcek": olcek,
+         "duzen": list(duzen),
          "ekran": soket_adi, "render_dugumu": render_dugumu, "wayland": soket_adi, "wayland_yol": os.path.join(cdir, soket_adi), "dbus_adres": f"unix:path={cdir}/bus",
          "xwayland": None, "xauth": None, "x_ana": None, "kafes": None, "cgroup": "", "bellek": bellek,
          "takas": takas, "pid": {}, "ses": None, "uyarilar": [], "baslangic": time.time(),
@@ -902,7 +968,8 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     kwin = [*([prlimit, "--rtprio=0", "--nice=10"] if prlimit else []),
             *([setpriv, "--no-new-privs"] if setpriv else []),
             _ozel_adlar(cdir), "--virtual", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
-            "--socket", d["wayland"], "--width", str(d["boyut"][0]), "--height", str(d["boyut"][1])]
+            "--socket", d["wayland"], "--width", str(d["boyut"][0]), "--height", str(d["boyut"][1]),
+            *(["--scale", str(olcek_al(d))] if olcek_al(d) != 1 else [])]
     xs = None
     fdler: list[int] = []
     try:
@@ -955,6 +1022,8 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     from . import ses  # oturuma özel ses sunucusu (ayar dinleme.ozel_ses; kurulamazsa yalnız uyarı)
     ses.ayara_gore_kur(d, cdir)
     _durum_yaz(d)
+    if olcek_al(d) != 1:
+        _olcek_uygula(d, k)
     _hazir_denetle(d, k)
 
 

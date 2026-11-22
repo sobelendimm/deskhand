@@ -448,8 +448,12 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
     X, Y, W, H = geo
     WIN = Atspi.CoordType.WINDOW
     fe = cerceve.get_extents(WIN)
-    ox = max(0, round((W - fe.width) / 2)) if W > fe.width else 0
-    oy = max(0, H - fe.height - ox) if H > fe.height else 0
+    # ölçek 2 masaüstünde XWayland uygulaması (Firefox/Chromium) X11 pikseliyle (fiziksel = mantıksal × 2) bildirir:
+    # çerçeve pencerenin iki katıysa kutular mantıksal piksele bölünür (ölçek 1'de çerçeve hiç bu kadar büyük olmaz)
+    r = round(fe.width / W) if W > 0 and H > 0 and fe.width >= 1.5 * W and fe.height >= 1.5 * H else 1
+    fw, fh = fe.width / r, fe.height / r
+    ox = max(0, round((W - fw) / 2)) if W > fw else 0
+    oy = max(0, round(H - fh - ox)) if H > fh else 0
     S = Atspi.StateType
     t0 = time.monotonic()
     sonuc, yigin, sayi = [], [(cerceve, 0, [])], 0
@@ -466,7 +470,11 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
             continue
         try:
             e = o.get_extents(WIN)
-            kutu_ = (e.x - fe.x + ox, e.y - fe.y + oy, e.width, e.height)
+            if r == 1:
+                kutu_ = (e.x - fe.x + ox, e.y - fe.y + oy, e.width, e.height)
+            else:
+                kutu_ = (round((e.x - fe.x) / r) + ox, round((e.y - fe.y) / r) + oy, round(e.width / r),
+                         round(e.height / r))
         except Exception:
             kutu_ = None
         if d > 0 and kutu_ and kutu_[2] > 0 and kutu_[3] > 0:

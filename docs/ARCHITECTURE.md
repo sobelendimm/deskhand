@@ -237,6 +237,23 @@ masaüstünü gösterir (devir sırasındaki geçiş dışında; Aşama 2). GPU:
 bilgisine güvenilmez) (`KWIN_RENDER_NODES`); o aygıtla açılamazsa bir kez varsayılanla. Oturum "hazır" sayılmadan önce: Wayland soketi,
 `org.kde.KWin` adı, ScreenShot2 arayüzü, oturum boyutunda (ölçek 1) bir kare, aynı boyutta EIS aygıtları; KWin
 beklerken ölürse hemen hata.
+ÖLÇEK 2 (HiDPI, `desktop start --scale 2` / `manage_desktop(scale=2)`, yalnız KWin; kayıtta `olcek`, eski kayıt = 1):
+`kwin_wayland --virtual --width G --height Y --scale 2` çerçeve tamponunu 2G×2Y açar ama KWin'in çıkış deposu yeni
+sanal çıkışa ölçek 1 verir (ölçüldü: EIS bölgesi 2G×2Y, düzen büyür) → hazır denetiminden önce `kscreen-doctor
+output.<ad>.scale.2` oturumun KENDİ Wayland soketiyle (`_ekran_ortami`: mutlak WAYLAND_DISPLAY, özel veri yolu,
+KSCREEN_BACKEND_INPROCESS; kullanıcının ekranına ulaşamaz). Hazır: kare 2G×2Y, EIS bölgesi G×Y. SÖZLEŞME: pencere
+geometrisi, tıklama/EIS koordinatı, AT-SPI kutuları, OCR kutuları MANTIKSAL piksel (ölçek 1 ile aynı düzen);
+`ArkaUc.goruntu()` fiziksel kare. `gorsel.pencere_goruntusu(tam=False)` (varsayılan; OCR, observe, fark, onay)
+fiziksel kareyi mantıksala LANCZOS ile küçültür; `tam=True` küçültmez, `im.info["deskhand_olcek"]`
+(`gorsel.piksel_olcegi`) = görüntü pikseli / pencere pikseli. Tam çözünürlüğü kullananlar: CLI `screenshot`
+(`--out` dosyası 2×, `--width` küçültür; `son_foto.olcek` = toplam ölçek, `--foto` eşler) ve MCP `screenshot`
+(tam kare `max_edge`'e küçültülür; `shot_id` ölçeği = küçültme × piksel ölçeği → `cekim_noktasi` mantıksal koordinat
+verir; küçük bölgeler 2× ayrıntıyla döner). XWayland: KWin `[Xwayland] Scale=2` (istemciler kendileri ölçekler, X11
+koordinatı fiziksel) → oturum uygulamalarına `GDK_SCALE=2` (Firefox dpr 2), Chromium/Electron'a
+`--force-device-scale-factor=2`; AT-SPI çerçevesi pencere geometrisinin ≥1,5 katıysa (`erisim._tara`) kutular bu
+orana bölünür. Xvfb türünde ölçek 2 Dur(9) ile reddedilir (çıkış ölçeği yok; uygulama başına bayraklar Qt/GTK/X11
+karışımında tutarsız). Bellek: 2× kare ~4 kat çerçeve tamponu (1280x800'de Firefox'lu kafes ~500 MiB; 4 GB kafes
+yeter).
 Varsayılan `on` (kullanıcının gerçek masaüstü). `oto`, `deskhand decide` (karar) komutuna bağlanır: kullanıcı
 ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 

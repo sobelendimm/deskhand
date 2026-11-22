@@ -143,7 +143,7 @@ kontrol("seçim: xvfb zorlanabilir (tanılama)", masaustu.secilen_tur()[:2] == (
 # gerçek düşme: KWin kendiliğinden seçildi ama AÇILAMADI → Xvfb, uyarıyla
 os.environ["DESKHAND_ARKA_TUR"] = ""
 asil_kwin_baslat = masaustu._kwin_baslat
-masaustu._kwin_baslat = lambda boyut: (_ for _ in ()).throw(Dur(9, "test: KWin açılamadı"))
+masaustu._kwin_baslat = lambda boyut, olcek=1: (_ for _ in ()).throw(Dur(9, "test: KWin açılamadı"))
 try:
     if shutil.which("Xvfb"):
         dx = masaustu.masaustu_baslat("800x600")
