@@ -116,10 +116,26 @@ def birim_testleri():
     sidler = []
     for i in range(6):
         sid = depo.yeni_kimlik()
-        depo.ekle(gozlem.Anlik(sid, "{w}", "kde", (10, 10), "t", []))
+        depo.ekle(gozlem.Anlik(sid, "{w}", "kde", (10, 10), "t", [{"rol": "label", "ad": f"durum {i}", "kaynak": "ocr", "kutu": [0, 0, 1, 1]}]))
         sidler.append(sid)
-    kontrol("önbellek: pencere başına en çok 4 (eski ikisi bilinmiyor)",
+    kontrol("önbellek: pencere başına en çok 4 farklı görüntü (eski ikisi bilinmiyor)",
             [depo.al(x)[1] for x in sidler] == ["unknown", "unknown", "", "", "", ""])
+    # sayfalı observe: aynı içerik 6 kez (offset=0,150,300…) → hiçbiri düşmez, ref'ler geçerli; sonra farklı içerik
+    sayfa = [{"rol": "push button", "ad": f"d{j}", "kaynak": "ocr", "kutu": [0, j, 1, 1]} for j in range(5)]
+    sayfa_sid = []
+    for i in range(6):
+        sid = depo.yeni_kimlik()
+        depo.ekle(gozlem.Anlik(sid, "{s}", "kde", (10, 10), "t", [dict(o) for o in sayfa]))
+        sayfa_sid.append(sid)
+    kontrol("önbellek: aynı içerikli 6 görüntü (sayfalama) → ilk sayfanın ref'i de geçerli",
+            all(depo.al(x)[0] is not None for x in sayfa_sid) and depo.al(sayfa_sid[0])[0].oge(1)["ad"] == "d0")
+    for i in range(3):
+        depo.ekle(gozlem.Anlik(depo.yeni_kimlik(), "{s}", "kde", (10, 10), "t", [{"rol": "label", "ad": f"y{i}", "kaynak": "ocr", "kutu": [0, 0, 1, 1]}]))
+    kontrol("önbellek: 3 farklı görüntü daha → sayfalı grup hâlâ son 4 içinde",
+            all(depo.al(x)[0] is not None for x in sayfa_sid))
+    depo.ekle(gozlem.Anlik(depo.yeni_kimlik(), "{s}", "kde", (10, 10), "t", [{"rol": "label", "ad": "y9", "kaynak": "ocr", "kutu": [0, 0, 1, 1]}]))
+    kontrol("önbellek: 4 farklı yeni görüntü → sayfalı grubun TÜMÜ birlikte düşer",
+            all(depo.al(x)[1] == "unknown" for x in sayfa_sid))
     for i in range(20):
         depo.ekle(gozlem.Anlik(depo.yeni_kimlik(), f"{{p{i}}}", "kde", (10, 10), "t", []))
     kontrol("önbellek: toplam en çok 16", len(depo._d) == 16)
@@ -589,12 +605,15 @@ async def kapi_testleri():
                 "buttonup left" in sat and abs(au.imlec[0] - (X + 580)) <= 3, f"{sat[:3]} {au.imlec} {metin(r)[:200]}")
 
         # --- bayatlık: üç neden ayrı, hiçbirinde girdi yok
+        _SON_BAYAT = []
+
         async def bayat(ad, arg, neden, hazirla=None):
             if hazirla:
                 hazirla()
             n0 = len(au.satirlar)
             sm.ISLEMLER.clear()
             r = await c.call_tool("click", {**arg, **F})
+            _SON_BAYAT[:] = [r]
             kontrol(f"bayat ref [{ad}] → [8] reason={neden}, sent nothing_sent, next satırı, girdi YOK",
                     r.is_error and "[8]" in metin(r) and yapi(r).get("error", {}).get("reason") == neden and
                     yapi(r).get("sent") == "nothing_sent" and "sent: nothing_sent" in metin(r) and "observe" in metin(r)
@@ -605,9 +624,16 @@ async def kapi_testleri():
         s.GOZLEM.al(st["snapshot_id"])[0].zaman -= 500
         await bayat("süresi doldu", {"ref": og["Kaydet"]["ref"]}, "snapshot")
         og, st, _r = await gozle()
-        for _i in range(4):  # pencere başına 4: en eskisi düşer
+        for _i in range(4):  # aynı içerik (tekrar / sayfalama): yeni yer tutmaz, ilk ref geçerli kalır
             await gozle()
+        kontrol("aynı içerikli 5 observe → ilk anlık görüntü düşmedi", s.GOZLEM.al(st["snapshot_id"])[0] is not None)
+        a0 = s.GOZLEM.al(st["snapshot_id"])[0]
+        for _i in range(4):  # pencere başına 4 FARKLI görüntü: en eskisi düşer
+            s.GOZLEM.ekle(gozlem.Anlik(s.GOZLEM.yeni_kimlik(), a0.k, a0.masaustu, a0.boyut, "t",
+                                       [{"rol": "label", "ad": f"z{_i}", "kaynak": "ocr", "kutu": [0, 0, 1, 1]}]))
         await bayat("pencere başına sınırdan düştü", {"ref": og["Kaydet"]["ref"]}, "snapshot")
+        kontrol("bayat ref iletisi düşürülme nedenini söyler (pencere başına 4)",
+                "pencere başına en çok 4" in metin(_SON_BAYAT[0]) if _SON_BAYAT else False)
         og, st, _r = await gozle()
         au.pen["{diger}"] = ["Başka Pencere", "baska", (900, 100, 400, 300)]
         await bayat("başka pencere (window verildi)", {"ref": og["Kaydet"]["ref"], "window": "Başka Pencere"}, "window")

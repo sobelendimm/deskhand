@@ -24,6 +24,7 @@ from . import dogrulama_sinamasi, guvenlik, ucbirim
 from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, insan_dogrulama_nokta,
                     insan_dogrulama_oge, sistem_istemi_on, sistem_istemi_onay, tikla_ic)
 from .gunluk import gunluk
+from .ipucu import komut as ipucu_komut
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, seviye_denetle,
                        yazi_onay_ister_mi)
 from .hata import Dur, dur_denetle, gercek_ekran_denetle
@@ -304,7 +305,9 @@ def _cerceve_bul(Atspi, pid, baslik):
             oran = difflib.SequenceMatcher(None, katla(ad), katla(baslik)).ratio()
             if not tam and oran < TORUN_BENZERLIK and ad != baslik:
                 continue
-            benz = 1.0 if ad and (ad == baslik or ad in baslik or baslik in ad) else oran
+            # tam başlık eşleşmesi içermeden ÖNCE: GTK diyaloğunun başlığı ("File Upload - <sayfa> — Mozilla Firefox")
+            # ana pencerenin adını İÇERİR; eşitlikte ana çerçeve seçilip diyalog yerine onun ağacı okunuyordu
+            benz = 2.0 if ad and ad == baslik else 1.0 if ad and (ad in baslik or baslik in ad) else oran
             adaylar.append((tam, benz, f, app_pid, app_ad))
     if not adaylar:
         raise Dur(6, _("pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): {ipucu}").format(
@@ -656,6 +659,12 @@ def _atspi_is(istek):
         return _odakli_kart(Atspi, cerceve)
     if islem == "odak_bilgi":
         return _odak_bilgi(Atspi, cerceve)
+
+
+    if islem == "odak_metin":
+        return _odakli_metin(Atspi, cerceve)
+    if islem == "cerceve_rol":
+        return cerceve.get_role_name()
     if islem == "tara":
         r = _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"],
                   bool(istek.get("kimlik_ver")), bool(istek.get("ayrinti")), int(istek.get("olcek") or 1))
@@ -805,6 +814,49 @@ def odak_bilgisi(k):
     except Exception:  # noqa: BLE001 - Dur dahil: bilinmiyor
         return None
     return r if isinstance(r, dict) else None
+
+
+ODAK_METIN_SINIRI = 4096
+
+
+def _odakli_metin(Atspi, cerceve):
+    """Çerçevede odaklı yazma alanı (text/entry) → {"rol", "ad", "metin"} | None. Parola alanı ve adı/nitelikleri gizli
+    bir alanı gösteren alanın değeri OKUNMAZ (metin None). Dosya seçici konum girdisi doğrulaması için (dosya_sec.py)."""
+    o = _uclar(Atspi, cerceve, lambda o, rol, ss, S: ss.contains(S.FOCUSED) and rol in ("password text", "text",
+                                                                                          "entry"), sure=1.0)
+    if o is None:
+        return None
+    try:
+        rol, ad = o.get_role_name(), o.get_name() or ""
+        metin = None
+        if rol != "password text" and not _GIZLI_ALAN.search(katla(" ".join((ad, *_deger_ipuclari(o))))):
+            ti = o.get_text_iface()
+            if ti is not None:
+                metin = Atspi.Text.get_text(ti, 0, ODAK_METIN_SINIRI) or ""
+        return {"rol": rol, "ad": ad, "metin": metin}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def odakli_metin(k):
+    """Pencerede odaklı yazma alanı ve tam değeri (bkz. _odakli_metin); okunamazsa None. Erişilebilirliği açar."""
+    erisim_ac_garanti()
+    try:
+        return _atspi_calistir(_pencere_istegi(k, "odak_metin"))
+    except Dur:
+        return None
+
+
+YEREL_DIYALOG_ROLLERI = ("file chooser", "dialog", "alert", "color chooser", "font chooser")
+
+
+def yerel_diyalog_mu(k) -> bool:
+    """Pencerenin AT-SPI çerçevesi uygulamanın YEREL diyaloğu mu (GTK dosya seçici vb.; rol sayfa tarafından
+    değiştirilemez)? Bilinmiyorsa False."""
+    try:
+        return _atspi_calistir(_pencere_istegi(k, "cerceve_rol")) in YEREL_DIYALOG_ROLLERI
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def imlec_satirlari(k):
@@ -1085,8 +1137,8 @@ def _oge_secimi(a, ogeler, sure):
         from . import web
         ipucu = ("\n" + _("Web sayfası ögeleri için: `web {kimlik} '{ad}'`").format(kimlik=a.kimlik, ad=a.ad)
                  if web.tarayici_mi(a.kimlik) else "")
-        raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `ekran agac {kimlik}`"
-                       ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", kimlik=a.kimlik) + ipucu)
+        raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `{komut}`"
+                       ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", komut=ipucu_komut("tree", a.kimlik)) + ipucu)
     if a.sira is None and len(bulunan) > 1 and tercih and kademe == "tam":
         # değer yazma: etiket (label) ile giriş alanı aynı ADI (TAM eşleşme) taşırsa yalnız BİRİ yazılabilirse
         # (entry/text…) o seçilir; bulanık (içerir/benzer) eşleşmede eski davranış: belirsizlik (5) sorulur

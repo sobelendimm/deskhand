@@ -23,7 +23,7 @@ deskhand/
                    ~/.local/state/ekran dizinleri varsa ve yenisi yoksa ilk açılışta KOPYALANIR (taşınmaz;
                    eski araç çalışmaya devam eder).
   hata.py          Dur(kod, mesaj) + çıkış kodları (§5)
-  gunluk.py        günlük + temizlik
+  gunluk.py        günlük (0600; STATE/CACHE dizinleri 0700, açılışta düzeltilir) + temizlik
   guvenlik.py      yasak pencereler, hassas düğme, ödeme sayfası, riskli tuş/uçbirim komutu onayı, uygulama erişim
                    seviyeleri, başlık/sınıf kilidi, denetle(), DUR anahtarı
   insan.py         Wayland etkinlik izleyici (ekran-etkinlik C yardımcısı) + insan_bekle
@@ -41,6 +41,10 @@ deskhand/
                    başlığı maskeli)
   gezin.py         `goto KİMLİK ADRES`: adres çubuğu yolu (ctrl+l → adres → Return) `api.tus`/`api.yaz` üzerinden; yeni
                    güvenlik yolu YOK (başlık kilidi, hassas sayfa, CAPTCHA kapısı, DUR, insan önceliği aynen); yalnız http(s)
+  dosya_sec.py     `choose-file KİMLİK YOL`: ctrl+l → AT-SPI odaklı girdi (erisim.odakli_metin) → yol → değer GERİ
+                   okunur (≠ yol → Dur 8, Enter yok) → Return → diyalog kapandı mı; arka planda yalnız XDG/test paylaşımı
+  surum.py         diskteki kurulum sürümü ↔ çalışan kod: get_status `stale_server`, doctor `deskhand mcp` süreçleri
+  ipucu.py         ipuçlarında çalıştırılabilir tam komut (`deskhand --desktop-name AD --background tree K`)
   arka_uc/__init__.py   ArkaUc arayüzü + sec(hedef)
   arka_uc/kde.py        kdotool + dotool + kscreen-doctor (+ spectacle yalnız görüntü kurtarması)
   arka_uc/kde_goruntu.py  ekran görüntüsü: yardimci/deskhand-goruntu (C, sd-bus) → KWin ScreenShot2
@@ -79,7 +83,8 @@ deskhand/
                    işaret, kanaldan okuma; §4)
   girdi_merkezi.py panelin içinde hazır bekleyen tek dotool + RUNTIME_DIR/girdi.sock (Qt'siz; §2, §4)
   gui/             panel, tepsi, onay diyaloğu; gui/gorev.py = "Görev" sekmesi (görev kutusu, canlı adımlar, görünmez
-                   masaüstünün canlı görüntüsü, geçmiş)
+                   masaüstünün canlı görüntüsü, geçmiş). Panel girişinde genel istisna yakalayıcı
+                   (panel.istisna_yakalayici_kur: sys/threading excepthook → günlük + tepsi uyarısı; PyQt6'nın SIGABRT'i yok)
   gorev.py         görev yürütücü (Qt'siz): kullanıcının yazdığı görevi `claude -p --output-format stream-json` ile
                    YALNIZ `deskhand mcp --desktop background` araçlarıyla yaptırır. Ayrıcalık sınırı argv'de:
                    geçici --mcp-config (tek sunucu deskhand-gorev, env DESKHAND_GERCEK_EKRAN=kapali) + --strict-mcp-config +
@@ -998,7 +1003,8 @@ eşleşen ögeler + ADI OLAN ataları (çocuk-sıra yolu öneki). `max_elements`
 `since=<snapshot_id>` (aynı pencere): yalnız `+` eklenen, `~` değişen (ad, değer, durum, kutu > 3 px), `-` kaybolan.
 `include_screenshot`: maskeli pencere görüntüsüne öge kutuları + numaraları çizilir (Set-of-Marks) ve `shot_id` kaydedilir.
 **Anlık görüntü önbelleği.** `snapshot_id` = sunucu (süreç) başına rastgele 4 hex önek + sayaç; pencere başına en çok 4,
-toplam 16, ömür 120 sn. Öge kimliği: erişilebilirlik ögesinde veri yolu adı + nesne yolu (BİRLİKTE; `_tara` libatspi
+toplam 16 FARKLI içerik, ömür 120 sn (içeriği bir öncekiyle aynı gözlem, ör. sayfalı `observe(offset=…)`, aynı gruba
+katılır: ilk sayfanın ref'leri düşmez). Öge kimliği: erişilebilirlik ögesinde veri yolu adı + nesne yolu (BİRLİKTE; `_tara` libatspi
 nesnesinin alanlarından okur, okunamazsa çocuk-sıra yolu) + pencere; OCR satırında metin + kutu.
 **`ref` ile eylem.** `click(ref)`, `type_text(ref)` (önce alan tıklanır, sonra klavye yolu), `scroll(ref)`,
 `drag(from_ref, to_ref)`. Bayatlık üç ayrı nedenle, HİÇBİR girdi gönderilmeden reddedilir (`[8]`, `error.reason`):

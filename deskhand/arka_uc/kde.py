@@ -236,7 +236,7 @@ def pencere_coz(arg):
         raise Dur(8, _("pencere kimliği boş"))
     adaylar = kd("search", "--name", arg).split()
     if not adaylar:
-        raise Dur(8, _("'{ad}' adlı pencere yok (ekran bul …)").format(ad=arg))
+        raise Dur(8, _("'{ad}' adlı pencere yok (deskhand windows ile bulun)").format(ad=arg))
     if len(adaylar) > 1:
         liste = "\n".join(f"  {w} | {baslik(w)}" for w in adaylar)
         raise Dur(5, _("'{ad}' {sayi} pencereye uyuyor; kimlik ver:\n{liste}").format(ad=arg, sayi=len(adaylar), liste=liste))

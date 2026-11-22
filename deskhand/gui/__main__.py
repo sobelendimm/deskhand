@@ -74,7 +74,10 @@ def main(argv: list[str] | None = None) -> int:
         from .panel import soket_adi
         print(soket_acilamadi_iletisi(soket_adi(), yollar.runtime_dir()), file=sys.stderr)
         return 1
+    from .panel import istisna_yakalayici_kur
+    istisna_yakalayici_kur()  # Panel kurulurken de: yakalanmayan istisna SIGABRT olmasın
     p = Panel(app, sunucu, girdi_merkezi=True)
+    istisna_yakalayici_kur(p)  # artık tepsi bildirimiyle
     _sinyal_kur(app, p.cik)
     if a.gorev:
         p.gorev_goster()

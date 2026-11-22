@@ -52,8 +52,9 @@ Ajan ya da izin kipi ne derse desin, iki masaüstünde de aracın kendisi uygula
 - **DUR anahtarı.** Paneldeki düğme, tepsi menüsü ya da isteğe bağlı genel kısayol. Açıkken
   hiçbir girdi gönderilmez, basılı tuşlar bırakılır. Ajan da DUR diyebilir, ama **sizin
   koyduğunuz DUR'u kaldıramaz**; onu yalnız panel kaldırır.
-- **Etkinlik günlüğü.** Her girdi günlüğe yazılır (`~/.local/state/deskhand`, 7 gün) ve
-  panelde canlı görünür.
+- **Etkinlik günlüğü.** Her girdi günlüğe yazılır (`~/.local/state/deskhand`, 7 gün; yalnız siz
+  okuyabilirsiniz: klasör 0700, dosyalar 0600) ve panelde canlı görünür. `secret` olmadan yazılan metinler
+  günlükte parça parça görünür: parola, kod ve kişisel bilgileri `secret=true` (`--secret`) ile yazın.
 
 ### Arka plan masaüstü
 
@@ -347,6 +348,26 @@ esac
 deskhand $NEREDE open --command "okular ~/fatura.pdf"
 ```
 
+Genel seçenekler (`--desktop-name AD`, `--background`) **komuttan ÖNCE** yazılır; `--` kullanıyorsanız da önce
+gelirler: `deskhand --desktop-name is1 --background tree <kimlik>`. zsh boşluklu bir değişkeni (`$NEREDE="--a --b"`)
+bölmez; bunun yerine ortamı kullanın: `export DESKHAND_HEDEF=arka DESKHAND_MASAUSTU=is1`, sonra yalın
+`deskhand tree <kimlik>`. Hata iletilerindeki ipuçları bu biçimde, olduğu gibi çalıştırılabilir tam komut verir.
+
+### Dosya yükleme (dosya seçici)
+
+Bir sayfadaki "Dosya seç" düğmesi GTK dosya seçicisini açar. Yolu elle yazmayın (ctrl+l → yol → Enter):
+konum girdisi açılmazsa yazılan yol listedeki "yazarak ara"ya gider ve Enter yanlış dosyayı seçebilir. Bunun yerine:
+
+```bash
+deskhand --background windows                       # diyaloğun kimliğini bulun ("File Upload - …")
+deskhand --background choose-file <diyalog> ~/İndirilenler/belge.pdf   # Türkçe: dosya-sec
+```
+
+`choose-file` konum girdisinin odakta olduğunu AT-SPI ile doğrular, yazdığı yolu geri okur (tam eşleşmezse Enter'a
+basmaz, 8 ile durur) ve diyaloğun kapandığını bekler. Görünmez masaüstündeki uygulamalar yalnız XDG klasörlerini
+(İndirilenler, Belgeler, Masaüstü…) görür: `/tmp` ya da başka ev klasörlerindeki dosyayı önce örneğin
+`~/İndirilenler`'e kopyalayın.
+
 Ajanlar için kurallar: 10, 12, 13, 15, 16 ve 18 çıkış kodlarında durun ve kullanıcıya söyleyin;
 tıklamadan önce okuyun, sonra doğrulayın; `--approved`'ı yalnız kullanıcı o adımı sohbette
 açıkça onayladıysa verin. Verilmezse Deskhand kullanıcıya panelden sorar.
@@ -359,8 +380,8 @@ açıkça onayladıysa verin. Verilmezse Deskhand kullanıcıya panelden sorar.
 | `~/.config/deskhand/ayarlar.toml` | meşgulken davranış (`[karar]`: sor / arka / bekle, süre, tam ekranda da sor) |
 | `~/.config/deskhand/oturum.toml` | arka plan için uygulama başına oturum politikası (varsayılanların üstüne birleşir) |
 | `~/.local/share/deskhand/` | kayıtlı simgeler (`simgeler/`), akışlar (`akislar/`) |
-| `~/.local/state/deskhand/` | girdi günlüğü (7 gün), yakalanan arka plan bildirimleri |
-| `~/.cache/deskhand/` | ekran görüntüleri, OCR önbelleği (5 gün) |
+| `~/.local/state/deskhand/` | girdi günlüğü (7 gün), yakalanan arka plan bildirimleri (0700) |
+| `~/.cache/deskhand/` | ekran görüntüleri, OCR önbelleği (5 gün, 0700) |
 | `$XDG_RUNTIME_DIR/deskhand/` | DUR anahtarı, onay istekleri, arka plan masaüstü durumu, oturum kopyaları (tmpfs, 0700) |
 
 Her klasör `DESKHAND_CONFIG_DIR`, `DESKHAND_STATE_DIR`, `DESKHAND_CACHE_DIR`,

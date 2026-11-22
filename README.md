@@ -51,8 +51,9 @@ permission mode says:
 - **STOP switch.** Panel button, tray menu or an optional global shortcut. While it is on,
   nothing sends input and held keys are released. An agent may set STOP itself, but **it
   cannot lift a STOP that you set**; only the panel can.
-- **Activity log.** Every input is logged (`~/.local/state/deskhand`, kept 7 days) and shown
-  live in the panel.
+- **Activity log.** Every input is logged (`~/.local/state/deskhand`, kept 7 days, readable only by
+  you: folder 0700, files 0600) and shown live in the panel. Text typed without `secret` shows up there in
+  pieces, so type passwords, codes and personal data with `secret=true` (`--secret`).
 
 ### Background desktop
 
@@ -325,8 +326,8 @@ chat. Without it, Deskhand asks the user in the panel.
 | `~/.config/deskhand/ayarlar.toml` | busy behaviour (`[karar]`: ask / background / wait, timeout, ask over fullscreen) |
 | `~/.config/deskhand/oturum.toml` | per-app session policy for the background desktop (merged over the defaults) |
 | `~/.local/share/deskhand/` | saved icons (`simgeler/`), flows (`akislar/`) |
-| `~/.local/state/deskhand/` | input log (7 days), captured background notifications |
-| `~/.cache/deskhand/` | screenshots, OCR cache (5 days) |
+| `~/.local/state/deskhand/` | input log (7 days), captured background notifications (0700) |
+| `~/.cache/deskhand/` | screenshots, OCR cache (5 days, 0700) |
 | `$XDG_RUNTIME_DIR/deskhand/` | STOP switch, approval requests, background desktop state, session copies (tmpfs, 0700) |
 
 Every directory can be moved with `DESKHAND_CONFIG_DIR`, `DESKHAND_STATE_DIR`,

@@ -13,6 +13,7 @@ from . import __version__, api, desen, guvenlik, hata, yollar
 from .akis import k_akis
 from .arka_uc import ARKA_ONEK, EKRAN, hedef_ad, sec
 from .doktor import k_doktor
+from .dosya_sec import k_dosya_sec
 from .erisim import k_agac, k_erisim, k_ogeye_tikla, k_ogeye_yaz
 from .eylem import (GIRDI_KOMUTLARI, KAYDIR_YON, OKUMA_KOMUTLARI, k_bas, k_dizi, k_fare, k_kapat, k_kaydir,
                     k_metne_tikla, k_pencere, k_renge_tikla, k_simgeye_tikla, k_surukle, k_tikla, k_tus, k_uyu,
@@ -93,6 +94,8 @@ YARDIM_KOMUTLAR = (
        "                    [--approved]"),
     N_("  ekran goto (git) <kimlik> <http(s)-adres> [--approved]   tarayıcı penceresinde adres çubuğuyla adrese git\n"
        "                                          (ctrl+l → adres → Return; tüm girdi denetimleri aynen; yalnız http/https)"),
+    N_("  ekran choose-file (dosya-sec) <diyalog-kimliği> <TAM-YOL>   dosya seçicide dosyayı seç: konum girdisi odakta\n"
+       "                                          mı, yazılan yol geri okunur, eşleşmezse Enter'a basılmaz; diyalog kapanır"),
     N_("  ekran open (ac) <uygulama [http(s)-adres] | --command \"KOMUT\"> [--url ADRES] [-b DESEN] [-s SINIF] [--timeout 30]\n"
        "                                          başlat → YENİ penceresini bekle → kimlik | başlık | sınıf "
        "(yasak: başlatılmaz).\n"
@@ -194,6 +197,7 @@ KISA_ACIKLAMA = {
     "uyu": N_("(dizi içinde) bekle"),
     "pano": N_("panoyu oku/yaz"),
     "git": N_("tarayıcı penceresinde http(s) adresine git"),
+    "dosya-sec": N_("dosya seçici diyaloğunda dosyayı doğrulayarak seç (yol geri okunur)"),
     "renk-bul": N_("renkli alanları bul"),
     "renge-tikla": N_("en büyük renk alanına tıkla"),
     "simge-kaydet": N_("yazısız simgeyi kaydet"),
@@ -526,6 +530,8 @@ def ayristirici(prog=None, sessiz=False):
     secenek(s, "--sure", en="--timeout", type=float, default=30.0)
     s = komut("git", k_git, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("adres")
     secenek(s, "--onayli", action="store_true", help=h_("hassas sayfada Enter: kullanıcı AÇIKÇA onayladı"))
+    s = komut("dosya-sec", k_dosya_sec, parents=[ortak]); s.add_argument("kimlik", help=h_("dosya seçici diyaloğu"))
+    s.add_argument("yol", help=h_("seçilecek dosyanın tam yolu"))
     s = komut("akis", k_akis, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("dosya")
     secenek(s, "--sure", en="--timeout", type=float, help=h_("dosyadaki süreyi geçersiz kıl"))
     s = komut("erisim", k_erisim)

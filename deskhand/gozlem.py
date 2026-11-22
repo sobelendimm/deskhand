@@ -5,7 +5,8 @@
   yalnız pencerenin süreç ağacından; panel/yasak çerçeve 10), tarayıcı belgesi `web.oku` (aynı kurallar), OCR
   `api.metin_oku` (yasak pencereler maskeli/çıkarılmış). Parola alanının (`password text`) değeri hiçbir yolda okunmaz.
 - Öge kimliği: erişilebilirlik ögesinde veri yolu adı + nesne yolu (BİRLİKTE) + pencere; OCR satırında metin + kutu.
-- Önbellek: pencere başına en çok 4, toplam 16 anlık görüntü, ömür 120 sn. `ref` ile eylemde öge güncel ağaçtan
+- Önbellek: pencere başına en çok 4, toplam 16 FARKLI anlık görüntü, ömür 120 sn. İçeriği aynı olan yeni gözlem (ör.
+  sayfalı observe'un sonraki sayfaları) yeni yer tutmaz: önceki aynı görüntülerin ref'leri geçerli kalır. `ref` ile eylemde öge güncel ağaçtan
   YENİDEN doğrulanır (erisim.ref_oge_sec); bu modül yalnız anlık görüntü düzeyini (bilinmiyor/eski/pencere) çözer.
 Saf kısımlar (biçim, süzme, fark, önbellek) ekran bilmez; testler sentetik ögelerle çalışır."""
 from __future__ import annotations
@@ -236,7 +237,7 @@ def baslik_norm(b: str | None) -> str:
 
 class Anlik:
     """Bir observe sonucu: pencere, masaüstü, pencere boyutu, ögeler (numara = sıra + 1)."""
-    __slots__ = ("sid", "k", "masaustu", "boyut", "baslik", "zaman", "ogeler", "anahtarlar", "adres")
+    __slots__ = ("sid", "k", "masaustu", "boyut", "baslik", "zaman", "ogeler", "anahtarlar", "adres", "grup")
 
     def __init__(self, sid, k, masaustu, boyut, baslik, ogeler, adres=None):
         self.sid, self.k, self.masaustu, self.boyut, self.baslik = sid, k, masaustu, tuple(boyut), baslik
@@ -244,6 +245,7 @@ class Anlik:
         self.zaman = time.monotonic()
         self.ogeler = ogeler
         self.anahtarlar = {anahtar(o): i for i, o in enumerate(ogeler)}
+        self.grup = sid  # içeriği aynı anlık görüntüler aynı grupta (Depo.ekle)
 
     def oge(self, n: int) -> dict | None:
         return self.ogeler[n - 1] if 1 <= n <= len(self.ogeler) else None
@@ -264,13 +266,38 @@ class Depo:
             return f"{ONEK}-{self._sayac}"
 
     def ekle(self, a: Anlik) -> None:
+        """Sınırlar FARKLI içerik sayısına uygulanır: aynı pencerenin en yeni anlık görüntüsüyle içeriği (ögeler,
+        boyut, adres) aynı olan yeni görüntü onun grubuna katılır (ögeler paylaşılır, gruptakilerin ömrü tazelenir).
+        Böylece sayfalı observe (offset=…) beşinci sayfada ilk sayfanın ref'lerini düşürmez."""
         with self._kilit:
+            for x in reversed(self._d.values()):
+                if x.k == a.k and x.masaustu == a.masaustu:
+                    if x.boyut == a.boyut and x.adres == a.adres and x.ogeler == a.ogeler:
+                        a.ogeler, a.anahtarlar, a.grup = x.ogeler, x.anahtarlar, x.grup
+                        for y in self._d.values():
+                            if y.grup == a.grup:
+                                y.zaman = a.zaman
+                    break
             self._d[a.sid] = a
-            ayni = [s for s, x in self._d.items() if x.k == a.k and x.masaustu == a.masaustu]
-            for s in ayni[:-self.pencere_basina]:
+            pencere = [x for x in self._d.values() if x.k == a.k and x.masaustu == a.masaustu]
+            kalan = self._son_gruplar(pencere, self.pencere_basina)
+            for x in pencere:
+                if x.grup not in kalan:
+                    del self._d[x.sid]
+            kalan = self._son_gruplar(self._d.values(), self.toplam)
+            for s in [s for s, x in self._d.items() if x.grup not in kalan]:
                 del self._d[s]
-            while len(self._d) > self.toplam:
+            while len(self._d) > self.toplam * self.pencere_basina:  # aynı içerikli görüntülerin de üst sınırı
                 self._d.popitem(last=False)
+
+    @staticmethod
+    def _son_gruplar(anliklar, n: int) -> set:
+        """En son görülen n farklı grup."""
+        sira: dict = {}
+        for x in anliklar:
+            sira.pop(x.grup, None)
+            sira[x.grup] = True
+        return set(list(sira)[-n:])
 
     def al(self, sid: str) -> tuple[Anlik | None, str]:
         """→ (anlık, "") | (None, "unknown" | "expired")."""
