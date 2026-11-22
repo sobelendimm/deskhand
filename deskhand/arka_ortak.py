@@ -248,15 +248,19 @@ def gercek_soket_kimlikleri() -> set[tuple[int, int]]:
 
 
 def runtime_denetle(yol: str) -> None:
-    """Deskhand'in RUNTIME_DIR'i (var olan dizin) kullanıcıya ait ve 0700 olmalı (başkasının hazırladığı dizine
-    oturum soketi/durum dosyası konmasın). Değilse Dur(14)."""
+    """Deskhand'in RUNTIME_DIR'i (var olan dizin) kullanıcıya ait gerçek dizin olmalı (başkasının hazırladığı dizine /
+    sembolik bağa oturum soketi/durum dosyası konmasın; değilse Dur 14) ve 0700 (bizimse gevşek izin sıkılaştırılır)."""
     try:
-        st = os.stat(yol)
+        st = os.lstat(yol)
     except FileNotFoundError:
         return
-    if st.st_uid != os.getuid() or (st.st_mode & 0o777) != 0o700:
-        raise Dur(14, _("çalışma dizini güvensiz (sahibi/izinleri): {yol} ({mod})").format(
-            yol=yol, mod=oct(st.st_mode & 0o777)))
+    import stat as _stat
+    if not _stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
+        raise Dur(14, _("çalışma dizini güvensiz (sahibi/türü): {yol}").format(yol=yol))
+    if st.st_mode & 0o077:  # bizim dizinimiz ama gevşek izinli (ör. eski sürüm/ara dizin): sıkılaştır
+        os.chmod(yol, 0o700)
+        if os.stat(yol).st_mode & 0o077:
+            raise Dur(14, _("çalışma dizini izinleri 0700 yapılamadı: {yol}").format(yol=yol))
 
 
 # ---------------------------------------------------------------- uygulama ad alanı yalıtımı (bwrap)
@@ -469,7 +473,8 @@ def uygulama_runtime(cdir: str) -> str:
     kullanıcının gerçek runtime dizinindeki soketleri (Wayland, veri yolu, erişilebilirlik…) varsayılan yoldan bulamaz;
     ses yalnız açık soket yoluyla (ses_ortami_uygula) boş çıkışa gider."""
     yol = os.path.join(cdir, "run")
-    os.makedirs(yol, mode=0o700, exist_ok=True)
+    if os.path.isdir(cdir) and not os.path.isdir(yol):  # üst dizinler YARATILMAZ (izinleri 0700 olmayabilirdi)
+        os.mkdir(yol, 0o700)
     return yol
 
 

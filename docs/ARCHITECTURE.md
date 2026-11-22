@@ -49,8 +49,9 @@ deskhand/
                    güvenlik kapıları (guvenlik_kapilari, baglanti_denetle), GPU seçimi, hazır olma denetimi, Eis sınıfı
   arka_ortak.py    iki türün ORTAK iç yapı taşları: bellek kafesi, öncelik, boş ses çıkışı, uygulama ortamı tabanı
                    (ortam_tabani), özel D-Bus yapılandırması, Xauthority, öncelik bekçisi başlatma
-  oncelik_bekcisi.py  kafesteki her iş parçacığını nice >= 10 / gerçek zamanlı olmayan / idle G/Ç'de tutan bekçi
-  ses_bekcisi.py   arka plan sesi boş çıkıştan başka çıkışa düşerse susturur ve kapatır
+  oncelik_bekcisi.py  kafesteki her iş parçacığını nice >= 10 / gerçek zamanlı olmayan / idle G/Ç'de tutan bekçi;
+                   ekran sunucusu (KWin/Xvfb) SIGKILL/OOM ile ölürse oturumu kapatır (kafes, X soket/kilit, dizin)
+  ses_bekcisi.py   (artık başlatılmıyor: arka plan uygulamaları ses sunucusuna hiç erişmez)
   pano_sahibi.py   sanal masaüstünün CLIPBOARD seçimini sunan yardımcı süreç (kafeste, ilk pano yazımında başlar)
   oturum/          oturum köprüsü (bkz. docs/SESSIONS.md)
   mesgul.py        kullanıcı meşgul mü (oyun / film) koruması
@@ -167,8 +168,8 @@ sonra 12 ile durulur; sonraki çağrılar beklemeden 12. Bildirimler `STATE_DIR/
 erişilebilir render aygıtı, `deskhand-eis` + `deskhand-goruntu` derli, kdotool, dbus-daemon…) ise KWin; değilse Xvfb.
 Kendiliğinden seçilen KWin AÇILAMAZSA Xvfb'ye düşülür (uyarı + günlük). Yalnız test/tanılama için
 `DESKHAND_ARKA_TUR=kwin|xvfb` (zorlanan kwin kullanılamıyorsa Dur 9, sessiz düşme yok). Aynı anda TEK arka plan
-masaüstü (durum kaydı + kilit). GPU: birden çok render aygıtı varsa ekrana bağlı çıkışı olmayan, boot_vga=0, tümleşik
-aygıt (`KWIN_RENDER_NODES`); o aygıtla açılamazsa bir kez varsayılanla. Oturum "hazır" sayılmadan önce: Wayland soketi,
+masaüstü (durum kaydı + kilit). GPU: birden çok render aygıtı varsa boot_vga=0 + tümleşik aygıt ("bağlı çıkış"
+bilgisine güvenilmez) (`KWIN_RENDER_NODES`); o aygıtla açılamazsa bir kez varsayılanla. Oturum "hazır" sayılmadan önce: Wayland soketi,
 `org.kde.KWin` adı, ScreenShot2 arayüzü, oturum boyutunda (ölçek 1) bir kare, aynı boyutta EIS aygıtları; KWin
 beklerken ölürse hemen hata.
 Varsayılan `on` (kullanıcının gerçek masaüstü). `oto`, `deskhand decide` (karar) komutuna bağlanır: kullanıcı
@@ -244,22 +245,57 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 - Sanal X bağlantısı yalnız `masaustu.guvenli_ekran()` ile açılır: boş ad Xlib'de `$DISPLAY`'e (kullanıcının gerçek
   XWayland'i) düşer ve XTEST girdisi gerçek masaüstüne gidebilirdi. Yalnız `:N` biçiminde ve gerçek `DISPLAY`'den
   farklı ekran kabul edilir.
+- **Durum kaydı güvenilmez (iki tür).** Kayıttan YALNIZ tür + kimlik/ekran numarası alınır; bütün yollar ve
+  adresler çalışma dizininden KURULUR (`kwin_oturum.guvenli_kayit`, `masaustu.guvenli_kayit`; `masaustu.durum()` bunu
+  uygular): KWin `RUNTIME_DIR/kwin-<8 hex>` (sembolik bağ değil, kullanıcının, 0700) → `unix:path=<dizin>/bus`,
+  `<dizin>/deskhand-<kimlik>`, Xauthority, XWayland `:120+`; Xvfb `RUNTIME_DIR/sanal-<no>`. Veri yolu adresinin katı
+  biçimi `unix:path=/yol[,guid=<32 hex>]` (Python `arka_ortak.bus_yolu_kati`, C `adres_coz`): `;` ile çoklu adres
+  (sd-bus/libdbus ilki olmazsa SONRAKİNE geçer) reddedilir. RUNTIME_DIR var olan dizinse sahibi kullanıcı ve 0700 olmalı.
+- **Karşı taraf doğrulaması (sert bağ / yer değiştirme).** Bağlanmadan önce (`kwin_oturum.baglanti_denetle`,
+  `masaustu.xvfb_karsi_denetle`): oturum soketlerinin SO_PEERCRED PID'i kayıttaki süreç (başlangıç zamanı aynı) —
+  veri yolu için dbus-daemon (komut satırında `--config-file=<dizin>/bus.conf`), Wayland için KWin, X için Xvfb;
+  soketin (st_dev, st_ino)'su kullanıcının gerçek soketlerinden biriyse ret. `deskhand-eis` bağlandıktan sonra aynısını
+  kendisi yapar (`--dbus-pid` + bus.conf; yoksa `hata bus-karsi`, çıkış 2).
 - **KWin türü kapıları.** `kwin_oturum.guvenlik_kapilari` (süreç başlamadan): veri yolu adresi kullanıcının gerçek
-  adresi, Wayland soket adı kullanıcınınki, yapılandırma dizini gerçek `~/.config`, HOME/çalışma dizini gerçek, XWayland
-  ekranı gerçek `DISPLAY` ise Dur 14. `kwin_oturum.baglanti_denetle` aynı kapıları + soketlerin oturum dizininde, oturum
-  dizininin `RUNTIME_DIR/kwin-*` olduğunu `arka_uc/kwin.py`'nin HER bağlantısından önce yeniden sınar (oynanmış/bayat
-  durum dosyası gerçek oturuma bağlatamaz). `deskhand-eis` yalnız `--bus <özel adres>` ile bağlanır, ortamdan devralmaz,
-  gerçek adresi reddeder. KWin `env -i` eşdeğeri asgari ortamla, geçici HOME/XDG_*_HOME ile açılır (KWin kendi kwinrc /
+  adresi (aynı inode dahil), Wayland soket adı kullanıcınınki, yapılandırma dizini gerçek `~/.config`, HOME/çalışma
+  dizini gerçek, XWayland ekranı gerçek `DISPLAY` ise Dur 14. `arka_uc/kwin.py` HER bağlantıdan önce
+  `baglanti_denetle`'nin döndürdüğü GÜVENLİ kaydı kullanır; `deskhand-eis` yalnız `--bus <özel adres>` ile bağlanır,
+  ortamdan devralmaz. KWin `env -i` eşdeğeri asgari ortamla, geçici HOME/XDG_*_HOME ile açılır (KWin kendi kwinrc /
   kwinoutputconfig.json / kglobalshortcutsrc / kxkbrc dosyalarını buraya yazar); KDE_FULL_SESSION/KDE_SESSION_VERSION
   KWin'e verilmez.
+- **Uygulama ad alanı (iki tür, TEK başlatma yolu: `arka_ortak.korumali_baslat`).** Arka plan uygulaması (KWin/Xvfb,
+  dbus-daemon ve Deskhand'in kendi yardımcıları DIŞINDAKİ her şey: `ac --arka`, `open_app`, oturum köprüsü komutları)
+  `bwrap` ile başlar: kök dosya sistemi aynen (`--dev-bind / /`), ama `/run/user/<UID>` (kullanıcının Wayland, D-Bus,
+  pipewire/pulse, kwallet, gnupg, ssh, xauth, at-spi, portal soketleri) ve Deskhand'in RUNTIME_DIR'i (girdi.sock,
+  sanal.json, diğer oturumlar) boş tmpfs ile örtülür, `/tmp/.X11-unix` boşaltılır; yalnız oturumun gerekenleri geri
+  bağlanır (kendi runtime dizini, özel veri yolu ve Wayland soketi, erişilebilirlik veri yolu, kendi X soketi +
+  Xauthority salt okunur, oturum kopyaları dizini). `--die-with-parent` YOK (masaüstü CLI'den uzun yaşar); kafes ve
+  PID temizliği aynen. bwrap yoksa uygulama başlatılmaz (Dur 9). Ölçüldü: Firefox (boş geçici profil) iki türde açılıyor,
+  sayfa yüklüyor, erişilebilirlik ağacı sunuyor; ad alanı içinde iç içe bwrap ve `flatpak run` (sistem çalışma zamanı)
+  çalışıyor → Flatpak uygulamaları da ad alanında. Soyut (abstract) unix soketleri paylaşılır (ağ ad alanı paylaşılıyor:
+  tarayıcı ağa çıkabilsin): kullanıcının X `:0`'ı soyut soketten erişilebilir ama anahtar (Xauthority) görünmediği
+  için bağlantı REDDEDİLİR (ölçüldü). **Sınır (bilerek):** HOME kullanıcınındır; arka plan uygulaması ev dizinindeki
+  dosyaları (ör. `~/.config/kwinrc`) okuyup yazabilir — uygulamalar kullanıcının dosyalarıyla çalışsın diye. Koruma
+  oturum politikası (kopya/bekle/kapali/on) ve uygulama başına karardır; ad alanı yalnız soketleri/oturumları korur.
+- **Ses (iki tür).** Arka plan uygulamaları kullanıcının ses sunucusuna (pipewire/pulse) HİÇ erişmez: çalma da kayıt
+  (mikrofon) da yok, uygulamalar sessiz çalışır. Soketler ad alanında görünmez; ortam da var olmayan bir sokete
+  yönlendirilir (`ses_ortami_uygula`). Boş çıkış (null sink) ve ses bekçisi artık kurulmaz (eski kayıtların
+  `deskhand-sessiz-*` modülü kapanışta yine kaldırılır); ses yönlendiricilerinde (ör. Kulak Kesil) arka plan akışı
+  dışlaması gerekmez.
 - **Uygulama ortamı (iki tür).** `arka_ortak.ortam_tabani`: kullanıcının oturumuna ait değişkenler (gerçek veri yolu,
   WAYLAND_DISPLAY/DISPLAY/XAUTHORITY, AT_SPI_BUS_ADDRESS, SSH_AUTH_SOCK/SSH_AGENT_PID, GNOME_KEYRING_CONTROL,
   LIBEI_SOCKET/EIS_SOCKET, SESSION_MANAGER, KDE_FULL_SESSION, PULSE_*/PIPEWIRE_*/IBUS_*) birleştirmeden ÖNCE ve SONRA
   silinir; `GSETTINGS_BACKEND=memory` (gerçek dconf'a yazılmaz), `ATSPI_DBUS_IMPLEMENTATION=dbus-daemon` (erişilebilirlik
   başlatıcısı `dbus-broker --scope user` ile kullanıcının gerçek a11y veri yolunu yeniden kullanamasın).
-  `XDG_RUNTIME_DIR` masaüstünün kendi klasörüdür (`<çalışma>/run`, 0700); ses sunucusuna yalnız AÇIK yolla
-  (PULSE_SERVER + PIPEWIRE_RUNTIME_DIR) ve yalnız boş çıkışa gidilir. HOME bilerek kullanıcınındır (uygulamalar
-  kullanıcının dosyalarıyla çalışır; profil/ayar yazımı oturum politikasıyla sınırlanır).
+  `XDG_RUNTIME_DIR` masaüstünün kendi klasörüdür (`<çalışma>/run`, 0700). HOME bilerek kullanıcınındır (yukarıdaki
+  "sınır").
+- **Bayat / oynanmış kayıtla kapatma (iki tür).** Bir PID'e yalnız başlangıç zamanı kayıttakiyle aynıysa
+  (`arka_ortak.pid_kaydet` / `pid_dogru`) ve kafes varsa kafesteyse sinyal gider; kafes yalnız
+  `deskhand-kwin-<kimlik>-N.scope` / `deskhand-sanal-<no>-N.scope` biçimindeyse boşaltılır; silinen dizin kayıttaki yol
+  değil `RUNTIME_DIR/kwin-<kimlik>` / `sanal-<no>`; X kilit/soketi yalnız :120+ (Xvfb :90+) ve kilit ölü ya da kayıttaki
+  sunucuya aitse.
+- **Ölü sunucu.** Öncelik bekçisi ekran sunucusunu (KWin/Xvfb; PID + başlangıç zamanı) izler: SIGKILL/OOM ile ölürse
+  kafesi boşaltır (SIGTERM, 2 sn, SIGKILL), kendi X soket/kilitlerini ve çalışma dizinini siler, çıkar.
 - **Özel D-Bus sertleştirmesi (iki tür).** `UpdateActivationEnvironment` ve `ReloadConfig` reddedilir; standart
   servis dizinleri yoktur, yalnız org.a11y.Bus etkinleştirilebilir.
 - **Düşük öncelik (iki tür).** Kafes nice 10 + ionice idle ile başlar; KWin `no_new_privs` (dosya yeteneği

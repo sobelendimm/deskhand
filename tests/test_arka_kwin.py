@@ -188,7 +188,10 @@ ornek = {"kimlik": "ab12cd34", "calisma": f"{RT}/kwin-ab12cd34", "wayland": "des
          "xwayland": ":150"}
 grt = os.environ.get("XDG_RUNTIME_DIR", "")
 gw = os.environ.get("WAYLAND_DISPLAY", "wayland-0")
-kontrol("kapı: geçerli kayıt geçer", dur_kodu(ko.baglanti_denetle, ornek) is None)
+os.makedirs(ornek["calisma"], mode=0o700, exist_ok=True)
+BEKLENEN = {"calisma": ornek["calisma"], "wayland_yol": ornek["wayland_yol"], "dbus_adres": ornek["dbus_adres"]}
+kontrol("kapı: geçerli kayıt → güvenli kayıt aynı yollar", all(ko.guvenli_kayit(ornek)[a] == v for a, v in BEKLENEN.items()))
+kontrol("kapı: canlı karşı taraf yokken (soket/süreç yok) bağlantı kapısı → Dur 14", dur_kodu(ko.baglanti_denetle, ornek) == 14)
 for ad_, ek_ in (("gerçek oturum veri yolu", {"dbus_adres": gercek_bus}),
                  ("veri yolu soketi oturum dizini dışında", {"dbus_adres": f"unix:path={RT}/bus"}),
                  ("kullanıcının Wayland soketi (mutlak yol)", {"wayland_yol": os.path.join(grt, gw), "wayland": gw}),
@@ -200,7 +203,13 @@ for ad_, ek_ in (("gerçek oturum veri yolu", {"dbus_adres": gercek_bus}),
     k_ = {**ornek, **ek_}
     if ek_.get("wayland_yol") is None and "wayland_yol" in ek_:
         k_.pop("wayland_yol")
-    kontrol(f"kapı: {ad_} → Dur 14", dur_kodu(ko.baglanti_denetle, k_) == 14)
+    try:  # oynanmış alan YOK SAYILIR: yollar kimlikten kurulur (ya da kayıt reddedilir)
+        g_ = ko.guvenli_kayit(k_)
+        yoksay = all(g_[a] == v for a, v in BEKLENEN.items()) and g_.get("xwayland") is None
+    except Dur as e:
+        yoksay = e.kod == 14
+    kontrol(f"kapı: {ad_} → yok sayıldı (yollar oturum dizininden) ve bağlantı kapısı Dur 14",
+            yoksay and dur_kodu(ko.baglanti_denetle, k_) == 14)
 r = subprocess.run([kwin_oturum_eis := os.path.join(KOK, "deskhand", "yardimci", "deskhand-eis")], capture_output=True,
                    text=True, timeout=10, env={"PATH": os.environ["PATH"], "DBUS_SESSION_BUS_ADDRESS": gercek_bus})
 kontrol("deskhand-eis: --bus yoksa ortamdaki (gerçek) adresi DEVRALMAZ → çıkış 2", r.returncode == 2)

@@ -139,8 +139,11 @@ srv.close()
 
 # ---------------------------------------------------------------- K4: RUNTIME_DIR sahip/izin
 os.chmod(RT, 0o755)
-kontrol("K4: RUNTIME_DIR 0755 → güvenli kayıt Dur 14", dur_kodu(ko.guvenli_kayit, d) == 14)
-os.chmod(RT, 0o700)
+ko.guvenli_kayit(d)
+kontrol("K4: bizim RUNTIME_DIR'imiz 0755 → 0700'e sıkılaştırıldı", (os.stat(RT).st_mode & 0o777) == 0o700)
+bag = os.path.join(G, "rt-bag")
+os.symlink(RT, bag)
+kontrol("K4: RUNTIME_DIR sembolik bağ → Dur 14", dur_kodu(ao.runtime_denetle, bag) == 14)
 
 # ---------------------------------------------------------------- O1: bayat/bozuk oturum.json
 print("\nO1) bayat kayıt")
