@@ -767,7 +767,7 @@ def _odak_bilgi(Atspi, cerceve):
         duzenlenebilir = rol in _DUZENLENEBILIR_ROLLER or ss.contains(S.EDITABLE)
     except Exception:  # noqa: BLE001
         return None
-    belge_ici, x = rol in _BELGE_ROLLERI, o
+    belge_ici, x, ulasti = rol in _BELGE_ROLLERI, o, False
     for _i in range(80):
         if belge_ici:
             break
@@ -775,12 +775,17 @@ def _odak_bilgi(Atspi, cerceve):
             x = x.get_parent()
         except Exception:  # noqa: BLE001 - üst zincir okunamadı: bilinmiyor
             return None
-        if x is None or x == cerceve:
+        if x is None:
+            return None  # zincir çerçeveye varmadan koptu: belge dışı SAYMA (adres çubuğu izni açık kalırdı) → bilinmiyor
+        if x == cerceve:
+            ulasti = True
             break
         try:
             belge_ici = x.get_role_name() in _BELGE_ROLLERI
         except Exception:  # noqa: BLE001
             return None
+    if not belge_ici and not ulasti:
+        return None  # 80 adımda ne belge ne çerçeve: bilinmiyor
     return {"rol": rol, "belge_ici": bool(belge_ici), "duzenlenebilir": bool(duzenlenebilir)}
 
 

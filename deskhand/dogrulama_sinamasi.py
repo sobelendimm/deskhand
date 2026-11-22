@@ -1024,6 +1024,8 @@ def _odak_guvenli(odak, d) -> bool:
     (bilinen sınama kaydı yokken) düzenlenebilir yazı alanında."""
     if not isinstance(odak, dict):
         return False
+    if d is not None:  # bilinen (kirli) sınama kaydı: sayfadaki yazı alanı (resimli kod kutusu olabilir) izin vermez
+        return not odak.get("belge_ici", True)
     return not odak.get("belge_ici") or bool(odak.get("duzenlenebilir"))
 
 

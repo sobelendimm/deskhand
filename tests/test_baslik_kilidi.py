@@ -1,4 +1,4 @@
-"""CLI otomatik başlık kilidi: kimlikle verilen girdi komutlarında (yaz, tus, tikla, dizi, kaydir) -b yoksa şimdiki TAM
+"""CLI otomatik başlık kilidi: kimlikle verilen girdi komutlarında (yaz, tus, tikla, kaydir; yalnız tarayıcı pencereleri) -b yoksa şimdiki TAM
 başlığa kilit (^…$); --no-title-lock kapatır; komut sırasında başlık değişince Dur 4 + "-b ile esnek desen" iletisi.
 Sahte arka uç (ekransız). Çalıştır:  python3 tests/test_baslik_kilidi.py"""
 import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; deskhand'den ÖNCE)
@@ -54,6 +54,7 @@ class SahteAU(arka_uc.ArkaUc):
     def __init__(self, degis_sonra=None):
         self.ad = "kde"
         self.satirlar, self.gonderim, self.degis_sonra, self.son_desen = [], 0, degis_sonra, None
+        self.sinif_adi = "firefox"  # otomatik kilit YALNIZ tarayıcı pencerelerinde
 
     def pencere_coz(self, arg): return "{w}" if arg in ("{w}", "Belge") else arg
     def pencereler(self, desen=None): return []
@@ -64,7 +65,7 @@ class SahteAU(arka_uc.ArkaUc):
             return "Başka sekme — KWrite"
         return "Belge (1) [taslak] — KWrite"
 
-    def sinif(self, k): return "kwrite"
+    def sinif(self, k): return self.sinif_adi
     def aktif(self): return "{w}"
     def one_getir(self, k): pass
     def kapat(self, k): pass
@@ -86,8 +87,7 @@ def ayristir(*argv):
 
 
 au = SahteAU()
-for argv in (("yaz", "{w}", "x"), ("tus", "{w}", "enter"), ("tikla", "{w}", "5", "5"), ("kaydir", "{w}"),
-             ("dizi", "{w}")):
+for argv in (("yaz", "{w}", "x"), ("tus", "{w}", "enter"), ("tikla", "{w}", "5", "5"), ("kaydir", "{w}")):
     a = ayristir(*argv)
     kontrol(f"{argv[0]} KİMLİKLE, -b yok → tam başlık kilidi ^…$", cli.otomatik_baslik_kilidi(a, au) and
             a.baslik == "^" + re.escape("Belge (1) [taslak] — KWrite") + "$", str(getattr(a, "baslik", None)))
@@ -101,6 +101,20 @@ a = ayristir("yaz", "{w}", "x", "--baslik-kilitsiz")
 kontrol("Türkçe --baslik-kilitsiz → kilit yok", not cli.otomatik_baslik_kilidi(a, au))
 a = ayristir("yaz", "Belge", "x")
 kontrol("başlık DESENİYLE verilen pencere (kimlik değil) → otomatik kilit yok", not cli.otomatik_baslik_kilidi(a, au))
+a = ayristir("dizi", "{w}")
+kontrol("dizi otomatik kilit kapsamı DIŞINDA (adımlar arasında sayfa değişimi olağan)", not cli.otomatik_baslik_kilidi(a, au))
+for sinif_ in ("kwrite", "org.kde.konsole", "com.mitchellh.ghostty", "zenity"):
+    au_ = SahteAU(); au_.sinif_adi = sinif_
+    a = ayristir("yaz", "{w}", "x")
+    kontrol(f"tarayıcı olmayan pencere ({sinif_}) → otomatik kilit yok (başlık yazarken değişir)",
+            not cli.otomatik_baslik_kilidi(a, au_) and not getattr(a, "baslik", None))
+import os as _os
+_eski = cli._masa_secenegi(["--no-title-lock", "yaz", "{w}", "x"])
+kontrol("--no-title-lock komuttan ÖNCE: argv'den soyulur, ortam bayrağı konur",
+        _eski == ["yaz", "{w}", "x"] and _os.environ.get(cli.BASLIK_KILITSIZ_ORTAM) == "1", str(_eski))
+a = ayristir("yaz", "{w}", "x")
+kontrol("ortam bayrağı varken otomatik kilit yok", not cli.otomatik_baslik_kilidi(a, au))
+_os.environ.pop(cli.BASLIK_KILITSIZ_ORTAM, None)
 a = ayristir("metne-tikla", "{w}", "Kaydet")
 kontrol("listede olmayan komut (metne-tikla) → otomatik kilit yok", not cli.otomatik_baslik_kilidi(a, au))
 
@@ -112,7 +126,7 @@ for degis, beklenen in ((None, 0), (2, 4)):
     kod = 0
     with arka_uc.hedef_sabit("kde"), contextlib.redirect_stderr(hata_), contextlib.redirect_stdout(io.StringIO()):
         try:
-            cli.main(["yaz", "{w}", "merhaba dunya nasilsin"])
+            cli.main(["yaz", "{w}", "merhabadunyanasilsin"])  # boşluksuz: sahte tarayıcı sayfası okunamaz (R1)
         except SystemExit as e:
             kod = e.code or 0
     if beklenen == 0:

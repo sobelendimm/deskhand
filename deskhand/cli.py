@@ -612,6 +612,10 @@ def _masa_secenegi(argv: list) -> list:
                 del argv[i:i + 2]
             os.environ[masalar.ORTAM] = masalar.dogrula(ad)
             continue
+        if t in ("--no-title-lock", "--baslik-kilitsiz"):  # komuttan ÖNCE de kabul (argparse yalnız sonrasını tanır)
+            os.environ[BASLIK_KILITSIZ_ORTAM] = "1"
+            del argv[i]
+            continue
         if t == "--" or not t.startswith("-"):
             break  # komut adı (ya da seçeneklerin sonu): sonrası komutun argümanları
         i += 2 if t in _DEGERLI_GENEL else 1
@@ -619,17 +623,27 @@ def _masa_secenegi(argv: list) -> list:
 
 
 # Kimlikle (başlık deseni değil) verilen bu girdi komutlarında -b yoksa şimdiki TAM başlığa kilit (^…$): komut sürerken
-# sekme/sayfa değişirse girdi yanlış yere gitmez (Dur 4). --no-title-lock kapatır.
-OTOMATIK_BASLIK_KOMUTLARI = {"yaz", "tus", "tikla", "dizi", "kaydir"}
+# sekme/sayfa değişirse girdi yanlış yere gitmez (Dur 4). YALNIZ tarayıcı pencerelerinde: editör (KWrite'ın "*"
+# değişiklik işareti), uçbirim ve okunmamış sayaçlı başlıklar yazarken değişir; orada kilit yazmayı yarıda keserdi.
+# dizi kapsam dışı (adımlar arasında sayfa değişimi olağan). --no-title-lock (komuttan önce ya da sonra) kapatır.
+OTOMATIK_BASLIK_KOMUTLARI = {"yaz", "tus", "tikla", "kaydir"}
+BASLIK_KILITSIZ_ORTAM = "DESKHAND_BASLIK_KILITSIZ"
 
 
 def otomatik_baslik_kilidi(a, au) -> bool:
     """a.baslik yoksa ve pencere KİMLİKLE verildiyse (çözülmüş kimlik = verilen) şimdiki tam başlığa kilitle.
     → kilit kondu mu."""
-    if a.komut not in OTOMATIK_BASLIK_KOMUTLARI or getattr(a, "baslik", None) or getattr(a, "baslik_kilitsiz", False):
+    if a.komut not in OTOMATIK_BASLIK_KOMUTLARI or getattr(a, "baslik", None) or getattr(a, "baslik_kilitsiz", False) \
+            or os.environ.get(BASLIK_KILITSIZ_ORTAM) == "1":
         return False
     k = getattr(a, "kimlik", None)
     if not k or k == EKRAN or getattr(a, "kimlik_ham", None) != k:
+        return False
+    from . import web
+    try:
+        if not web.tarayici_sinifi_mi(au.sinif(k) or ""):
+            return False
+    except Dur:
         return False
     b = au.baslik(k)
     if not b:

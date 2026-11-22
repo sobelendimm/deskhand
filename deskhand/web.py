@@ -646,18 +646,24 @@ _TARAYICI_SINIFI = (r"(?:^|[.\-_ ])(?:firefox\w*|mozilla\w*|librewolf|waterfox\w
                     r"vivaldi|opera|edge|msedge|thorium|epiphany|falkon|electron\d*)(?=$|[.\-_ ])")
 
 
-def tarayici_mi(k) -> bool:
+def tarayici_sinifi_mi(sinif: str) -> bool:
+    """Pencere sınıfı (WM_CLASS / app_id) bir tarayıcınınki mi (ad parçalarıyla tam eşleşme)."""
     import re
-    if k == EKRAN or not k:
-        return False
-    try:
-        sinif = (sec(k).sinif(k) or "").lower()
-    except Dur:
-        return False
+    sinif = (sinif or "").lower()
     if re.search(_TARAYICI_SINIFI, sinif):
         return True
     from .uygulama import CHROMIUM_IKILILERI
     return sinif in CHROMIUM_IKILILERI
+
+
+def tarayici_mi(k) -> bool:
+    if k == EKRAN or not k:
+        return False
+    try:
+        sinif = sec(k).sinif(k) or ""
+    except Dur:
+        return False
+    return tarayici_sinifi_mi(sinif)
 
 
 IPUCU_ERISIM = _("İpucu: tarayıcı erişilebilirlik açıkken başlamamış olabilir; kapatıp arka planda yeniden aç "
