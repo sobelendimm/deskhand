@@ -64,7 +64,12 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "hata": N_("onay isteği yazılamadı → red"),
     "gozetimsiz": N_("gözetimsiz çalışmada hassas eylem yapılmaz"),
     "kanal": N_("onay kanalı doğrulanamadı (yanıtın Deskhand panelinden geldiği kanıtlanamadı) → red"),
+    "kosul": N_("beklenen koşul gerçekleşti (insan doğrulaması sayfadan kalktı)"),
 }
+TUR_DEVIR = "devir"           # istek türü: insan doğrulaması devri (panelde "Devral / Bitti / Vazgeç"; izin = Bitti)
+DEVIR_EN_COK = 3600.0         # insan devri isteğinin en uzun ömrü (request_human timeout_s üst sınırı): bekleme boyunca BAŞKA
+                              # süreçlerin girdisi de kapalı kalır (bekleyen_var bu sınıra kadar "sahte" saymaz)
+KONTROL_ARALIK = 3.0          # isteyen `kontrol` işlevini en çok bu sıklıkta çağırır (sn)
 KARARLAR = ("izin", "red")
 _ID = re.compile(r"[0-9a-f]{32}")
 
@@ -363,7 +368,7 @@ class _Kanal:
             self._yanitlanan[istek_id] = simdi
             for k in [k for k, t in self._yanitlanan.items() if simdi - t > 3600]:
                 del self._yanitlanan[k]
-            for k in [k for k, (_kr, t) in self._kararlar.items() if simdi - t > VARSAYILAN_SURE + ESKI_PAY]:
+            for k in [k for k, (_kr, t) in self._kararlar.items() if simdi - t > DEVIR_EN_COK + ESKI_PAY]:
                 del self._kararlar[k]
             c = self._bekleyen.pop(istek_id, None)
             if c is None:
@@ -531,7 +536,8 @@ def bekleyen_var(masaustu: str, haric_pid: int | None = None, simdi: float | Non
     for d in bekleyenler(simdi):
         if d["masaustu"] != masaustu or d["pid"] <= 0 or d["pid"] == haric_pid:
             continue
-        if d["son_zaman"] - d["zaman"] > VARSAYILAN_SURE + ESKI_PAY:
+        sinir = (DEVIR_EN_COK if d.get("tur") == TUR_DEVIR else VARSAYILAN_SURE) + ESKI_PAY
+        if d["son_zaman"] - d["zaman"] > sinir:
             continue
         return True
     return False
@@ -548,16 +554,24 @@ def _dur_acik() -> bool:
     return os.path.exists(dur_dosyasi())
 
 
-def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str) -> None:
+DEVIR_ETIKET = {"izin": "devir-tamam", "kosul": "devir-kosul"}  # insan devri: "onay izin" DEĞİL (izin verilmedi, iş devredildi)
+
+
+def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str, tur: str = "") -> None:
     from .gunluk import gunluk
     yer = "arka sanal " if masaustu == "arka" else ""
-    gunluk(f"onay {sonuc.neden} | {yer}[{hedef}] | {eylem}")
+    neden = DEVIR_ETIKET.get(sonuc.neden, f"devir-{sonuc.neden}") if tur == TUR_DEVIR else sonuc.neden
+    gunluk(f"onay {neden} | {yer}[{hedef}] | {eylem}")
 
 
 def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran", sure: float = VARSAYILAN_SURE,
-               goruntu=None, gunluge_yaz: bool = True) -> OnaySonucu:
+               goruntu=None, gunluge_yaz: bool = True, tur: str = "", kontrol=None) -> OnaySonucu:
     """Paneldeki insandan bir kez izin iste ve bekle (en çok `sure` sn). → OnaySonucu.
     masaustu: "ekran" (kullanıcının ekranı) | "arka" (görünmez masaüstü).
+    tur: "" (hassas eylem onayı) | "devir" (insan doğrulaması devri: panel "Devral/Bitti/Vazgeç" gösterir; izin = Bitti).
+    kontrol: isteğe bağlı koşul işlevi (beklerken ~KONTROL_ARALIK sn'de bir çağrılır); True dönerse bekleme biter,
+    OnaySonucu(izin=False, neden="kosul"): izin DEĞİL, yalnız "beklenen şey kendiliğinden oldu" (isteği kapatma yetkisi
+    ajanda değil: koşul sayfanın gerçek durumudur ve bekleme boyunca ajanın girdisi o masaüstüne kapalıdır).
     goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu."""
     if not os.environ.get("DESKHAND_RUNTIME_DIR"):  # kullanıcının GERÇEK panelinde iletişim kutusu açılır
         from .hata import gercek_ekran_denetle
@@ -566,7 +580,7 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
 
     def bitir(s: OnaySonucu) -> OnaySonucu:
         if gunluge_yaz:
-            _kaydet_gunluk(s, eylem, hedef, masaustu)
+            _kaydet_gunluk(s, eylem, hedef, masaustu, tur)
         return s
 
     if gozetimsiz():  # başında insan yok: panel diyaloğu açılmaz, beklenmez (tek nokta: CLI, MCP, akış hep buradan)
@@ -599,6 +613,8 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
         istek = {"id": istek_id, "eylem": str(eylem), "hedef": str(hedef),
                  "ayrinti": str(ayrinti or "")[:AYRINTI_SINIR], "masaustu": masaustu, "zaman": simdi,
                  "son_zaman": simdi + sure, "pid": os.getpid(), "goruntu": g_yol}
+        if tur == TUR_DEVIR:
+            istek["tur"] = TUR_DEVIR
         _yaz_atomik(iy, istek)
         kanal.sendall(f"bekle {istek_id}\n".encode())
     except Exception:  # noqa: BLE001 - görüntü/istek yazılamadı: red (soket açık kalmasın)
@@ -608,6 +624,7 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
     try:
         son = time.monotonic() + sure
         sonraki_canlilik = time.monotonic() + CANLILIK_ARALIK
+        sonraki_kontrol = time.monotonic() + KONTROL_ARALIK
         tampon = b""
         while True:
             try:
@@ -635,6 +652,13 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
                 sonraki_canlilik = t + CANLILIK_ARALIK
                 if panel_pid() != ppid:
                     return bitir(OnaySonucu(False, "panel-kapandi", istek_id))
+            if kontrol is not None and t >= sonraki_kontrol:
+                try:
+                    if kontrol():
+                        return bitir(OnaySonucu(False, "kosul", istek_id))
+                except Exception:  # noqa: BLE001 - koşul okunamadı: beklemeye devam (insan kararı/zaman aşımı geçerli)
+                    pass
+                sonraki_kontrol = time.monotonic() + KONTROL_ARALIK
     finally:
         try:
             kanal.close()
@@ -668,6 +692,7 @@ def istek_oku(yol: str) -> dict | None:
         d[alan] = str(d.get(alan) or "")
     d["ayrinti"] = d["ayrinti"][:AYRINTI_SINIR]
     d["masaustu"] = "arka" if d.get("masaustu") == "arka" else "ekran"
+    d["tur"] = TUR_DEVIR if d.get("tur") == TUR_DEVIR else ""
     g = d.get("goruntu")
     d["goruntu"] = g if isinstance(g, str) and os.path.isfile(g) else None
     return d

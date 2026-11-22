@@ -20,9 +20,9 @@ import time
 import types
 
 from .arka_uc import EKRAN, sec
-from . import guvenlik, ucbirim
-from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, sistem_istemi_on,
-                    sistem_istemi_onay, tikla_ic)
+from . import dogrulama_sinamasi, guvenlik, ucbirim
+from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, insan_dogrulama_nokta,
+                    insan_dogrulama_oge, sistem_istemi_on, sistem_istemi_onay, tikla_ic)
 from .gunluk import gunluk
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, seviye_denetle,
                        yazi_onay_ister_mi)
@@ -1069,7 +1069,7 @@ def k_ogeye_tikla(a):
             rol=o["rol"], ad=o["ad"], x=f"{o['cx']:.0f}", y=f"{o['cy']:.0f}", kademe=kademe, sn=f"{sure:.2f}"))
         tikla_ic(g, a.kimlik, a.baslik, o["cx"], o["cy"], a.dugme, sec().geometri(a.kimlik), mod=mod)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
 
 
 # ---------------------------------------------------------------- faresiz yol: güvenlik + günlük
@@ -1107,9 +1107,11 @@ def _atspi_gunluk(k, etiket, ne):
 def _hassas_oge(k, onayli, ne, o, bilgi, ek_metinler=(), ek_basliklar=()):
     """Hassas düğme / ödeme sayfası denetimi (fare yolundaki hassas_nokta ile aynı kurallar, OCR yerine AT-SPI
     yazıları: ad, açıklama, çocuk adları). Görüntü eklenmez (pencereyi öne getirirdi). → onay alındı mı."""
+    insan_dogrulama_oge(k, o)  # CAPTCHA: ögenin ait olduğu iç belge (iframe) sınama çerçevesiyse 18 (görünmeyen öge dahil)
     metinler = [*ek_metinler, o["ad"], bilgi.get("aciklama", ""), *bilgi.get("cocuklar", [])]
     metinler = [m for m in metinler if m]
     nokta = (o["cx"], o["cy"]) if o.get("cx") is not None else None
+    insan_dogrulama_nokta(k, nokta[0] if nokta else None, nokta[1] if nokta else None, metinler)  # CAPTCHA kapısı
     onayli_oldu = False
     if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=nokta, goruntu_al=False, ek_basliklar=ek_basliklar):
         onayli, onayli_oldu = True, True
@@ -1283,9 +1285,11 @@ def _web_tikla(g, a, w, mod):
     Girdi.gonder'de, hassas düğme + ödeme sayfası denetimi hassas_nokta'da (ögenin ADI de hedef metin: OCR yazıyı
     okuyamasa, ör. yazısız simge düğmesi, yine onay istenir; sayfa başlığı ağaçtan da denetlenir)."""
     k = a.kimlik
+    insan_dogrulama_oge(k, w["oge"])  # görünmeyen ögeyi görünür yapmak (kaydırma) için bile girdi gönderilmez
     if not w["oge"]["gorunur"]:
         w = _web_gorunur_yap(g, a, w)
     o, sayfa = w["oge"], w["sayfa"]
+    insan_dogrulama_oge(k, o)  # CAPTCHA: sınama çerçevesinin ögesi (görünürlüğe bakılmaksızın) hiç tıklanmaz
     cx, cy = o["merkez"]
     basliklar = (sayfa.get("baslik") or "",) if sayfa.get("hassas_sayfa") else ()
     yakin = nokta_metni(k, cx, cy)
@@ -1304,12 +1308,13 @@ def _web_eylem(a, w):
     k, o, sayfa = a.kimlik, w["oge"], w["sayfa"]
     basliklar = (sayfa.get("baslik") or "",) if sayfa.get("hassas_sayfa") else ()
     merkez = o.get("merkez")
-    oz = {"ad": o["ad"], "cx": merkez[0] if merkez else None, "cy": merkez[1] if merkez else None}
+    oz = {"ad": o["ad"], "cx": merkez[0] if merkez else None, "cy": merkez[1] if merkez else None,
+          "_belge_adres": o.get("_belge_adres")}
     etiket = f"ogeye-tikla '{a.ad}' --eylem" + (f" {a.eylem}" if a.eylem else "")
     from .guvenlik import sistem_istemi_engel
     sistem_istemi_engel(k, getattr(a, "onayli", False), _("erişilebilirlik eylemi"), goruntu_al=False)
     onayli = _hassas_oge(k, a.onayli, _("tıklama (erişilebilirlik eylemi)"), oz, {}, ek_metinler=(a.ad,),
-                         ek_basliklar=basliklar)
+                         ek_basliklar=basliklar)  # (sınama çerçevesi ögesi → 18: insan_dogrulama_oge _hassas_oge'de)
     if guvenlik.yapistirma_ogesi_mi(a.ad, o.get("ad") or "", a.eylem or "") and guvenlik.yapistirma_engel(k, a.onayli):
         onayli = True  # erişilebilir adı/eylem adı yapıştırma (simgeli düğme dahil): kullanıcının panosu
     if onayli:
@@ -1327,7 +1332,10 @@ def _web_eylem(a, w):
                             ).format(ad=o["ad"]), tur="hedef-degisti")
     from . import gonderim
     gonderim.artir()  # eylem çağrısı yarıda kalsa da "belki gitti" (MCP sent)
-    r = web.eylem_yap(k, o, a.eylem or None)
+    try:
+        r = web.eylem_yap(k, o, a.eylem or None)
+    finally:  # eylem sayfayı değiştirmiş olabilir (hata verse bile): sınama kaydı kirlenir
+        dogrulama_sinamasi.girdi_oldu(k)
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']} (web)" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:
         raise Dur(6, _("eylem çalışmadı: '{eylem}' (öge reddetti)").format(eylem=r["eylem"]))
@@ -1373,7 +1381,10 @@ def _ogeye_eylem(a):
     _atspi_korumalari(k, a.baslik, "fare")  # onay beklenmiş olabilir: pencere/başlık/DUR/ekran korumasını yeniden doğrula
     from . import gonderim
     gonderim.artir()  # eylem çağrısı yarıda kalsa da "belki gitti" (MCP sent)
-    r = _atspi_calistir(_oge_istegi(k, o, "eylem", eylem=eylem_adi))
+    try:
+        r = _atspi_calistir(_oge_istegi(k, o, "eylem", eylem=eylem_adi))
+    finally:  # eylem sayfayı değiştirmiş olabilir (hata verse bile)
+        dogrulama_sinamasi.girdi_oldu(k)
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']}" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:
         raise Dur(6, _("eylem çalışmadı: '{eylem}' (öge reddetti)").format(eylem=r["eylem"]))
@@ -1388,6 +1399,7 @@ def k_ogeye_yaz(a):
     metin = a.metin.replace("\r\n", "\n").replace("\r", "\n")
     o, kademe, sure = _eylem_baglami(a, "klavye")
     k = a.kimlik
+    insan_dogrulama_nokta(k, o.get("cx"), o.get("cy"), [a.ad, o.get("ad")])  # CAPTCHA alanına değer yazılmaz
     bilgi = _atspi_calistir(_oge_istegi(k, o, "incele"))
     if not bilgi["yazilabilir"]:
         raise Dur(6, _("öge yazılabilir değil (EditableText ya da Value arayüzü yok): '{ad}'").format(ad=o["ad"]))
@@ -1414,7 +1426,10 @@ def k_ogeye_yaz(a):
     ucbirim.tampon_isle(sec(), k, kirli=True)  # değer doğrudan yazıldı: satırın içeriği artık bilinmez
     from . import gonderim
     gonderim.artir()  # değer yazma yarıda kalsa da "belki gitti" (MCP sent)
-    r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
+    try:
+        r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
+    finally:  # değer yazıldı (sayfa değişmiş olabilir; hata verse bile): sınama kaydı kirlenir
+        dogrulama_sinamasi.girdi_oldu(k)
     gonderim.not_yaz("dogrulandi", r.get("dogrulandi"))
     goster = f"***({len(metin)})" if gizli else repr(metin if len(metin) <= 200 else metin[:197] + "…")
     _atspi_gunluk(k, etiket, f"atspi set-text {goster}")

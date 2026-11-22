@@ -3,7 +3,7 @@ Kullanıcının GERÇEK ekranına hiçbir girdi gitmez; gerçek ~/.config yazıl
 
  A) Saf birim: gozlem.py (temizleme, satır/yapı biçimi, sorgu + atalar, OCR ayıklama, önbellek sınırları/ömür, fark,
     Set-of-Marks çizimi), erisim.ref_oge_sec (kimlik + ad/rol/kutu ±3 px).
- B) Araç listesi: 18 araç, observe/wait_for salt-okunur, outputSchema (observe/batch/wait_for/click), açıklamalarda
+ B) Araç listesi: 19 araç, observe/wait_for salt-okunur, outputSchema (observe/batch/wait_for/click), açıklamalarda
     komut enjeksiyonu kalıbı ve "sandbox/isolated/secure" iddiası yok; tools/list boyutu ölçülür.
  C) GÖRÜNMEZ masaüstünde (Xvfb) gerçek Qt pencereleri: observe (ağaç, sorgu, since, OCR, numaralı görüntü),
     ref ile tık/eylem/yazı/kaydırma, durum değişimi = confirmed, bayat ref (pencere boyutu), wait_for (text, element,
@@ -185,7 +185,7 @@ async def liste_testleri():
         r = await c.list_tools()
         talimat = (c.initialize_result.instructions if getattr(c, "initialize_result", None) else None) or s.TALIMAT
     araclar = {t.name: t for t in r.tools}
-    kontrol("liste: 19 araç (0.6.1: + listen)", len(araclar) == 19, str(sorted(araclar)))
+    kontrol("liste: 20 araç (0.6.1: + listen; 0.7.0: + request_human)", len(araclar) == 20, str(sorted(araclar)))
     for ad in ("observe", "wait_for"):
         a = araclar[ad].annotations
         kontrol(f"liste: {ad} salt-okunur", a.read_only_hint is True)

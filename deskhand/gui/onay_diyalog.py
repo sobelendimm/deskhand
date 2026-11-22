@@ -38,6 +38,7 @@ def sure_metni(sn: float) -> str:
 
 class OnayDiyalog(QDialog):
     karar_verildi = pyqtSignal(str, str)  # (istek id, "izin" | "red" | "sure" | "geri")
+    devral_istendi = pyqtSignal(str)      # (istek id): insan doğrulaması devri, arka plan masaüstü → panel Devral açar
 
     def __init__(self, istek: dict, parent=None, yanitla=onay.yanitla, saat=time.time, kurma_ms: int = KURMA_MS,
                  istek_var=None, hareket_px: int = HAREKET_PX):
@@ -65,7 +66,8 @@ class OnayDiyalog(QDialog):
         ikon.setAlignment(Qt.AlignmentFlag.AlignTop)
         ust.addWidget(ikon)
         soru = QLabel()
-        self.mt(soru.setText, T.D_SORU)
+        self.devir = istek.get("tur") == onay.TUR_DEVIR  # insan doğrulaması devri: Devral / Bitti / Vazgeç
+        self.mt(soru.setText, T.D_DEVIR_SORU if self.devir else T.D_SORU)
         f = soru.font()
         f.setPointSizeF(f.pointSizeF() * 1.25)
         f.setBold(True)
@@ -140,7 +142,7 @@ class OnayDiyalog(QDialog):
         self.l_kalan.setObjectName("muted")
         kok.addWidget(self.l_kalan)
         notu = QLabel()
-        self.mt(notu.setText, T.D_NOT)
+        self.mt(notu.setText, T.D_DEVIR_NOT if self.devir else T.D_NOT)
         notu.setWordWrap(True)
         notu.setEnabled(False)  # soluk (paletten)
         kok.addWidget(notu)
@@ -148,12 +150,12 @@ class OnayDiyalog(QDialog):
         dugmeler = QHBoxLayout()
         dugmeler.addStretch(1)
         self.b_red = QPushButton()
-        self.mt(self.b_red.setText, T.D_RED)
+        self.mt(self.b_red.setText, T.D_DEVIR_VAZGEC if self.devir else T.D_RED)
         self.b_red.setDefault(True)
         self.b_red.setAutoDefault(True)
         self.b_red.clicked.connect(lambda: self._karar("red"))
         self.b_izin = QPushButton()
-        self.mt(self.b_izin.setText, T.D_IZIN)
+        self.mt(self.b_izin.setText, T.D_DEVIR_BITTI if self.devir else T.D_IZIN)
         self.b_izin.setAutoDefault(False)
         self.b_izin.setDefault(False)
         self.b_izin.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # yalnız fareyle: Enter/boşluk izne dönüşmez
@@ -167,6 +169,15 @@ class OnayDiyalog(QDialog):
         for b in (self.b_red, self.b_izin):
             b.setMinimumWidth(150)
             b.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.b_devral = None
+        if self.devir and istek.get("masaustu") == "arka":
+            self.b_devral = QPushButton()
+            self.mt(self.b_devral.setText, T.D_DEVIR_DEVRAL)
+            self.b_devral.setAutoDefault(False)
+            self.b_devral.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self.b_devral.setMinimumWidth(150)
+            self.b_devral.clicked.connect(lambda: self.devral_istendi.emit(self.istek_id))
+            dugmeler.addWidget(self.b_devral)
         dugmeler.addWidget(self.b_red)
         dugmeler.addWidget(self.b_izin)
         kok.addLayout(dugmeler)
@@ -220,7 +231,7 @@ class OnayDiyalog(QDialog):
             self._bitir("geri")  # isteyen vazgeçti / zaten yanıtlandı
             return
         self.cubuk.setValue(int(1000 * max(0.0, min(1.0, k / self.toplam))))
-        self.l_kalan.setText(_(T.D_KALAN).format(s=sure_metni(k)))
+        self.l_kalan.setText(_(T.D_KALAN_DEVIR if self.devir else T.D_KALAN).format(s=sure_metni(k)))
 
     def _karar(self, karar: str, neden: str | None = None, kapat: bool = True):
         if self.bitti:

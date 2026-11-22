@@ -313,7 +313,7 @@ esac
 deskhand $WHERE open --command "okular ~/invoice.pdf"
 ```
 
-Rules for agents: stop on exit codes 10, 12, 13, 15 and 16 and tell the user; read before you click
+Rules for agents: stop on exit codes 10, 12, 13, 15, 16 and 18 and tell the user; read before you click
 and verify after; pass `--approved` only when the user has approved that exact step in the
 chat. Without it, Deskhand asks the user in the panel.
 
@@ -360,6 +360,7 @@ target cannot touch your desktop.
 | 15 | you are playing a game or watching a video: your screen is not touched |
 | 16 | the app cannot be opened on the background desktop (open on your screen, or keyring-only) |
 | 17 | your real screen is locked for this process (`DESKHAND_GERCEK_EKRAN`): use the background desktop |
+| 18 | a human-verification challenge (CAPTCHA) is in the way: never solved or bypassed; hand over with `request_human` |
 | 20 / 21 | `decide`: background / later (0 = your screen) |
 
 Over MCP the same codes appear as `[code] name: detail` errors.

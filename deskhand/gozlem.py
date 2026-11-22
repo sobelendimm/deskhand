@@ -81,6 +81,10 @@ def web_ogesi(o: dict, etkilesimli_roller) -> dict:
          "etkin": "devre_disi" not in (o.get("durum") or [])}
     if not o.get("gorunur", True):
         e["gorunmez"] = True
+    if o.get("cerceve"):
+        e["cerceve"] = o["cerceve"]  # iç içe belge (iframe) derinliği: insan doğrulaması algısı kullanır
+    if o.get("_belge_adres"):
+        e["belge_adres"] = o["_belge_adres"]  # ögenin ait olduğu iframe belgesinin adresi (yalnız iç algı; ajana çıkmaz)
     if o.get("deger") and o["rol"] != "password text":
         e["deger"] = temiz(o["deger"])
     if o.get("href"):
@@ -180,6 +184,8 @@ def satir(o: dict, n: int) -> str:
         p.append("= " + json.dumps(kisalt(o["deger"], DEGER_SINIRI), ensure_ascii=False))
     if o.get("hassas"):
         p.append("!sensitive")
+    if o.get("sinama"):
+        p.append("!human-verification")
     if o["kaynak"] == "ocr":
         p.append("(ocr)")
     if o.get("gorunmez"):
@@ -205,6 +211,8 @@ def yapisal(o: dict, sid: str, n: int) -> dict:
         e["actions"] = list(o["eylemler"])
     if o.get("hassas"):
         e["sensitive"] = True
+    if o.get("sinama"):
+        e["human_verification"] = True
     if o.get("href"):
         e["href"] = kisalt(o["href"], 200)
     if o["kaynak"] == "ocr":

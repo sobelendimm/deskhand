@@ -332,7 +332,7 @@ esac
 deskhand $NEREDE open --command "okular ~/fatura.pdf"
 ```
 
-Ajanlar için kurallar: 10, 12, 13, 15 ve 16 çıkış kodlarında durun ve kullanıcıya söyleyin;
+Ajanlar için kurallar: 10, 12, 13, 15, 16 ve 18 çıkış kodlarında durun ve kullanıcıya söyleyin;
 tıklamadan önce okuyun, sonra doğrulayın; `--approved`'ı yalnız kullanıcı o adımı sohbette
 açıkça onayladıysa verin. Verilmezse Deskhand kullanıcıya panelden sorar.
 
@@ -379,6 +379,7 @@ plan hedefi masaüstünüze dokunamasın.
 | 15 | oyun oynuyor ya da film izliyorsunuz: ekranınıza dokunulmaz |
 | 16 | uygulama görünmez masaüstünde açılamaz (ekranınızda açık ya da şifre deposu istiyor) |
 | 17 | gerçek ekranınız bu süreçte kilitli (`DESKHAND_GERCEK_EKRAN`): görünmez masaüstünü kullanın |
+| 18 | insan doğrulaması (CAPTCHA) sınaması: asla çözülmez/atlatılmaz; `request_human` ile kullanıcıya devredin |
 | 20 / 21 | `decide`: arka plan / sonra (0 = ekranınız) |
 
 MCP'de aynı kodlar `[kod] ad: ayrıntı` biçiminde hata olarak döner.
