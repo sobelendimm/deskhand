@@ -12,6 +12,14 @@
   veri klasörleri eskisi gibi yazılabilir ve kalıcıdır; ev köküne yazılanlar oturumla atılır. Bir uygulamanın kendi
   ayarı gerekiyorsa `oturum.toml`'da uygulama başına `ev = [...]` (varsayılan yok). Ölçüm: KWrite, Dolphin, Konsole,
   Gwenview, Firefox, Chromium, zenity, Meld ve Electron açılıyor; tema ve OCR doğruluğu değişmedi.
+- **Güvenlik: ev beyaz listesi sertleştirildi (bağımsız inceleme).** Sembolik bağ olan beyaz liste/`ev` girdisinin
+  kaynağı bir XDG veri klasörüne, ev dışında `/tmp`, `/run/user/UID` ya da RUNTIME_DIR'e giderse reddedilir; beyaz liste
+  bağları ev içinde yalnız beyaz listedeki bir girdiye çıkabilir; ikinci hat (sır örtüleri) kaynak→hedef eşlemesiyle de
+  örter; kaynak `O_PATH` fd'siyle açılıp bwrap `--ro-bind-fd` ile bağlanır (yol yarışı kapandı). Politika `ev`
+  girdisinde glob, kısa gizli girdi ve `.config`/`.local`/`.cache`… merkezleri reddedilir. Flatpak `overrides` ve GTK
+  yer imleri/sunucuları örtülür. Paket bağları veri klasörlerinden sonra gelir, `.git` kökü reddedilir. Ad alanındaki
+  `/tmp` ve ev tmpfs'i min(2 GiB, kafes/4) ile sınırlı. Ev altında görünmeyen bir program başlatılırsa zaman aşımı
+  beklenmeden `oturum.toml` `ev = [...]` ipuçlu anlaşılır hata verilir.
 
 ## 0.6.1 (22 Kasım 2026)
 

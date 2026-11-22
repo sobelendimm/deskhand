@@ -445,7 +445,7 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     soketleri, başka X soketleri görünmez), `/run/user/<UID>` (Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh,
     xauth, at-spi, portal, systemd soketleri) ve (başka yerdeyse) Deskhand'in RUNTIME_DIR'i (girdi.sock, sanal.json,
     diğer oturumlar).
-  - **Ev dizini BOŞ tmpfs + BEYAZ LİSTE** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` 2 GiB): gerçek
+  - **Ev dizini BOŞ tmpfs + BEYAZ LİSTE** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` = min(2 GiB, kafes belleği/4), kafes varsayılanı 4G → 1 GiB; ad alanındaki `/tmp` de aynı sınırla): gerçek
     ev dizininden YALNIZ masaüstü/araç takımı görünümü SALT OKUNUR görünür — `~/.config/kdeglobals`, `kdedefaults/`,
     `kcminputrc`, `kcmfonts`, `Trolltech.conf`, `plasma-localerc`, `breezerc`, `Kvantum`, `qt5ct`/`qt6ct`, `gtk-3.0`,
     `gtk-4.0`, `gtkrc`, `gtkrc-2.0`, `~/.gtkrc-2.0`, `xsettingsd`, `fontconfig`, `~/.local/share/fonts`, `~/.fonts`,
@@ -457,6 +457,23 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     `.git-credentials`, `gh/hosts.yml`, `.docker`, `.kube`, `.pypirc`, `.local/share/<bilinmeyen>`, `.cache/<uyg>`,
     `~/projeler/.env`, `~/notlar.txt` okunamıyor; `tests/test_ev_beyaz_liste.py`). Sembolik bağ olan beyaz liste
     girdisi HEDEFİNDEN bağlanır; hedefi ev dizininin kendisi/üstü ya da bir SIR_YOLLARI yolu olan girdi reddedilir.
+    Sembolik bağ kuralları (`_beyaz_ham`): kaynak (realpath) bir XDG veri klasörünün içinde/kendisi/üstü ise RET (veri
+    klasörü yazılabilir bağlanır: ad alanındaki uygulama orada `-> ~/.config` bağı kurup sonraki başlatmalarda tüm
+    yapılandırmayı açtırabilirdi); kaynak ev DIŞINDA ve `/tmp`, `/run/user/UID` ya da RUNTIME_DIR altındaysa RET; beyaz
+    liste girdisinin kaynağı ev içinde ve sözcüksel yoldan farklıysa YALNIZ kaynak beyaz listedeki (bağ olmayan) bir
+    girdinin altındaysa kabul (dotfiles yöneticisi bağları `~/dotfiles/...` reddedilir; gerekirse politika `ev`); politika
+    `ev` girdisi için yalnız ilk iki kural. İkinci hat (SIR_YOLLARI) kaynak→hedef eşlemesiyle de örter (kaynağın içindeki
+    sır `hedef + göreli yol`'da). Politika `ev` girdisi ayrıca `gecerli_politika_ev_girdisi` ile süzülür: glob karakteri,
+    derinliği 2'den az gizli girdi (`.ssh`, `.netrc`…) ve merkezlerin kendisi (`.config`, `.local`, `.local/share`,
+    `.local/state`, `.cache`, `.var`) RET. İnce örtüler (SIR_YOLLARI): `.local/share/flatpak/overrides` (boş dizin),
+    `.config/gtk-3.0/bookmarks` ve `servers` (/dev/null); `flatpak/repo/config` BİLEREK örtülmez (ölçüldü: /dev/null örtüsü
+    `flatpak --user` kurulumunu bozar). TOCTOU: kaynaklar `O_PATH|O_NOFOLLOW` fd'si olarak açılır, `(dev,ino)` ve
+    `/proc/self/fd` yolu denetlenir, bwrap `--ro-bind-fd` ile bağlar (fd'ler `pass_fds` ile geçer, uygulamaya sızmaz); bwrap
+    bunu bilmiyorsa çözülmüş gerçek yol `--ro-bind` edilir ve denetim-bağlama arasındaki yarış kalır (yalnız ev sahibinin
+    kendi hesabının yazabildiği yollarda). Paket/`sys.prefix` bağları veri klasörlerinden SONRA eklenir, bir `.git`
+    deposunun KÖKÜ olan yol reddedilir. Teşhis: çözülmüş exec (`gio launch` için .desktop Exec'i) ev altında ama ad
+    alanında görünmüyorsa `korumali_baslat` HEMEN `Dur(9)` verir (iletide `oturum.toml` `[uygulama.<ad>] ev = [...]`
+    ipucu; MCP `open_app` ve CLI `ac` aynı kapıdan geçer).
     Uygulamanın yazdıkları (`~/.config/autostart`, `~/.bashrc`, `~/.config/systemd/user`, `~/.local/bin`, kendi
     ayarı, önbelleği…) oturumla ATILIR → kalıcılık kaçışı yok. Bir uygulamanın kendi ayarı gerekiyorsa oturum
     politikasında uygulama başına `ev = [...]` (ev dizinine göreli; salt okunur; VARSAYILAN hiçbir uygulamada YOK;

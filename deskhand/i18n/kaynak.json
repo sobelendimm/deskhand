@@ -611,7 +611,7 @@
   "masaustu.py:232"
  ],
  "DESKHAND_SANAL_TAKAS geçersiz: {deger} (ör. 0, 512M, 1G)": [
-  "arka_ortak.py:117"
+  "arka_ortak.py:118"
  ],
  "DUR": [
   "gui/dil.py:78",
@@ -1473,7 +1473,7 @@
   "mcp_sunucu.py:1874"
  ],
  "başlatılacak komut boş": [
-  "arka_ortak.py:928"
+  "arka_ortak.py:1148"
  ],
  "başlatılamadı: {hata}": [
   "insan.py:57",
@@ -1537,7 +1537,7 @@
   "masaustu.py:730"
  ],
  "bellek kafesi yok: öncelik bekçisi çalışmıyor (ad tabanlı sistem kuralları önceliği yükseltebilir)": [
-  "arka_ortak.py:958"
+  "arka_ortak.py:1178"
  ],
  "betik okunamadı: {p}": [
   "uygulama.py:384"
@@ -1665,7 +1665,7 @@
   "uygulama.py:292"
  ],
  "boş ses çıkışı kurulamadı ({hata}): arka plan sesi kapatıldı": [
-  "arka_ortak.py:1023"
+  "arka_ortak.py:1243"
  ],
  "bu arka uç panoyu desteklemiyor": [
   "arka_uc/__init__.py:158",
@@ -1722,7 +1722,7 @@
   "erisim.py:1068"
  ],
  "bwrap (bubblewrap) yok: arka plan uygulaması yalıtılamaz, başlatılmadı": [
-  "arka_ortak.py:865"
+  "arka_ortak.py:1023"
  ],
  "bölge kökü +{x}+{y}": [
   "gorsel.py:232"
@@ -1933,7 +1933,7 @@
   "kwin_oturum.py:384"
  ],
  "erişilebilirlik adresi oturumun at-spi dizini dışında ya da geçersiz: {adres}; bağlanılmadı": [
-  "arka_ortak.py:293"
+  "arka_ortak.py:294"
  ],
  "erişilebilirlik ayarı (org.a11y.Status)": [
   "erisim.py:67"
@@ -1945,22 +1945,22 @@
   "web.py:113"
  ],
  "erişilebilirlik dizini güvensiz (sembolik bağ / dizin değil / başkasının / gevşek izinli): {dizin}": [
-  "arka_ortak.py:233"
+  "arka_ortak.py:234"
  ],
  "erişilebilirlik dizini güvensiz: {dizin}": [
-  "arka_ortak.py:300"
+  "arka_ortak.py:301"
  ],
  "erişilebilirlik dizini masaüstü açıldığından beri değişmiş (başka dizin): {dizin}": [
-  "arka_ortak.py:236"
+  "arka_ortak.py:237"
  ],
  "erişilebilirlik dizini yok: {hata}": [
-  "arka_ortak.py:231"
+  "arka_ortak.py:232"
  ],
  "erişilebilirlik dizini zaten var (açılışta olmamalı): {dizin}": [
-  "arka_ortak.py:265"
+  "arka_ortak.py:266"
  ],
  "erişilebilirlik dizini zaten var ama masaüstünün kaydında kimliği yok ({dizin}); arka plan masaüstünü yeniden açın": [
-  "arka_ortak.py:277"
+  "arka_ortak.py:278"
  ],
  "erişilebilirlik eylemi": [
   "erisim.py:620",
@@ -1982,16 +1982,16 @@
   "masaustu.py:896"
  ],
  "erişilebilirlik soketi güvensiz (sembolik bağ / soket değil / başkasının): {yol}; bağlanılmadı": [
-  "arka_ortak.py:304"
+  "arka_ortak.py:305"
  ],
  "erişilebilirlik soketi kullanıcının gerçek soketinin sert bağı: {yol}; bağlanılmadı": [
-  "arka_ortak.py:307"
+  "arka_ortak.py:308"
  ],
  "erişilebilirlik soketi yok: {hata}": [
-  "arka_ortak.py:298"
+  "arka_ortak.py:299"
  ],
  "erişilebilirlik soketinin karşı tarafı bu oturumun süreci değil ({karsi}); bağlanılmadı": [
-  "arka_ortak.py:315"
+  "arka_ortak.py:316"
  ],
  "erişilebilirlik veri yolu bulunamadı (org.a11y.Bus yanıt vermedi)": [
   "web.py:198"
@@ -2316,7 +2316,7 @@
   "cli.py:408"
  ],
  "güvenli araç bulunamadı: {ad} (yalnız /usr/bin ve /bin; dosya ve üst dizinleri root'a ait, başkası yazamaz olmalı)": [
-  "arka_ortak.py:445"
+  "arka_ortak.py:446"
  ],
  "ham komut (bilinen bir uygulamaya uymuyor)": [
   "oturum/__init__.py:85"
@@ -2835,7 +2835,7 @@
   "masaustu.py:990"
  ],
  "oturum kopyası geçersiz (kopya kökünün alt dizini değil): {yol}": [
-  "arka_ortak.py:833"
+  "arka_ortak.py:991"
  ],
  "oturum köprüsü yok: görünmez masaüstünde uygulama başlatılamaz; '{uygulama}' başlatılmadı. desktop='foreground' (kullanıcının ekranı) kullan ya da kullanıcıya bildir.": [
   "mcp_sunucu.py:1946"
@@ -2871,10 +2871,10 @@
   "mesgul.py:620"
  ],
  "pactl yok": [
-  "arka_ortak.py:1040"
+  "arka_ortak.py:1260"
  ],
  "pactl yok: arka plan sesi tamamen kapatıldı": [
-  "arka_ortak.py:1014"
+  "arka_ortak.py:1234"
  ],
  "paketi kur: {paket}": [
   "doktor.py:61"
@@ -3244,7 +3244,7 @@
   "ses.py:331"
  ],
  "ses modülü kaldırılamadı: {hata}": [
-  "arka_ortak.py:1040"
+  "arka_ortak.py:1260"
  ],
  "ses sunucusu şimdi kuruldu: bundan ÖNCE açılan uygulamaların sesi buraya gelmez; onları kapatıp yeniden aç (ya da masaüstünü manage_desktop(start, audio=true) ile aç)": [
   "mcp_sunucu.py:1484"
@@ -3335,7 +3335,7 @@
   "mcp_sunucu.py:1244"
  ],
  "süreç bellek kafesine alınamadı ({kafes}): {hata}": [
-  "arka_ortak.py:914"
+  "arka_ortak.py:1134"
  ],
  "sürükleme": [
   "eylem.py:908"
@@ -3486,7 +3486,7 @@
   "erisim.py:240"
  ],
  "uygulama girdisi kopyası geçersiz: {yol}": [
-  "arka_ortak.py:852"
+  "arka_ortak.py:1010"
  ],
  "uygulamanın erişilebilirlik ağacında pencere yok (pid {pid}). Firefox GNOME_ACCESSIBILITY=1 ile, Chromium --force-renderer-accessibility ile başlatılmalı": [
   "web.py:273"
@@ -3566,7 +3566,7 @@
   "doktor.py:225"
  ],
  "yanıt yok": [
-  "arka_ortak.py:976",
+  "arka_ortak.py:1196",
   "arka_uc/sanal.py:782",
   "kwin_oturum.py:1212",
   "masaustu.py:835"
@@ -3896,6 +3896,9 @@
  "{yol} (henüz yok)": [
   "doktor.py:213"
  ],
+ "{yol} ev dizininde ve arka plan ad alanında görünmüyor (ev dizini boştur: yalnız beyaz liste, XDG veri klasörleri ve oturum politikasındaki `ev` girdileri görünür); oturum.toml içinde [uygulama.{uyg}] ev = [\"{goreli}\"] ekleyin ya da uygulamayı görünür bir yere kurun": [
+  "arka_ortak.py:1090"
+ ],
  "{yol}: hiç 'ekran' bloğu ya da 'basari' yok": [
   "akis.py:82"
  ],
@@ -3936,10 +3939,10 @@
   "doktor.py:300"
  ],
  "çalışma dizini gevşek izinli ({izin}; 0700 olmalı): {yol} — `chmod 700 {yol}` ile düzeltin": [
-  "arka_ortak.py:358"
+  "arka_ortak.py:359"
  ],
  "çalışma dizini güvensiz (sahibi/türü): {yol}": [
-  "arka_ortak.py:356"
+  "arka_ortak.py:357"
  ],
  "çalışma dizini yolu çok uzun (soket yolu 108 bayt sınırı): {dizin}": [
   "kwin_oturum.py:834"
@@ -4015,7 +4018,7 @@
   "ucbirim.py:329"
  ],
  "öncelik bekçisi hazır olmadı ({yanit})": [
-  "arka_ortak.py:976"
+  "arka_ortak.py:1196"
  ],
  "özel D-Bus (dbus-daemon) açılmadı": [
   "masaustu.py:788"

@@ -134,8 +134,8 @@ class Politika:
         self.not_ = ham.get("not") or ""
         # ev dizini beyaz liste girdileri (uygulama başına, ev dizinine göreli; salt okunur; varsayılan YOK): arka plan
         # ad alanında ev dizini boştur, uygulamanın kendi ayarı gerekiyorsa yalnız bu yolla verilir (geçersiz girdi atılır)
-        from ..arka_ortak import gecerli_ev_girdisi
-        self.ev = tuple(g for g in (ham.get("ev") or ()) if gecerli_ev_girdisi(g)) \
+        from ..arka_ortak import gecerli_politika_ev_girdisi
+        self.ev = tuple(g for g in (ham.get("ev") or ()) if gecerli_politika_ev_girdisi(g)) \
             if isinstance(ham.get("ev"), (list, tuple)) else ()
         self._reddet = tuple(site.get("reddet", ()))
         self._izin = tuple(site.get("izin", ()))
