@@ -139,6 +139,7 @@ KOD_ADI = {  # gösterirken _()
     14: N_("sanal masaüstü kapalı (manage_desktop action=start)"),
     15: N_("kullanıcı oyunda/film izliyor: ekranına dokunma, desktop=background kullan ya da sonra dene"),
     16: N_("uygulama arka planda açılamaz (kullanıcının ekranında açık ya da yalnız ön plan)"),
+    17: N_("gerçek ekran bu süreçte kapalı (DESKHAND_GERCEK_EKRAN): desktop=background kullan"),
 }
 
 

@@ -571,6 +571,7 @@ class Istemci:
     def baglan(cls, duzen: tuple[str, str], yol: str | None = None) -> "Istemci | None":
         """Merkez varsa bağlan ve el sıkışmayı GÖNDER (yanıt hazir_bekle'de okunur: kurulumla örtüşsün). Soket bu
         kullanıcının ve 0600 değilse ya da öbür uç başka kullanıcıysa None (çağıran kendi dotool'una düşer)."""
+        hata.gercek_ekran_denetle(_("girdi merkezi (panelin dotool'u)"))  # gerçek ekran kilidi: panele bağlanma = girdi hattı
         yol = yol or soket_yolu()
         try:
             st = os.lstat(yol)

@@ -332,7 +332,11 @@ chat. Without it, Deskhand asks the user in the panel.
 Every directory can be moved with `DESKHAND_CONFIG_DIR`, `DESKHAND_STATE_DIR`,
 `DESKHAND_CACHE_DIR`, `DESKHAND_DATA_DIR`, `DESKHAND_RUNTIME_DIR`. Other variables:
 `DESKHAND_HEDEF=on|arka|oto` (default desktop), `DESKHAND_SANAL_BOYUT=1920x1080` (background
-size), `DESKHAND_SANAL_BELLEK=4G` (memory cap, `0` = off).
+size), `DESKHAND_SANAL_BELLEK=4G` (memory cap, `0` = off). `DESKHAND_GERCEK_EKRAN=kapali` locks your
+real screen for that process at the lowest layer (input, window actions, app launch, clipboard write,
+notifications, screenshots all fail with exit code 17; `salt-okuma` still allows reading
+screenshots and the clipboard): set it in test and measurement scripts so a forgotten background
+target cannot touch your desktop.
 
 ## Exit codes
 
@@ -355,6 +359,7 @@ size), `DESKHAND_SANAL_BELLEK=4G` (memory cap, `0` = off).
 | 14 | background desktop not available |
 | 15 | you are playing a game or watching a video: your screen is not touched |
 | 16 | the app cannot be opened on the background desktop (open on your screen, or keyring-only) |
+| 17 | your real screen is locked for this process (`DESKHAND_GERCEK_EKRAN`): use the background desktop |
 | 20 / 21 | `decide`: background / later (0 = your screen) |
 
 Over MCP the same codes appear as `[code] name: detail` errors.

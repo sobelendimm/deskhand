@@ -20,6 +20,7 @@ from PIL import Image
 
 from .. import yollar
 from ..gunluk import gunluk
+from ..hata import gercek_ekran_denetle
 from ..i18n import _
 
 ONEK = b"DESKHAND-GORUNTU 1 "
@@ -86,6 +87,7 @@ def al(bolge=None, bin_yolu=None) -> tuple[Image.Image, float]:
     argv = [yol]
     if bolge:
         argv += ["-a", *(str(int(v)) for v in bolge)]
+    gercek_ekran_denetle(_("ekran görüntüsü"), okuma=True)  # kullanıcının ekran İÇERİĞİ: yalnız "salt-okuma"da serbest
     try:
         p = subprocess.run(argv, capture_output=True, timeout=ZAMAN_ASIMI)
     except (OSError, subprocess.TimeoutExpired) as e:

@@ -16,6 +16,10 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import _yalitim  # noqa: E402,F401  (Deskhand'den ÖNCE)
 
+# Bu takımlar BİLEREK gerçek ekrana girdi gönderir: _yalitim'in koyduğu gerçek ekran kilidi (DESKHAND_GERCEK_EKRAN) burada
+# açıkça kaldırılır (alt süreçler de devralmasın).
+os.environ.pop("DESKHAND_GERCEK_EKRAN", None)
+
 from deskhand import yollar  # noqa: E402
 from deskhand.arka_uc import sec  # noqa: E402
 

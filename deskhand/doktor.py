@@ -89,6 +89,17 @@ def satir_kwin():
     return _satir(_("KWin / Plasma sürümü"), "uyari", _("sürüm okunamadı (kwin/plasmashell bulunamadı)"))
 
 
+def satir_gercek_ekran():
+    """DESKHAND_GERCEK_EKRAN ayarlıysa bu SÜREÇTE gerçek ekranın kilitli olduğunu gösterir (ayarsızken satır yok)."""
+    kip = hata.gercek_ekran_kipi()
+    if kip == "acik":
+        return None
+    if kip == "salt-okuma":
+        return _satir(_("Gerçek ekran"), "tamam", _("bu süreçte kapalı: yalnız okuma serbest (ekran görüntüsü, pano) "
+                                                    "(DESKHAND_GERCEK_EKRAN=salt-okuma)"))
+    return _satir(_("Gerçek ekran"), "tamam", _("bu süreçte kapalı (DESKHAND_GERCEK_EKRAN=kapali)"))
+
+
 def satir_panel():
     from . import onay
     pid = onay.panel_pid()
@@ -233,7 +244,7 @@ def satir_gpu_ocr():
                   _("./install.sh eksikleri ve kurulum komutlarını listeler"))
 
 
-SATIRLAR = (satir_surum, satir_oturum, satir_kwin, satir_panel, satir_onay_kapsami, satir_girdi_merkezi, satir_yardimcilar,
+SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_onay_kapsami, satir_girdi_merkezi, satir_yardimcilar,
             satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_arka_tur, satir_gpu_ocr)
 
 
@@ -246,7 +257,9 @@ def topla() -> list[dict]:
         sonuc.append(_satir(_("Bağımlılıklar"), "uyari", _("denetlenemedi: {hata}").format(hata=e)))
     for f in SATIRLAR:
         try:
-            sonuc.append(f())
+            satir = f()
+            if satir is not None:  # satir_gercek_ekran: ayarsızken satır yok (çıktı öncekiyle aynı)
+                sonuc.append(satir)
         except Exception as e:  # noqa: BLE001
             sonuc.append(_satir(f.__name__.removeprefix("satir_"), "uyari", _("denetlenemedi: {hata}").format(hata=e)))
     return sonuc

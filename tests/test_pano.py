@@ -428,6 +428,10 @@ class SahtePopen:
 KDE_SUBPROCESS = kde.subprocess
 kde.subprocess = types.SimpleNamespace(Popen=SahtePopen, PIPE=subprocess.PIPE, DEVNULL=subprocess.DEVNULL,
                                        TimeoutExpired=subprocess.TimeoutExpired, run=subprocess.run)
+# Gerçek ekran kilidi (_yalitim: kapali) yalnız bu bölümde açılır: kde.subprocess tümüyle SAHTE (gerçek wl-copy/wl-paste
+# çalışmaz); bölüm sonunda (finally) kilit geri konur.
+KILIT0 = os.environ.get("DESKHAND_GERCEK_EKRAN")
+os.environ["DESKHAND_GERCEK_EKRAN"] = "acik"
 KORUMA = {"hata": None, "cagri": 0}
 
 
@@ -557,6 +561,7 @@ try:
 finally:
     kde.subprocess = KDE_SUBPROCESS
     kde.on_plan_korumasi = GERCEK_KORUMA
+    os.environ["DESKHAND_GERCEK_EKRAN"] = KILIT0
     for k_, v_ in env0.items():
         if v_ is not None:
             os.environ[k_] = v_

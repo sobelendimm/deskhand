@@ -26,6 +26,10 @@ public issue.
 - Run the tests before sending: `for t in tests/test_*.py; do python3 "$t" || break; done`.
   They redirect every Deskhand directory to a temporary folder and never send input to your
   screen. `test_sanal` and `test_mcp` start their own invisible desktop.
+- Measurement and test scripts must import `tests/_yalitim.py` (or set `DESKHAND_GERCEK_EKRAN=kapali`
+  themselves): it locks the real screen at the lowest layer (input, window actions, app launch,
+  clipboard write, notifications, screenshots), so a forgotten `hedef("sanal")` fails with exit code 17
+  instead of touching your desktop. `salt-okuma` allows only reading (screenshots, clipboard).
 - The suites in `tests/ekranli/` drive your **real** screen. Run them only when you are not
   using the computer, and say in the PR whether you ran them.
 - Raw input tools (`dotool`, `xdotool`) are called only inside `deskhand/arka_uc/`. Every new

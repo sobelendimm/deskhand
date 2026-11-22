@@ -620,9 +620,10 @@ uymadı · 5 belirsiz (birden çok eşleşme) · 6 bulunamadı · 7 zaman aşım
 9 araç eksik (dotool/tesseract/Xvfb…) · 10 yasak/hassas · 11 akış hata ekranı · 12 insan kullanıyor ·
 **13 kullanıcı DUR dedi** · **14 sanal masaüstü kapalı** · **15 kullanıcı oyunda/film izliyor, ekranına müdahale yok** ·
 **16 uygulama arka planda açılamaz** (kullanıcının ekranında açık ya da yalnız ön plan) ·
+**17 gerçek ekran bu süreçte kapalı** (`DESKHAND_GERCEK_EKRAN`, bkz. §6) ·
 20 / 21 `decide` karar kodları: 0 = kullanıcının ekranı, 20 = arka plan, 21 = sonra.
 
-Çağıran otomasyon 10, 12, 13, 15 ve 16'da durmalı ve kullanıcıya haber vermelidir. MCP yüzeyinde aynı kodlar
+Çağıran otomasyon 10, 12, 13, 15, 16 ve 17'de durmalı ve kullanıcıya haber vermelidir. MCP yüzeyinde aynı kodlar
 `[kod] ad: ayrıntı` hatası olarak görünür. Bu tablo README'deki "Exit codes" tablosuyla tutarlı tutulur.
 
 ## 6. Çalışma kuralları
@@ -632,6 +633,17 @@ uymadı · 5 belirsiz (birden çok eşleşme) · 6 bulunamadı · 7 zaman aşım
 - Gerçek ekran testleri: GERÇEK ekrana girdi gönderen hiçbir test/komut (kde arka ucu ile tikla/yaz/tus,
   `tests/ekranli/`) kullanıcı bilgisayarı kullanırken (film, oyun…) çalıştırılmaz; yalnız elle, makine boştayken
   koşulur. Sanal masaüstü (Xvfb) testleri serbesttir.
+- **Gerçek ekran kilidi (yapısal):** `DESKHAND_GERCEK_EKRAN=kapali` ayarlıysa kullanıcının GERÇEK oturumuna etki eden her
+  yol, gerçek aracı çalıştırmadan HEMEN önce `hata.gercek_ekran_denetle()` ile reddedilir (Dur 17, açık ileti): girdi
+  (`kde.Girdi` kurulumu, `kde.dotool_ac`, girdi merkezi bağlantısı), yan etkili `kdotool` sözleri (etkinleştir/taşı/
+  boyutlandır/küçült/kapat… `kde.calis`), uygulama başlatma (`kde.baslat`), pano yazma (`kde._wl`), bildirim
+  (`mesgul.sor`), kullanıcının oturum veri yolunda erişilebilirlik ayarı ve AT-SPI eylem/yazma (`erisim`).
+  Kullanıcının ekran/pano İÇERİĞİNİ okuyan yollar (ekran görüntüsü, `wl-paste`) da kapanır; `salt-okuma` değeri bunları
+  (yalnız okumayı) serbest bırakır. Pencere listesi/başlık/geometri, kilit/boşta durumu ve AT-SPI okuma açık kalır.
+  Tanınmayan değer `kapali` sayılır. Ayarsızken davranış birebir aynıdır; `doctor` ayarlıysa "Gerçek ekran" satırını
+  gösterir. Görünmez masaüstü (`sanal`, `kwin`) ve test sahte arka uçları etkilenmez. KURAL: ölçüm/test betikleri
+  `tests/_yalitim`'i içe aktarır (kilidi koyar) ya da değişkeni kendileri ayarlar; yalnız bilerek gerçek ekrana
+  dokunan `tests/ekranli/` kaldırır. Gerçek aracı sahte ikiliyle değiştiren testler kilidi kendi içinde `acik` yapar.
 - `pkill -f DESEN` kullanmayın (kendi kabuğunuzu öldürebilir); süreçleri PID ile durdurun.
 - Kişisel veri: kodda, yorumlarda, testlerde ve belgelerde kullanıcı adı, gerçek ev dizini, hesap adı, tarihli kişisel
   olay notu olmaz. Tasarım nedeni yorumda kalabilir; tarih ve kişi olmadan.

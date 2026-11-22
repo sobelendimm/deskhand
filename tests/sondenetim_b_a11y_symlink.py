@@ -7,6 +7,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import _yalitim  # noqa: E402,F401  (gerçek ekran kilidi + yalıtım; Deskhand'den ÖNCE)
 from deskhand import arka_ortak as ao, erisim  # noqa: E402
 
 uid = os.getuid()
