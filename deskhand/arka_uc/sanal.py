@@ -480,6 +480,8 @@ class SanalArkaUc(ArkaUc):
         d = masaustu.durum_oku()
         if d is None or masaustu.tur(d) != "xvfb":  # KWin türündeki masaüstü bu arka uca ait değil (arka_uc.sec)
             raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+        from .. import gorev_kipi
+        gorev_kipi.masaustu_kapisi(d)  # görev masaüstü ↔ kipsiz istemci ayrımı (Dur 14)
         return masaustu.guvenli_kayit(d)  # yollar/adresler kayıttan değil, ekran numarasından (Dur 14)
 
     def _x(self) -> _X:
@@ -500,6 +502,8 @@ class SanalArkaUc(ArkaUc):
         d = masaustu.durum(saglik=False)
         if d is None or masaustu.tur(d) != "xvfb":
             raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+        from .. import gorev_kipi
+        gorev_kipi.masaustu_kapisi(d)
         masaustu.xvfb_karsi_denetle(d)  # X / veri yolu soketinin karşı tarafı bu masaüstünün süreçleri (sert bağa karşı)
         return d["ekran"]
 

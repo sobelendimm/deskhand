@@ -67,7 +67,7 @@ denemeyi bırak, ne gördüğünü yaz; kullanıcı Devral ile müdahale edebili
 kullanıcıdan isteme. Ödeme/satın alma gibi hassas adımlar kullanıcının onayını panelden ister; reddedilirse dur. İşi \
 bitirince KISA, düz Türkçe bir özet yaz: ne yaptın, ne bulundu, ne yapılamadı."""
 
-KIMLIK_ORTAM_DENEN = re.compile(r"(TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|API_?KEY|AUTH)", re.I)
+KIMLIK_ORTAM_DENEN = gorev_kipi.KIMLIK_ORTAM_DENEN  # tek kaynak: gorev_kipi
 GIRIS_IZLERI = re.compile(r"not logged in|please run /login|/login|invalid api key|oauth token|authentication[ _]error|"
                           r"authentication_failed|invalid[ _]x-api-key|credit balance|401", re.I)
 BASE64 = re.compile(r"[A-Za-z0-9+/=_-]{200,}")
@@ -76,9 +76,9 @@ BASE64 = re.compile(r"[A-Za-z0-9+/=_-]{200,}")
 class GorevHatasi(Exception):
     """Başlatılamayan görev: mesaj + (varsa) ne yapılacağı."""
 
-    def __init__(self, mesaj: str, ipucu: str = ""):
+    def __init__(self, mesaj: str, ipucu: str = "", kod: str = ""):
         super().__init__(mesaj)
-        self.mesaj, self.ipucu = mesaj, ipucu
+        self.mesaj, self.ipucu, self.kod = mesaj, ipucu, kod
 
     def __str__(self):
         return self.mesaj + (f" — {self.ipucu}" if self.ipucu else "")
@@ -216,8 +216,25 @@ def girdi_kisalt(g, arac: str = "") -> dict:
                 "window", "ref", "desktop", "target", "key", "keys"))):
             sonuc[str(k)[:40]] = f"[{len(v)} karakter]"
             continue
+        if isinstance(v, (dict, list, tuple)):  # batch(steps=[{"text": ...}]) vb.: iç içe gizli anahtarlar da
+            v = _gizli_maskele(v)
         sonuc[str(k)[:40]] = v if isinstance(v, (bool, int, float)) or v is None else kisalt(v, 100)
     return sonuc
+
+
+def _gizli_maskele(v, derinlik: int = 0):
+    """İç içe dict/listede GIZLI_GIRDILER anahtarlarının metin değerleri → "[N karakter]" (yinelemeli)."""
+    if derinlik > 8:
+        return "[…]"
+    if isinstance(v, dict):
+        arac = str(v.get("tool") or v.get("action") or v.get("name") or "")
+        return {k: (f"[{len(x)} karakter]" if isinstance(x, str) and (k in GIZLI_GIRDILER or (
+                    arac in GIZLI_ARACLAR and k not in ("window", "ref", "desktop", "target", "key", "keys", "tool",
+                                                         "action", "name")))
+                    else _gizli_maskele(x, derinlik + 1)) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_gizli_maskele(x, derinlik + 1) for x in v]
+    return v
 
 
 def ozet_maskele(metin: str) -> str:
@@ -394,9 +411,12 @@ class Gorev:
         return t is not None and t.is_alive()
 
     # -------- başlat
-    def baslat(self, metin: str, siteler: str = "") -> str:
+    def baslat(self, metin: str, siteler: str = "", masaustu_kapat: bool = False) -> str:
         """Görevi başlat → görev kimliği. Başlatılamazsa GorevHatasi (hiçbir süreç/dosya kalmaz). siteler: görevde
-        oturumla girilebilecek alan adları (virgüllü; boş → çerezsiz temiz profil; gorev_kipi.site_ayristir)."""
+        oturumla girilebilecek alan adları (virgüllü; boş → çerezsiz temiz profil; gorev_kipi.site_ayristir).
+        Görünmez masaüstü (başka bir iş için) AÇIKSA görev BAŞLAMAZ: GorevHatasi(kod="masaustu_acik"); kullanıcı
+        onaylarsa masaustu_kapat=True ile önce o masaüstü kapatılır (önceki oturumların kipsiz pencereleri görev
+        ajanının erişimine girmez). Görev sürerken masaüstü göreve ayrılır (gorev_kipi.masaustu_ayir)."""
         if self.calisiyor:
             raise GorevHatasi(_("Bir görev zaten çalışıyor."), _("Bitmesini bekleyin ya da Durdur'a basın."))
         metin = (metin or "").strip()
@@ -415,6 +435,18 @@ class Gorev:
         kilit = self._kilit_al()
         tmp = None
         try:
+            # önce ayır (kipsiz istemciler artık masaüstü açamaz), SONRA açık masaüstünü denetle (yarış yok)
+            gorev_kipi.masaustu_ayir()
+            if _masaustu_acik():
+                if not masaustu_kapat:
+                    raise GorevHatasi(_("Görünmez masaüstü başka bir iş için açık; kapatıp başlatılsın mı?"),
+                                      _("Görev kendi temiz masaüstünde çalışır: açık masaüstündeki pencereler "
+                                        "kapatılır."), kod="masaustu_acik")
+                from . import masaustu
+                masaustu.masaustu_durdur()
+                if _masaustu_acik():
+                    raise GorevHatasi(_("Görünmez masaüstü kapatılamadı; görev başlatılmadı."), kod="masaustu_acik")
+            gorev_kipi.indirme_dizini_bosalt()  # önceki görevin indirdikleri bu görevin tarayıcısına görünmesin
             tmp = tempfile.mkdtemp(prefix="deskhand-gorev-", dir=calisma_koku())  # 0700; /tmp DEĞİL
             calisma = os.path.join(tmp, "calisma")
             os.mkdir(calisma, 0o700)
@@ -427,7 +459,7 @@ class Gorev:
             self.id = uuid.uuid4().hex[:8]
             self.metin, self.neden, self.olaylar_ = metin, "", []
             self.siteler = gorev_kipi.site_ayristir(siteler)
-            self._masaustu_onceden = _masaustu_acik()
+            self._masaustu_onceden = False  # yukarıda: açık masaüstüyle görev başlamaz
             self._gecmis_ac(model)
             self._bitti.clear()
             try:
@@ -443,6 +475,7 @@ class Gorev:
             except OSError:
                 pass  # süreç hemen öldü: okuyucu çıkışını ve stderr'i raporlar
         except BaseException:
+            gorev_kipi.masaustu_birak()
             self._kilit_birak(kilit)
             if tmp:
                 shutil.rmtree(tmp, ignore_errors=True)
@@ -457,6 +490,9 @@ class Gorev:
         """claude'un ortamı: ANTHROPIC_* (API anahtarı, temel adres, özel başlıklar) SİLİNİR, iç içe oturum işaretleri
         atılır, CLAUDE_ORTAM_EK eklenir; GÖREV KİPİ + izinli siteler (MCP sunucusu devralır)."""
         o = {k: v for k, v in os.environ.items() if not k.startswith("ANTHROPIC_")}
+        # kimlik bilgisi değişkenleri (TOKEN/SECRET/PASSWORD/KEY…) claude'a → MCP'ye → uygulamalara GEÇMEZ; claude
+        # girişini ~/.claude/.credentials.json'dan (OAuth) okur; yalnız kendi giriş değişkeni kalır
+        o = gorev_kipi.ortam_temizle(o, gorev_kipi.CLAUDE_ORTAM_IZINLI)
         o["DESKHAND_GERCEK_EKRAN"] = "kapali"  # claude'un tüm alt süreçleri (MCP dahil) gerçek ekrana kilitli
         for k in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):  # iç içe oturum işareti
             o.pop(k, None)
@@ -594,15 +630,18 @@ class Gorev:
             self._kilit = None
 
     def _masaustu_kapat(self):
-        """Görünmez masaüstünü bu görev açtıysa kapat (oturum kopyaları masaustu_durdur → oturum.kapanis ile silinir)."""
-        if self._masaustu_onceden or not _masaustu_acik():
-            return
+        """Görevin görünmez masaüstünü ("gorev": true) kapat (oturum kopyaları masaustu_durdur → oturum.kapanis ile
+        silinir), sonra masaüstü ayrımını kaldır. Görevin olmayan masaüstüne dokunulmaz."""
         try:
             from . import masaustu
+            if self._masaustu_onceden or not _masaustu_acik() or not (masaustu.durum_oku() or {}).get("gorev"):
+                return
             masaustu.masaustu_durdur()
             self._yay(olay("metin", _("Görevin açtığı görünmez masaüstü kapatıldı (oturum kopyaları silindi).")))
         except Exception as e:  # noqa: BLE001
             self._yay(olay("hata", _("Görünmez masaüstü kapatılamadı: {hata}").format(hata=e), kod="masaustu"))
+        finally:
+            gorev_kipi.masaustu_birak()
 
     def _azami_dakika_goster(self) -> int:
         sn = self._azami_sn if self._azami_sn is not None else ayar_azami_dakika() * 60

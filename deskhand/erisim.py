@@ -127,6 +127,8 @@ def _a11y_adresi():
         return ""
     from . import masaustu
     d = masaustu.durum(saglik=False) or {}
+    from . import gorev_kipi
+    gorev_kipi.masaustu_kapisi(d or None)
     adres, p = d.get("a11y_adres"), (d.get("pid") or {}).get("a11y")
     yol = (re.search(r"unix:path=([^,]+)", adres or "") or [None, ""])[1]
     if adres and p and masaustu._canli(p) and os.path.exists(yol):

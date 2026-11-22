@@ -271,7 +271,13 @@ class GorevSekmesi(QWidget):
         metin = self.kutu.toPlainText().strip()
         if not metin:
             return
-        siteler = ", ".join(gorev_kipi.site_ayristir(self.siteler.text()))
+        gecerli, ret = gorev_kipi.site_ayristir_ayrintili(self.siteler.text())
+        if ret:  # joker / tek başına genel son ek / geçersiz ad: açık ileti, görev başlamaz
+            self._bitis_durumu = "hata"
+            self.sonuc.setPlainText(_(T.G_SITE_RET).format(nedenler="\n".join(ret)))
+            self._durum_yaz()
+            return
+        siteler = ", ".join(gecerli)
         if self.onay_iste and not self._onayla(metin, siteler):
             return
         self.liste.clear()
@@ -282,10 +288,14 @@ class GorevSekmesi(QWidget):
         self._bitis_durumu = ""
         try:
             self.g = self.gorev_f(olay_cb=self.olay_geldi.emit)
-            if siteler:
-                self.g.baslat(metin, siteler=siteler)
-            else:
-                self.g.baslat(metin)
+            ek = {"siteler": siteler} if siteler else {}
+            try:
+                self.g.baslat(metin, **ek)
+            except gorev.GorevHatasi as e:
+                # görünmez masaüstü başka bir iş için açık: kullanıcı onaylarsa kapatılıp görev başlar
+                if getattr(e, "kod", "") != "masaustu_acik" or not self._masaustu_kapat_onayla():
+                    raise
+                self.g.baslat(metin, masaustu_kapat=True, **ek)
         except gorev.GorevHatasi as e:
             self.g = None
             self._bitis_durumu = "hata"
@@ -308,6 +318,14 @@ class GorevSekmesi(QWidget):
                         QMessageBox.StandardButton.Cancel, self)
         b = k.addButton(_(T.G_BASLAT), QMessageBox.ButtonRole.AcceptRole)
         k.setDefaultButton(b)
+        k.exec()
+        return k.clickedButton() is b
+
+    def _masaustu_kapat_onayla(self) -> bool:
+        k = QMessageBox(QMessageBox.Icon.Warning, _(T.G_MASAUSTU_ACIK_BASLIK), _(T.G_MASAUSTU_ACIK_METIN),
+                        QMessageBox.StandardButton.Cancel, self)
+        b = k.addButton(_(T.G_MASAUSTU_KAPAT_BASLAT), QMessageBox.ButtonRole.AcceptRole)
+        k.setDefaultButton(k.button(QMessageBox.StandardButton.Cancel))
         k.exec()
         return k.clickedButton() is b
 

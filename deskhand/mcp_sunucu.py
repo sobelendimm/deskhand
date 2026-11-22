@@ -922,7 +922,13 @@ def kisalt_adres(a: str, n: int = 80) -> str:
 def _gorev_adres_denetle(k) -> None:
     """GÖREV KİPİ (savunma derinliği): tarayıcı belgesi yerel dosya / tarayıcı iç sayfası (file:, about:config…)
     ise okuma ve görüntü REDDEDİLİR (tarayıcı ilkesi zaten engeller)."""
-    if not gorev_kipi.etkin() or not k or k == EKRAN:
+    if not gorev_kipi.etkin():
+        return
+    try:  # yalnız görev tarayıcısının pencereleri; tüm ekran yalnız ekranda tarayıcı dışı pencere yokken (BÜYÜK-1/ORTA-2)
+        gorev_kipi.pencere_denetle(api.arka(), k)
+    except hata.Dur as e:
+        raise ToolError(f"[{e.kod}] " + e.mesaj) from None
+    if not k or k == EKRAN:
         return
     a = _web_adresi(k)
     if gorev_kipi.adres_yasak(a):
@@ -2506,6 +2512,9 @@ def main(argv: list[str] | None = None) -> None:
         if i + 1 < len(argv) and argv[i + 1] == "background":
             os.environ["DESKHAND_MCP_SADECE_ARKA"] = "1"
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="deskhand-mcp %(levelname)s %(message)s")
+    if gorev_kipi.etkin():  # GÖREV KİPİ: kimlik bilgisi değişkenleri sunucuda ve başlattığı uygulamalarda YOK
+        for k in [k for k in os.environ if k not in gorev_kipi.ortam_temizle(dict(os.environ))]:
+            del os.environ[k]
     # güvenlik ağı: hedefi açıkça sabitlenmemiş (öngörülmemiş) bir sec() çağrısı görünmez masaüstüne gitsin
     os.environ["DESKHAND_HEDEF"] = "arka"
     from . import yollar

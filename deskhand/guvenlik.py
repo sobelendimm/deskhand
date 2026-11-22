@@ -1039,6 +1039,9 @@ def _kullanici_yasaklari():
 
 
 def yasak_denetle(k):
+    from . import gorev_kipi
+    if gorev_kipi.etkin():  # GÖREV KİPİ: yalnız görev tarayıcısının pencereleri (başka pencere: kapat + Dur 10)
+        gorev_kipi.pencere_denetle(sec(), k, adres=_gorev_adresi)
     if k == EKRAN or not k:
         return  # masaüstü kipinde: klavye → etkin pencere (denetle), fare → imlecin altındaki pencere denetlenir
     au = sec()
@@ -1047,6 +1050,19 @@ def yasak_denetle(k):
         if re.search(d, b, re.I) or re.search(d, sinif, re.I):
             raise Dur(10, _("YASAK pencere: {baslik} (sınıf {sinif}) /{desen}/ ile eşleşti; hiçbir girdi gönderilmez "
                             "({dosya})").format(baslik=repr(b), sinif=repr(sinif), desen=d, dosya=yollar.yasak_dosya()))
+
+
+def _gorev_adresi(k) -> str | None:
+    """Görev kipi: tarayıcı penceresinin web belgesi adresi (okunamazsa None; okuma araçları ayrıca denetler)."""
+    try:
+        from . import web
+        return web.sayfa_bilgisi(k).get("adres") or None
+    except Dur as e:
+        if e.kod in (10, 13):
+            raise
+        return None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def baslatma_yasak_denetle(*metinler):

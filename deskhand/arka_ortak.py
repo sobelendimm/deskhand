@@ -990,6 +990,8 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
     if gorev_kipi.etkin():  # GÖREV KİPİ: tarayıcı kurumsal ilkesi (file://, about:config/logins… engeli) salt okunur
         for kaynak, hedef in gorev_kipi.ilke_baglari():
             a += ["--ro-bind", kaynak, hedef]
+        for yol in gorev_kipi.maskeli_ikililer():  # girdi/yetki araçları ad alanında boş dosya (çalıştırılamaz)
+            a += ["--ro-bind", "/dev/null", yol]
     for k in SON_KOMUT_ORTAMI:
         if env and env.get(k):
             a += ["--setenv", k, env[k]]
@@ -1361,6 +1363,9 @@ def ortam_tabani(env: dict | None = None, izinli: tuple = ()) -> dict:
         e.update(env)
     for k in [k for k in e if _cikarilacak_mi(k) and not (k in izinli and env and k in env)]:
         del e[k]
+    from . import gorev_kipi
+    if gorev_kipi.etkin():  # GÖREV KİPİ: TOKEN/SECRET/PASSWORD/KEY… değişkenleri uygulamaya geçmez
+        e = gorev_kipi.ortam_temizle(e)
     e["GSETTINGS_BACKEND"] = "memory"
     # özel veri yolunun etkinleştirdiği at-spi-bus-launcher kendi dbus-daemon'unu açsın: dbus-broker --scope=user
     # kullanıcının GERÇEK erişilebilirlik veri yolunu yeniden kullanabiliyor
