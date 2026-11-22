@@ -399,7 +399,7 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
                 raise Dur(e.kod, _("{mesaj} ({yazilan}/{toplam} karakter tamam)").format(
                     mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
             yazilan += len(p)
-            gunluk(f"{g.etiket} | [{au.baslik(k)}] | " + (f"yapistir ***({len(p)})" if g.gizli else
+            gunluk(f"{g.etiket} | [{au.baslik(k)}] | " + ("yapistir ***" if g.gizli else
                    f"yapistir {p[:200]!r}" if p not in "\n\t" else ("key enter" if p == "\n" else "key tab")))
     finally:
         g.izle_bitir()
@@ -523,7 +523,7 @@ def _harf_harf_yaz(g, k, desen, metin, onayli):
                         mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
                 time.sleep(HARF_SN)  # dotool harfi yazsın (typehold 6 + typedelay 4 ms); kuyruk birikmesin
                 yazilan += 1
-            gunluk(f"{g.etiket} | [{_au().baslik(k)}] | " + (f"type ***({len(p)})" if g.gizli else f"type {p!r}"))
+            gunluk(f"{g.etiket} | [{_au().baslik(k)}] | " + ("type ***" if g.gizli else f"type {p!r}"))
     finally:
         g.izle_bitir()
     print(_("yazıldı: {karakter} karakter, {parca} parça").format(karakter=len(metin), parca=len(parcalar)))

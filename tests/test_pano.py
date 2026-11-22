@@ -393,7 +393,8 @@ SIR = "cok-gizli-parola-Xq9😀"
 yaz(au, SIR, gizli=True)
 yaz(au, "gorunur-metin-Zk3 😀")
 g = gunluk_metni()
-kontrol("gizli yazı: metin günlükte YOK, 'yapistir ***(n)' var", SIR not in g and "cok-gizli" not in g and "yapistir ***(" in g)
+kontrol("gizli yazı: metin ve parça uzunlukları günlükte YOK, 'yapistir ***' var", SIR not in g and "cok-gizli" not in g
+        and "yapistir ***" in g and "yapistir ***(" not in g)
 kontrol("gizli olmayan yazı günlüğe yazılır (kırpılmış)", "gorunur-metin-Zk3" in g)
 yaz(au, "x😀" + "u" * 5000)
 kontrol("günlük: uzun yapıştırma 200 karakterde kırpılır", "u" * 300 not in gunluk_metni())
@@ -961,7 +962,7 @@ au.pano_yaz("eski içerik ğüşİ 😀")
 temizle_kutu()
 r, ms = api_yaz("gizli parola 😀" * 30, gizli=True)
 gl = gunluk_metni()
-kontrol("yapıştır (sanal): gizli yazı günlüğe yazılmadı ('yapistir ***')", "gizli parola" not in gl and "yapistir ***(" in gl)
+kontrol("yapıştır (sanal): gizli yazı günlüğe yazılmadı ('yapistir ***')", "gizli parola" not in gl and "yapistir ***" in gl)
 bekle(lambda: kutu_metni() == "gizli parola 😀" * 30, 3)
 kontrol("yapıştır (sanal): gizli yazı yine de hedefe birebir gitti", kutu_metni() == "gizli parola 😀" * 30)
 

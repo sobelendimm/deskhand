@@ -1913,9 +1913,10 @@ def gizli_rakamli_mi(metin) -> bool:
 
 
 def gizli_satir(satir):
-    """Gizli girdinin günlük satırı: `type …` → uzunluk, `key/keydown/keyup …` → ***."""
+    """Gizli girdinin günlük satırı: `type …` → `type ***` (parça uzunluğu da yok: kelime uzunlukları sızmasın; toplam
+    uzunluk komut etiketinde), `key/keydown/keyup …` → ***."""
     if satir.startswith("type "):
-        return f"type ***({len(satir) - 5})"
+        return "type ***"
     m = re.match(r"(keydown|keyup|key)\s", satir)
     return f"{m.group(1)} ***" if m else satir
 

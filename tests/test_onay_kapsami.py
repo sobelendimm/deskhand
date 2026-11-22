@@ -442,7 +442,8 @@ with arka_uc.hedef_sabit("kde"):
     guvenlik._KART_TAMPON.clear()
 
     # K3: günlük maskesi (tam numara ve kart rakamları günlüğe gitmez)
-    kontrol("gizli_satir: type → uzunluk", guvenlik.gizli_satir("type 4") == "type ***(1)")
+    kontrol("gizli_satir: type → yalnız ***, parça uzunluğu yok", guvenlik.gizli_satir("type 4") == "type ***"
+            and guvenlik.gizli_satir("type abcdef") == "type ***")
     kontrol("gizli_satir: key 4 → ***", guvenlik.gizli_satir("key 4") == "key ***" and guvenlik.gizli_satir(
         "keydown 4") == "keydown ***" and guvenlik.gizli_satir("mouseto 1 2") == "mouseto 1 2")
     kontrol("gizli_etiket: tus 4 1 1 1 → tus ***", guvenlik.gizli_etiket("tus 4 1 1 1") == "tus ***" and

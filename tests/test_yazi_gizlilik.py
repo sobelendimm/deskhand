@@ -187,6 +187,8 @@ kontrol("dizi: gizli adım çalıştı", kod == 0 and au.hedef == "Parola-Sir9",
 kontrol("dizi: gizli adım satırı stdout'ta YOK (yalnız komut adı + ***)",
         "Parola-Sir9" not in cikti and "***" in cikti, cikti)
 kontrol("dizi: gizli adım günlükte YOK", "Parola-Sir9" not in gunluk_metni()[len(g0):])
+kontrol("gizli yazı: günlükte parça uzunlukları YOK (yalnız toplam, etikette)",
+        "***(" not in gunluk_metni()[len(g0):], gunluk_metni()[len(g0):][-300:])
 kod, mesaj, cikti = calistir(SahteAU(), eylem.adimlari_calistir, a_, ["yaz 'Parola-Sir9' --gizli --bilinmeyen"])
 kontrol("dizi: hatalı gizli satır → Dur 1, iletide gizli metin YOK", kod == 1 and "Parola-Sir9" not in mesaj
         and "Parola-Sir9" not in cikti, mesaj)
