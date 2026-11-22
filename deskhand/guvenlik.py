@@ -238,6 +238,53 @@ def ucbirim_mi(sinif):
     return bool(_UCBIRIM.search(sinif or ""))
 
 
+# Uçbirim GÖMEBİLEN uygulamalar (Dolphin F4, Kate/KWrite uçbirim paneli, IDE'ler): pencere PID'i bilinmiyorsa güvenli
+# tarafta uçbirim sayılır; PID biliniyorsa süreç ağacına (tty'li kabuk torunu) bakılır.
+GOMULU_UCBIRIM_SINIFLARI = (
+    "dolphin", "kate", "kdevelop", "krusader", "code", "code-oss", "codium", "vscodium", "cursor", "windsurf",
+    "zed", "lapce", "sublime_text", "geany", "qtcreator", "gnome-builder", "emacs", "spyder", "idea", "pycharm",
+    "clion", "goland", "webstorm", "phpstorm", "rider", "rustrover", "android-studio", "jetbrains", "nautilus",
+    "thunar", "nemo", "caja", "pcmanfm", "doublecmd", "neovide", "nvim-qt", "gvim", "kile", "kmail", "yakuake",
+)
+_GOMULU = re.compile(r"(?<![a-z0-9])(?:" + "|".join(re.escape(a) for a in GOMULU_UCBIRIM_SINIFLARI) + r")(?![a-z0-9])",
+                     re.I)
+_UCBIRIM_ONBELLEK = {}  # (arka uç, kimlik) → (zaman, bool)
+
+
+def ucbirim_penceresi_mi(k):
+    """Pencere bir UÇBİRİM barındırıyor mu? (1) sınıfı uçbirim öykünücüsü; (2) penceresinin sahibi sürecin torunlarında
+    denetim uçbirimi (tty) olan bir kabuk var (gömülü uçbirim: Dolphin F4, Kate paneli, VS Code…); (3) PID bilinmiyor ve
+    sınıf uçbirim gömebilen bir uygulama (güvenli taraf); (4) erişilebilirlik zaten açıksa pencerede rolü `terminal`
+    olan bir öge var (PID'siz ya da gömebilen sınıflarda). 2 sn önbellek."""
+    if not k or k == EKRAN:
+        return False
+    import time as _t
+    au = sec()
+    sinif = au.sinif(k)
+    anahtar = (au.ad, k, sinif)  # sınıf da anahtarda: kimlik yeniden kullanılırsa eski sonuç taşınmasın
+    kayit = _UCBIRIM_ONBELLEK.get(anahtar)
+    if kayit and _t.monotonic() - kayit[0] < 2.0:
+        return kayit[1]
+    sonuc = ucbirim_mi(sinif)
+    if not sonuc:
+        from . import kendi
+        pid = _pencere_pid(au, k)
+        if pid:
+            sonuc = bool(kendi.kabuk_torunlari(pid))
+        else:
+            sonuc = bool(_GOMULU.search(sinif or ""))
+        if not sonuc and (not pid or _GOMULU.search(sinif or "")):
+            try:
+                from . import erisim
+                sonuc = erisim.erisim_acik() and erisim.imlec_satirlari(k) is not None
+            except Exception:  # noqa: BLE001 - erişilebilirlik isteğe bağlı
+                sonuc = False
+    if len(_UCBIRIM_ONBELLEK) > 256:
+        _UCBIRIM_ONBELLEK.clear()
+    _UCBIRIM_ONBELLEK[anahtar] = (_t.monotonic(), bool(sonuc))
+    return bool(sonuc)
+
+
 _SARMALAYICI = {"env", "time", "nohup", "nice", "ionice", "command", "builtin", "exec", "stdbuf", "setsid", "xargs",
                 "watch", "timeout", "chrt", "unbuffer", "taskset", "flock", "caffeinate", "systemd-inhibit"}
 # sarmalayıcı → (argüman ALAN seçenekler, komuttan önceki konumsal argüman sayısı): `nice -n 5 X`, `timeout -s 9 5 X`
@@ -380,10 +427,11 @@ def _ansi_c(s, i):
 
 
 class _Komut:
-    __slots__ = ("kelimeler", "ic", "yon")
+    __slots__ = ("kelimeler", "ic", "yon", "stdin_kabuk")
 
     def __init__(self):
         self.kelimeler, self.ic, self.yon = [], [], []  # sözcükler, komut ikamesi içleri, (işleç, hedef) yönlendirmeler
+        self.stdin_kabuk = False  # kabuk, komutunu standart girdiden okuyor (… | sh)
 
 
 def _ayristir(s):
@@ -552,12 +600,152 @@ def _kume_ac(t):
     return [m.group(1) + x + m.group(3) for x in m.group(2).split(",")]
 
 
+# Kabuğa DOLAYLI girdi / kalıcılık / geniş yıkım (denetim 2): komut metni görünmeden çalışan kod da onay ister.
+_GECICI_DIZIN = re.compile(r"(?:/tmp|/var/tmp|/dev/shm|/run/user/\d+|~/\.cache|\$HOME/\.cache|\$\{HOME\}/\.cache|"
+                           r"\$TMPDIR|\$\{TMPDIR\})(?:/|$)")
+# kabuk/oturum başlangıç dosyaları, otomatik başlatma, Deskhand'in kendi yapılandırması, ssh/gpg, kullanıcı bin dizinleri:
+# buraya yazmak kodu SONRA (görünmeden) çalıştırır ya da güvenlik ayarını değiştirir
+_HASSAS_DOSYA = re.compile(
+    r"(?:~|\$HOME|\$\{HOME\}|/home/[^/]+|/root)/(?:\.bashrc|\.bash_profile|\.bash_login|\.bash_logout|\.profile|\.zshrc|"
+    r"\.zshenv|\.zprofile|\.zlogin|\.zlogout|\.kshrc|\.mkshrc|\.cshrc|\.tcshrc|\.xprofile|\.xinitrc|\.xsession\w*|"
+    r"\.xsessionrc|\.inputrc|\.pam_environment|\.config/fish(?:/.*)?|\.config/autostart(?:/.*)?|"
+    r"\.config/autostart-scripts(?:/.*)?|\.config/plasma-workspace(?:/.*)?|\.config/environment\.d(?:/.*)?|"
+    r"\.config/systemd(?:/.*)?|\.config/deskhand(?:/.*)?|\.local/share/applications(?:/.*)?|\.local/bin(?:/.*)?|"
+    r"bin(?:/.*)?|\.ssh(?:/.*)?|\.gnupg(?:/.*)?|\.config/git/config|\.gitconfig|\.config/kwinrc|\.config/khotkeysrc|"
+    r"\.config/kglobalshortcutsrc)/?|/etc/(?:profile|bash\.bashrc|zsh/\S*|environment|sudoers\S*|cron\S*|systemd/\S*|"
+    r"xdg/autostart/\S*)")
+_GUVENLI_UZANTI = re.compile(r"\.(?:txt|md|log|json|csv|tsv|html?|xml|ya?ml|toml|ini|conf|cfg|out|err|bak|diff|patch|"
+                             r"rst|tex|svg|png|jpe?g|gif|pdf)$", re.I)
+_KABUK_BASLANGIC_DEGISKEN = {"PROMPT_COMMAND", "PS0", "BASH_ENV", "ENV", "ZDOTDIR", "LD_PRELOAD", "LD_AUDIT",
+                             "PROMPT_SUBST", "precmd_functions", "preexec_functions", "fish_greeting"}
+_GECMIS = re.compile(r"!(?:!|-?\d+|[^\s=(~!]\S*)|\^[^^]+\^[^^]*\^?")  # !!, !n, !-n, !dizge, ^a^b
+_ISTEM_KOMUT = {"history", "fc", "r", "print"}
+_AYRIK_BASLATICI = {"systemd-run", "at", "batch", "daemonize", "start-stop-daemon", "nsenter", "unshare", "chroot",
+                    "machinectl", "systemd-nspawn", "script", "expect", "sshpass"}
+_TMUX_KOMUT = {"new", "new-session", "new-window", "neww", "split-window", "splitw", "send-keys", "send", "respawn-pane",
+               "respawn-window", "run-shell", "run", "display-popup", "popup", "pipe-pane", "if-shell", "source-file"}
+_GIT_KOD_ANAHTAR = re.compile(r"(?:alias\.[^=]+=\s*!|core\.(?:sshCommand|pager|editor|fsmonitor|hooksPath|askPass|gitProxy)|"
+                              r"sequence\.editor|diff\.external|credential\.helper|filter\.\S+\.(?:clean|smudge|process)|"
+                              r"uploadpack\.packObjectsHook|protocol\.ext\.allow)", re.I)
+
+
+def _yaz_hedefleri(komut, arg, kom):
+    """Komutun YAZDIĞI dosyalar: yönlendirme (>), tee, cp/mv/install/ln/rsync hedefi, dd of=, truncate/shred."""
+    hedef = [h for op, h in kom.yon if ">" in op]
+    duz = [a for a in arg if not a.startswith("-")]
+    if komut == "tee":
+        hedef += duz
+    elif komut in ("cp", "mv", "install", "ln", "rsync", "scp") and len(duz) >= 2:
+        hedef.append(duz[-1])
+    elif komut == "dd":
+        hedef += [a[3:] for a in arg if a.startswith("of=")]
+    elif komut in ("truncate", "shred"):
+        hedef += duz
+    elif komut == "sed" and any(a == "-i" or a.startswith(("-i", "--in-place")) for a in arg):
+        hedef += duz[1:]
+    return hedef
+
+
+def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
+    """Kabuğa dolaylı girdi, kalıcılık (başlangıç dosyaları, cron, takma ad), geniş yıkım ve görünmeden çalışan kod."""
+    n = []
+    duz = [a for a in arg if not a.startswith("-")]
+    for h in _yaz_hedefleri(komut, arg, kom):
+        if _HASSAS_DOSYA.fullmatch(h.rstrip("/")) or _HASSAS_DOSYA.fullmatch(h):
+            n.append(_("kabuk/oturum başlangıç, otomatik başlatma ya da güvenlik dosyasına yazma ({hedef})").format(
+                hedef=h))
+            break
+    # yıkıcı komut metnini (sonra çalıştırılabilecek) bir dosyaya yazma: printf 'sudo reboot' > /tmp/a
+    if komut in ("echo", "printf", "cat", "tee", "print") and derinlik < 3:
+        for op, h in kom.yon:
+            if ">" in op and (_GECICI_DIZIN.match(h) or not _GUVENLI_UZANTI.search(h)) and \
+                    any(_metin_riskleri(a, derinlik + 1) for a in duz):
+                n.append(_("yıkıcı komutu çalıştırılabilecek bir dosyaya yazma ({hedef})").format(hedef=h))
+                break
+    if komut == "eval":
+        n.append(_("eval: metni komut olarak çalıştırır (dolaylı yürütme)"))
+    if komut in ("source", "."):
+        n.append(_("{komut}: dosyadaki komutları bu kabukta çalıştırır (içeriği denetlenemez)").format(komut=komut))
+    if komut in _KABUK:
+        c_var = any(re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a) for a in arg)
+        dosya = next((a for a in arg if not a.startswith(("-", "+"))), None)
+        if any(op.startswith("<") for op, _h in kom.yon):
+            n.append(_("kabuğa yönlendirilmiş girdi (<, <<, <<<): komut metni görünmeden çalışır"))
+        elif not c_var and dosya is not None and (_GECICI_DIZIN.match(dosya) or "." not in _yol_adi(dosya) or
+                                                  _ISARET in dosya):
+            n.append(_("{komut} geçici/uzantısız betiği çalıştırır ({dosya})").format(komut=komut, dosya=dosya))
+        elif not c_var and dosya is None:
+            kom.stdin_kabuk = True
+    if _YORUMLAYICI.fullmatch(komut):
+        j = 0
+        while j < len(arg):
+            a = arg[j]
+            if a in ("-m", "-c", "-e", "-E", "-r", "-p", "-W", "-X", "-I", "-x") or re.fullmatch(r"-[a-zA-Z]*[ceEpr]", a):
+                break  # modül / satır içi kod (ayrıca denetlenir)
+            if not a.startswith("-"):
+                n.append(_("{komut} betik dosyasını çalıştırır ({dosya}): içeriği denetlenemez").format(komut=komut, dosya=a))
+                break
+            j += 1
+    if komut in ("awk", "gawk", "mawk", "nawk", "busybox-awk") and any(
+            re.search(r"\bsystem\s*\(|\|\s*getline|\|\s*[\"']|\bprint\b[^;]*\|", a) for a in arg):
+        n.append(_("{komut} programı kabuk komutu çalıştırır (system / boru)").format(komut=komut))
+    if _GECMIS.fullmatch(komut) or (komut in ("fc", "r")) or (komut == "history" and "-s" in arg) or \
+            (komut == "print" and "-s" in arg):
+        n.append(_("geçmişten komut çalıştırma/ekleme ({komut}): çalışacak komut görünmez").format(komut=komut))
+    if komut in ("alias", "trap") and arg:
+        n.append(_("{komut}: sonradan (görünmeden) çalışacak komut tanımlar").format(komut=komut))
+    if komut in ("ln",) and any(_yol_adi(a) in _YETKI | _KABUK for a in duz[:-1]):
+        n.append(_("yetki/kabuk programına bağlantı (adını gizler)"))
+    if re.match(r"(?:/tmp|/var/tmp|/dev/shm)/", kom.kelimeler[0] if kom.kelimeler else "") or \
+            _GECICI_DIZIN.match(next((w for w in kom.kelimeler if not _ATAMA.fullmatch(w)), "")):
+        n.append(_("geçici dizinden program çalıştırma"))
+    if komut == "kill" and ("-1" in arg[1:] or ("--" in arg and "-1" in arg[arg.index("--"):])):
+        n.append(_("kill -1: kullanıcının TÜM süreçlerini sonlandırır"))
+    if komut in ("pkill", "killall") and ("-u" in arg or any(a.startswith("--user") for a in arg)):
+        n.append(_("{komut} -u: kullanıcının tüm süreçlerini sonlandırır").format(komut=komut))
+    if komut == "killall5":
+        n.append(_("killall5: tüm süreçlere sinyal gönderir"))
+    if komut in ("mv", "cp", "rsync") and any(_KOK_HEDEF.fullmatch(a) for a in duz[:-1]) and komut == "mv":
+        n.append(_("mv kök/ev dizinini taşır"))
+    if komut == "rsync" and any(a.startswith("--delete") for a in arg) and any(_KOK_HEDEF.fullmatch(a) for a in duz):
+        n.append(_("rsync --delete kök/ev dizininde: eşleşmeyen her şeyi siler"))
+    if komut == "crontab" and any(a != "-l" for a in arg):
+        n.append(_("crontab: zamanlanmış görevleri siler/değiştirir"))
+    if komut == "git" and "clean" in arg and any(re.fullmatch(r"-[a-zA-Z]*f[a-zA-Z]*", a) or a == "--force" for a in arg):
+        n.append(_("git clean -f: izlenmeyen dosyaları siler (geri alınamaz)"))
+    if komut == "git" and any(_GIT_KOD_ANAHTAR.search(arg[j + 1]) for j, a in enumerate(arg[:-1]) if a == "-c"):
+        n.append(_("git -c ile kabuk komutu çalıştıran ayar (takma ad / komut kancası)"))
+    if komut == "shred":
+        n.append(_("shred: dosyayı geri alınamaz biçimde yok eder"))
+    if komut == "truncate" and any(re.fullmatch(r"(?:-s|--size=?)0|0", a) for a in arg):
+        n.append(_("truncate -s 0: dosyanın içeriğini siler"))
+    if komut in _AYRIK_BASLATICI:
+        n.append(_("{komut}: komutu uçbirimin dışında/ayrık başlatır (denetlenemez)").format(komut=komut))
+    if komut == "tmux" and any(a in _TMUX_KOMUT for a in arg) and len(duz) > 1:
+        n.append(_("tmux ile ayrık oturumda komut çalıştırma"))
+    if komut == "screen" and any(re.fullmatch(r"-[a-zA-Z]*[dD][a-zA-Z]*m?|-X", a) for a in arg):
+        n.append(_("screen ile ayrık oturumda komut çalıştırma"))
+    if komut == "flock" and any(a in ("-c", "--command") for a in arg):
+        n.append(_("flock -c: komutu kabukta çalıştırır"))
+    if komut == "rm" and "xargs" in sarmalayicilar:
+        n.append(_("xargs rm: listedeki her dosyayı siler"))
+    return n
+
+
+def _atama_riski(ad, deger):
+    if ad in _KABUK_BASLANGIC_DEGISKEN or (ad in ("PS1", "PS2", "PS4", "RPROMPT", "PROMPT") and
+                                          re.search(r"\$\(|`", deger or "")):
+        return [_("{ad}: kabuk her istemde/başlangıçta bu kodu çalıştırır").format(ad=ad)]
+    return []
+
+
 def _komut_riski(kom, degiskenler, derinlik):
     """Tek basit komut → (neden listesi, asıl komut adı)."""
     t = []
     for w in kom.kelimeler:
         t += _kume_ac(_degisken_coz(w, degiskenler))
     nedenler = []
+    sarmalayicilar = []
     for op, hedef in kom.yon:
         if ">" in op and _DISK_AYGIT.fullmatch(_degisken_coz(hedef, degiskenler)):
             nedenler.append(_("> /dev/diskaygıtı: diskin üzerine yazar"))
@@ -571,8 +759,12 @@ def _komut_riski(kom, degiskenler, derinlik):
         if m:
             if _ISARET not in m.group(3):
                 degiskenler[m.group(1)] = m.group(3)
+            nedenler += _atama_riski(m.group(1), m.group(3))
             i += 1
             continue
+        if _GECMIS.fullmatch(w):  # !!, !-2, ^a^b: geçmişteki (görünmeyen) komutu çalıştırır
+            nedenler.append(_("geçmişten komut çalıştırma/ekleme ({komut}): çalışacak komut görünmez").format(komut=w))
+            return nedenler, ""
         if not w or w.startswith("$") or _ISARET in w:  # bilinmeyen değer komut konumunda: sonrakine bak
             i += 1
             continue
@@ -580,7 +772,11 @@ def _komut_riski(kom, degiskenler, derinlik):
         if ad in ("busybox", "toybox"):  # busybox rm -rf ~ → rm
             i += 1
             continue
+        if ad == "flock" and any(a in ("-c", "--command") or a.startswith("--command=") for a in t[i + 1:]):
+            nedenler.append(_("flock -c: komutu kabukta çalıştırır"))
+            return nedenler, ad
         if ad in _SARMALAYICI:
+            sarmalayicilar.append(ad)
             secenekler, konumsal = _SARMALAYICI_SECENEK.get(ad, (set(), 0))
             i += 1
             while i < len(t) and t[i].startswith("-") and t[i] != "-":
@@ -601,6 +797,10 @@ def _komut_riski(kom, degiskenler, derinlik):
             continue
         break
     if i >= len(t):
+        for op, h in kom.yon:  # yalnız yönlendirme: `> ~/.bashrc`, `: > dosya`
+            if ">" in op and _HASSAS_DOSYA.fullmatch(h):
+                nedenler.append(_("kabuk/oturum başlangıç, otomatik başlatma ya da güvenlik dosyasına yazma ({hedef})"
+                                  ).format(hedef=h))
         return nedenler, ""
     komut, arg = _yol_adi(t[i]), t[i + 1:]
     if komut in _ATAMA_KOMUT:
@@ -608,7 +808,10 @@ def _komut_riski(kom, degiskenler, derinlik):
             m = _ATAMA.fullmatch(a)
             if m and _ISARET not in m.group(3):
                 degiskenler[m.group(1)] = m.group(3)
+            if m:
+                nedenler += _atama_riski(m.group(1), m.group(3))
         return nedenler, komut
+    nedenler += _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik)
     if komut in _YETKI:
         nedenler.append(_("{komut} ile yetki yükseltme").format(komut=komut))
     if komut in _GUC or (komut in ("init", "telinit") and any(a in ("0", "6") for a in arg)):
@@ -693,6 +896,12 @@ def _metin_riskleri(metin, derinlik=0):
         indir = next((n for n, a in enumerate(adlar) if a in ("curl", "wget")), None)
         if indir is not None and any(a in _KABUK or a in _YETKI for a in adlar[indir + 1:]):
             nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
+        if any(k.stdin_kabuk for k in hat[1:]):
+            nedenler.append(_("boru ile kabuğa komut verme (… | sh): çalışacak komut görünmez"))
+        cozucu = next((n for n, k in enumerate(hat) if adlar[n] in ("base64", "base32", "xxd", "uudecode", "openssl")
+                       and any(a in ("-d", "--decode", "-D", "-r") for a in k.kelimeler)), None)
+        if cozucu is not None and cozucu < len(hat) - 1:
+            nedenler.append(_("kodlanmış metni çözüp başka komuta verme (base64 -d | …)"))
     return nedenler
 
 
@@ -1043,9 +1252,22 @@ def hassas_mi(*metinler):
     return None
 
 
+# Menüden yapıştırma (Yapıştır / Paste / Einfügen … ya da "Ctrl+V" kısayol ipucu): kısayolla yapıştırma ile aynı kural.
+_YAPISTIR_METIN = re.compile(r"^\W{0,2}(?:yapistir|paste|einfugen|coller|pegar|incolla|plakken|wklej|vlozit|"
+                             r"beillesztes|klistra in|lim inn|indsaet|liita)\b|\b(?:ctrl|strg)[\s+]*(?:shift[\s+]*)?v\b|"
+                             r"\bshift[\s+]*ins(?:ert)?\b", re.I)
+
+
+def yapistirma_metni_mi(*metinler):
+    """Tıklanacak hedefin yazısı / AT-SPI öge adı bir yapıştırma eylemi mi (kısa metin)?"""
+    return any(t and len(t) <= 48 and _YAPISTIR_METIN.search(katla(t).replace("&", "")) for t in metinler)
+
+
 def hassas_engel(onayli, *metinler, hedef="", k=None, nokta=None):
     """Hassas düğme (Satın al / Öde / Yetkilendir / Hesabı sil…) onay ister. k + nokta verildiyse onay isteği
     noktadaki yazıyı ve çevresinin küçük görüntüsünü taşır."""
+    if yapistirma_metni_mi(*metinler):  # kde: menüden yapıştırma da kullanıcının panosunu taşır
+        yapistirma_engel(k, onayli)
     eslesen = hassas_mi(*metinler)
     onayli = onayli_gecerli(onayli)
     if eslesen and not onayli:
@@ -1095,7 +1317,7 @@ def ucbirim_komut_engel(k, onayli, metin, gizli=False, goruntu_al=True):
     au = sec()
     pen = k if k and k != EKRAN else au.aktif()
     sinif = au.sinif(pen) if pen else ""
-    if not ucbirim_mi(sinif):
+    if not pen or not ucbirim_penceresi_mi(pen):  # sınıf ya da gömülü uçbirim (süreç ağacı)
         return False
     if not onayli_gecerli(onayli):
         b = au.baslik(pen)
@@ -1190,11 +1412,12 @@ def sistem_istemi_mi(k):
         return None
     import time as _t
     au = sec()
-    anahtar = (au.ad, k)
+    sinif = au.sinif(k)
+    anahtar = (au.ad, k, sinif)
     kayit = _SISTEM_ONBELLEK.get(anahtar)
     if kayit and _t.monotonic() - kayit[0] < 2.0:
         return kayit[1]
-    adlar = [au.sinif(k)]
+    adlar = [sinif]
     pid = _pencere_pid(au, k)
     if pid:
         from . import kendi

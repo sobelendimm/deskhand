@@ -53,13 +53,14 @@ TERM_PROGRAM_SINIF = {"ghostty": "ghostty", "wezterm": "wezterm", "vscode": "cod
 
 
 def _stat(pid, proc=None):
-    """/proc/<pid>/stat → (ppid, pgrp, tpgid, comm) | None. comm parantezli ve boşluk içerebilir: son ')' ile bölünür."""
+    """/proc/<pid>/stat → (ppid, pgrp, tpgid, comm, tty_nr) | None. comm parantezli ve boşluk içerebilir: son ')' ile
+    bölünür. tty_nr 0 = denetim uçbirimi yok."""
     try:
         with open(f"{proc or PROC}/{int(pid)}/stat") as f:
             s = f.read()
         comm = s[s.index("(") + 1:s.rindex(")")]
         alan = s[s.rindex(")") + 2:].split()
-        return int(alan[1]), int(alan[2]), int(alan[5]), comm
+        return int(alan[1]), int(alan[2]), int(alan[5]), comm, int(alan[4])
     except (OSError, ValueError, IndexError):
         return None
 
@@ -90,6 +91,19 @@ def atalar(pid=None, proc=None, sinir=64):
     return zincir
 
 
+def dis_pid(pid, proc=None):
+    """PID ad alanındaysak (flatpak/bwrap) sürecin EN DIŞ PID'i (/proc/<pid>/status NSpid ilk alanı) | None."""
+    try:
+        with open(f"{proc or PROC}/{int(pid)}/status") as f:
+            for satir in f:
+                if satir.startswith("NSpid:"):
+                    pidler = [int(x) for x in satir.split()[1:]]
+                    return pidler[0] if len(pidler) > 1 else None
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 def _tmux_istemcileri(ortam):
     """$TMUX soketiyle salt okunur istemci PID'leri → [pid] | None (çözülemedi)."""
     tmux = ortam.get("TMUX", "")
@@ -112,13 +126,15 @@ def _tmux_istemcileri(ortam):
 class Kume:
     """Ajanın kendi istemcisini tanıma bilgisi."""
 
-    def __init__(self, pidler=(), siniflar=(), tum_ucbirim=False, ipucu_genel=False, zincir=(), neden=""):
+    def __init__(self, pidler=(), siniflar=(), tum_ucbirim=False, ipucu_genel=False, zincir=(), neden="",
+                 ad_alani=False):
         self.pidler = set(pidler)          # bu PID'lerin pencerelerine girdi yok
         self.siniflar = set(siniflar)      # PID'i bilinmeyen pencerelerde bu sınıf sözcükleri (kde)
         self.tum_ucbirim = tum_ucbirim     # çoklayıcı çözülemedi: TÜM uçbirim sınıflı pencereler (kde)
         self.ipucu_genel = ipucu_genel     # uçbirimde çalışıyoruz ama hangisi bilinmiyor (PID'siz uçbirim pencereleri)
         self.zincir = list(zincir)
         self.neden = neden
+        self.ad_alani = ad_alani            # PID ad alanındayız (flatpak/bwrap): pencere PID'i eşleşmeyebilir
 
 
 def hesapla(pid=None, proc=None, ortam=None, tmux_sorgu=None):
@@ -130,11 +146,18 @@ def hesapla(pid=None, proc=None, ortam=None, tmux_sorgu=None):
     tum_ucbirim = False
     notlar = []
 
+    ad_alani = os.path.exists("/.flatpak-info") or any(c in ("bwrap", "flatpak-session", "flatpak") for _p, c in zincir)
+
     def ekle(z):
+        nonlocal ad_alani
         for p, comm in z:
             if comm in ALTYAPI:
                 continue
             pidler.add(p)
+            dis = dis_pid(p, proc)  # ad alanındaysa pencere yöneticisinin gördüğü dış PID
+            if dis is not None:
+                pidler.add(dis)
+                ad_alani = True
             s = OYKUNUCU_AD.get(comm) or OYKUNUCU_AD.get(surec_adi(p, proc)[1])
             if s:
                 siniflar.add(s)
@@ -175,7 +198,7 @@ def hesapla(pid=None, proc=None, ortam=None, tmux_sorgu=None):
             ekle(atalar(ip, proc))
     if ortam.get("STY") or ortam.get("ZELLIJ"):  # screen / zellij oturumu
         tum_ucbirim = True
-    return Kume(pidler, siniflar, tum_ucbirim, ipucu_genel, zincir, "; ".join(notlar))
+    return Kume(pidler, siniflar, tum_ucbirim, ipucu_genel, zincir, "; ".join(notlar), ad_alani)
 
 
 _ONBELLEK = {"zaman": -1e9, "kume": None}
@@ -214,7 +237,8 @@ def kendi_mi(pid, sinif, arka_uc_ad, ucbirim_mi, k=None):
         return None  # görünmez masaüstündeki pencereler ajanın istemcisi olamaz
     if K.tum_ucbirim and ucbirim_mi(sinif):
         return ("coklayici", K.neden)
-    if p is None and ucbirim_mi(sinif) and (K.ipucu_genel or any(_sinif_sozcugu(sinif, s) for s in K.siniflar)):
+    sinif_uyar = ucbirim_mi(sinif) and (K.ipucu_genel or any(_sinif_sozcugu(sinif, s) for s in K.siniflar))
+    if sinif_uyar and (p is None or K.ad_alani):  # PID yok ya da ad alanı yüzünden eşleşmeyebilir: sınıf yedeği
         return ("sinif", sinif)
     return None
 
@@ -236,15 +260,44 @@ def surec_tablosu(proc=None):
     return tablo
 
 
+KABUK_ADLARI = {"bash", "zsh", "fish", "sh", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "xonsh", "elvish", "yash",
+                "ion", "pwsh", "osh", "busybox", "ash"}
+
+
+def _torunlar(pid, tablo):
+    cocuklar = {}
+    for p, st in tablo.items():
+        cocuklar.setdefault(st[0], []).append(p)
+    sonuc, yigin = [], list(cocuklar.get(pid, []))
+    while yigin and len(sonuc) < 4096:
+        p = yigin.pop()
+        sonuc.append(p)
+        yigin += cocuklar.get(p, [])
+    return sonuc
+
+
+def kabuk_torunlari(pid, proc=None, tablo=None):
+    """Pencere süreci pid'in torunlarında DENETİM UÇBİRİMİ (tty) olan kabuklar → [pid]. Boş değilse pencere bir uçbirim
+    barındırıyor (Dolphin F4 / Kate uçbirim paneli / VS Code uçbirimi: gömülü uçbirim). pid bilinmiyorsa None."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return None
+    tablo = surec_tablosu(proc) if tablo is None else tablo
+    return [p for p in _torunlar(pid, tablo) if tablo[p][3] in KABUK_ADLARI and tablo[p][4] != 0]
+
+
 def on_plan_surecleri(pid, proc=None):
-    """Uçbirim süreci pid'in çocuklarının (kabuklar) uçbirimlerinde ÖN PLANDAKİ süreçlerin adları → [comm] | None
-    (pid bilinmiyor / çocuk yok). Tek süreçte çok pencere (Ghostty): tüm çocukların ön planı döner."""
+    """Pencere süreci pid'in uçbirimlerinde ÖN PLANDAKİ süreçlerin adları → [comm] | None (pid bilinmiyor / kabuk yok).
+    Torunlardaki uçbirimli kabukların (gömülü uçbirim dahil) tpgid'i; yoksa doğrudan çocuklar (eski davranış). Tek
+    süreçte çok pencere (Ghostty): tüm kabukların ön planı döner."""
     try:
         pid = int(pid)
     except (TypeError, ValueError):
         return None
     tablo = surec_tablosu(proc)
-    cocuklar = [p for p, st in tablo.items() if st[0] == pid]
+    kabuklar = [p for p in kabuk_torunlari(pid, tablo=tablo) or () if p in tablo]
+    cocuklar = kabuklar or [p for p, st in tablo.items() if st[0] == pid]
     if not cocuklar:
         return None
     gruplar = {}

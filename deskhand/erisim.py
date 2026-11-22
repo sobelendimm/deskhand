@@ -230,28 +230,38 @@ def _girmeyen_ipucu(pid):
 # ---------------------------------------------------------------- pencere / ağaç (libatspi'nin bağlı olduğu yerde)
 
 def _surec_akrabasi(a, b):
-    """İki PID aynı uygulamanın süreç ağacında mı (eşit, biri diğerinin atası)? Çok süreçli uygulamalar (tarayıcı,
-    Electron) erişilebilirlik ağacını penceresinin sahibinden farklı bir süreçten bildirebilir."""
+    """Uygulama süreci a, pencere süreci b'nin KENDİSİ ya da TORUNU mu? (Çok süreçli uygulamalar — tarayıcı, Electron —
+    erişilebilirlik ağacını penceresinin sahibinin alt sürecinden bildirebilir.) Atalar SAYILMAZ: pencerenin sahibini
+    başlatan başka bir uygulamanın çerçevesine eylem gitmesin."""
     from . import kendi
     try:
         a, b = int(a), int(b)
     except (TypeError, ValueError):
         return False
-    if a == b:
-        return True
-    return any(p == b for p, _c in kendi.atalar(a)[1:]) or any(p == a for p, _c in kendi.atalar(b)[1:])
+    return a == b or any(p == b for p, _c in kendi.atalar(a)[1:])
+
+
+def _exe(pid):
+    try:
+        return os.path.realpath(f"/proc/{int(pid)}/exe")
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+TORUN_BENZERLIK = 0.9  # tam PID eşleşmesi yokken torun süreçteki çerçevenin başlığa en düşük benzerliği
 
 
 def _cerceve_bul(Atspi, pid, baslik):
-    """Pencere → AT-SPI çerçevesi: YALNIZ hedef pencerenin PID'inden (çok süreçli uygulamada aynı süreç ağacından:
-    ata/torun) seçilir; aynı süreçte birden çok çerçeve varsa başlık benzerliğiyle. Başka uygulamanın çerçevesine
-    başlık benzerliğiyle düşülmez (denetimler X/KWin penceresinde yapılır, eylem BAŞKA uygulamada olurdu): PID
-    bilinmiyor ya da eşleşme yoksa Dur 6. → (çerçeve, uygulama pid, uygulama adı)."""
+    """Pencere → AT-SPI çerçevesi: YALNIZ hedef pencerenin PID'inden seçilir; aynı süreçte birden çok çerçeve varsa
+    başlık benzerliğiyle. Tam PID eşleşmesi yoksa yalnız pencere sürecinin TORUNLARINDAN, AYNI çalıştırılabilir dosyaya
+    sahip ve başlığı ≥ TORUN_BENZERLIK benzeyen çerçeve. Atalar ve başka uygulamalar asla (denetimler X/KWin penceresinde
+    yapılır, eylem BAŞKA uygulamada olurdu): PID bilinmiyor ya da eşleşme yoksa Dur 6. → (çerçeve, uygulama pid, ad)."""
     if not pid:
         raise Dur(6, _("pencerenin süreç kimliği (PID) bilinmiyor: erişilebilirlik çerçevesi güvenle eşlenemez ({baslik})"
                        ).format(baslik=repr(baslik)), tur="agacta_yok")
     adaylar = []
     masa = Atspi.get_desktop(0)
+    pencere_exe = None
     for i in range(masa.get_child_count()):
         app = masa.get_child_at_index(i)
         if app is None:
@@ -261,6 +271,10 @@ def _cerceve_bul(Atspi, pid, baslik):
             if not _surec_akrabasi(app_pid, pid):
                 continue
             tam = str(app_pid) == str(pid)
+            if not tam:
+                pencere_exe = pencere_exe or _exe(pid)
+                if pencere_exe is None or _exe(app_pid) != pencere_exe:
+                    continue  # torun ama başka program (ör. pencerenin başlattığı ayrı bir uygulama)
             app_ad = app.get_name() or ""
             cerceveler = [app.get_child_at_index(j) for j in range(app.get_child_count())]
         except Exception:
@@ -272,8 +286,10 @@ def _cerceve_bul(Atspi, pid, baslik):
                 ad = f.get_name() or ""
             except Exception:
                 continue
-            benz = 1.0 if ad and (ad == baslik or ad in baslik or baslik in ad) else \
-                difflib.SequenceMatcher(None, katla(ad), katla(baslik)).ratio()
+            oran = difflib.SequenceMatcher(None, katla(ad), katla(baslik)).ratio()
+            if not tam and oran < TORUN_BENZERLIK and ad != baslik:
+                continue
+            benz = 1.0 if ad and (ad == baslik or ad in baslik or baslik in ad) else oran
             adaylar.append((tam, benz, f, app_pid, app_ad))
     if not adaylar:
         raise Dur(6, _("pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): {ipucu}").format(

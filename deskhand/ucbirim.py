@@ -42,7 +42,13 @@ _ISTEM = re.compile(r"[$#>%❯»➜λ\]:]\s*")
 
 
 def ucbirim_hedefi(au, k):
-    return bool(k) and k != EKRAN and guvenlik.ucbirim_mi(au.sinif(k))
+    """Pencere uçbirim mi ya da uçbirim barındırıyor mu (sınıf, süreç ağacında tty'li kabuk, AT-SPI terminal rolü)?"""
+    return bool(k) and k != EKRAN and guvenlik.ucbirim_penceresi_mi(k)
+
+
+# satırda geçmiş açılımı (!!, !n, !-n, !dizge, ^a^b) ya da geçmişi değiştiren/çalıştıran komut: çalışacak komut görünmez
+_GECMIS_ACILIMI = re.compile(r"(?:^|[\s;&|(`])(?:!(?:!|-?\d+|[A-Za-z_./][^\s=]*)|\^[^^\s]+\^)|"
+                             r"(?:^|[\s;&|(])(?:fc|r)(?:\s|$)|\b(?:history|print)\s+(?:-\w*\s+)*-s\b")
 
 
 # ---------------------------------------------------------------- ön plan süreci
@@ -213,7 +219,7 @@ def _ocr_satirlar(k):
     if not satirlar:
         return None
     satirlar.sort(key=lambda s: (s.get("y", 0), s.get("x", 0)))
-    return [s["t"] for s in satirlar[-3:]]
+    return [s["t"] for s in satirlar[-4:]]  # gömülü uçbirimin altında durum çubuğu olabilir: bir satır fazla
 
 
 def satir_oku(k):
@@ -230,6 +236,7 @@ def adaylar(satirlar):
     p = max((i for i, s in enumerate(satirlar) if _ISTEM.search(s)), default=None)
     tabanlar = ["".join(satirlar[p:])] if p is not None else ["".join(satirlar[-n:]) for n in (1, 2, 3)
                                                              if n <= len(satirlar)]
+    tabanlar += satirlar[-4:]  # tek tek satırlar (istem işareti yanlış satırda bulunduysa)
     sonuc = []
     for t in tabanlar:
         sonuc.append(t)
@@ -263,6 +270,8 @@ def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True):
         return bool(onaylanan.strip()) and a.endswith(onaylanan.strip()) and \
             guvenlik.riskli_komut(a[:len(a) - len(onaylanan.strip())]) is None
     neden = next((r for r in (guvenlik.riskli_komut(a) for a in aday if not onayli_mi(a)) if r), None)
+    if neden is None and any(_GECMIS_ACILIMI.search(a) for a in aday if not onayli_mi(a)):
+        neden = _("satırda geçmiş açılımı/geçmiş komutu var (!!, !n, ^a^b, fc, r, history -s): çalışacak komut bilinmiyor")
     if neden is None and okunan is None and tampon.get("kirli"):
         neden = _("giriş satırı okunamadı ve içeriği bilinmiyor (geçmişten çağrılmış ya da düzenlenmiş olabilir)")
     if neden is None:

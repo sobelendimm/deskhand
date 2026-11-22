@@ -165,8 +165,24 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   (`{sudo,reboot}`), `busybox`/`toybox X` → X, sarmalayıcıların argümanlı seçenekleri (`env -u AD`, `nice -n 5`,
   `timeout -s 9 5`), `env -S`, `find … -delete` / `-exec rm`, `sh/bash -c` (ve `-lc` gibi kümeler), `eval`, `python -c` /
   `perl -e` / `ruby -e` / `node -e` kodunda dosya silme, komut çalıştırma ya da dinamik kod (`__import__`, `eval`…).
+  Kabuğa DOLAYLI girdi de onay ister (komut metni görünmeden çalışır): `… | sh` (komutunu stdin'den okuyan kabuk),
+  `base64 -d | …`, kabuğa `<`/`<<`/`<<<`, `source`/`.`, geçici ya da uzantısız betiği `sh`/`bash` ile çalıştırma, betik
+  DOSYASINI yorumlayıcıyla çalıştırma (`python3 x.py`), `eval`, `alias`/`trap`, `PROMPT_COMMAND`/`PS0`/`BASH_ENV`/
+  `LD_PRELOAD` ataması, geçmiş açılımı (`!!`, `!n`, `^a^b`) ve `fc`/`r`/`history -s`/`print -s`, geçici dizinden program,
+  yetki/kabuk programına `ln`. Kalıcılık ve geniş yıkım: kabuk/oturum başlangıç dosyalarına, otomatik başlatmaya,
+  `~/.config/deskhand`'e, `~/.ssh`'e, `~/.local/bin`'e yazma (yönlendirme, tee, cp/mv/install/ln/rsync hedefi, dd of=,
+  truncate, `sed -i`), yıkıcı komut metnini çalıştırılabilecek dosyaya yazma (`printf 'sudo reboot' > /tmp/a`),
+  `kill -1`, `pkill/killall -u`, `crontab` (-l dışı), `git clean -f`, `git -c alias.x=!…`/komut kancası ayarları, `shred`,
+  `truncate -s 0`, `mv ~`, `rsync --delete` kök/ev dizininde, `xargs rm`, `awk` içinde `system()`/boru, ayrık başlatıcılar
+  (`systemd-run`, `at`, `tmux new … 'komut'`, `screen -dm`, `flock -c`).
+- **Uçbirim tanıma** (`guvenlik.ucbirim_penceresi_mi`, 2 sn önbellek): pencere sınıfı uçbirim öykünücüsüyse; YA DA
+  pencerenin sahibi sürecin TORUNLARINDA denetim uçbirimi (tty) olan bir kabuk varsa (GÖMÜLÜ uçbirim: Dolphin F4, Kate
+  uçbirim paneli, VS Code/IDE uçbirimi — pencerenin tamamı uçbirim sayılır); PID bilinmiyorsa ve sınıf uçbirim gömebilen
+  bir uygulamaysa (`GOMULU_UCBIRIM_SINIFLARI`) güvenli tarafta; erişilebilirlik zaten açıksa (PID'siz ya da gömebilen
+  sınıfta) pencerede rolü `terminal` olan öge varsa. Yıkıcı komut yazma onayı ve Enter kapısı bu tanımı kullanır; ön plan
+  süreci gömülü uçbirimin kabuklarının tpgid'inden okunur. Uçbirimsiz Dolphin/Kate'te yazı sıradan yazıdır.
 - **Uçbirim ENTER KAPISI** (`deskhand/ucbirim.py`; parça parça yazılmış komut: `sud` + `o reboot` + Enter). Uçbirim
-  sınıflı pencereye satırı çalıştıran bir tuş (enter, kpenter, linefeed, `x:Return`, `k:28`, ctrl+j/ctrl+m/ctrl+o; yazının
+  barındıran pencereye satırı çalıştıran bir tuş (enter, kpenter, linefeed, `x:Return`, `k:28`, ctrl+j/ctrl+m/ctrl+o; yazının
   içindeki `\n`) gitmeden HEMEN önce o anki giriş satırı okunur — erişilebilirlik ZATEN açıksa AT-SPI (rolü `terminal` olan
   ögenin imleç satırı + önceki iki satır; erişilebilirlik bunun için açılmaz), yoksa pencerenin OCR'ı (en alttaki üç yazılı
   satır; istem işaretinden sonrası ve sarılmış satırların birleşimi aday) — ve `riskli_komut`'tan geçer; yıkıcıysa onay
@@ -187,7 +203,10 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   soketiyle salt okunur `tmux list-clients -F '#{client_pid}'` → istemcilerin ataları (öykünücü) eklenir; çözülemezse
   (screen, zellij, dtach, tmux sorgusu başarısız) TÜM uçbirim sınıflı pencereler (kde). PID'i bilinmeyen pencereler (kde):
   ortam ipuçları (`KONSOLE_DBUS_WINDOW`, `WINDOWID`, `TERM_PROGRAM`, `GHOSTTY_RESOURCES_DIR`, `KITTY_PID`,
-  `ALACRITTY_WINDOW_ID`) ve zincirdeki öykünücünün adı → o sınıftaki PID'siz uçbirim pencereleri de. ssh üzerinden bağlanan
+  `ALACRITTY_WINDOW_ID`) ve zincirdeki öykünücünün adı → o sınıftaki PID'siz uçbirim pencereleri de. PID ad alanında
+  çalışıyorsak (flatpak/bwrap: `/.flatpak-info`, zincirde bwrap ya da `/proc/<pid>/status` NSpid birden çok): ataların
+  dış PID'i (NSpid ilk alanı) kümeye eklenir ve PID'i eşleşmeyen aynı sınıftaki uçbirim pencereleri de kapsanır (pencere
+  yöneticisi dış PID'i görür). ssh üzerinden bağlanan
   uzak istemci kapsam dışıdır. Görünmez masaüstündeki pencereler ajanın istemcisi olamaz: orada yalnız PID kuralı vardır
   (doğal olarak boşa çıkar). Denetim yerleri: `denetle`, `pencere_denetle` (AT-SPI), `imlec_alti_denetle` (tıklamanın/
   sürüklemenin düştüğü pencere), masaüstü kipinde klavye girdisinin gittiği etkin pencere (`girdi_seviye_denetle`),
@@ -201,7 +220,9 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   hemen önce `sistem_istemi_denetle` onaysız istemde 10 verir — girdinin DÜŞTÜĞÜ ekran noktasındaki pencere için de
   (`imlec_alti_denetle`: başka pencere hedeflenip noktada istem açıksa izin olsa bile ret; masaüstü kipindeki tıkta noktadaki
   isteme onay sorulur).
-- **Yapıştırma = pano okuma** (kde): `ctrl+v`, `ctrl+shift+v`, `shift+insert` ve orta tık (birincil seçim) kullanıcının
+- **Yapıştırma = pano okuma** (kde): `ctrl+v`, `ctrl+shift+v`, `shift+insert`, orta tık (birincil seçim) ve MENÜDEN
+  yapıştırma (tıklanan yazı ya da AT-SPI öge adı Yapıştır/Paste/Einfügen/Coller/Pegar… ya da "Ctrl+V" ipucu; kısa metin;
+  `guvenlik.hassas_engel` içinde — fare, AT-SPI eylemi ve aynı işlevi çağıran web yolları) kullanıcının
   panosunu ajanın görebileceği yere taşır: pano boş değilse ve Deskhand'in bu oturumda yazdığı metin değilse
   (`guvenlik.kendi_pano_ekle/kendi_pano_mu`: süreç belleği + `RUNTIME_DIR/pano-ozetleri`, 0600, yalnız sha256) onay ister
   (okunamıyorsa da). Deskhand'in kendi yapıştırarak yazma yolu (`eylem._yapistirarak_yaz`) muaftır. Sanal masaüstünün
@@ -297,7 +318,9 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   `mesgul.ekran_korumasi()` çağırır. Etkin pencere tam ekran / oyun biçimli ya da MPRIS'te video çalıyorsa
   Dur(15). İstisna yalnız kullanıcının açık izni (`--ekranimda`, `DESKHAND_EKRANIMDA=1` ya da bildirimdeki
   "Ekranımda yap" düğmesi → 10 dk). Sanal masaüstü etkilenmez.
-- **AT-SPI çerçevesi yalnız hedef pencerenin PID'inden** seçilir (çok süreçli uygulamada aynı süreç ağacından: ata/torun);
+- **AT-SPI çerçevesi yalnız hedef pencerenin PID'inden** seçilir; tam PID eşleşmesi yoksa YALNIZ pencere sürecinin
+  TORUNLARINDAN, aynı çalıştırılabilir dosyaya sahip ve başlığı ≥ 0,9 benzeyen çerçeve (çok süreçli uygulama). ATALAR asla
+  (pencerenin sahibini başlatan başka uygulamanın çerçevesine eylem gitmesin);
   bulunamazsa ya da PID bilinmiyorsa Dur 6 — başka uygulamanın çerçevesine başlık benzerliğiyle düşülmez. Seçilen
   çerçevenin kendi kimliği de denetlenir: Deskhand paneli/onay diyaloğu sürecine ait çerçeve her zaman 10 (okuma dahil),
   yasak desen (uygulama adı/çerçeve adı) 10; eylem/değer yazmada ajanın kendi istemcisi ve uygulama erişim seviyesi.
