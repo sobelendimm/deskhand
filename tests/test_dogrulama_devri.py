@@ -313,6 +313,10 @@ def _hazirla(k_):
 
 ds.tarayici_mi, ds.baslik_simdi = (lambda k_: True), (lambda k_: "T")
 _web.oku, _web.hazirla, _erisim.erisim_acik, _api.yasak_mi = _oku, _hazirla, (lambda: acik_["v"]), (lambda k_: None)
+_ag_once = _erisim.erisim_ac_garanti
+ac_say = {"n": 0}
+_erisim.erisim_ac_garanti = lambda: ac_say.__setitem__("n", ac_say["n"] + 1)  # SAHTE: gerçek erişilebilirlik açılmaz
+ds._ERISIM_DENENDI.clear()
 try:
     ds.temizle()
     r1 = [ds.hazir_oku("arka:62", "T") for _i in range(5)]
@@ -328,14 +332,39 @@ try:
     cagri.update(oku=0, hazirla=0)
     ds.temizle()
     r3 = ds.hazir_oku("arka:64", "T")
-    kontrol("O3: erişilebilirlik KAPALIYSA kapı için açılmaz (web.hazirla/oku çağrılmaz), fail-open",
-            r3 == (None, False) and cagri == {"oku": 0, "hazirla": 0}, f"{cagri} {r3}")
+    kontrol("O3: erişilebilirlik KAPALI kalırsa sayfa OKUNAMADI sayılır (web.hazirla/oku çağrılmaz); açma BİR kez denendi",
+            r3 == (None, False) and cagri == {"oku": 0, "hazirla": 0} and ac_say["n"] == 1, f"{cagri} {r3} {ac_say}")
+    for n_ in (65, 66, 67):
+        ds.temizle()
+        ds.hazir_oku(f"arka:{n_}", "T")
+    kontrol("O2: tarayıcıda kapı için erişilebilirlik süreç başına YALNIZ BİR kez açılır (erisim_ac_garanti)",
+            ac_say["n"] == 1, str(ac_say))
+    ds._ERISIM_DENENDI.clear()
+    ds.temizle()
+    ac_say["n"] = 0
+    _acildi = {"v": False}
+
+    def _ag():
+        ac_say["n"] += 1
+        acik_["v"] = _acildi["v"] = True
+
+    _erisim.erisim_ac_garanti = _ag
+    mod_["c"] = "tamam"
+    _oku_eski = _web.oku
+    _web.oku = lambda k_, *a_, **kw_: {"ogeler": [], "sayfa": {"belge": 1, "adres": "http://x.test/"}}
+    cagri.update(oku=0, hazirla=0)
+    r4 = ds.hazir_oku("arka:68", "T")
+    kontrol("O2: erişilebilirlik kapıda açılınca tarama ilerler ve sayfa okunur", r4 == (None, True) and ac_say["n"] == 1,
+            f"{r4} {ac_say}")
+    _web.oku = _oku_eski
+    acik_["v"] = False
     kontrol("O3: kapı taraması toplam süre sınırı <= 2 sn", ds.TARAMA_SURESI <= 2.0)
     with _web.tarama_siniri(1.0):
         ic_ = getattr(_web._SINIR, "bitis", None)
     kontrol("O3: tarama_siniri bitiş koyar ve çıkışta geri alır", ic_ is not None and getattr(_web._SINIR, "bitis", None) is None)
 finally:
     ds.tarayici_mi, ds.baslik_simdi, _web.oku, _web.hazirla, _erisim.erisim_acik, _api.yasak_mi = _once
+    _erisim.erisim_ac_garanti = _ag_once
     ds.temizle()
 
 print("== A) ikinci inceleme: klavye Tab dizisi (BÜYÜK-2), odak önbelleği (KÜÇÜK-9)")
@@ -362,9 +391,9 @@ def _odak_yok():
 r_tab = ds.klavye_engeli("arka:65", odak_sorgu=_odak_yok, dizi=["tab", "space"])
 kontrol("B2: sınama varken odak dışındayken 'tab space' → ret (odağa bakmadan)", r_tab is not None and odak_sayaci["n"] == 0,
         str(r_tab))
-kontrol("B2: 'tab' tek başına / 'space' (odak dışında) serbest",
+kontrol("B2: 'tab' tek başına / 'space' (odak BİLİNİYOR ve sınama dışında) serbest",
         ds.klavye_engeli("arka:65", odak_sorgu=_odak_yok, dizi=["tab"]) is None and
-        ds.klavye_engeli("arka:65", odak_sorgu=_odak_yok, dizi=["space"]) is None)
+        ds.klavye_engeli("arka:65", odak_sorgu=lambda: {"kutu": [500, 500, 5, 5]}, dizi=["space"]) is None)
 ds.temizle()
 ds.baslik_simdi = _bs
 # K9: odak sorgusu kısa önbellekli; girdi_oldu siler
@@ -445,6 +474,309 @@ except hata.Dur as e_:
     kod_oge3 = e_.kod
 kontrol("O6: sıradan iframe (video) ögesi 18 DEĞİL", kod_oge3 == 0, str(kod_oge3))
 ds.temizle()
+
+# ================================================================ A) ÜÇÜNCÜ İNCELEME düzeltmeleri (saf birim, sahte arka uç)
+print("== A) üçüncü inceleme: O1 durum dosyası yalnız engel ekler (yok/okunamadi yalnız bellek)")
+ds.temizle()
+ds.yok_kaydet("arka:40", "b")
+ds.okunamadi_kaydet("arka:41", "b")
+ham_ = open(ds._yol(), encoding="utf-8").read()
+kontrol("O1: yok / okunamadi kayıtları dosyaya YAZILMAZ", '"yok"' not in ham_ and '"okunamadi"' not in ham_ and
+        "arka:40" not in ham_ and "arka:41" not in ham_, ham_)
+kontrol("O1: ama süreç içinde etkin (bellek)", ds.yok_mu("arka:40", "b") and ds.okunamadi_mu("arka:41", "b"))
+ds.temizle()
+simdi1 = time.monotonic()
+dosya_yaz({"boot": ds._boot_id(), "sinama": {}, "bastir": {}, "girdi": {},
+           "yok": {"arka:42": {"baslik": "b", "zaman": simdi1}}, "okunamadi": {"arka:43": {"baslik": "b", "zaman": simdi1}}})
+kontrol("O1: dosyadaki taze `yok` / `okunamadi` kaydı OKUNMAZ (kapıyı açamaz)",
+        ds.yok_mu("arka:42", "b") is False and ds.okunamadi_mu("arka:43", "b") is False)
+with ds._depo() as d_:
+    kontrol("O1: eski sürümün yok/okunamadi bölümleri temizlenir", set(d_) <= {"boot", "sinama", "bastir", "girdi"}, str(set(d_)))
+# dosyadaki sinama kaydını silmek 'engel yok' kararı VERMEZ: süreç kendi taramasını yapar
+ds.temizle()
+sayac2 = {"tara": 0}
+_t0_, _tm0_, _bs0_ = ds.tara, ds.tarayici_mi, ds.baslik_simdi
+
+
+def _sahte_tara2(k_, baslik=None, kapi=False):
+    sayac2["tara"] += 1
+    return None, False
+
+
+ds.tara, ds.tarayici_mi, ds.baslik_simdi = _sahte_tara2, (lambda k_: True), (lambda k_: "x")
+og_ = [oge("check box", "I'm not a robot", 1)]
+ds.kaydet("arka:44", ds.incele(og_, "x", {}), og_, baslik="x")
+dosya_yaz({"boot": ds._boot_id(), "sinama": {}, "bastir": {}, "girdi": {}})
+ds.hazir_oku("arka:44", "x")
+kontrol("O1: dosyadan sınama kaydını silmek kapıyı açmaz: süreç kendi taramasını yapar", sayac2["tara"] == 1, str(sayac2))
+ds.tara, ds.tarayici_mi, ds.baslik_simdi = _t0_, _tm0_, _bs0_
+ds.temizle()
+
+print("== A) üçüncü inceleme: B1 kaydırma/girdi sonrası kutular bayatlamaz (kirli kayıt)")
+ds.temizle()
+yeni_kutu = {"v": [10, 10, 100, 20]}
+
+
+def _tara_b1(k_, baslik=None, kapi=False):
+    """Sahte tarama: sayfanın o anki kutusunu yazar (kaydırılınca kutu yer değiştirir)."""
+    sayac2["tara"] += 1
+    t0_ = time.monotonic()
+    if mod_b1["okunamaz"]:
+        return None, False
+    og2 = [{**oge("check box", "I'm not a robot", 1), "kutu": list(yeni_kutu["v"])}]
+    sn_ = ds.incele(og2, "x", {})
+    ds.kaydet(k_, sn_, og2, baslik="x", simdi=t0_)
+    return sn_, True
+
+
+mod_b1 = {"okunamaz": False}
+sayac2["tara"] = 0
+ds.tara, ds.tarayici_mi, ds.baslik_simdi = _tara_b1, (lambda k_: True), (lambda k_: "x")
+try:
+    _tara_b1("arka:45")
+    sayac2["tara"] = 0
+    d_, ok_ = ds.hazir_oku("arka:45", "x")
+    kontrol("B1: girdi YOKKEN taze kayıt yeniden taranmadan kullanılır", sayac2["tara"] == 0 and d_ is not None, str(sayac2))
+    ds.girdi_oldu("arka:99")
+    ds.hazir_oku("arka:45", "x")
+    kontrol("B1: başka pencereye girdi bu pencerenin kaydını kirletmez", sayac2["tara"] == 0, str(sayac2))
+    ds.girdi_oldu("arka:45")  # kaydırma / tuş / pencere boyutu: girdi_oldu(pencere)
+    yeni_kutu["v"] = [10, 400, 100, 20]  # sayfa kaydı: kutu aşağı indi
+    d_, ok_ = ds.hazir_oku("arka:45", "x")
+    kontrol("B1: girdiden SONRA kayıt yeniden taranır ve kutular güncellenir", sayac2["tara"] == 1 and ok_ and
+            d_["kutular"] == [[10, 400, 100, 20]], f"{sayac2} {d_}")
+    kontrol("B1: eski konum artık sınama değil, yeni konum sınama",
+            ds.nokta_engeli("arka:45", 50, 20) is None and ds.nokta_engeli("arka:45", 50, 410) is not None)
+    # masaüstü kipi / pencere bilinmeyen girdi (JOKER): tüm pencereler kirli
+    sayac2["tara"] = 0
+    ds.girdi_oldu(None)
+    ds.hazir_oku("arka:45", "x")
+    kontrol("B1: pencere bilinmeyen girdi (masaüstü kipi, k=None) TÜM kayıtları kirletir", sayac2["tara"] == 1, str(sayac2))
+    # girdi kaydı dosyaya da gider (başka süreç/MCP aynı kirliliği görür)
+    ds.girdi_oldu("arka:45")
+    with ds._depo() as d_:
+        kontrol("B1: girdi zamanı dosyada (süreçler arası): tarayıcı penceresi", "arka:45" in d_["girdi"], str(d_["girdi"]))
+    # yeniden tarama OKUNAMAZSA eski kutulara güvenilmez: o pencerede TÜM fare girdisi reddedilir
+    mod_b1["okunamaz"] = True
+    ds.girdi_oldu("arka:45")
+    d_, ok_ = ds.hazir_oku("arka:45", "x")
+    kontrol("B1: kirli kayıt yeniden okunamadı → durum kirli=True", d_ is not None and d_.get("kirli") and not ok_, str(d_))
+    kontrol("B1: okunamayan kirli pencerede kutu DIŞI nokta bile reddedilir (page_wide gibi)",
+            ds.nokta_engeli("arka:45", 900, 900) is not None and ds.nokta_engeli("arka:45", 1, 1, ["Kaydet"]) is not None)
+    kontrol("B1: kirli+okunamadı: ref/öge yolu (girdi_engeli kayit=) de reddeder",
+            ds.girdi_engeli("arka:45", oge={"rol": "button"}, baslik="x", kayit=d_) is not None)
+    kontrol("B1: kirli+okunamadı klavye: Tab sonrası girdi / tek başına Boşluk reddedilir, PageDown serbest",
+            ds.klavye_engeli("arka:45", dizi=["tab", "space"]) is not None and ds.klavye_engeli("arka:45", dizi=["space"]) is not None and
+            ds.klavye_engeli("arka:45", dizi=["pagedown"]) is None)
+finally:
+    ds.tara, ds.tarayici_mi, ds.baslik_simdi = _t0_, _tm0_, _bs0_
+    ds.temizle()
+
+# kaydırma / tuş / pencere yönetimi çekirdekte girdi_oldu(pencere) çağırır
+from deskhand import eylem as _ey  # noqa: E402
+_go0 = ds.girdi_oldu
+gor_ = []
+ds.girdi_oldu = lambda k_=None: gor_.append(k_)
+
+
+class _SahteG:
+    def kapat(self):
+        pass
+
+
+try:
+    _ey.girdi_birak(_SahteG(), "arka:46")
+    _ey.girdi_birak(_SahteG())
+finally:
+    ds.girdi_oldu = _go0
+kontrol("B1: eylem.girdi_birak girdinin gittiği pencereyi girdi_oldu'ya iletir (k yoksa None = JOKER)", gor_ == ["arka:46", None], str(gor_))
+
+print("== A) üçüncü inceleme: O2/O3 klavye (okunamayan tarayıcı, odak bilinmiyor), KÜÇÜK-1 ham tuş kodu")
+ds.temizle()
+_t0_, _tm0_, _bs0_ = ds.tara, ds.tarayici_mi, ds.baslik_simdi
+ds.tara, ds.tarayici_mi, ds.baslik_simdi = (lambda k_, baslik=None, kapi=False: (None, False)), (lambda k_: True), (lambda k_: "x")
+try:
+    ret_ = {n_: ds.klavye_engeli("arka:47", dizi=d_) is not None for n_, d_ in (
+        ("tab+space", ["tab", "space"]), ("space", ["space"]), ("enter", ["enter"]), ("k:57", ["k:57"]), ("x:Return", ["x:Return"]),
+        ("yazı ' '", ["metin: "]), ("tab+yazı", ["tab", "metin:ab"]), ("a", ["a"]), ("tab", ["tab"]), ("pagedown", ["pagedown"]),
+        ("yazı 'abc'", ["metin:abc"]))}
+    kontrol("O2: okunamayan tarayıcıda Tab sonrası girdi + tek başına Boşluk/Enter (ham kod dahil) reddedilir",
+            all(ret_[n_] for n_ in ("tab+space", "space", "enter", "k:57", "x:Return", "yazı ' '", "tab+yazı")), str(ret_))
+    kontrol("O2: okunamayan tarayıcıda sıradan tuş/yazı/PageDown/tek Tab serbest",
+            not any(ret_[n_] for n_ in ("a", "tab", "pagedown", "yazı 'abc'")), str(ret_))
+    ds.tarayici_mi = lambda k_: False
+    kontrol("O2: tarayıcı OLMAYAN pencerede kural yok", ds.klavye_engeli("arka:48", dizi=["tab", "space"]) is None and
+            ds.klavye_engeli("arka:48", dizi=["space"]) is None)
+    ds.tarayici_mi = lambda k_: True
+    ds.okunamadi_kaydet("arka:49", "x")
+    ds.girdi_oldu("arka:49")
+    kontrol("O2: girdi_oldu `okunamadi` önbelleğini de siler", ds.okunamadi_mu("arka:49", "x") is False)
+finally:
+    ds.tara, ds.tarayici_mi, ds.baslik_simdi = _t0_, _tm0_, _bs0_
+    ds.temizle()
+
+ds.temizle()
+og_ = [oge("check box", "I'm not a robot", 1)]
+ds.kaydet("arka:50", ds.incele(og_, "x", {}), og_, baslik="x")
+_bs0_ = ds.baslik_simdi
+ds.baslik_simdi = lambda k_: "x"
+
+
+def _odak_hata():
+    raise TimeoutError("odak sorgusu yanıtsız")
+
+
+try:
+    o3_ = {}
+    for ad_, sorgu_ in (("yok(None)", lambda: None), ("hata", _odak_hata), ("kutusuz", lambda: {"rol": "x"})):
+        o3_[ad_] = [ds.klavye_engeli("arka:50", odak_sorgu=sorgu_, dizi=d_) is not None
+                    for d_ in (["space"], ["enter"], ["metin:abc"], ["x:Return"], ["pagedown"], ["tab"])]
+    kontrol("O3: sınama varken odak BİLİNEMİYORSA Boşluk/Enter/yazı reddedilir; PageDown/Tab serbest",
+            all(v_ == [True, True, True, True, False, False] for v_ in o3_.values()), str(o3_))
+    kontrol("O3: odak bilinip sınama dışındaysa Boşluk/yazı serbest",
+            all(ds.klavye_engeli("arka:50", odak_sorgu=lambda: {"kutu": [500, 500, 5, 5]}, dizi=d_) is None
+                for d_ in (["space"], ["metin:abc"])))
+    kontrol("O3: odak sınama kutusundaysa hâlâ reddedilir",
+            ds.klavye_engeli("arka:50", odak_sorgu=lambda: {"kutu": [10, 10, 100, 20]}, dizi=["a"]) is not None)
+finally:
+    ds.baslik_simdi = _bs0_
+    ds.temizle()
+
+print("== A) üçüncü inceleme: B2 masaüstü kipinde pencere değişimi (sahte arka uç)")
+
+
+class _AuB2:
+    """EKRAN kipi sahte arka ucu: fare() ilk `dogru` çağrıda pencere A, sonra B (üstteki pencere kapandı/değişti)."""
+    ad = "sahte"
+
+    def __init__(self, degis_sonra):
+        self.say, self.degis = 0, degis_sonra
+
+    def fare(self):
+        self.say += 1
+        return (500, 500, "A" if self.say <= self.degis else "B")
+
+    def geometri(self, k_):
+        return (0, 0, 1000, 1000)
+
+    def ekran_alani(self):
+        return (0, 0, 1000, 1000)
+
+    def one_getir(self, k_):
+        pass
+
+
+class _GB2:
+    def __init__(self):
+        self.gidenler = []
+        self.etiket, self.gizli, self.onayli, self.son_fare, self.onay_hedefi = "t", False, False, None, None
+        self.kesildi = None
+
+    def kapat(self):
+        pass
+
+    def gonder(self, k_, desen, *komutlar):
+        self.gidenler.extend(komutlar)
+
+    ham = zorla = gonder
+
+    def izle(self, *a_, **kw_):
+        pass
+
+    def izle_bitir(self):
+        pass
+
+
+_ey_yedek = {n_: getattr(_ey, n_) for n_ in ("_au", "insan_dogrulama_ekran", "imlec_alti_denetle", "onay_hedefi_dogrula",
+                                              "hassas_nokta", "nokta_metni", "dur_denetle", "girdi_al")}
+from deskhand import guvenlik as _gv  # noqa: E402
+_sim0_ = _gv.sistem_istemi_mi
+_gv.sistem_istemi_mi = lambda w_: False
+for n_ in ("insan_dogrulama_ekran", "imlec_alti_denetle", "onay_hedefi_dogrula", "hassas_nokta", "dur_denetle"):
+    setattr(_ey, n_, lambda *a_, **kw_: None)
+_ey.nokta_metni = lambda *a_, **kw_: []
+_g_hedef = {}
+_ey.girdi_al = lambda *a_, **kw_: _g_hedef["g"]
+from deskhand.arka_uc import EKRAN as _EKR  # noqa: E402
+try:
+    # (1) kapıdan hemen sonra pencere zaten değişmiş → Dur 3, hiçbir şey tıklanmadı
+    au_ = _AuB2(1)  # çözümleme A, kapı sonrası denetim B
+    _ey._au = lambda: au_
+    g_ = _GB2()
+    try:
+        _ey.tikla_ic(g_, _EKR, None, 500, 500, "sol")
+        kod_ = 0
+    except hata.Dur as e_:
+        kod_ = e_.kod
+    kontrol("B2: kapıdan hemen sonra imlecin altındaki pencere değiştiyse → Dur 3, tık gitmedi",
+            kod_ == 3 and not any(c_.startswith("click") for c_ in g_.gidenler), f"{kod_} {g_.gidenler}")
+    # (2) çift tık: BİRİNCİ tıktan sonra pencere değişir → ikinci tık GİTMEZ (tek tek gönderilir)
+    for dugme_, beklenen_ in (("cift", 1), ("uclu", 1)):
+        au_ = _AuB2(2)  # 1: tikla_ic w çözümü, 2: kapı sonrası denetim; 3.: ilk tıktan önce → B
+        au_.degis = 3  # w çözümü + kapı sonrası + ilk tık öncesi = A; ikinci tık öncesi = B
+        _ey._au = lambda au_=au_: au_
+        g_ = _GB2()
+        try:
+            _ey.tikla_ic(g_, _EKR, None, 500, 500, dugme_)
+            kod_ = 0
+        except hata.Dur as e_:
+            kod_ = e_.kod
+        n_tik_ = sum(c_.startswith("click") for c_ in g_.gidenler)
+        kontrol(f"B2: masaüstü kipinde '{dugme_}' tık TEK TEK gider; pencere değişince kalanı gitmez (Dur 3)",
+                kod_ == 3 and n_tik_ == beklenen_, f"{kod_} {g_.gidenler}")
+    # (3) tekrar>1: ikinci tekrar öncesi pencere değişir
+    au_ = _AuB2(0)
+    au_.degis = 99
+    _ey._au = lambda: au_
+    g_ = _GB2()
+    _ey.tikla_ic(g_, _EKR, None, 500, 500, "cift")
+    kontrol("B2: pencere değişmediyse çift tık iki ayrı click olarak gider", sum(c_.startswith("click") for c_ in g_.gidenler) == 2 and
+            all(len(c_.split()) == 2 for c_ in g_.gidenler if c_.startswith("click")), str(g_.gidenler))
+    au_ = _AuB2(0)
+    au_.degis = 4
+    _ey._au = lambda: au_
+    g_ = _GB2()
+    try:
+        _ey.tikla_ic(g_, _EKR, None, 500, 500, "sol", tekrar=3)
+        kod_ = 0
+    except hata.Dur as e_:
+        kod_ = e_.kod
+    kontrol("B2: tekrar>1: her tıktan önce pencere denetlenir (değişince kalan tekrarlar gitmez)",
+            kod_ == 3 and 1 <= sum(c_.startswith("click") for c_ in g_.gidenler) < 3, f"{kod_} {g_.gidenler}")
+    # (4) imleç hedefte değilse (kullanıcı oynattı) Dur 3
+    class _AuImlec(_AuB2):
+        def fare(self):
+            self.say += 1
+            return (500 if self.say < 2 else 700, 500, "A")
+    au_ = _AuImlec(99)
+    _ey._au = lambda: au_
+    g_ = _GB2()
+    try:
+        _ey.tikla_ic(g_, _EKR, None, 500, 500, "sol")
+        kod_ = 0
+    except hata.Dur as e_:
+        kod_ = e_.kod
+    kontrol("B2: kapıdan sonra imleç hedef noktada değilse → Dur 3", kod_ == 3 and not any(
+        c_.startswith("click") for c_ in g_.gidenler), f"{kod_} {g_.gidenler}")
+    # (5) sürükleme: kapıdan sonra buttondown ÖNCESİ pencere yeniden denetlenir
+    au_ = _AuB2(1)  # w1 çözümü A, kapı sonrası denetim B
+    _ey._au = lambda: au_
+    g_ = _GB2()
+    _g_hedef["g"] = g_
+    a_ = type("A", (), dict(kimlik=_EKR, baslik=None, x1=500.0, y1=500.0, x2=600.0, y2=500.0, dugme="sol", sure=0.05,
+                            onayli=False))()
+    try:
+        _ey.k_surukle(a_)
+        kod_ = 0
+    except hata.Dur as e_:
+        kod_ = e_.kod
+    kontrol("B2: sürüklemede kapıdan sonra pencere değiştiyse buttondown GİTMEZ (Dur 3)",
+            kod_ == 3 and not any(c_.startswith("buttondown") for c_ in g_.gidenler), f"{kod_} {g_.gidenler}")
+finally:
+    for n_, v_ in _ey_yedek.items():
+        setattr(_ey, n_, v_)
+    _gv.sistem_istemi_mi = _sim0_
+    ds.temizle()
 
 # ================================================================ güvenlik: görünmez masaüstü
 from deskhand import api, masaustu  # noqa: E402
@@ -658,6 +990,41 @@ try:
     r, e = arac(mcp_sunucu.read_text, window=pencere, source="web", desktop="background")
     kontrol("read_text(web): okunabilir ve human_verification taşır", r is not None and
             (r.get("human_verification") or {}).get("detected"), f"{r!r:.300} {e}")
+    # ===== ÜÇÜNCÜ İNCELEME B1: kaydırma / tuş / pencere boyutu sınama kaydını KİRLETİR; sonraki girdi yeniden tarar
+    g0_ = au.geometri(pencere)
+    with api.hedef("sanal"):
+        assert sec(arka_bayragi=True).ad == "sanal"
+        for ad_, f_ in (("api.kaydir", lambda: api.kaydir(pencere, "down", 1)),
+                        ("api.tus pagedown", lambda: api.tus(pencere, "pagedown")),
+                        ("api.pencere_yonet boyut", lambda: api.pencere_yonet(pencere, "boyut", g=g0_[2] - 40, h=g0_[3] - 40)),
+                        ("MCP scroll", lambda: mcp_sunucu.scroll(window=pencere, direction="down", amount=1, desktop="background"))):
+            ds.temizle()
+            arac(mcp_sunucu.observe, window=pencere, desktop="background")
+            d0_ = ds.durum(pencere)
+            z0_ = d0_["zaman"] if d0_ else None
+            try:
+                f_()
+            except (hata.Dur, mcp_sunucu.ToolError) as e_:
+                print(f"   ({ad_}: {type(e_).__name__} {e_})")
+            kontrol(f"B1: {ad_} sonrası sınama kaydı kirli (son girdi > kayıt zamanı)",
+                    z0_ is not None and ds.son_girdi(pencere) > z0_, f"{z0_} {ds.son_girdi(pencere)}")
+            d1_, ok1_ = ds.hazir_oku(pencere)
+            kontrol(f"B1: {ad_} sonrası hazir_oku kaydı YENİDEN tarar (kayıt zamanı ilerler)",
+                    ok1_ and d1_ is not None and d1_["zaman"] > z0_ and not d1_.get("kirli"), f"{d1_} {ok1_}")
+        if tuple(au.geometri(pencere)) != tuple(g0_):
+            api.pencere_yonet(pencere, "boyut", g=g0_[2], h=g0_[3])  # sonraki testler için eski boyut
+        ds.temizle()
+        # KÜÇÜK-1: ham tuş kodları < 0x100 (BTN_* kodları 0x100+ fare düğmesidir)
+        kodlar_k = {}
+        for kod_ in ("k:57", "k:255", "k:256", "k:272", "k:0", "k:abc"):
+            try:
+                _ey.tus_coz(kod_)
+                kodlar_k[kod_] = 0
+            except hata.Dur as e_:
+                kodlar_k[kod_] = e_.kod
+        kontrol("KÜÇÜK-1: k: ham tuş kodu 1-255 geçer; 256+ (BTN_LEFT=272), 0 ve sayı olmayan Dur(1)",
+                kodlar_k == {"k:57": 0, "k:255": 0, "k:256": 1, "k:272": 1, "k:0": 1, "k:abc": 1}, str(kodlar_k))
+
     ff.kapat()
     acik.remove(ff)
     ds.temizle()

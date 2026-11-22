@@ -837,7 +837,17 @@ başka yolla). Deskhand yalnız algılar, ajan girdisini reddeder, kullanıcıya
   `press_key`, `drag` sonuçlarında. `read_text` iframe'lerin TAM adresini vermez (yalnız tür + alan adı); kritik
   bildirimde sayfa başlığı değil alan adı yazılır.
 - **Durum**: pencere kimliği + başlık/adres anahtarıyla `RUNTIME_DIR/insan-dogrulama.json` (0600, flock) — CLI ve MCP
-  süreçleri aynı kutuları görür. Başlık/adres değişince ya da 300 sn sonra silinir. "Sınama yok" sonucu ~10 sn önbellekte.
+  süreçleri aynı kutuları görür. Dosya YALNIZ ENGEL EKLER: algılanmış sınama kutuları (`sinama`), uyarı bastırma
+  (`bastir`) ve pencerenin son girdi zamanı (`girdi`; yalnız YENİDEN TARAMA zorlar). "Sınama yok" ve "okunamadı" kararları
+  YALNIZ süreç belleğindedir (dosyaya yazılmaz, dosyadan OKUNMAZ; ~3 sn / ~10 sn): "engel yok" kararı için sürecin KENDİ
+  taraması gerekir. Dosya her okunuşta doğrulanır (tip, 0 ≤ yaş ≤ TTL, önyükleme kimliği), ama kapıyı kalıcı açık tutmaya
+  karşı güvence dosyanın doğruluğuna değil bu kurala dayanır: dosyaya sahte "yok" yazmak ya da sınama kaydını silmek kapıyı
+  AÇMAZ (süreç yeniden tarar); en kötü ihtimal fazladan ret ya da tarama. Başlık/adres değişince ya da 300 sn sonra silinir.
+  **Bayat kutu yok:** her girdi (tık, tuş, yazı, kaydırma, pencere taşıma/boyutlandırma/büyütme, erişilebilirlik eylemi) o
+  pencerenin sınama kaydını "kirli" işaretler (son girdi zamanı, süreçler arası; masaüstü kipinde pencere bilinmediği için
+  tüm pencereler); sonraki girdiden önce kayıt son girdiden eskiyse (ya da 15 sn'den eskiyse) sayfa YENİDEN taranır
+  (kaydırma animasyonu için ~0,25 sn yerleşme beklenir). Kirli kayıt yeniden OKUNAMAZSA o pencerede TÜM fare girdisi
+  reddedilir (`page_wide` gibi) ve klavyede Tab sonrası girdi + tek başına Boşluk/Enter reddedilir.
 - **Reddetme (ÇEKİRDEK kapı)**: fare yollarının TEK ortak noktası `eylem.hassas_nokta` (koordinat, metin, öge, simge,
   renk, web, sürükleme başlangıcı; sürükleme bitişi ve `erisim._hassas_oge` ile `ogeye-yaz` de) `nokta_engeli`'ni çağırır:
   tıklanan NOKTA sınama kutusundaysa (ya da kısa metin sınama cümlesiyse) **Dur(18)** — gözlemsiz çağrı, CLI (`ekran
@@ -859,5 +869,20 @@ başka yolla). Deskhand yalnız algılar, ajan girdisini reddeder, kullanıcıya
   (`retry_after_s`). `bekleyen_var` devir isteklerini 3600 sn'ye kadar canlı sayar (bekleme boyunca BAŞKA süreçlerin
   girdisi de kapalı). Günlük/geçmişte etiket `devir-tamam` ("onay izin" değil); "Bitti/Vazgeç/süre" ile diyaloğun açtığı
   Devral kapanır.
-- **Sınırlar:** yeni CAPTCHA türleri algıdan kaçabilir; ağaç okunamazsa (erişilebilirlik kapalı) algı yoktur — tarayıcı
-  yolları zaten konumu doğrulanamayan ögeye tıklamaz (fail-closed). Klavye odak sorgusu tarayıcı sayfaları içindir.
+- **Okunamayan sayfa (fail-open yok):** erişilebilirlik ağacı okunamayan TARAYICI penceresinde (kapalı/yanıtsız, belge yok)
+  Tab'dan sonra gelen girdi ve tek başına Boşluk/Enter ya da boşluk içeren yazı reddedilir (odak sınama kutusunda olabilir);
+  sınama durumu VARKEN odak bilinemiyorsa (sorgu hata verdi, odakta kutulu öge yok) Boşluk/Enter/yazı içeren dizi reddedilir.
+  Kapı taraması erişilebilirlik kapalıyken tarayıcı penceresi için süreç başına BİR kez `erisim_ac_garanti` çağırır. **kde'de
+  yan etki:** bu, kullanıcının oturumunda erişilebilirliği (AT-SPI veri yolu `IsEnabled` + `toolkit-accessibility`) OTURUM
+  GENELİNDE açar ve açık kalır (tüm uygulamalar erişilebilirlik ağacı üretir; küçük performans maliyeti); günlükte ve durum
+  dizinindeki işaretle görünür, `deskhand a11y off` geri alır. Sanal (arka plan) masaüstünde yalnız o masaüstünün özel veri
+  yolu etkilenir. Ham tuş kodları (`k:N`) yalnız 1-255 (0x100+ BTN_* fare düğmeleridir). Masaüstü kipinde (EKRAN) kapının
+  sınadığı pencere kapıdan hemen sonra ve HER tık/basmadan önce yeniden denetlenir (imlecin altındaki pencere ve imleç aynı
+  değilse Dur 3); çift/üçlü tık ve `tekrar>1` tek tek gönderilir, sürüklemede `buttondown` öncesi de denetlenir.
+- **Tehdit modeli:** kapı, kazara ya da sayfa metniyle kandırılmış (prompt injection) bir ajanın CAPTCHA etkileşimini
+  durdurmak için EN-İYİ-ÇABA bir ikinci hattır; asıl güvence ajanın kuralıdır (CAPTCHA çözülmez, `request_human` ile
+  devredilir). Kabuğu olan bir ajan `girdi.sock`'a doğrudan yazarak bu kapıları (ve diğer araç düzeyi kapıları) zaten
+  atlayabilir; bu, belgedeki mevcut genel sınırdır (§2, §8) ve bu kapıların kapsamı dışındadır.
+- **Sınırlar:** yeni CAPTCHA türleri algıdan kaçabilir; ağaç okunamazsa (erişilebilirlik kapalı/yanıtsız) algı yoktur — bu
+  durumda tarayıcı yolları konumu doğrulanamayan ögeye tıklamaz (fail-closed) ve yukarıdaki klavye kuralları devreye girer.
+  Klavye odak sorgusu tarayıcı sayfaları içindir.

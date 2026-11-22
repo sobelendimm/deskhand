@@ -1008,7 +1008,7 @@ def k_ogeye_tikla(a):
             rol=o["rol"], ad=o["ad"], x=f"{o['cx']:.0f}", y=f"{o['cy']:.0f}", kademe=kademe, sn=f"{sure:.2f}"))
         tikla_ic(g, a.kimlik, a.baslik, o["cx"], o["cy"], a.dugme, sec().geometri(a.kimlik), mod=mod)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
 
 
 # ---------------------------------------------------------------- faresiz yol: güvenlik + günlük
@@ -1272,7 +1272,7 @@ def _web_eylem(a, w):
     from . import gonderim
     gonderim.artir()  # eylem çağrısı yarıda kalsa da "belki gitti" (MCP sent)
     r = web.eylem_yap(k, o, a.eylem or None)
-    dogrulama_sinamasi.girdi_oldu()  # eylem sayfayı değiştirmiş olabilir: "sınama yok" önbelleği silinir
+    dogrulama_sinamasi.girdi_oldu(k)  # eylem sayfayı değiştirmiş olabilir: "sınama yok" önbelleği silinir
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']} (web)" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:
         raise Dur(6, _("eylem çalışmadı: '{eylem}' (öge reddetti)").format(eylem=r["eylem"]))
@@ -1319,7 +1319,7 @@ def _ogeye_eylem(a):
     from . import gonderim
     gonderim.artir()  # eylem çağrısı yarıda kalsa da "belki gitti" (MCP sent)
     r = _atspi_calistir(_oge_istegi(k, o, "eylem", eylem=eylem_adi))
-    dogrulama_sinamasi.girdi_oldu()  # eylem sayfayı değiştirmiş olabilir
+    dogrulama_sinamasi.girdi_oldu(k)  # eylem sayfayı değiştirmiş olabilir
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']}" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:
         raise Dur(6, _("eylem çalışmadı: '{eylem}' (öge reddetti)").format(eylem=r["eylem"]))

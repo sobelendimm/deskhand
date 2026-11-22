@@ -326,8 +326,12 @@ def ogeleri_isaretle(ogeler: list[dict], s: dict | None) -> None:
             ogeler[i]["sinama"] = True
 
 
-# ---------------------------------------------------------------- pencere başına durum (girdi kapısı): ÇALIŞMA DİZİNİNDE JSON
-# (CLI süreci ve MCP süreci aynı kutuları görür; 0600, flock ile atomik; pencere kimliği + başlık/adres anahtarı)
+# ---------------------------------------------------------------- pencere başına durum (girdi kapısı)
+# DOSYA (çalışma dizininde JSON; CLI süreci ve MCP süreci aynı kutuları görür; 0600, flock ile atomik) YALNIZ ENGEL EKLER:
+#   sinama (algılanmış sınama kutuları), bastir (uyarı bastırma), girdi (pencerenin son girdi zamanı: yalnız YENİDEN TARAMA
+#   zorlar). "Sınama yok" (yok) ve "okunamadı" kararları YALNIZ süreç belleğindedir: dosyaya yazılmaz, dosyadan OKUNMAZ;
+#   "engel yok" kararı için sürecin KENDİ taraması gerekir (dosyayı düzenlemek kapıyı açamaz; en kötü ihtimal fazladan
+#   ret ya da tarama).
 
 TTL = 300.0  # algının en uzun ömrü (sn); ayrıca başlık/adres değişince durum SİLİNİR
 YENI_TTL = 15.0  # sınama durumu bundan eskiyse girdiden önce YENİDEN taranır (sayfa değişmiş olabilir; kalıcı kapı kalmaz)
@@ -336,10 +340,16 @@ OKUNAMADI_TTL = 10.0  # "bu pencere okunamadı" (erişilebilirlik kapalı/yanıt
 TARAMA_SURESI = 2.0  # girdi kapısı taramasının TOPLAM süre sınırı (sn)
 BASTIR_TTL = 1800.0  # kullanıcı Bitti dedikten sonra aynı sınama imzası için uyarı bastırma süresi (sn)
 ODAK_TTL = 1.0  # odaktaki öge sorgusu önbelleği (sn); her girdiden sonra silinir
-BOLUM_TAVAN = {"sinama": TTL, "yok": YOK_TTL, "okunamadi": OKUNAMADI_TTL, "bastir": BASTIR_TTL}
+YERLESME = 0.25  # girdiden sonra sayfanın yerleşmesi (kaydırma animasyonu, yeniden boyama) için yeniden taramadan önce beklenir (sn)
+BOLUM_TAVAN = {"sinama": TTL, "bastir": BASTIR_TTL, "girdi": TTL}  # DOSYADAKİ bölümler
 EN_COK_KAYIT = 64  # bölüm başına (bozuk/kötü niyetli dosya şişmesin)
+JOKER = "*"  # girdi kaydı: pencere bilinmeyen girdi (masaüstü kipi) → tüm pencereler kirli
 _KILIT = threading.Lock()
+_BELLEK = threading.Lock()  # süreç belleği önbellekleri (_KILIT'ten ayrı: iç içe kilitlenme yok)
 _DEVIR: dict[str, float] = {}
+_YOK: dict[str, dict] = {}  # pencere → {"baslik", "zaman"}: SÜREÇ BELLEĞİ (dosyaya yazılmaz, dosyadan okunmaz)
+_OKUNAMADI: dict[str, dict] = {}  # aynı: yalnız süreç belleği
+_GIRDI: dict[str, float] = {}  # pencere → bu süreçte son girdi zamanı (dosyadaki `girdi` bölümünün bellek eşi)
 DOSYA_AD = "insan-dogrulama.json"
 
 
@@ -375,17 +385,19 @@ def _kayit_gecerli(bolum: str, k, v, simdi: float) -> bool:
         if not all(isinstance(v.get(a), str) for a in ("kind", "window", "hint", "baslik", "adres")):
             return False
         return v.get("imza") is None or isinstance(v.get("imza"), str)
-    if bolum in ("yok", "okunamadi"):
-        return isinstance(v.get("baslik", ""), str)
+    if bolum == "girdi":
+        return True
     return isinstance(v.get("imza"), str)  # bastir
 
 
 def _temizle_dosya(d: dict) -> dict:
-    """Okunan sözlüğü doğrula: önyükleme kimliği farklıysa (monotonic sıfırlandı) hepsi atılır; bozuk kayıtlar atılır."""
+    """Okunan sözlüğü doğrula: önyükleme kimliği farklıysa (monotonic sıfırlandı) hepsi atılır; bozuk kayıtlar ve BİLİNMEYEN
+    bölümler (eski sürümün `yok` / `okunamadi` bölümleri dahil: kapıyı AÇAN kararlar dosyadan okunmaz) atılır."""
     boot = _boot_id()
     if not isinstance(d, dict) or d.get("boot") != boot:
         d = {"boot": boot}
     simdi = time.monotonic()
+    d = {"boot": d.get("boot"), **{ad: d[ad] for ad in BOLUM_TAVAN if ad in d}}
     for ad in BOLUM_TAVAN:
         b = d.get(ad)
         if not isinstance(b, dict):
@@ -431,7 +443,8 @@ def _zaman(simdi: float | None) -> float:
 
 def kaydet(k: str, s: dict | None, ogeler: list[dict] | None = None, simdi: float | None = None,
            baslik: str | None = None, adres: str | None = None) -> None:
-    """Pencere k için sınama durumunu yaz (s None = sınama yok → durum silinir). Kutular PENCERE pikseli."""
+    """Pencere k için sınama durumunu yaz (s None = sınama yok → durum silinir). Kutular PENCERE pikseli. simdi: sayfanın
+    OKUNDUĞU an (taramanın BAŞLANGICI; sonradan gelen girdi kaydı daha yeni sayılır → kayıt kirli)."""
     with _depo() as d:
         if not s:
             d["sinama"].pop(k, None)
@@ -441,58 +454,96 @@ def kaydet(k: str, s: dict | None, ogeler: list[dict] | None = None, simdi: floa
                    and ogeler[i]["kutu"][3] > 0] + [list(x) for x in s.get("ek_kutular", ())]
         d["sinama"][k] = {**{a: s.get(a) for a in ("kind", "window", "hint", "confidence", "page_wide", "imza", "site")},
                           "kutular": kutular, "zaman": _zaman(simdi), "baslik": baslik or "", "adres": adres or ""}
-        d["yok"].pop(k, None)
-        d["okunamadi"].pop(k, None)
+    with _BELLEK:
+        _YOK.pop(k, None)
+        _OKUNAMADI.pop(k, None)
 
 
 def yok_kaydet(k: str, baslik: str | None, simdi: float | None = None) -> None:
-    """Taramada sınama çıkmadı: bu pencere+başlık için YOK_TTL sn tekrar taranmasın (yalnız tarama maliyeti; kapıyı kalıcı
-    açmaz: TTL üst sınırı okurken doğrulanır)."""
+    """Bu SÜREÇ taradı ve sınama çıkmadı: bu pencere+başlık için YOK_TTL sn tekrar taranmasın (yalnız tarama maliyeti; yalnız
+    süreç belleği: dosyaya yazılmaz, dosyadan okunmaz). Dosyadaki sınama kaydı silinir (kendi taramamız daha yeni)."""
     with _depo() as d:
         d["sinama"].pop(k, None)
-        d["okunamadi"].pop(k, None)
-        d["yok"][k] = {"baslik": baslik or "", "zaman": _zaman(simdi)}
+    with _BELLEK:
+        _OKUNAMADI.pop(k, None)
+        _YOK[k] = {"baslik": baslik or "", "zaman": _zaman(simdi)}
+
+
+def _bellek_son_girdi(k: str) -> float:
+    with _BELLEK:
+        return max(_GIRDI.get(k, 0.0), _GIRDI.get(JOKER, 0.0))
+
+
+def son_girdi(k: str) -> float:
+    """Pencerenin son girdi zamanı (bu süreç + dosyadaki `girdi` bölümü; pencereye özgü ya da JOKER). 0 = bilinmiyor."""
+    m = _bellek_son_girdi(k)
+    with _depo() as d:
+        g = d["girdi"]
+        return max(m, g.get(k, {}).get("zaman", 0.0), g.get(JOKER, {}).get("zaman", 0.0))
 
 
 def yok_mu(k: str, baslik: str | None, simdi: float | None = None) -> bool:
-    with _depo() as d:
-        y = d["yok"].get(k)
-        if not y:
-            return False
-        yas = _zaman(simdi) - y["zaman"]
-        if yas < 0 or yas > YOK_TTL or (baslik or "") != y.get("baslik", ""):
-            d["yok"].pop(k, None)
-            return False
-        return True
+    """Bu süreç bu pencereyi yakın zamanda taradı ve sınama yoktu mu (YOK_TTL, başlık aynı, TARAMADAN SONRA girdi yok)?"""
+    with _BELLEK:
+        y = _YOK.get(k)
+    if not y:
+        return False
+    yas = _zaman(simdi) - y["zaman"]
+    if yas < 0 or yas > YOK_TTL or (baslik or "") != y.get("baslik", "") or son_girdi(k) > y["zaman"]:
+        with _BELLEK:
+            _YOK.pop(k, None)
+        return False
+    return True
 
 
 def okunamadi_kaydet(k: str, baslik: str | None, simdi: float | None = None) -> None:
-    """Pencere taranamadı (erişilebilirlik kapalı/yanıtsız, web belgesi yok): OKUNAMADI_TTL sn tekrar denenmesin. Mevcut
-    sınama durumu KORUNUR."""
-    with _depo() as d:
-        d["okunamadi"][k] = {"baslik": baslik or "", "zaman": _zaman(simdi)}
+    """Pencere taranamadı (erişilebilirlik kapalı/yanıtsız, web belgesi yok): OKUNAMADI_TTL sn tekrar denenmesin (yalnız süreç
+    belleği). Mevcut sınama durumu KORUNUR."""
+    with _BELLEK:
+        _OKUNAMADI[k] = {"baslik": baslik or "", "zaman": _zaman(simdi)}
 
 
 def okunamadi_mu(k: str, baslik: str | None, simdi: float | None = None) -> bool:
-    with _depo() as d:
-        y = d["okunamadi"].get(k)
+    with _BELLEK:
+        y = _OKUNAMADI.get(k)
         if not y:
             return False
         yas = _zaman(simdi) - y["zaman"]
         if yas < 0 or yas > OKUNAMADI_TTL or (baslik or "") != y.get("baslik", ""):
-            d["okunamadi"].pop(k, None)
+            _OKUNAMADI.pop(k, None)
             return False
         return True
 
 
-def girdi_oldu() -> None:
-    """Bir pencereye girdi GÖNDERİLDİ (tık/tuş/yazı/eylem): sayfa değişmiş olabilir → "sınama yok" önbelleği ve odak önbelleği
-    silinir (tık sınamayı açmış olabilir: sonraki girdi yeniden bakar)."""
+def _girdi_dosyaya_yazilsin(anahtar: str) -> bool:
+    """Girdi kaydı diğer süreçlere de (dosya) gitsin mi: yalnız tarayıcı penceresinde (tarayıcı dışı uygulamalarda her
+    tıkta dosya yazılmaz: tık gecikmesi artmaz). JOKER (masaüstü kipi): bu süreç bir tarayıcı penceresiyle ilgilendiyse."""
+    try:
+        if anahtar == JOKER:
+            return any(v[1] for v in list(_TARAYICI.values()))
+        return tarayici_mi(anahtar)
+    except Exception:  # noqa: BLE001 - belirsizse yaz (yalnız yeniden tarama zorlar)
+        return True
+
+
+def girdi_oldu(k: str | None = None) -> None:
+    """Bir pencereye girdi GÖNDERİLDİ (tık/tuş/yazı/kaydırma/pencere yönetimi/eylem): sayfa değişmiş olabilir → o pencerenin
+    sınama kaydı KİRLİ olur (son girdi zamanı; kutular artık eski yerinde olmayabilir: sonraki girdi yeniden tarar, tarayıcı
+    kayıttan eskiyse hazir_oku yeniden bakar), "sınama yok" / "okunamadı" önbellekleri ve odak önbelleği silinir. k yok ya da
+    masaüstü kipi (EKRAN) → pencere bilinmiyor: TÜM pencereler kirli sayılır (JOKER)."""
+    from .arka_uc import EKRAN
+    simdi = time.monotonic()
+    anahtar = k if k and k != EKRAN else JOKER
     _ODAK.clear()
-    if not os.path.exists(_yol()):
-        return
-    with _depo() as d:
-        d["yok"].clear()
+    with _BELLEK:
+        if len(_GIRDI) > 256:
+            _GIRDI.clear()
+        _GIRDI[anahtar] = simdi
+        _YOK.clear()
+        _OKUNAMADI.clear()
+    if _girdi_dosyaya_yazilsin(anahtar):
+        with _depo() as d:
+            d["girdi"][anahtar] = {"zaman": simdi}
 
 
 def temizle(k: str | None = None) -> None:
@@ -502,6 +553,12 @@ def temizle(k: str | None = None) -> None:
                 d[ad].clear()
             else:
                 d[ad].pop(k, None)
+    with _BELLEK:
+        for b in (_YOK, _OKUNAMADI, _GIRDI):
+            if k is None:
+                b.clear()
+            else:
+                b.pop(k, None)
 
 
 def durum(k: str, simdi: float | None = None, baslik: str | None = None, adres: str | None = None) -> dict | None:
@@ -589,13 +646,15 @@ def tara(k: str, baslik: str | None = None, kapi: bool = False) -> tuple[dict | 
     """Tarayıcı penceresinin sayfasını (erişilebilirlik ağacı; ekran görüntüsü/öne getirme YOK) oku, sınama durumunu yaz.
     → (sonuç | None, okundu). Pencere tarayıcı değilse ya da sayfa okunamazsa okundu=False (mevcut durum KORUNUR: iki
     geçici zaman aşımı yanlış 'kayboldu' üretmesin); okunamayan pencere OKUNAMADI_TTL sn tekrar denenmez. Yasak (10) ve DUR
-    (13) yükselir. kapi=True (girdi kapısı): erişilebilirlik KAPALIYSA açılmaz (fail-open + günlük: kapı için kullanıcının
-    oturumunda erişilebilirlik açılmaz) ve toplam süre TARAMA_SURESI ile sınırlı."""
+    (13) yükselir. kapi=True (girdi kapısı): erişilebilirlik KAPALIYSA tarayıcı penceresi için süreç başına BİR kez açılır
+    (erisim_ac_garanti; kde'de oturum geneli yan etki: docs/ARCHITECTURE.md §13); yine kapalıysa sayfa OKUNAMADI sayılır
+    (klavye_engeli: Tab sonrası girdi / tek başına Boşluk-Enter reddedilir) ve toplam süre TARAMA_SURESI ile sınırlı."""
     import contextlib
     from . import gozlem, web
     from .hata import Dur
     if not k or not tarayici_mi(k):
         return None, False
+    t0 = time.monotonic()  # sayfanın OKUNDUĞU an: bundan sonra gelen girdi bu kaydı kirletir
     try:
         if kapi:
             from . import api
@@ -603,7 +662,9 @@ def tara(k: str, baslik: str | None = None, kapi: bool = False) -> tuple[dict | 
             if api.yasak_mi(k):
                 raise Dur(10, _("YASAK pencere: ağacı okunmaz"))
             if not erisim_acik():
-                _gunluk("insan-dogrulama | erisim kapali: kapi taramasi yapilmadi (fail-open)")
+                _erisim_bir_kez_ac()
+            if not erisim_acik():
+                _gunluk("insan-dogrulama | erisim kapali: kapi taramasi yapilamadi (sayfa okunamadi sayilir)")
                 okunamadi_kaydet(k, baslik)
                 return None, False
         else:
@@ -628,16 +689,43 @@ def tara(k: str, baslik: str | None = None, kapi: bool = False) -> tuple[dict | 
     sonuc = incele(ogeler, baslik, s["sayfa"])
     ogeleri_isaretle(ogeler, sonuc)
     if sonuc:
-        kaydet(k, sonuc, ogeler, baslik=baslik, adres=s["sayfa"].get("adres") or "")
+        kaydet(k, sonuc, ogeler, baslik=baslik, adres=s["sayfa"].get("adres") or "", simdi=t0)
     else:
-        yok_kaydet(k, baslik)
+        yok_kaydet(k, baslik, simdi=t0)
     return sonuc, True
+
+
+_ERISIM_DENENDI = threading.Event()  # erişilebilirlik kapı için bu süreçte bir kez açılmayı denedi
+
+
+def _erisim_bir_kez_ac() -> None:
+    """Kapı taramasında erişilebilirlik KAPALI: tarayıcıda sınama kutuları ancak ağaçtan okunur; bu yüzden süreç başına BİR kez
+    açılır (erisim_ac_garanti). kde'de bu kullanıcının oturumunda erişilebilirliği açar (oturum geneli yan etki; `deskhand
+    a11y off` geri alır, docs/ARCHITECTURE.md §13); sanal masaüstünde yalnız özel veri yolu."""
+    if _ERISIM_DENENDI.is_set():
+        return
+    _ERISIM_DENENDI.set()
+    try:
+        from .erisim import erisim_ac_garanti
+        erisim_ac_garanti()
+        _gunluk("insan-dogrulama | kapi icin erisilebilirlik acildi")
+    except Exception as e:  # noqa: BLE001 - açılamazsa sayfa okunamadı sayılır (klavye/fare kuralları sıkılaşır)
+        _gunluk(f"insan-dogrulama | erisilebilirlik acilamadi: {type(e).__name__}")
+
+
+def _yerles(girdi: float) -> None:
+    """Son girdiden sonra sayfa yerleşsin (kaydırma animasyonu, yeniden boyama): yeniden taramadan önce kalan süre beklenir."""
+    kalan = YERLESME - (time.monotonic() - girdi)
+    if kalan > 0:
+        time.sleep(min(kalan, YERLESME))
 
 
 def hazir_oku(k: str, baslik: str | None = None) -> tuple[dict | None, bool]:
     """Girdiden ÖNCE: pencerenin sınama durumu + sayfanın şu an (ya da çok yakın zamanda) OKUNABİLDİĞİ. Durum yoksa ve pencere
-    tarayıcıysa BİR kez tarar; "sınama yok" sonucu YOK_TTL (3 sn), "okunamadı" OKUNAMADI_TTL sn önbellekte; mevcut durum
-    YENI_TTL'den eskiyse yeniden taranır (okunamazsa eski durum korunur: kapı AÇILMAZ). → (durum | None, okundu)."""
+    tarayıcıysa BİR kez tarar; "sınama yok" sonucu YOK_TTL (3 sn), "okunamadı" OKUNAMADI_TTL sn önbellekte (yalnız süreç
+    belleği). Sınama kaydı YENI_TTL'den eskiyse YA DA kayıttan SONRA o pencereye girdi gittiyse (tık, tuş, kaydırma, pencere
+    boyutu: kutular artık yerinde olmayabilir) yeniden taranır. Kirli kayıt yeniden OKUNAMAZSA eski kutulara güvenilmez: dönen
+    durumda kirli=True (o pencerede TÜM fare girdisi reddedilir). → (durum | None, okundu)."""
     if not k:
         return None, False
     from .arka_uc import EKRAN
@@ -645,15 +733,24 @@ def hazir_oku(k: str, baslik: str | None = None) -> tuple[dict | None, bool]:
         return None, False
     baslik = baslik if baslik is not None else baslik_simdi(k)
     d = durum(k, baslik=baslik)
+    kirli = False
+    girdi = 0.0
     if d is not None:
-        if _zaman(None) - d["zaman"] <= YENI_TTL:
+        girdi = son_girdi(k)
+        kirli = d["zaman"] < girdi
+        if not kirli and _zaman(None) - d["zaman"] <= YENI_TTL:
             return d, True
     elif yok_mu(k, baslik):
         return None, True
     elif okunamadi_mu(k, baslik):
         return None, False
+    if kirli:
+        _yerles(girdi)
     _sonuc, okundu = tara(k, baslik, kapi=True)
-    return durum(k, baslik=baslik), okundu
+    d = durum(k, baslik=baslik)
+    if kirli and not okundu and d is not None and d["zaman"] < girdi:
+        d = {**d, "kirli": True}
+    return d, okundu
 
 
 def hazir(k: str, baslik: str | None = None) -> dict | None:
@@ -670,15 +767,17 @@ def _kutuda(kutu, nokta) -> bool:
 
 def girdi_engeli(k: str, *, oge: dict | None = None, ad: str | None = None, nokta=None, noktalar=(),
                  klavye: bool = False, baslik: str | None = None, odak_kutusu=None,
-                 simdi: float | None = None, rol: str | None = None, metin_kati: bool = False) -> dict | None:
+                 simdi: float | None = None, rol: str | None = None, metin_kati: bool = False,
+                 kayit: dict | None = None) -> dict | None:
     """Girdi sınama ögesine mi gidiyor? Evetse sınama sonucu (acik_sonuc biçimi), değilse None.
       oge: observe ögesi (sinama bayrağı); ad: metin/öge adı hedefi (sınama algılanmış pencerede kısa insan-doğrulama cümlesi
       ya da satıcı adı; sınama YOKKEN yalnız KUTU ROLÜNDEKİ ögenin adı [rol] ya da sayfa okunamadığı için doğrulanamayan
       hedefin kısa yazısı [metin_kati]: "I'm Not a Robot (2017)" dizi adı, "Ben Robot Değilim" film adı serbest);
       nokta/noktalar: pencere pikseli (algılanan sınama kutularından biri); odak_kutusu: odaktaki ögenin kutusu (klavye
       girdisi: odak sınama kutusundaysa ret: Tab+Boşluk ile işaretleme); klavye: hedefsiz klavye girdisi — yalnız sayfanın
-      TAMAMI sınamaysa (ara sayfa) engellenir; baslik: pencerenin güncel başlığı (değiştiyse eski algı atılır)."""
-    d = durum(k, simdi, baslik=baslik)
+      TAMAMI sınamaysa (ara sayfa) engellenir; baslik: pencerenin güncel başlığı (değiştiyse eski algı atılır);
+      kayit: hazir_oku'nun verdiği durum (kirli=True: girdiden sonra yeniden OKUNAMADI → o pencerede TÜM fare girdisi ret)."""
+    d = kayit if kayit is not None else durum(k, simdi, baslik=baslik)
     if oge is not None and oge.get("sinama"):
         return acik_sonuc({"kind": (d or {}).get("kind", "captcha"), "window": (d or {}).get("window", baslik or ""),
                            "hint": IPUCU.format(kind=(d or {}).get("kind", "captcha")),
@@ -693,6 +792,8 @@ def girdi_engeli(k: str, *, oge: dict | None = None, ad: str | None = None, nokt
     sonuc = acik_sonuc({"kind": kind, "window": d.get("window") or baslik or "", "hint": IPUCU.format(kind=kind),
                         "confidence": d.get("confidence") or "high"})
     if ad and ad_kalibi_mi(ad, satici=True):
+        return sonuc
+    if d.get("kirli") and not klavye:  # girdiden sonra yeniden okunamadı: kutuların yeri bilinmiyor → tüm fare girdisi ret
         return sonuc
     pts = [p for p in ([nokta] if nokta is not None else []) + list(noktalar) if p is not None]
     for kutu in d["kutular"]:
@@ -735,9 +836,10 @@ def nokta_engeli(k: str, x, y, metinler=()) -> dict | None:
         _d, okundu = hazir_oku(k, baslik)
     else:  # tarayıcı değil: ağaç taranmaz (tık gecikmesi yok); observe'un yazdığı durum varsa o kullanılır
         okundu = False
+        _d = None
         baslik = baslik_simdi(k) if durum(k) is not None else None
     for m in _kisa_metinler(metinler) or (None,):
-        r = girdi_engeli(k, ad=m, nokta=nokta, baslik=baslik, metin_kati=not okundu)
+        r = girdi_engeli(k, ad=m, nokta=nokta, baslik=baslik, metin_kati=not okundu, kayit=_d)
         if r is not None:
             return r
     return None
@@ -830,26 +932,85 @@ def klavye_engeli(k: str, odak_sorgu=None, dizi=None) -> dict | None:
     kaydırıcı, sınama çerçevesi içi, resimli güvenlik kodu giriş alanı) → sonuç. odak_sorgu: çağıranın verdiği, odaktaki
     ögenin {"kutu": [x,y,w,h]} bilgisini döndüren işlev (AT-SPI; yalnız sınama durumu VARKEN çağrılır: durum yoksa ek maliyet
     yok). dizi: gönderilecek tuş/metin parçaları (tuş akorları; yazı için metin_dizisi): sayfada sınama durumu varken Tab/
-    Shift+Tab'dan sonra başka tuş ya da yazı da içeriyorsa ret (Tab odağı sınama kutusuna taşıyıp devamı ona gönderirdi)."""
+    Shift+Tab'dan sonra başka tuş ya da yazı da içeriyorsa ret (Tab odağı sınama kutusuna taşıyıp devamı ona gönderirdi).
+    FAIL-OPEN YOK: (1) sayfa OKUNAMAYAN tarayıcı penceresinde (erişilebilirlik kapalı/yanıtsız, kirli kayıt yeniden okunamadı)
+    Tab'dan sonra gelen girdi ve tek başına Boşluk/Enter reddedilir; (2) sınama durumu VARKEN odak bilinemiyorsa (sorgu hata
+    verdi / odakta kutulu öge yok) Boşluk/Enter/yazı içeren dizi reddedilir."""
     from .arka_uc import EKRAN
     if not k or k == EKRAN:
         return None
     baslik = baslik_simdi(k)
-    d = hazir(k, baslik)
+    d, okundu = hazir_oku(k, baslik)
     if d is None:
+        if not okundu and tarayici_mi(k):
+            return okunamayan_klavye_engeli(dizi, baslik)
         return None
     if d.get("page_wide"):
-        return girdi_engeli(k, klavye=True, baslik=baslik)
+        return girdi_engeli(k, klavye=True, baslik=baslik, kayit=d)
+    if d.get("kirli"):  # girdiden sonra yeniden okunamadı: odak/kutular bilinmiyor
+        return okunamayan_klavye_engeli(dizi, baslik, d)
     if dizi and tab_sonrasi_girdi(dizi):
-        kind = d.get("kind") or "captcha"
-        return acik_sonuc({"kind": kind, "window": d.get("window") or baslik or "", "hint": IPUCU.format(kind=kind),
-                           "confidence": d.get("confidence") or "high"})
+        return _sonuc_d(d, baslik)
     kutu = None
+    bilinmiyor = True
     try:
         kutu = ((odak_sorgu or (lambda: odakli_oge(k)))() or {}).get("kutu")
-    except Exception:  # noqa: BLE001 - odak okunamadıysa yalnız sayfa geneli kuralı
+        bilinmiyor = not (kutu and len(kutu) == 4)
+    except Exception:  # noqa: BLE001 - odak okunamadı: bilinmiyor (aşağıda Boşluk/Enter/yazı reddedilir)
         kutu = None
-    return girdi_engeli(k, klavye=True, baslik=baslik, odak_kutusu=kutu if kutu and len(kutu) == 4 else None)
+    if bilinmiyor and dizi and dizi_etkilesimli(dizi):
+        return _sonuc_d(d, baslik)
+    return girdi_engeli(k, klavye=True, baslik=baslik, odak_kutusu=kutu if kutu and len(kutu) == 4 else None, kayit=d)
+
+
+def _sonuc_d(d: dict, baslik: str | None) -> dict:
+    kind = d.get("kind") or "captcha"
+    return acik_sonuc({"kind": kind, "window": d.get("window") or baslik or "", "hint": IPUCU.format(kind=kind),
+                       "confidence": d.get("confidence") or "high"})
+
+
+def dizi_bosluk_enter(dizi) -> bool:
+    """Dizide Boşluk/Enter eşdeğeri bir tuş (ham k:57, x:Return… dahil) ya da boşluk/satır sonu içeren yazı var mı?"""
+    from . import guvenlik
+    for t in dizi or ():
+        t = str(t)
+        if t.startswith("metin:"):
+            if any(c.isspace() for c in t[6:]):
+                return True
+        elif guvenlik.onay_tusu_mu(t):
+            return True
+    return False
+
+
+def dizi_etkilesimli(dizi) -> bool:
+    """Dizide Boşluk/Enter ya da herhangi bir yazı (`metin:`) var mı? (Odaktaki sınama kutusunu işaretleyebilecek girdi.)"""
+    return dizi_bosluk_enter(dizi) or any(str(t).startswith("metin:") and len(str(t)) > 6 for t in dizi or ())
+
+
+def tek_basina_bosluk_enter(dizi) -> bool:
+    """Dizi TEK bir girdi mi ve o Boşluk/Enter (ya da yalnız boşluk/satır sonu yazısı) mi? (Odaktaki onay kutusunu işaretler.)"""
+    parcalar = [t for t in (dizi or ()) if t]
+    if len(parcalar) != 1:
+        return False
+    t = str(parcalar[0])
+    if t.startswith("metin:"):
+        return t[6:] != "" and t[6:].strip() == ""
+    return dizi_bosluk_enter(parcalar)
+
+
+IPUCU_OKUNAMADI = ("This page could not be read, so a human-verification challenge (CAPTCHA) cannot be ruled out. Space, Enter "
+                   "and anything after Tab are refused here. Click a specific element or read the page first; if a CAPTCHA "
+                   "is on it, call request_human(reason, window).")
+
+
+def okunamayan_klavye_engeli(dizi, baslik: str | None = None, d: dict | None = None, bosluk: bool = True) -> dict | None:
+    """Sayfası OKUNAMAYAN tarayıcı penceresinde klavye kuralı: Tab'dan sonra gelen girdi ve (bosluk=True) tek başına Boşluk/
+    Enter reddedilir (odak sınama kutusunda olabilir; doğrulanamıyor). d: bilinen (kirli) sınama kaydı."""
+    if not dizi or not (tab_sonrasi_girdi(dizi) or (bosluk and tek_basina_bosluk_enter(dizi))):
+        return None
+    if d is not None:
+        return _sonuc_d(d, baslik)
+    return acik_sonuc({"kind": "captcha", "window": baslik or "", "hint": IPUCU_OKUNAMADI, "confidence": "low"})
 
 
 # ---------------------------------------------------------------- request_human için kapı (bekleyen devir)

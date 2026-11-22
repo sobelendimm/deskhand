@@ -905,12 +905,15 @@ def _sinama_kapisi(k: str | None, *, oge: dict | None = None, ad: str | None = N
     if not k or k == EKRAN:
         return
     baslik = _baslik_simdi(k)
-    d, okundu = dogrulama_sinamasi.hazir_oku(k, baslik)
-    if klavye:
+    if klavye:  # klavye_engeli kendi hazir_oku'sunu yapar (kirli kayıt iki kez taranmasın)
         r = dogrulama_sinamasi.klavye_engeli(k, dizi=dizi)
     else:
+        d, okundu = dogrulama_sinamasi.hazir_oku(k, baslik)
         r = dogrulama_sinamasi.girdi_engeli(k, oge=oge, ad=ad, noktalar=[p for p in noktalar if p is not None],
-                                            baslik=baslik, rol=rol, metin_kati=not okundu)
+                                            baslik=baslik, rol=rol, metin_kati=not okundu, kayit=d)
+        if r is None and d is None and not okundu and dizi and dogrulama_sinamasi.tarayici_mi(k):
+            # sayfa OKUNAMADI (a11y kapalı/yanıtsız): hedefli yazıda yalnız Tab'dan sonra gelen girdi reddedilir
+            r = dogrulama_sinamasi.okunamayan_klavye_engeli(dizi, baslik, bosluk=False)
         if r is None and dizi and d is not None and dogrulama_sinamasi.tab_sonrasi_girdi(dizi):
             r = dogrulama_sinamasi.acik_sonuc({"kind": d.get("kind") or "captcha", "window": d.get("window") or baslik or "",
                                                "hint": dogrulama_sinamasi.IPUCU.format(kind=d.get("kind") or "captcha"),

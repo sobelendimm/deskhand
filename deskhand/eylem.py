@@ -108,12 +108,14 @@ def girdi_al(etiket="", gizli=False):
     return _au().girdi(etiket, gizli, denetle=denetle)
 
 
-def girdi_birak(g):
+def girdi_birak(g, k=None):
+    """k: girdinin gittiği pencere (bilinmiyorsa/masaüstü kipinde tüm pencereler kirli sayılır)."""
     try:
         if g is not _paylasilan():
             g.kapat()
     finally:
-        dogrulama_sinamasi.girdi_oldu()  # girdi gitti: sayfa değişmiş olabilir ("sınama yok" önbelleği + odak önbelleği silinir)
+        # girdi gitti: sayfa değişmiş olabilir (o pencerenin sınama kaydı kirlenir; "sınama yok" + odak önbellekleri silinir)
+        dogrulama_sinamasi.girdi_oldu(k)
 
 
 def basili_bekle(g, k, desen, sure, beklenen_fare=None):
@@ -181,6 +183,16 @@ def mod_coz(mod):
     return sonuc
 
 
+def ekran_pencere_ayni(w, px, py):
+    """MASAÜSTÜ kipi (EKRAN): insan-doğrulama kapısının sınadığı pencere `w` HÂLÂ imlecin altında mı ve imleç hedef noktada
+    (px, py) mı? Kapıdan sonra (ve her tık/basmadan önce) çağrılır: arada pencere değiştiyse (üstteki pencere kapandı/açıldı) ya da
+    imleç oynadıysa Dur(3): hiçbir şey gönderilmez."""
+    fx, fy, w2 = _au().fare()
+    if (w2 or "") != (w or "") or (fx is not None and (abs(fx - px) > 2 or abs(fy - py) > 2)):
+        raise Dur(3, _("imlecin altındaki pencere ya da imleç değişti (insan doğrulaması kapısı başka pencereyi sınadı); "
+                       "tıklanmadı"))
+
+
 def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod=()):
     """mod: mod_coz çıktısı (dotool tuş adları). Değiştirici: keydown → tıklama → keyup; bırakma HER durumda
     (hata, kesinti, DUR) `zorla` ile yapılır (basili_bekle/k_bas ile aynı güvence)."""
@@ -195,9 +207,11 @@ def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod
         raise Dur(8, _("pencere taşındı ya da boyutu değişti; tıklanmadı"))
     g.gonder(k, desen, f"mouseto {fx:.6f} {fy:.6f}")
     time.sleep(0.04)  # imleç üzerine gelme (hover) olayı işlensin
+    w = None
     if k == EKRAN:  # masaüstü kipi: noktadaki pencere bir sistem istemiyse (polkit, KWallet…) önce insan onayı
         w = _au().fare()[2]
         insan_dogrulama_ekran(px, py, w, getattr(g, "ekran_metinler", ()))  # CAPTCHA: imlecin altındaki pencere + nokta
+        ekran_pencere_ayni(w, px, py)  # kapıdan hemen sonra: sınanan pencere hâlâ imlecin altında (pencere değişimi → 3)
         if w and guvenlik.sistem_istemi_mi(w):
             guvenlik.sistem_istemi_engel(w, getattr(g, "onayli", False), _("tıklama"))
     imlec_alti_denetle(k, px, py)
@@ -215,6 +229,8 @@ def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod
         if mod:
             time.sleep(0.03)  # uygulama değiştiriciyi görsün
         if basili > 0:  # fare düğmesini BASILI tut (ör. oyunda kazma): ne olursa olsun bırak
+            if k == EKRAN:
+                ekran_pencere_ayni(w, px, py)
             g.gonder(k, desen, f"buttondown {tus}")
             try:
                 basili_bekle(g, k, desen, basili, (px, py))
@@ -227,7 +243,12 @@ def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod
             if i:
                 time.sleep(0.06)
                 imlec_alti_denetle(k, px, py)  # tekrarlar arasında da insan/pencere denetimi
-            g.gonder(k, desen, *([f"click {tus}"] * TIKLA_SAYI.get(dugme, 1)))
+            if k == EKRAN:  # masaüstü kipi: çift/üçlü tık TEK TEK gönderilir; her tıktan önce pencere + imleç yeniden denetlenir
+                for _j in range(TIKLA_SAYI.get(dugme, 1)):  # (ilk tık üstteki pencereyi kapatırsa ikincisi alttakine inmesin)
+                    ekran_pencere_ayni(w, px, py)
+                    g.gonder(k, desen, f"click {tus}")
+            else:
+                g.gonder(k, desen, *([f"click {tus}"] * TIKLA_SAYI.get(dugme, 1)))
     finally:
         for m in reversed(bastik):
             g.zorla(f"keyup {m}")
@@ -693,7 +714,7 @@ def k_tikla(a):
         hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), x, y, yakin)
         tikla_ic(g, a.kimlik, a.baslik, x, y, a.dugme, geo, a.basili, a.tekrar, mod)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
 
 
 TUS_TAKMA = {"return": "enter", "escape": "esc", "page_up": "pageup", "prior": "pageup", "page_down": "pagedown",
@@ -718,7 +739,17 @@ def tus_coz(kombinasyon, ayri_tuslar=False):
     for akor in kombinasyon.split():
         parcalar = []
         for t in akor.split("+"):
-            if t.startswith(("x:", "k:")) or (len(t) == 1 and t.isupper()):
+            if t.startswith("k:"):  # ham evdev tuş kodu: klavye tuşları < 0x100; 0x100+ BTN_* (fare düğmeleri) → tuş değil
+                try:
+                    kod = int(t[2:])
+                except ValueError:
+                    kod = -1
+                if not 0 < kod < 0x100:
+                    raise Dur(1, _("ham tuş kodu geçersiz: {tus} (klavye tuşları 1-255; 256 ve üstü fare düğmeleridir)").format(
+                        tus=repr(t)))
+                parcalar.append(t)
+                continue
+            if t.startswith("x:") or (len(t) == 1 and t.isupper()):
                 parcalar.append(t)
                 continue
             t2 = TUS_TAKMA.get(t.lower(), t.lower())
@@ -814,7 +845,7 @@ def k_tus(a):
             ucbirim.tus_sonrasi(_au(), a.kimlik, kombinasyon)  # uçbirim açma tuşu / klavye menüsü işareti
         ucbirim.tampon_isle(_au(), a.kimlik, tus=kombinasyon)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
     print(_("tuş: {kombinasyon}").format(kombinasyon=kombinasyon))
 
 
@@ -871,7 +902,7 @@ def k_yaz(a):
         _au().one_getir(a.kimlik)
         yaz_ic(g, a.kimlik, a.baslik, metin, onayli)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
 
 
 def k_kaydir(a):
@@ -880,7 +911,7 @@ def k_kaydir(a):
     try:
         kaydir_ic(g, a.kimlik, a.baslik, a.yon, a.adim, nokta)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
     print(_("kaydırıldı: {yon} {adim}").format(yon=a.yon, adim=a.adim))
 
 
@@ -911,7 +942,7 @@ def k_bas(a):
         finally:
             g.zorla(f"keyup {kombinasyon}")
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
     print(_("basılı tutuldu: {kombinasyon} {sn} sn").format(kombinasyon=kombinasyon, sn=a.sure))
 
 
@@ -929,7 +960,7 @@ def k_fare(a):
         imlec_alti_denetle(a.kimlik, px, py)
         g.son_fare = (px, py)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
     print(_("fare: pencere ({x},{y}) = ekran ({ex},{ey})").format(x=round(a.x), y=round(a.y), ex=px, ey=py))
 
 
@@ -956,7 +987,9 @@ def k_surukle(a):
         time.sleep(0.04)
         imlec_alti_denetle(a.kimlik, p1x, p1y)
         if a.kimlik == EKRAN:  # masaüstü kipi: başlangıç noktasındaki pencere (tarayıcıdaki sınama kutusu) basmadan ÖNCE
-            insan_dogrulama_ekran(p1x, p1y, None, yakin1)
+            w1 = _au().fare()[2]
+            insan_dogrulama_ekran(p1x, p1y, w1, yakin1)
+            ekran_pencere_ayni(w1, p1x, p1y)  # kapıdan sonra, buttondown'dan ÖNCE: pencere + imleç yeniden denetlenir
         g.gonder(a.kimlik, a.baslik, f"buttondown {tus}")
         birakildi = False
         try:
@@ -1002,7 +1035,7 @@ def k_surukle(a):
         g.son_fare = (p2x, p2y)
         ucbirim.tampon_isle(_au(), a.kimlik, kirli=True)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
     print(_("sürüklendi ({dugme}): ({x1},{y1}) → ({x2},{y2}) {sn} sn").format(
         dugme=a.dugme, x1=round(a.x1), y1=round(a.y1), x2=round(a.x2), y2=round(a.y2), sn=a.sure))
 
@@ -1159,16 +1192,19 @@ def pencere_yonet(k, islem, x=None, y=None, g=None, h=None, desen=None):
     guvenlik.insan_onceligi(_("pencere işlemi"))  # kullanıcı klavye/fare kullanıyorsa bekle, sonra 12
     dur_denetle()
     guvenlik.hedef_pencere_denetle(k)  # onay beklenmiş olabilir: yeniden
-    if islem == "tasi":
-        au.tasi(k, hedef[0], hedef[1])
-        geo = _geo_bekle(k, lambda c: abs(c[0] - hedef[0]) <= 1 and abs(c[1] - hedef[1]) <= 1)
-    elif islem == "boyut":
-        au.boyutlandir(k, hedef[2], hedef[3])
-        geo = _geo_bekle(k, lambda c: abs(c[2] - hedef[2]) <= 1 and abs(c[3] - hedef[3]) <= 1)
-    else:
-        {"kucult": au.kucult, "buyut": au.buyut, "geri": au.geri_yukle}[islem](k)
-        # küçültmede geometri değişmez; büyütme/geri yüklemede yeni geometri otursun
-        geo = _geo_bekle(k, lambda c: islem == "kucult" or tuple(c) != onceki, 0.2 if islem == "kucult" else 0.6)
+    try:
+        if islem == "tasi":
+            au.tasi(k, hedef[0], hedef[1])
+            geo = _geo_bekle(k, lambda c: abs(c[0] - hedef[0]) <= 1 and abs(c[1] - hedef[1]) <= 1)
+        elif islem == "boyut":
+            au.boyutlandir(k, hedef[2], hedef[3])
+            geo = _geo_bekle(k, lambda c: abs(c[2] - hedef[2]) <= 1 and abs(c[3] - hedef[3]) <= 1)
+        else:
+            {"kucult": au.kucult, "buyut": au.buyut, "geri": au.geri_yukle}[islem](k)
+            # küçültmede geometri değişmez; büyütme/geri yüklemede yeni geometri otursun
+            geo = _geo_bekle(k, lambda c: islem == "kucult" or tuple(c) != onceki, 0.2 if islem == "kucult" else 0.6)
+    finally:  # taşıma/boyut/büyütme sayfayı yeniden düzenler: sınama kutuları artık yerinde değil (kayıt kirlenir)
+        dogrulama_sinamasi.girdi_oldu(k)
     geo = tuple(geo)
     uyari = ""
     if hedef is not None and any(abs(a_ - b_) > 1 for a_, b_ in zip(geo, hedef)):
@@ -1230,7 +1266,7 @@ def k_simgeye_tikla(a):
             ad=a.ad, x=f"{cx:.0f}", y=f"{cy:.0f}", benzerlik=f"{sk:.3f}"))
         tikla_ic(g, a.kimlik, a.baslik, cx, cy, a.dugme, geo, mod=mod)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
 
 
 def k_renge_tikla(a):
@@ -1257,7 +1293,7 @@ def k_renge_tikla(a):
         print(_("renk alanı: {renk} ({x},{y}) {alan} piksel").format(renk=a.renk, x=f"{x:.0f}", y=f"{y:.0f}", alan=alan))
         tikla_ic(g, a.kimlik, a.baslik, x, y, a.dugme, geo, mod=mod)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
 
 
 def k_metne_tikla(a):
@@ -1304,4 +1340,4 @@ def k_metne_tikla(a):
             sn=f"{sure:.2f}"))
         tikla_ic(g, a.kimlik, a.baslik, m["cx"] + dx, m["cy"] + dy, a.dugme, geo, mod=mod)
     finally:
-        girdi_birak(g)
+        girdi_birak(g, a.kimlik)
