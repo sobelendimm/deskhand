@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import time
 
 from .hata import ARAC_EKSIK, Dur
@@ -548,7 +549,7 @@ BILINEN_MASKELER = (".steam/steam.pipe", ".ICEauthority", ".Xauthority")
 
 def ev_soketleri(ev: str | None = None) -> list[str]:
     """Ev dizininde (derinlik 4, gizli dizinler dahil) soket ve FIFO'lar + bilinenler (BILINEN_MASKELER): ad alanında
-    /dev/null ile maskelenir (katman yazılabilir olsa da gerçek sokete/boruya bağlanılmasın, yetki anahtarı okunmasın)."""
+    /dev/null ile maskelenir (görünen alanlarda: gerçek sokete/boruya bağlanılmasın, yetki anahtarı okunmasın)."""
     ev = ev or gercek_ev()
     bulunan = {y for _t, y in (_bul(ev, "-maxdepth", "4", "(", "-type", "s", "-o", "-type", "p", ")", "-printf",
                                      r"%y %p\0") or [])}
@@ -584,6 +585,12 @@ SIR_YOLLARI = (
     ".thunderbird", ".config/filezilla", ".config/remmina", ".local/share/remmina",  # e-posta / FTP / uzak bağlantı
     ".npmrc", ".pypirc", ".cargo/credentials", ".cargo/credentials.toml",  # paket deposu jetonları
     ".bash_history", ".zsh_history", ".local/share/fish/fish_history",  # kabuk geçmişi (komutlarda jeton olabilir)
+    # İNCE örtüler (beyaz listedeki dizinlerin İÇİNDEKİ hassas dosya): Flatpak kullanıcı geçersiz kılmaları, GTK dosya
+    # seçici yer imleri ve ağ sunucuları. `.local/share/flatpak/repo/config` BİLEREK yok: ölçüldü (flatpak 1.x, sahte ev,
+    # ad alanında `flatpak --user remotes/list/repair`): /dev/null örtüsü `opening repo: openat(config): Permission denied`
+    # ile TÜM kullanıcı Flatpak kurulumunu (flatpak_ornek sarmalayıcısının `flatpak run`'ı dahil) bozuyor
+    ".local/share/flatpak/overrides",
+    ".config/gtk-3.0/bookmarks", ".config/gtk-3.0/servers",
 )
 
 
@@ -632,47 +639,219 @@ def sir_bos_hedefler(ev: str | None = None) -> list[str]:
     return sorted(y for y in bos if not any(u != y and _ic_ice(y, u) for u in bos))
 
 
-_KATMAN: dict[str, bool] = {}
+# Ev dizini BEYAZ LİSTESİ (ev dizinine göreli; glob olabilir): arka plan uygulaması ev dizininde YALNIZ bunları (salt
+# okunur) görür; ev dizini BOŞ tmpfs'tir (yazılanlar oturumla atılır). Yalnız masaüstü/araç takımı GÖRÜNÜMÜ (tema, renk,
+# yazı tipi, simge, imleç, dil, XDG klasör adları, dosya ilişkilendirmeleri) ve kullanıcı Flatpak/.desktop kurulumu:
+# hiçbir uygulamanın KENDİ yapılandırması/verisi (jeton, oturum, geçmiş) burada YOK. Bir uygulamanın kendi ayarı
+# gerekiyorsa oturum politikasında uygulama başına `ev = [...]` (varsayılan boş; oturum.toml). Kara liste
+# (SIR_YOLLARI) yalnız ikinci hat: görünen alanların (beyaz liste, veri klasörleri, `ev` girdileri) içinde örter.
+EV_BEYAZ_LISTE = (
+    ".config/kdeglobals", ".config/kdedefaults", ".config/kcminputrc", ".config/kcmfonts", ".config/Trolltech.conf",
+    ".config/plasma-localerc", ".config/breezerc", ".config/Kvantum", ".config/qt5ct", ".config/qt6ct",
+    ".config/gtk-3.0", ".config/gtk-4.0", ".config/gtkrc", ".config/gtkrc-2.0", ".gtkrc-2.0", ".config/xsettingsd",
+    ".config/fontconfig", ".local/share/fonts", ".fonts", ".cache/fontconfig",
+    ".icons", ".local/share/icons", ".themes", ".local/share/themes", ".local/share/color-schemes",
+    ".config/user-dirs.dirs", ".config/user-dirs.locale", ".config/mimeapps.list", ".local/share/mime",
+    ".local/share/applications", ".local/share/flatpak",   # kullanıcı .desktop girdileri + Flatpak kurulumu (flatpak run)
+)
+EV_BOYUT_AZAMI = 2 << 30   # ad alanındaki boş ev tmpfs'inin (ve /tmp'nin) boyut üst sınırı (2 GiB)
+EV_BOYUT = EV_BOYUT_AZAMI  # geriye uyum adı (üst sınır); gerçek sınır: ev_boyut()
 
 
-def katman_destekli(ev: str | None = None) -> bool:
-    """bwrap ev dizininin üstüne geçici katman (overlayfs, kullanıcı ad alanında) kurabiliyor mu (süreç başına bir kez
-    ölçülür, ~15 ms). Kurulamıyorsa korumali_argv ev dizinini salt okunur bağlar."""
-    ev = ev or gercek_ev()
-    if ev not in _KATMAN:
+def bellek_bayt(metin: str | None) -> int | None:
+    """Kafes bellek metni (4G, 512M, 1500000K, 25%) → bayt; çözülemezse/sınırsızsa None."""
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([KMGT%]?)B?\s*", metin or "", re.I)
+    if not m:
+        return None
+    n, u = float(m.group(1)), m.group(2).upper()
+    if u == "%":
         try:
-            r = subprocess.run([arac("bwrap"), "--unshare-user", "--ro-bind", "/", "/", "--overlay-src", ev,
-                                "--tmp-overlay", ev, "--", arac("true")], capture_output=True, timeout=10,
-                               env={"PATH": GUVENLI_PATH}, stdin=subprocess.DEVNULL)
-            _KATMAN[ev] = r.returncode == 0
-        except (OSError, subprocess.TimeoutExpired):
-            _KATMAN[ev] = False
-    return _KATMAN[ev]
+            with open("/proc/meminfo") as f:
+                toplam = int(f.readline().split()[1]) * 1024
+        except (OSError, ValueError, IndexError):
+            return None
+        return int(toplam * n / 100) or None
+    return int(n * {"": 1, "K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}[u]) or None
+
+
+def ev_boyut(bellek: str | None = None) -> int:
+    """Ev tmpfs'i ve /tmp için boyut: min(2 GiB, kafes belleği / 4) (kafes varsayılanı 4G → 1 GiB). Kafes kapalı ya da
+    çözülemezse üst sınır. bellek verilmezse DESKHAND_SANAL_BELLEK / varsayılan."""
+    b = bellek_bayt(bellek if bellek is not None else _bellek_siniri())
+    return min(EV_BOYUT_AZAMI, b // 4) if b else EV_BOYUT_AZAMI
 
 
 def _ic_ice(yol: str, ust: str) -> bool:
     return yol == ust or yol.startswith(ust.rstrip("/") + "/")
 
 
-def ev_baglari(ev: str | None = None) -> tuple[list[str], dict]:
-    """Ev dizini için bwrap argümanları → (argümanlar, bilgi). Ev dizini GEÇİCİ katmanla örtülür (gerçek dosyalar
-    okunur, yazılanlar oturumla atılır: ~/.config/autostart, ~/.bashrc, ~/.local/bin… kalıcı olarak değiştirilemez);
-    katman kurulamazsa ev dizini salt okunur + ~/.cache tmpfs. Yazılabilir GERÇEK bağlar yalnız veri klasörleri
-    (veri_klasorleri); onların içindeki gizli dizin/dosyalar (.git, .vscode, .envrc…) salt okunur örtülür, soket/FIFO'lar
-    /dev/null ile maskelenir; gizli girdisi çok olan klasör bütünüyle salt okunur. Ev dizinindeki soket/FIFO'lar da
-    maskelenir."""
-    ev = ev or gercek_ev()
-    a: list[str] = []
-    bilgi: dict = {"katman": katman_destekli(ev), "yazilabilir": [], "salt_okunur_klasor": [], "nokta": 0, "maske": 0,
-                   "sir": []}
-    if bilgi["katman"]:
-        a += ["--overlay-src", ev, "--tmp-overlay", ev]
-    else:
-        a += ["--ro-bind", ev, ev]
-        if os.path.isdir(os.path.join(ev, ".cache")):
-            a += ["--tmpfs", os.path.join(ev, ".cache")]
-    maske = set(ev_soketleri(ev))
+def gecerli_ev_girdisi(g) -> bool:
+    """Beyaz liste / politika `ev` girdisi: ev dizinine göreli metin, boş değil, `..` ve mutlak yol yok."""
+    return isinstance(g, str) and bool(g) and not g.startswith("/") and ".." not in g.split("/") and \
+        g.strip("/.") != ""
+
+
+# Politika `ev` girdisi olarak GEÇERSİZ merkezler: bunlar uygulamaların tüm yapılandırma/veri/önbellek ağacını açar
+EV_MERKEZLER = frozenset({".config", ".local", ".local/share", ".local/state", ".cache", ".var"})
+
+
+def gecerli_politika_ev_girdisi(g) -> bool:
+    """YALNIZ politikanın uygulama başına `ev` girdisi (EV_BEYAZ_LISTE'den daha sıkı): gecerli_ev_girdisi + glob karakteri
+    (* ? [ ] { }) YOK + derinliği 2'den az gizli girdi YOK (.ssh, .netrc, .bashrc…) + merkezlerin kendisi
+    (EV_MERKEZLER: .config, .local, .local/share, .local/state, .cache, .var) YOK."""
+    if not gecerli_ev_girdisi(g) or any(c in g for c in "*?[]{}"):
+        return False
+    import posixpath
+    n = posixpath.normpath(g)
+    if n in EV_MERKEZLER:
+        return False
+    p = n.split("/")
+    return not (p[0].startswith(".") and len(p) < 2)
+
+
+def _yasak_kaynak_kokleri() -> list[str]:
+    """Ev DIŞINDAKİ bir kaynağın bulunamayacağı yerler: /tmp, /run/user/UID ve Deskhand'in RUNTIME_DIR'i (ad alanında bunlar
+    boş tmpfs; psd/oturum verisi bu yollarla sızmasın, kaynak ayrıca bağlama anında değişebilir)."""
+    k = ["/tmp", f"/run/user/{os.getuid()}"]
+    try:
+        from . import yollar
+        k.append(os.path.realpath(yollar.runtime_dir()))
+    except Exception:
+        pass
+    return k
+
+
+def _beyaz_ham(ev: str, ek: tuple | list = ()) -> list[tuple[str, str, tuple[int, int]]]:
+    """ev_beyaz_baglari'nın ham hali → [(kaynak gerçek yol, ad alanındaki yol, (dev, ino))]. Kurallar (sembolik bağ
+    hedefi = kaynak; y = sözcüksel yol, hedef):
+      - geçersiz göreli yol; hedefi ev dizininin kendisi/üstü; kendisi ya da hedefi SIR_YOLLARI içinde → RET;
+      - kaynak bir XDG veri klasörünün içinde/kendisi/üstü → RET (veri klasörü yazılabilir bağlanır: ad alanındaki uygulama
+        orada `-> ~/.config` gibi bir bağ kurup sonraki başlatmalarda tüm yapılandırmayı açtırabilirdi);
+      - kaynak ev DIŞINDA ve /tmp, /run/user/UID ya da RUNTIME_DIR altında → RET;
+      - EV_BEYAZ_LISTE girdisi: kaynak ev içinde ve sözcüksel yoldan (y) farklıysa YALNIZ kaynak beyaz listedeki (bağ
+        olmayan) bir girdinin altındaysa kabul; politika `ev` girdisi için bu kural YOK (yalnız yukarıdakiler;
+        sırların bağ hedefi içinde örtülmesi ev_baglari'nın ikinci hattı)."""
+    import glob
+    ev = os.path.realpath(ev)
+    sirlar = [os.path.realpath(y) for y in _sir_ham(ev)[0]]
+    veri = veri_klasorleri(ev)
+    yasak = _yasak_kaynak_kokleri()
+    beyaz_lex: list[str] = []
+    for g in EV_BEYAZ_LISTE:
+        if gecerli_ev_girdisi(g):
+            for w in sorted(glob.glob(os.path.join(glob.escape(ev), g))):
+                w = os.path.normpath(w)
+                if not os.path.islink(w) and os.path.realpath(w) == w:
+                    beyaz_lex.append(w)
+    sonuc: list[tuple[str, str, tuple[int, int]]] = []
+    for politika, girdiler in ((False, EV_BEYAZ_LISTE), (True, ek)):
+        for g in girdiler:
+            if not (gecerli_politika_ev_girdisi(g) if politika else gecerli_ev_girdisi(g)):
+                continue
+            for y in sorted(glob.glob(os.path.join(glob.escape(ev), g))):
+                y = os.path.normpath(y)
+                kaynak = os.path.realpath(y)
+                if not _ic_ice(y, ev) or y == ev or not os.path.exists(kaynak) or _ic_ice(ev, kaynak):
+                    continue
+                if any(_ic_ice(kaynak, s) or _ic_ice(y, s) for s in sirlar):
+                    continue
+                if any(_ic_ice(kaynak, k) or _ic_ice(k, kaynak) for k in veri):
+                    continue
+                ev_ici = _ic_ice(kaynak, ev)
+                if not ev_ici and any(_ic_ice(kaynak, k) for k in yasak):
+                    continue
+                if not politika and ev_ici and kaynak != y and not any(_ic_ice(kaynak, w) for w in beyaz_lex):
+                    continue
+                try:
+                    st = os.stat(kaynak)
+                except OSError:
+                    continue
+                if all(h != y for _k, h, _i in sonuc):
+                    sonuc.append((kaynak, y, (st.st_dev, st.st_ino)))
+    return sonuc
+
+
+def ev_beyaz_baglari(ev: str, ek: tuple | list = ()) -> list[tuple[str, str]]:
+    """EV_BEYAZ_LISTE + ek (politikanın uygulama başına `ev` girdileri) → [(kaynak gerçek yol, ad alanındaki yol)] (var
+    olanlar; glob açılmış). Sembolik bağsa HEDEFİ kaynak olur (ad alanında bağın yerine bağlanır). Reddedilenler ve
+    gerekçeleri: _beyaz_ham."""
+    return [(k, h) for k, h, _i in _beyaz_ham(ev, ek)]
+
+
+def _bwrap_ozellik(secenek: str) -> bool:
+    """bwrap --help bu seçeneği içeriyor mu (süreç başına bir kez ölçülür)."""
+    if secenek not in _OZELLIK:
+        try:
+            r = subprocess.run([arac("bwrap"), "--help"], capture_output=True, timeout=10, text=True,
+                               env={"PATH": GUVENLI_PATH}, stdin=subprocess.DEVNULL)
+            _OZELLIK[secenek] = secenek in (r.stdout + r.stderr)
+        except (OSError, subprocess.TimeoutExpired):
+            _OZELLIK[secenek] = False
+    return _OZELLIK[secenek]
+
+
+_OZELLIK: dict[str, bool] = {}
+
+
+def _yol_fd(kaynak: str, kimlik: tuple[int, int]) -> int | None:
+    """Kaynağı `O_PATH|O_NOFOLLOW` ile aç; (dev, ino) denetim sırasında görülenle aynı ve /proc/self/fd/N tam olarak
+    kaynak yolunu gösteriyorsa fd, değilse (araya sembolik bağ girdi/silindi/değişti) None. bwrap `--ro-bind-fd` ile bu
+    fd'yi bağlar: bağlama anında yolu YENİDEN çözmez (TOCTOU kapanır)."""
+    try:
+        fd = os.open(kaynak, os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if (st.st_dev, st.st_ino) == tuple(kimlik) and os.readlink(f"/proc/self/fd/{fd}") == kaynak:
+            return fd
+    except OSError:
+        pass
+    os.close(fd)
+    return None
+
+
+def ev_baglari(ev: str | None = None, ek: tuple | list = (), boyut: int | None = None,
+               fds: list | None = None) -> tuple[list[str], dict]:
+    """Ev dizini için bwrap argümanları → (argümanlar, bilgi). Ev dizini BOŞ tmpfs (0700, boyut = ev_boyut()): gerçek evden
+    YALNIZ beyaz liste (ev_beyaz_baglari: görünüm ayarları + ek = politikanın uygulama başına `ev` girdileri) SALT
+    OKUNUR görünür; yazılanlar (ayar, önbellek, ~/.config/autostart, ~/.bashrc, ~/.local/bin…) oturumla atılır.
+    Yazılabilir GERÇEK bağlar yalnız veri klasörleri (veri_klasorleri); onların içindeki gizli dizin/dosyalar (.git,
+    .vscode, .envrc…) salt okunur örtülür, soket/FIFO'lar /dev/null ile maskelenir; gizli girdisi çok olan klasör
+    bütünüyle salt okunur. Görünen alanlardaki SIR_YOLLARI (ikinci hat) ve soket/FIFO'lar da örtülür; beyaz liste girdisi
+    sembolik bağsa sırlar KAYNAK→HEDEF eşlemesiyle de örtülür (kaynağın içindeki sır, hedef + göreli yol).
+    fds verilirse (liste) beyaz liste kaynakları `O_PATH|O_NOFOLLOW` fd olarak açılır ve `--ro-bind-fd` ile bağlanır
+    (bwrap yolu bağlama anında YENİDEN çözmez); çağıran fd'leri Popen pass_fds ile geçirir ve sonra kapatır. fds yoksa ya
+    da bwrap `--ro-bind-fd` bilmiyorsa çözülmüş gerçek yol (`--ro-bind`) bağlanır: denetimle bağlama arasındaki yarış
+    (kaynak yolunun ara bileşeni değişirse) kalır, yalnız ev sahibinin kendi hesabının yazabildiği yollar için."""
+    ev = os.path.realpath(ev or gercek_ev())
+    a: list[str] = ["--perms", "0700"]
+    if bwrap_size_var():
+        a += ["--size", str(boyut or ev_boyut())]
+    a += ["--tmpfs", ev]
+    bilgi: dict = {"kip": "beyaz", "beyaz": [], "yazilabilir": [], "salt_okunur_klasor": [], "nokta": 0, "maske": 0,
+                   "sir": [], "fd": 0}
+    gorunen: list[str] = []
+    esleme: list[tuple[str, str]] = []   # (kaynak, hedef) — kaynak ≠ hedef olanlar sır eşlemesi için
+    fd_kullan = fds is not None and _bwrap_ozellik("--ro-bind-fd")
+    for kaynak, hedef, kimlik in _beyaz_ham(ev, ek):
+        if fd_kullan:
+            fd = _yol_fd(kaynak, kimlik)
+            if fd is None:   # denetimden sonra değişti/silindi: bağlama
+                continue
+            fds.append(fd)
+            a += ["--ro-bind-fd", str(fd), hedef]
+            bilgi["fd"] += 1
+        else:
+            a += ["--ro-bind", kaynak, hedef]
+        bilgi["beyaz"].append(hedef)
+        gorunen.append(hedef)
+        if kaynak != hedef:
+            esleme.append((kaynak, hedef))
+    sirlar = [os.path.realpath(y) for y in _sir_ham(ev)[0]]
+    maske = {y for y in ev_soketleri(ev) if any(_ic_ice(y, g) for g in gorunen)}
     for k in veri_klasorleri(ev):
+        gorunen.append(k)
         girdiler = veri_nokta_girdileri(k)
         if girdiler is None:
             a += ["--ro-bind", k, k]
@@ -686,13 +865,31 @@ def ev_baglari(ev: str | None = None) -> tuple[list[str], dict]:
             elif tur in ("d", "f"):
                 a += ["--ro-bind", y, y]
                 bilgi["nokta"] += 1
+    # Deskhand'in KENDİ kodu (ad alanında çalışan sarmalayıcı: oturum/flatpak_ornek.py) ve Python ortamı (venv) ev
+    # dizinindeyse (git klonu, pip --user, pipx): salt okunur görünür — yalnız kod. Veri klasörlerinden SONRA eklenir
+    # (hangi alanların zaten görünür olduğu bilinsin; bir veri klasörünü örtmesin). Ev kökü/üstü, sır yolu, bir veri
+    # klasörünün üstü ya da bir .git deposunun KÖKÜ ise reddedilir (yalnız paket alt dizini; depo kökü tüm proje/.git açar)
+    for y in sorted({os.path.realpath(os.path.dirname(os.path.abspath(__file__))), os.path.realpath(sys.prefix)}):
+        if _ic_ice(y, ev) and y != ev and not _ic_ice(ev, y) and not any(_ic_ice(y, s) for s in sirlar) and \
+                all(not _ic_ice(y, g) for g in gorunen) and not any(_ic_ice(g, y) for g in gorunen) and \
+                not os.path.lexists(os.path.join(y, ".git")):
+            a += ["--ro-bind", y, y]
+            bilgi["beyaz"].append(y)
+            gorunen.append(y)
+            maske |= {m for m in ev_soketleri(ev) if _ic_ice(m, y)}
     for y in sorted(maske):
         if _ic_ice(y, ev):
             a += ["--ro-bind", "/dev/null", y]
             bilgi["maske"] += 1
-    for y in sir_yollari(ev):  # EN SON: veri klasörü bağlarının da üstüne (oturum kopyası bundan SONRA bağlanır)
-        a += ["--tmpfs", y] if os.path.isdir(y) else ["--ro-bind", "/dev/null", y]
-        bilgi["sir"].append(y)
+    for y in sir_yollari(ev):  # EN SON (ikinci hat): yalnız görünen alanların içindekiler (oturum kopyası SONRA bağlanır)
+        hedefler = [y] if any(_ic_ice(y, g) for g in gorunen) else []
+        for k, h in esleme:   # sembolik bağ beyaz liste girdisi: kaynağın içindeki sır hedefte de örtülür
+            t = h + y[len(k):]
+            if _ic_ice(y, k) and t not in hedefler:
+                hedefler.append(t)
+        for t in hedefler:
+            a += ["--tmpfs", t] if os.path.isdir(y) else ["--ro-bind", "/dev/null", t]
+            bilgi["sir"].append(t)
     bilgi["bos_dizin"] = []
     for y in sir_bos_hedefler(ev):  # boşta asılı bağ olmasın (korumali_argv: /run/user/UID ve /tmp bu noktada boş tmpfs)
         # dosya olan hedef → /dev/null; dizin ya da (psd durmuşken) hiç olmayan hedef → boş dizin (yapılandırma kökü)
@@ -731,23 +928,14 @@ SON_KOMUT_ORTAMI = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT")
 
 
 RUN_USER_BOYUT = 1 << 30   # ad alanındaki /run/user/UID tmpfs'inin boyut sınırı (1 GiB)
-_SIZE: list[bool] = []
-
-
 def bwrap_size_var() -> bool:
     """bwrap `--size` (tmpfs boyutu; bubblewrap >= 0.9) destekliyor mu (süreç başına bir kez ölçülür)."""
-    if not _SIZE:
-        try:
-            r = subprocess.run([arac("bwrap"), "--help"], capture_output=True, timeout=10, text=True,
-                               env={"PATH": GUVENLI_PATH}, stdin=subprocess.DEVNULL)
-            _SIZE.append("--size" in (r.stdout + r.stderr))
-        except (OSError, subprocess.TimeoutExpired):
-            _SIZE.append(False)
-    return _SIZE[0]
+    return _bwrap_ozellik("--size")
 
 
 def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, bool]], env: dict | None = None,
-                  ev: str | None = None) -> list[str]:
+                  ev: str | None = None, ev_ek: tuple | list = (), bellek: str | None = None,
+                  fds: list | None = None) -> list[str]:
     """Arka plan UYGULAMASININ komutu bwrap ad alanında (denetim 12c: Y1 aygıtlar, Y3 süreçler, HOME, Y4 IPC):
       - ayrı kullanıcı + PID ad alanı (`--unshare-user --unshare-pid`, kendi /proc): kullanıcının başka süreçleri
         görünmez, sinyal/ptrace gönderilemez;
@@ -755,7 +943,9 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
         input/event*, snd, hidraw, usb, video düğümleri YOK;
       - /tmp, /run/user/UID ve (başka yerdeyse) Deskhand'in RUNTIME_DIR'i BOŞ tmpfs: kullanıcının Wayland/D-Bus/ses/
         kwallet/gnupg/ssh soketleri, /tmp'deki Steam/Chromium/ICE/Kulak Kesil soketleri görünmez;
-      - ev dizini geçici katman (ev_baglari): okunur, yazılanlar atılır; yalnız veri klasörleri gerçek yazılır;
+      - /tmp ve ev dizini boyut sınırlı (ev_boyut: kafes belleği/4, en çok 2 GiB; bellek = kafes bellek metni);
+      - ev dizini BOŞ tmpfs (ev_baglari): gerçek evden yalnız beyaz liste (görünüm ayarları + politikanın
+        uygulama başına `ev` girdileri = ev_ek) salt okunur; yazılanlar atılır; yalnız veri klasörleri gerçek yazılır;
       - yalnız `baglar` (oturumun kendi soketleri/dizinleri; (yol, salt_okunur)) geri bağlanır;
       - env verilirse PATH/LD_* YALNIZ son komuta `--setenv` ile gider.
     --die-with-parent YOK (masaüstü CLI'den uzun yaşar); kafes ve PID temizliği aynen geçerli."""
@@ -764,11 +954,15 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
     a = [arac("bwrap"), "--unshare-user", "--unshare-pid", "--ro-bind", "/", "/", "--dev", "/dev"]
     if os.path.isdir("/dev/dri"):
         a += ["--dev-bind", "/dev/dri", "/dev/dri"]
-    a += ["--proc", "/proc", "--tmpfs", "/tmp"]
+    boyut = ev_boyut(bellek)
+    a += ["--proc", "/proc"]
+    if bwrap_size_var():  # /tmp de aynı sınırla (kafes belleği/4, en çok 2 GiB): tmpfs belleği şişirmesin
+        a += ["--size", str(boyut)]
+    a += ["--tmpfs", "/tmp"]
     if bwrap_size_var():  # /run/user/UID'ye profil/önbellek yazan uygulama (sembolik bağ → --dir) belleği şişirmesin
         a += ["--size", str(RUN_USER_BOYUT)]
     a += ["--tmpfs", f"/run/user/{uid}"]
-    a += ev_baglari(ev)[0]
+    a += ev_baglari(ev, ev_ek, boyut, fds)[0]
     rk = os.path.realpath(runtime_kok)
     if not (_ic_ice(rk, f"/run/user/{uid}") or _ic_ice(rk, "/tmp")):
         a += ["--tmpfs", rk]
@@ -776,6 +970,11 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
     paylasim = test_paylasimi()
     if paylasim:
         a += ["--bind", paylasim, paylasim]
+        # YALNIZ test takımı: deponun tests/ dizini (test pencere betikleri) salt okunur görünür — ev dizini boş tmpfs
+        # olduğu için depo ev altındaysa görünmezdi. Paket dizinine kardeş `tests/` dışında hiçbir şey açılmaz.
+        testler = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "tests")
+        if os.path.isdir(testler) and not os.path.islink(testler):
+            a += ["--ro-bind", testler, testler]
     for yol, ro in baglar:
         if yol and os.path.exists(yol):
             a += ["--ro-bind" if ro else "--bind", yol, yol]
@@ -818,10 +1017,11 @@ def girdi_kopyasi_bagi(yol: str | None) -> list[tuple[str, bool]]:
 
 
 def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str, bool]], kopya: str | None = None,
-                    girdi: str | None = None, **popen) -> subprocess.Popen:
+                    girdi: str | None = None, ev: tuple | list = (), **popen) -> subprocess.Popen:
     """Arka plan UYGULAMASINI başlatmanın TEK yolu (iki tür): bwrap ad alanı (korumali_argv) + bellek kafesi + düşük
     öncelik. kopya: oturum politikasının hazırladığı kopya dizini (yalnız o bağlanır, kopya_bagi); girdi: onaylı
-    girdinin özel .desktop kopyası (salt okunur, girdi_kopyasi_bagi). bwrap yoksa ya da
+    girdinin özel .desktop kopyası (salt okunur, girdi_kopyasi_bagi); ev: politikanın bu uygulamaya verdiği ev dizini
+    beyaz liste girdileri (Hazirlik.ev; salt okunur, ev_beyaz_baglari süzer). bwrap yoksa ya da
     güvenli yolda değilse Dur(9): yalıtımsız başlatma yok. Yardımcı zincir güvenli PATH ile çalışır; uygulamanın PATH'i
     yalnız son komuta gider."""
     if not bwrap_var():
@@ -840,12 +1040,75 @@ def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str,
     popen.setdefault("stdin", subprocess.DEVNULL)
     dis = {k: v for k, v in env.items() if k not in SON_KOMUT_ORTAMI}
     dis["PATH"] = GUVENLI_PATH
-    p = kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar, env), dis, **popen)
+    ev_ek = tuple(ev or ())
+    exec_gorunur_denetle(argv, env, ev_ek)   # görünmez exec: zaman aşımına kadar bekletme, HEMEN anlaşılır hata
+    fds: list[int] = []   # beyaz liste kaynaklarının O_PATH fd'leri (bwrap --ro-bind-fd; TOCTOU yok): süreçle geçer
+    try:
+        komut = korumali_argv(list(argv), yollar.runtime_dir(), baglar, env, ev_ek=ev_ek,
+                              bellek=d.get("bellek") or _bellek_siniri(), fds=fds)
+        gecen = (*tuple(popen.pop("pass_fds", ())), *fds)
+        p = kafeste_baslat(d, komut, dis, pass_fds=gecen, **popen)
+    finally:
+        for fd in fds:   # Popen çatallandı (ya da hata): ebeveynde kapat
+            try:
+                os.close(fd)
+            except OSError:
+                pass
     if ses_bagli and _ses.pulse_kimlik(cdir) != beklenen:  # bwrap bağı sırasında değişti: uygulamayı öldür
         p.kill()
         p.wait()
         raise Dur(14, _("özel ses dizini uygulama başlatılırken değişti; uygulama durduruldu"))
     return p
+
+
+def _exec_adayi(argv: list[str], env: dict | None) -> str | None:
+    """Başlatılacak komutun çözülmüş çalıştırılabilir yolu: argv[0]; `gio launch X.desktop` ise .desktop'un Exec ilk
+    sözcüğü. Çözülemezse None (denetim atlanır; bwrap/uygulama kendi hatasını verir)."""
+    import shlex
+    import shutil
+    if not argv:
+        return None
+    ad = argv[0]
+    if os.path.basename(ad) == "gio" and len(argv) > 2 and argv[1] == "launch":
+        try:
+            with open(argv[2], encoding="utf-8", errors="replace") as f:
+                govde = None
+                for satir in f:
+                    if satir.strip().startswith("["):
+                        govde = satir.strip() == "[Desktop Entry]"
+                    elif govde and satir.startswith("Exec="):
+                        ad = shlex.split(satir[5:].strip())[0]
+                        break
+                else:
+                    return None
+        except (OSError, ValueError, IndexError):
+            return None
+    if os.path.isabs(ad):
+        return ad if os.path.exists(ad) else None
+    return shutil.which(ad, path=(env or {}).get("PATH") or GUVENLI_PATH)
+
+
+def exec_gorunur_denetle(argv: list[str], env: dict | None = None, ev_ek: tuple | list = (), ev: str | None = None) -> None:
+    """Çözülmüş exec (ve gerçek yolu) ev dizininin altında ama ad alanında GÖRÜNMÜYORSA (beyaz liste, politika `ev`, XDG
+    veri klasörleri, Deskhand kodu dışında) Dur(ARAC_EKSIK): bwrap'te boş ev dizininde ikili bulunamaz, uygulama pencere
+    açmadan ölür ve çağıran zaman aşımına kadar beklerdi. İleti `oturum.toml` içinde `ev = [...]` ipucunu verir."""
+    yol = _exec_adayi(argv, env)
+    if not yol:
+        return
+    ev = os.path.realpath(ev or gercek_ev())
+    adaylar = {os.path.normpath(yol), os.path.realpath(yol)}
+    if not any(_ic_ice(y, ev) and y != ev for y in adaylar):
+        return
+    bilgi = ev_baglari(ev, ev_ek)[1]
+    gorunur = [*bilgi["beyaz"], *bilgi["yazilabilir"], *bilgi["salt_okunur_klasor"]]
+    for y in sorted(adaylar):
+        if _ic_ice(y, ev) and y != ev and not any(_ic_ice(y, g) for g in gorunur):
+            goreli = os.path.relpath(y, ev)
+            uyg = os.path.basename(argv[0]) if os.path.basename(argv[0]) != "gio" else os.path.basename(yol)
+            raise Dur(ARAC_EKSIK, _("{yol} ev dizininde ve arka plan ad alanında görünmüyor (ev dizini boştur: yalnız "
+                                    "beyaz liste, XDG veri klasörleri ve oturum politikasındaki `ev` girdileri görünür); "
+                                    "oturum.toml içinde [uygulama.{uyg}] ev = [\"{goreli}\"] ekleyin ya da uygulamayı "
+                                    "görünür bir yere kurun").format(yol=y, uyg=uyg, goreli=goreli))
 
 
 def _sinyal(pids, sig) -> None:

@@ -6,6 +6,9 @@
 # Her uygulama bölümünde:
 #   adlar  = ["telegram-desktop", ...]   tam eşleşen adlar/takma adlar (küçük harf; .desktop/.exe eki atılır)
 #   kimlik = ["org.telegram.desktop*"]   .desktop/Flatpak kimliği ya da ad için fnmatch kalıpları (küçük harf)
+# Ev dizini (arka plan ad alanında BOŞ; yalnız görünüm ayarları beyaz listesi): uygulamanın kendi ayarı gerekiyorsa
+#   ev = [".local/share/user-places.xbel"]   ev dizinine göreli, salt okunur (VARSAYILAN hiçbir uygulamada YOK;
+#   `_varsayilan`da verilse de bilinmeyen uygulamalara verilmez; sır yolları bununla açılamaz)
 # Bölüm adının kendisi her zaman bir addır. -beta/-nightly/-stable/-browser/-bin/-native/-dev/-git/-desktop ekleri
 # atılmış hâli de denenir (google-chrome-beta → google-chrome). Birden çok bölüme uyarsa EN KISITLAYICI karar
 # kazanır: kapali > on > bekle > kopya > paylas.

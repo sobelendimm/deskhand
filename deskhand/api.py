@@ -553,9 +553,10 @@ def uygulama_komutu(uygulama: str, argumanlar: list[str] | None = None) -> tuple
 
 
 def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict | None = None,
-                baslik: str | None = None, sure: float = 15.0, kopya: str | None = None) -> dict:
+                baslik: str | None = None, sure: float = 15.0, kopya: str | None = None, ev: tuple | list = ()) -> dict:
     """Uygulamayı GEÇERLİ hedefte başlat, YENİ penceresini bekle (uygulama.k_ac ile aynı döngü; ek: env).
-    kopya: oturum politikasının hazırladığı kopya (arka planda yalnız o ad alanına bağlanır). Yasak uygulama
+    kopya: oturum politikasının hazırladığı kopya (arka planda yalnız o ad alanına bağlanır); ev: politikanın uygulama
+    başına ev dizini beyaz liste girdileri (Hazirlik.ev; salt okunur). Yasak uygulama
     başlatılmaz (10)."""
     from .gunluk import gunluk
     from .guvenlik import baslatma_komut_engel, baslatma_yasak_denetle
@@ -577,7 +578,7 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
         girdi = argv[2] if len(argv) > 2 and argv[:2] == ["gio", "launch"] and \
             os.path.dirname(os.path.realpath(argv[2])) == os.path.realpath(os.path.join(yollar.runtime_dir(),
                                                                                          "uygulama")) else None
-        _baslat(au, argv, fp, env, kopya, girdi)  # arka planda: masaustu.baslat → arka_ortak.korumali_baslat (bwrap)
+        _baslat(au, argv, fp, env, kopya, girdi, ev=ev)  # arka planda: masaustu.baslat → arka_ortak.korumali_baslat (bwrap)
     gunluk(f"ac | {ad} | {shlex.join(argv)}" + (f" | env {sorted(env)}" if env else ""))
     t0 = time.monotonic()
     son_kwin = None  # son yutulan geçici pencere listesi hatası (zaman aşımında iletiye eklenir)

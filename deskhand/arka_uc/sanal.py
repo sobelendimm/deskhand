@@ -690,13 +690,13 @@ class SanalArkaUc(ArkaUc):
 
     # -------- uygulama
     def baslat(self, argv: list[str], env: dict | None = None, cikti=None, kopya: str | None = None,
-               girdi: str | None = None):
+               girdi: str | None = None, ev: tuple | list = ()):
         """Sanal masaüstünde (kafes + sanal ortam) başlat. env: os.environ'a eklenecek/değişecek değişkenler;
         cikti: açık dosya (stdout+stderr), yoksa masaüstünün uygulamalar.log'u; kopya: oturum politikasının kopyası
-        (ad alanına yalnız o bağlanır)."""
+        (ad alanına yalnız o bağlanır); ev: politikanın uygulama başına ev dizini beyaz liste girdileri."""
         if cikti is not None:
-            return masaustu.baslat(argv, env, kopya=kopya, girdi=girdi, stdout=cikti, stderr=cikti)
-        return masaustu.baslat(argv, env, kopya=kopya, girdi=girdi)
+            return masaustu.baslat(argv, env, kopya=kopya, girdi=girdi, ev=ev, stdout=cikti, stderr=cikti)
+        return masaustu.baslat(argv, env, kopya=kopya, girdi=girdi, ev=ev)
 
     # -------- CHANGE 1 isteğe bağlı yöntemler
     def kimlikler(self) -> list[str]:

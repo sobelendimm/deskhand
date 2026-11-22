@@ -1948,6 +1948,7 @@ def open_app(
                                         "kullanıcıya bildir.").format(uygulama=app))
         env = None
         kopya = None
+        ev_ek: tuple = ()
         notlar = []
         if api.arka().ad == "sanal":
             if masaustu.durum() is None:
@@ -1981,6 +1982,7 @@ def open_app(
                         argv = [*h.argv, *belgeler]
                         yasak_metin = [*yasak_metin, " ".join(argv)]
                     env = dict(getattr(h, "env_ek", None) or {}) or None  # yalnız politikanın ortamı; ajandan değil
+                    ev_ek = tuple(getattr(h, "ev", None) or ())  # politikanın uygulama başına ev beyaz listesi
                     if karar == "kopya":
                         kopya = getattr(h, "kopya_yolu", None)  # ad alanına YALNIZ bu kopya bağlanır
                         if hasattr(ot, "parmak_kaydet"):
@@ -1992,7 +1994,7 @@ def open_app(
         with kilitli(girdi=True):  # onay bekleyen masaüstüne uygulama açılmaz (yalnız kapı denetimi; başlatma
             pass                   # ve pencere beklemesi kilidi tutmaz)
         gonderim.artir()  # başlatma isteği gitti: sonraki hata "belki başladı"
-        r = api.uygulama_ac(argv, ad, yasak_metin, env, title, wait_s, kopya=kopya)
+        r = api.uygulama_ac(argv, ad, yasak_metin, env, title, wait_s, kopya=kopya, **({"ev": ev_ek} if ev_ek else {}))
         if notlar:
             r["notes"] = notlar
         r["effect"] = "confirmed" if r.get("status") == "opened" else "unverifiable"
