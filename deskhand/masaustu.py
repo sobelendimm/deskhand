@@ -23,6 +23,7 @@ en çok [masaustu] azami adlı/varsayılan masaüstü (yalnız KWin türü çokl
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import json
 import os
@@ -636,34 +637,50 @@ def masaustu_baslat(boyut: str | None = None, openbox: bool = True, ad: str | No
                     os.remove(durum_yolu())
                 except OSError:
                     pass
-            acik = [a for a in masalar.adlar() if a != ad and durum(saglik=False, ad=a) is not None]
-            if len(acik) >= masalar.azami():
-                raise Dur(7, _("en çok {sayi} görünmez masaüstü açık olabilir ({adlar}); birini kapatın "
-                               "(deskhand desktop stop --name AD) ya da [masaustu] azami ayarını artırın").format(
-                    sayi=masalar.azami(), adlar=", ".join(a or "varsayılan" for a in acik)))
-            t, zorla, _neden = secilen_tur()
-            if ad != "" and t != "kwin":
-                raise Dur(ARAC_EKSIK, _("adlı görünmez masaüstü yalnız KWin türünde açılabilir ({neden})").format(
-                    neden=_neden or "DESKHAND_ARKA_TUR=xvfb"))
-            if t == "kwin":
-                try:
-                    d = _kwin_baslat(boyut)
-                except Dur as e:
-                    if zorla or ad != "":
-                        raise
-                    from .gunluk import gunluk
-                    gunluk(f"masaustu | KWin oturumu açılamadı, Xvfb'ye düşüldü: {e.mesaj}")
-                    d = _xvfb_baslat(boyut, openbox)
-                    d["uyarilar"].insert(0, _("KWin oturumu açılamadı ({hata}); Xvfb kullanılıyor").format(hata=e.mesaj))
-            else:
-                d = _xvfb_baslat(boyut, openbox)
-            if gorev_kipi.etkin():
-                d["gorev"] = True  # görev masaüstü: kipsiz istemciler bağlanamaz (gorev_kipi.masaustu_kapisi)
-            d["ad"] = ad
-            if oto:
-                d["oto"] = True
-            _durum_yaz(d)
-            return d
+            # sınır sayımı + başlatma + kayıt TEK genel kilitte: iki farklı ad aynı anda azami'yi aşamasın
+            with _genel_baslatma_kilidi():
+                return _baslat_sinirli(ad, boyut, openbox, oto)
+
+
+@contextlib.contextmanager
+def _genel_baslatma_kilidi():
+    os.makedirs(masalar.masa_koku(), mode=0o700, exist_ok=True)
+    with open(os.path.join(masalar.masa_koku(), ".baslat.lock"), "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+
+
+def _baslat_sinirli(ad: str, boyut: str | None, openbox: bool, oto: bool) -> dict:
+    """masaustu_baslat'ın kilit altındaki gövdesi (bağlam = ad): sınır, tür, başlatma, kayıt."""
+    from . import gorev_kipi
+    acik = [a for a in masalar.adlar() if a != ad and durum(saglik=False, ad=a) is not None]
+    if len(acik) >= masalar.azami():
+        raise Dur(7, _("en çok {sayi} görünmez masaüstü açık olabilir ({adlar}); birini kapatın "
+                       "(deskhand desktop stop --name AD) ya da [masaustu] azami ayarını artırın").format(
+            sayi=masalar.azami(), adlar=", ".join(a or "varsayılan" for a in acik)))
+    t, zorla, _neden = secilen_tur()
+    if ad != "" and t != "kwin":
+        raise Dur(ARAC_EKSIK, _("adlı görünmez masaüstü yalnız KWin türünde açılabilir ({neden})").format(
+            neden=_neden or "DESKHAND_ARKA_TUR=xvfb"))
+    if t == "kwin":
+        try:
+            d = _kwin_baslat(boyut)
+        except Dur as e:
+            if zorla or ad != "":
+                raise
+            from .gunluk import gunluk
+            gunluk(f"masaustu | KWin oturumu açılamadı, Xvfb'ye düşüldü: {e.mesaj}")
+            d = _xvfb_baslat(boyut, openbox)
+            d["uyarilar"].insert(0, _("KWin oturumu açılamadı ({hata}); Xvfb kullanılıyor").format(hata=e.mesaj))
+    else:
+        d = _xvfb_baslat(boyut, openbox)
+    if gorev_kipi.etkin():
+        d["gorev"] = True  # görev masaüstü: kipsiz istemciler bağlanamaz (gorev_kipi.masaustu_kapisi)
+    d["ad"] = ad
+    if oto:
+        d["oto"] = True
+    _durum_yaz(d)
+    return d
 
 
 def liste(temizle: bool = True) -> list[dict]:
