@@ -732,6 +732,29 @@ for ad_, md_, diger in (("kde", "ekran", "arka"), ("sanal", "arka", "ekran")):
                 kod_al(eylem.k_tikla, ns(x=50, y=50)) == 0)
         onay._sil(onay.istek_yolu(k_))
 
+# c) hedef görüntüsünün bölgesi (info["deskhand_bolge"]) MCP'nin onay sonrası karşılaştırmasında kullanılır
+from deskhand import mcp_sunucu, onay_hedef  # noqa: E402
+
+au = kur("sanal")
+au.pen["{w}"][1] = "kwrite"
+with arka_uc.hedef_sabit("sanal"):
+    im_ = guvenlik.hedef_goruntusu("{w}", (300, 300))
+    beklenen_ = onay_hedef.nokta_bolgesi((300, 300))
+    kontrol("hedef_goruntusu(nokta) → info['deskhand_bolge'] = noktanın çevresi (onay_hedef.nokta_bolgesi ile aynı)",
+            im_ is not None and tuple(im_.info.get("deskhand_bolge") or ()) == beklenen_,
+            str(im_ and im_.info.get("deskhand_bolge")))
+    mcp_sunucu._ONAY_YEREL.nokta = None
+    kontrol("MCP _onay_bolgesi: metin/simge/öge tıklamasında (nokta yok) görüntünün bölgesi kullanılır, tüm pencere değil",
+            mcp_sunucu._onay_bolgesi(im_) == beklenen_)
+    onh_ = mcp_sunucu._onay_hedefi_yakala("{w}", im_)
+    kontrol("…onay hedefi bu bölgenin görüntüsünü tutar", onh_ is not None and onh_.bolge == beklenen_ and
+            onh_.ozet is not None, str(onh_))
+    im_ = guvenlik.hedef_goruntusu("{w}")
+    kontrol("hedef_goruntusu(nokta yok) → bölge = tüm pencere (küçültülmüş görüntüde bile pencere pikseli)",
+            im_ is not None and tuple(im_.info.get("deskhand_bolge") or ())[2:] == tuple(au.pen["{w}"][2][2:]),
+            str(im_ and im_.info.get("deskhand_bolge")))
+arka_uc._ORNEKLER.clear()
+
 # ================================================================ A9) AT-SPI çerçevesi yalnız PID'den
 print("A9) AT-SPI çerçevesi")
 
