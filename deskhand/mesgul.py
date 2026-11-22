@@ -195,12 +195,18 @@ def tam_ekran_mi(p, cikislar=None):
 # ---------------------------------------------------------------- oyun / yasak pencere
 
 def yasak_desenleri():
-    """Yasak listesi (SALT OKUMA: dosya yoksa oluşturulmaz, varsayılan liste kullanılır)."""
+    """Yasak listesi guvenlik ile AYNI kaynaktan (liste_koruma: panel açıksa panelin yetkili kopyası, kapalıysa işaret
+    denetimli dosya). SALT OKUMA: dosya yoksa oluşturulmaz, varsayılan liste kullanılır. Panelin işaretlediği dosya
+    kayıp/değişmişse (Dur 10: guvenlik zaten her girdiyi reddeder) burada da değiştirilmiş içerik kullanılmaz:
+    varsayılan liste."""
+    from . import liste_koruma
+    from .guvenlik import VARSAYILAN_YASAK
+    from .hata import Dur
     try:
-        with open(yollar.yasak_dosya()) as f:
-            metin = f.read()
-    except OSError:
-        from .guvenlik import VARSAYILAN_YASAK
+        metin = liste_koruma.metin("yasak", olustur=False)
+    except Dur:
+        metin = None
+    if metin is None:
         metin = _(VARSAYILAN_YASAK)
     return [l.strip() for l in metin.splitlines() if l.strip() and not l.lstrip().startswith("#")]
 

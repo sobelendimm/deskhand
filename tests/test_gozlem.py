@@ -17,6 +17,7 @@ Kullanıcının GERÇEK ekranına hiçbir girdi gitmez; gerçek ~/.config yazıl
 
 Çalıştır:  python3 tests/test_gozlem.py"""
 import asyncio
+import copy
 import atexit
 import base64
 import io
@@ -56,7 +57,9 @@ def metin(r):
 
 
 def yapi(r):
-    return r.structured_content or {}
+    """structuredContent; observe/batch'te yok (yalnız metin) → metin ayrıştırılır (tests/yardimci/mcp_metin.py)."""
+    import mcp_metin
+    return mcp_metin.yapi(r)
 
 
 # ================================================================ A) saf birim
@@ -67,8 +70,18 @@ def birim_testleri():
     o = {"rol": "push button", "ad": "Kaydet", "kutu": [1, 2, 3, 4], "durumlar": ["focused"], "kaynak": "tree",
          "deger": "x" * 100, "hassas": True, "eylemler": ["Press"]}
     sat = gozlem.satir(o, 7)
-    kontrol("satir: [N] rol \"ad\" durum = değer !sensitive", sat.startswith('[7] push button "Kaydet" focused = "')
-            and sat.endswith("!sensitive") and "…" in sat, sat)
+    kontrol("satir: [N] rol \"ad\" @kutu durum = değer !sensitive",
+            sat.startswith('[7] push button "Kaydet" @1,2,3,4 focused = "') and sat.endswith("!sensitive") and "…" in sat,
+            sat)
+    import mcp_metin
+    e = mcp_metin._oge("ab12-3", 7, sat.split(" ", 1)[1])
+    kontrol("satir → ayrıştırma: rol/ad/kutu/durum/değer/hassas metinden geri okunur",
+            e["role"] == "push button" and e["name"] == "Kaydet" and e["frame"] == [1, 2, 3, 4] and
+            e["states"] == ["focused"] and e["value"].endswith("…") and e["sensitive"] is True, str(e))
+    e = mcp_metin._oge("ab12-3", 8, gozlem.satir({"rol": "push button", "ad": "", "kutu": [5, 6, 7, 8],
+                                                   "durumlar": ["disabled"], "kaynak": "tree"}, 8).split(" ", 1)[1])
+    kontrol("satir: adsız ögede rol (boşluklu) ile durum @kutu ile ayrılır", e == {
+        "ref": "ab12-3:8", "role": "push button", "frame": [5, 6, 7, 8], "states": ["disabled"]}, str(e))
     y = gozlem.yapisal({"rol": "label", "ad": "", "kutu": [0, 0, 5, 5], "durumlar": [], "kaynak": "tree"}, "ab12-3", 2)
     kontrol("yapisal: boş/varsayılan alanlar atılır (ad, durum, değer, eylem yok)",
             y == {"ref": "ab12-3:2", "role": "label", "frame": [0, 0, 5, 5]}, str(y))
@@ -175,9 +188,11 @@ async def liste_testleri():
     for ad in ("observe", "wait_for"):
         a = araclar[ad].annotations
         kontrol(f"liste: {ad} salt-okunur", a.read_only_hint is True)
-    for ad in ("observe", "batch", "wait_for", "click"):
+    for ad in ("wait_for", "click"):
         sema = araclar[ad].output_schema or {}
         kontrol(f"liste: {ad} outputSchema (effect alanı)", "effect" in (sema.get("properties") or {}), str(sema)[:200])
+    for ad in ("observe", "batch"):  # token ekonomisi: yalnız kısa metin (structuredContent metnin ~5 katıydı)
+        kontrol(f"liste: {ad} outputSchema YOK", araclar[ad].output_schema is None, str(araclar[ad].output_schema)[:200])
     kontrol("liste: batch yıkıcı (girdi)", araclar["batch"].annotations.destructive_hint is True)
     kontrol("liste: ref parametresi click/type_text/scroll'da, drag'de from_ref/to_ref",
             all("ref" in araclar[a].input_schema["properties"] for a in ("click", "type_text", "scroll")) and
@@ -263,13 +278,13 @@ async def sanal_testleri():
             await asyncio.sleep(0.25)
         txt = metin(r)
         kontrol("sanal observe: başlık satırı snapshot_id + kaynak tree, Qt ögeleri satır satır",
-                re.match(r"snapshot [0-9a-f]{4}-\d+ \| window \"gozlem-a11y\" \d+x\d+ \| sources tree", txt) is not None
+                re.match(r"snapshot [0-9a-f]{4}-\d+ \| window \S+ \"gozlem-a11y\" \d+x\d+ \| sources tree", txt) is not None
                 and '] push button "Kaydet"' in txt.replace("] button", "] push button") or '] button "Kaydet"' in txt,
                 txt[:400])
         ogeler = {e.get("name"): e for e in st.get("elements", [])}
-        kontrol("sanal observe: yapılandırılmış alanlar (ref, role, frame, actions; disabled, sensitive)",
+        kontrol("sanal observe: metindeki alanlar (ref, role, @frame; disabled, sensitive); structuredContent YOK",
                 ogeler.get("Kaydet", {}).get("ref", "").startswith(st.get("snapshot_id", "?") + ":") and
-                "Press" in ogeler.get("Kaydet", {}).get("actions", []) and
+                len(ogeler.get("Kaydet", {}).get("frame", [])) == 4 and r.structured_content is None and
                 "disabled" in ogeler.get("Pasif düğme", {}).get("states", []) and
                 ogeler.get("Satın al", {}).get("sensitive") is True, json.dumps(st.get("elements", [])[:4])[:400])
         kontrol("sanal observe: parola alanının değeri yok; sayı kutusunun değeri var",
@@ -681,9 +696,8 @@ async def kapi_testleri():
         await kapi("uygulama seviyesi goruntule", "click", {"ref": "Kaydet"}, 10, seviye)
         await kapi("uygulama seviyesi goruntule (via=action)", "click", {"ref": "Kaydet", "via": "action"}, 10, seviye)
         os.remove(yollar.seviye_dosya())
-        # sistem istemi: öge yolu (element/text tıklamasıyla aynı) pencere denetiminde onaysız istemi reddeder (10);
-        # onay sorulsa da sorulmasa da girdi gitmez
-        await kapi("sistem istemi (polkit)", "click", {"ref": "Kaydet"}, 10, lambda a: None, onay_beklenir=None,
+        # sistem istemi: ref tıklaması da (koordinatlı tık / via=action gibi) önce onay sorar; red → 10, girdi yok
+        await kapi("sistem istemi (polkit)", "click", {"ref": "Kaydet"}, 10, lambda a: None, onay_beklenir=True,
                    baslik="Kimlik doğrulama gerekli", sinif="polkit-kde-authentication-agent-1")
         _au, r = await kapi("parola alanı (red): tık gitti, YAZI gitmedi", "type_text", {"ref": "Parola", "text": "gizli1"},
                             10, lambda a: None, onay_beklenir=True, sent="maybe_partial", girdi_yok=("type ",))
@@ -780,6 +794,228 @@ async def kapi_testleri():
         s._DONGU.temizle()
 
 
+async def tur5_kapi_testleri():
+    """tur6 birleştirmesi: Faz 10'un ref/batch/observe yolları tur5'in kapılarından geçer (sahte kde + sahte AT-SPI).
+    - type_text(ref) ve batch adımlarındaki HER Enter (uçbirimde) ayrı onay ister (bir Enter = bir onay);
+    - click(ref) yapıştırma ögesine (simgeli "Yapıştır" düğmesi) kullanıcının panosu için onay ister;
+    - sistem istemi penceresinde click(ref | text | element) koordinatlı tık ve via=action gibi ONAY SORAR;
+    - observe'un çerçeve seçimi yalnız pencere süreci + aynı programlı torun (ata uygulamanın ağacı listelenmez);
+    - observe/batch: structuredContent yok, metin kısa (çekirdeğin yapılandırılmış sözlüğüyle karşılaştırma)."""
+    from mcp import Client
+    import sahte_masaustu as sm
+    from deskhand import kendi
+    F = {"desktop": "foreground"}
+    sm.kur()
+    UCB, UCB_SINIF = "kullanici@makine: ~", "konsole"
+
+    def enter_istekleri():
+        return [x for x in sm.ISTEKLER if "Enter" in x["eylem"] + x["ayrinti"] or "Uçbirim" in x["eylem"]]
+
+    async with Client(s.mcp) as c:
+        async def gozle(baslik):
+            r = await c.call_tool("observe", {"window": re.escape(baslik), **F})
+            return {e.get("name"): e for e in yapi(r).get("elements", [])}, r
+
+        # --- observe/batch token ekonomisi: istemciye yalnız metin
+        au = sm.sifirla()
+        og, r = await gozle("Belge — KWrite")
+        cekirdek = s.observe(window="KWrite", desktop="foreground")
+        tam = len(json.dumps(cekirdek.structured_content, ensure_ascii=False))
+        OLCUM["sahte_observe"] = (len(metin(r)), tam, len(og))
+        kontrol("observe istemciye: structuredContent YOK, metinde ref + @kutu (çekirdekte yapılandırılmış sözlük durur)",
+                r.structured_content is None and all(e.get("frame") for e in og.values()) and
+                cekirdek.structured_content.get("elements"), metin(r)[:200])
+
+        # --- uçbirim: type_text(ref) içindeki HER Enter ayrı onay
+        au = sm.sifirla(UCB, UCB_SINIF)
+        og, _r = await gozle(UCB)
+        sm.YANIT["izin"] = True
+        n0 = len(au.satirlar)
+        r = await c.call_tool("type_text", {"ref": og["Ad"]["ref"], "text": "ls\npwd", "submit": True, **F})
+        sat = au.satirlar[n0:]
+        kontrol("uçbirim type_text(ref='ls\\npwd', submit): 2 Enter → 2 ayrı onay, ikisi de gitti",
+                not r.is_error and len(enter_istekleri()) == 2 and sum(x == "key enter" for x in sat) == 2,
+                f"{[x['eylem'] for x in sm.ISTEKLER]} {sat}")
+        au = sm.sifirla(UCB, UCB_SINIF)
+        og, _r = await gozle(UCB)
+        sayac = {"n": 0}
+
+        def ilki_evet():  # ilk Enter onaylanır, ikincisi reddedilir: ikinci Enter GİTMEZ (önceki onay taşınmaz)
+            sayac["n"] += 1
+            sm.YANIT["izin"] = sayac["n"] == 1
+        sm.YANIT.update(izin=True, kanca=ilki_evet)
+        n0 = len(au.satirlar)
+        r = await c.call_tool("type_text", {"ref": og["Ad"]["ref"], "text": "ls\nrm -rf x\n", **F})
+        sat = au.satirlar[n0:]
+        kontrol("uçbirim type_text(ref): 1. Enter onaylı, 2. Enter reddedildi → [10]; onaylar yazıdan ÖNCE: hiç "
+                "yazı/Enter gitmedi", r.is_error and "[10]" in metin(r) and len(enter_istekleri()) == 2 and
+                not any(x == "key enter" or x.startswith("type ") for x in sat), f"{metin(r)[:200]} {sat}")
+
+        # --- batch adımlarındaki Enter'lar: adım başına, Enter başına onay
+        au = sm.sifirla(UCB, UCB_SINIF)
+        og, _r = await gozle(UCB)
+        sm.YANIT["izin"] = True
+        n0 = len(au.satirlar)
+        r = await c.call_tool("batch", {"steps": [
+            {"tool": "type_text", "args": {"ref": og["Ad"]["ref"], "text": "echo a\n"}},
+            {"tool": "press_key", "args": {"window": re.escape(UCB), "keys": "enter enter"}}], **F})
+        sat = au.satirlar[n0:]
+        kontrol("batch uçbirim: type_text '\\n' + press_key 'enter enter' → 3 Enter, 3 ayrı onay",
+                not r.is_error and len(enter_istekleri()) == 3 and sum(x == "key enter" for x in sat) == 3,
+                f"{metin(r)[:300]} {[x['eylem'] for x in sm.ISTEKLER]} {sat}")
+        au = sm.sifirla(UCB, UCB_SINIF)
+        og, _r = await gozle(UCB)
+        n0 = len(au.satirlar)
+        r = await c.call_tool("batch", {"steps": [
+            {"tool": "type_text", "args": {"ref": og["Ad"]["ref"], "text": "x"}},
+            {"tool": "press_key", "args": {"window": re.escape(UCB), "keys": "enter"}},
+            {"tool": "type_text", "args": {"ref": og["Ad"]["ref"], "text": "y"}}], **F})
+        st = yapi(r)
+        sat = au.satirlar[n0:]
+        kontrol("batch uçbirim (red): 2. adımın Enter'ı onay istedi, reddedildi → durdu, Enter yok, 3. adım gitmedi",
+                r.is_error and st.get("failed_step") == 2 and st.get("not_sent") == [3] and len(enter_istekleri()) == 1
+                and "key enter" not in sat and not any(x == "type y" for x in sat), f"{metin(r)[:300]} {sat}")
+
+        # --- click(ref) yapıştırma ögesi: kullanıcının panosu → onay
+        for via, ad_ in ((None, "Yapıştır"), ("action", "Yapıştır"), (None, "\U0001f4cb")):
+            au = sm.sifirla()
+            au.pano_oku = lambda: "kullanıcının gizli metni"
+            sm.AGAC["Belge — KWrite"].append(sm.oge("push button", ad_, 600, 200, 80, 30, kimlik=(":1.9", "/a/9"),
+                                                    yol=[3, 0]))
+            og, _r = await gozle("Belge — KWrite")
+            n0 = len(au.satirlar)
+            sm.ISLEMLER.clear()
+            r = await c.call_tool("click", {"ref": og[ad_]["ref"], **({"via": via} if via else {}), **F})
+            kontrol(f"click(ref='{ad_}'{', via=action' if via else ''}): yapıştırma ögesi → pano onayı istendi, red → "
+                    "[10], tık/eylem yok", r.is_error and "[10]" in metin(r) and
+                    any("pano" in (x["eylem"] + x["ayrinti"]).lower() or "clipboard" in
+                        (x["eylem"] + x["ayrinti"]).lower() for x in sm.ISTEKLER) and
+                    "click left" not in au.satirlar[n0:] and not sm.eylemler(),
+                    f"{metin(r)[:200]} {sm.ISTEKLER[:1]}")
+        au = sm.sifirla()
+        au.pano_oku = lambda: "kullanıcının gizli metni"
+        sm.AGAC["Belge — KWrite"].append(sm.oge("push button", "Yapıştır", 600, 200, 80, 30, kimlik=(":1.9", "/a/9"),
+                                                yol=[3, 0]))
+        og, _r = await gozle("Belge — KWrite")
+        sm.YANIT["izin"] = True
+        n0 = len(au.satirlar)
+        r = await c.call_tool("click", {"ref": og["Yapıştır"]["ref"], **F})
+        kontrol("click(ref='Yapıştır') izinle: BİR onay, bir tık, approved_by_user",
+                not r.is_error and len(sm.ISTEKLER) == 1 and au.satirlar[n0:].count("click left") == 1 and
+                yapi(r).get("approved_by_user") is True, f"{metin(r)[:200]} {len(sm.ISTEKLER)}")
+
+        # --- sistem istemi: ref/text/element tıklaması da ONAY SORAR (koordinatlı tık ve via=action gibi)
+        POLKIT, POLKIT_SINIF = "Kimlik doğrulama gerekli", "polkit-kde-authentication-agent-1"
+        for ad_, arg in (("ref", None), ("text", {"text": "Kaydet"}), ("element", {"element": "Kaydet"}),
+                         ("ref via=action", "action"), ("x/y (shot_id)", "xy")):
+            au = sm.sifirla(POLKIT, POLKIT_SINIF)
+            og, _r = await gozle(POLKIT)
+            if arg is None:
+                a = {"ref": og["Kaydet"]["ref"]}
+            elif arg == "action":
+                a = {"ref": og["Kaydet"]["ref"], "via": "action"}
+            elif arg == "xy":
+                rs = await c.call_tool("screenshot", {"window": re.escape(POLKIT), **F})
+                a = {"x": 160, "y": 120, "shot_id": (rs.structured_content or {}).get("shot_id")}
+            else:
+                a = {"window": re.escape(POLKIT), **arg}
+            n0 = len(au.satirlar)
+            sm.ISLEMLER.clear()
+            r = await c.call_tool("click", {**a, **F})
+            kontrol(f"sistem istemi click({ad_}): onay İSTENDİ, red → [10], tık/eylem yok",
+                    r.is_error and "[10]" in metin(r) and len(sm.ISTEKLER) == 1 and
+                    "click left" not in au.satirlar[n0:] and not sm.eylemler(),
+                    f"{metin(r)[:200]} {len(sm.ISTEKLER)} {au.satirlar[n0:]}")
+        for ad_, arg in (("ref", None), ("text", {"text": "Kaydet"}), ("element", {"element": "Kaydet"})):
+            au = sm.sifirla(POLKIT, POLKIT_SINIF)
+            og, _r = await gozle(POLKIT)
+            sm.YANIT["izin"] = True
+            a = {"ref": og["Kaydet"]["ref"]} if arg is None else {"window": re.escape(POLKIT), **arg}
+            n0 = len(au.satirlar)
+            r = await c.call_tool("click", {**a, **F})
+            kontrol(f"sistem istemi click({ad_}) izinle: BİR onay, bir tık", not r.is_error and len(sm.ISTEKLER) == 1
+                    and au.satirlar[n0:].count("click left") == 1, f"{metin(r)[:200]} {len(sm.ISTEKLER)}")
+
+    # --- observe çerçeve seçimi: yalnız pencere süreci + aynı programlı torun (gerçek erisim._cerceve_bul)
+    class Cerceve:
+        def __init__(self, ad, ogeler):
+            self.ad, self.ogeler = ad, ogeler
+
+        def get_name(self):
+            return self.ad
+
+    class Uygulama:
+        def __init__(self, pid, ad, cerceveler):
+            self.pid, self.ad, self.c = pid, ad, cerceveler
+
+        def get_process_id(self):
+            return self.pid
+
+        def get_name(self):
+            return self.ad
+
+        def get_child_count(self):
+            return len(self.c)
+
+        def get_child_at_index(self, i):
+            return self.c[i]
+
+    class Masa:
+        def __init__(self):
+            self.uygulamalar = []
+
+        def get_child_count(self):
+            return len(self.uygulamalar)
+
+        def get_child_at_index(self, i):
+            return self.uygulamalar[i]
+
+    masa = Masa()
+    SahteAtspi = type("SahteAtspi", (), {"get_desktop": staticmethod(lambda i: masa)})
+    ATA, PEN, TORUN, BASKA_TORUN = 7101, 7102, 7103, 7104
+    zincir = {PEN: [(PEN, "kwrite"), (ATA, "plasmashell")], TORUN: [(TORUN, "kwrite"), (PEN, "kwrite"), (ATA, "x")],
+              BASKA_TORUN: [(BASKA_TORUN, "evil"), (PEN, "kwrite"), (ATA, "x")], ATA: [(ATA, "plasmashell")]}
+    exe = {PEN: "/usr/bin/kwrite", TORUN: "/usr/bin/kwrite", BASKA_TORUN: "/usr/bin/evil", ATA: "/usr/bin/plasmashell"}
+    eski = (erisim._atspi_calistir, erisim._atspi, erisim._tara, erisim._exe, kendi.atalar)
+    erisim._atspi_calistir = erisim._atspi_is
+    erisim._atspi = lambda adres: SahteAtspi
+    erisim._tara = lambda Atspi, cerceve, *a, **k: {"ogeler": copy.deepcopy(cerceve.ogeler), "sure": 0.0}
+    erisim._exe = lambda pid: exe.get(int(pid))
+    kendi.atalar = lambda pid=None, proc=None: zincir.get(int(pid), [(int(pid), "?")]) if pid else [(0, "")]
+    try:
+        au = sm.sifirla()
+        au.pid_[sm.PENCERE] = str(PEN)
+        ata_ogesi = [sm.oge("push button", "ATA DÜĞMESİ", 10, 10, kimlik=(":1.1", "/ata/1"))]
+        masa.uygulamalar = [Uygulama(ATA, "plasmashell", [Cerceve("Belge — KWrite", ata_ogesi)])]
+        async with Client(s.mcp) as c:
+            r = await c.call_tool("observe", {"window": "KWrite", **F})
+            st = yapi(r)
+            kontrol("observe çerçevesi: ATA uygulamanın aynı başlıklı çerçevesi SEÇİLMEZ (ağaç yok → OCR)",
+                    not r.is_error and not any(e.get("name") == "ATA DÜĞMESİ" for e in st.get("elements", [])) and
+                    "tree" not in st.get("sources", []), metin(r)[:300])
+            r = await c.call_tool("click", {"window": "KWrite", "element": "ATA DÜĞMESİ", **F})
+            kontrol("click(element) ata uygulamanın ögesine gitmez", r.is_error, metin(r)[:200])
+            masa.uygulamalar.append(Uygulama(BASKA_TORUN, "evil", [Cerceve("Belge — KWrite", [
+                sm.oge("push button", "BAŞKA PROGRAM", 10, 10, kimlik=(":1.2", "/b/1"))])]))
+            r = await c.call_tool("observe", {"window": "KWrite", **F})
+            kontrol("observe çerçevesi: BAŞKA programlı torun seçilmez",
+                    not any(e.get("name") == "BAŞKA PROGRAM" for e in yapi(r).get("elements", [])), metin(r)[:300])
+            masa.uygulamalar.append(Uygulama(TORUN, "kwrite", [Cerceve("Belge — KWrite", [
+                sm.oge("push button", "TORUN DÜĞMESİ", 10, 10, kimlik=(":1.3", "/t/1"))])]))
+            r = await c.call_tool("observe", {"window": "KWrite", **F})
+            adlar = [e.get("name") for e in yapi(r).get("elements", [])]
+            kontrol("observe çerçevesi: aynı programlı TORUN seçilir (çok süreçli uygulama)", "TORUN DÜĞMESİ" in adlar
+                    and "ATA DÜĞMESİ" not in adlar, metin(r)[:300])
+            masa.uygulamalar.append(Uygulama(PEN, "kwrite", [Cerceve("Belge — KWrite", [
+                sm.oge("push button", "KENDİ DÜĞMESİ", 10, 10, kimlik=(":1.4", "/k/1"))])]))
+            r = await c.call_tool("observe", {"window": "KWrite", **F})
+            adlar = [e.get("name") for e in yapi(r).get("elements", [])]
+            kontrol("observe çerçevesi: tam PID eşleşmesi önce", adlar[:1] == ["KENDİ DÜĞMESİ"], metin(r)[:300])
+    finally:
+        erisim._atspi_calistir, erisim._atspi, erisim._tara, erisim._exe, kendi.atalar = eski
+        sm.kur()
+
+
 def main():
     t0 = time.monotonic()
     birim_testleri()
@@ -793,15 +1029,20 @@ def main():
     else:
         print("ATLANDI (C2): firefox / Xvfb / jeepney yok")
     asyncio.run(kapi_testleri())
+    asyncio.run(tur5_kapi_testleri())
     print("\n# ölçümler:")
     print(f"  tools/list: {OLCUM.get('tools_list')} karakter (~{(OLCUM.get('tools_list') or 0) // 4} token); "
           f"talimat {OLCUM.get('talimat')} karakter")
+    if "sahte_observe" in OLCUM:
+        m, j, n = OLCUM["sahte_observe"]
+        print(f"  observe (sahte, {n} öge): istemciye giden metin {m} karakter; çekirdeğin yapılandırılmış sözlüğü "
+              f"(artık GÖNDERİLMEZ) {j} karakter (x{j / max(m, 1):.1f})")
     for ad in ("sanal_tam", "sanal_interactive", "sanal_query", "web_buyuk", "web_buyuk_40", "web_buyuk_query",
                "web_read_text_300"):
         if ad in OLCUM:
             m, j, n = OLCUM[ad][:3]
-            print(f"  observe {ad}: {n} öge, metin {m} karakter (~{m // 4} token), yapılandırılmış JSON {j} karakter"
-                  + (f", {OLCUM[ad][3]} sn" if len(OLCUM[ad]) > 3 else ""))
+            print(f"  observe {ad}: {n} öge, metin {m} karakter (~{m // 4} token), metinden ayrıştırılan JSON {j} "
+                  "karakter" + (f", {OLCUM[ad][3]} sn" if len(OLCUM[ad]) > 3 else ""))
     print(f"\n{gecen}/{toplam} gözlem testi geçti ({time.monotonic() - t0:.1f} sn)")
     sys.exit(0 if gecen == toplam else 1)
 

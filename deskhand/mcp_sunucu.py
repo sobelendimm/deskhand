@@ -221,8 +221,10 @@ def _json(d) -> str:
 def arac(sema, **kayit):
     """Sonuç sözleşmeli araç kaydı. MCP'ye SARMALAYICI kaydedilir: gönderim sayacı sıfırlanır, ToolError hata sonucuna
     (sent/next, yapılandırılmış) çevrilir, sözlük sonuç kısa JSON metni + structuredContent olur; outputSchema =
-    `sema`. Modüldeki ad ÇEKİRDEK işlevde kalır (ToolError fırlatır, sözlük döner): batch adımları ve testler onu
-    çağırır (aynı kilit, kapılar, onay, döngü kesici; paralel kopya yok)."""
+    `sema`. sema=None: outputSchema YOK ve başarılı sonuç YALNIZ kısa metin (+ görüntü) içeriktir — structuredContent
+    gönderilmez (observe/batch: yapılandırılmış kopya metnin ~5 katı token'dı; metin her şeyi taşır). Modüldeki ad
+    ÇEKİRDEK işlevde kalır (ToolError fırlatır, sözlük/CallToolResult döner; yapılandırılmış alan çekirdekte durur):
+    batch adımları ve testler onu çağırır (aynı kilit, kapılar, onay, döngü kesici; paralel kopya yok)."""
     def dekor(fn):
         @functools.wraps(fn)
         def sarili(*a, **k):
@@ -231,11 +233,17 @@ def arac(sema, **kayit):
                 r = fn(*a, **k)
             except ToolError as e:
                 return hata_sonucu(e)
+            if sema is None:
+                if isinstance(r, CallToolResult):
+                    return CallToolResult(content=r.content, is_error=r.is_error)
+                return CallToolResult(content=[TextContent(type="text", text=_json(r))])
             if isinstance(r, CallToolResult):
                 return r
             return CallToolResult(content=[TextContent(type="text", text=_json(r))], structured_content=r)
         sarili.__signature__ = inspect.signature(fn, eval_str=True).replace(
-            return_annotation=Annotated[CallToolResult, sema])
+            return_annotation=CallToolResult if sema is None else Annotated[CallToolResult, sema])
+        if sema is None:
+            kayit.setdefault("structured_output", False)
         mcp.add_tool(sarili, name=fn.__name__, **kayit)
         fn.mcp_sarili = sarili
         return fn
@@ -1130,7 +1138,7 @@ def manage_desktop(
         raise ToolError(hata_metni(e)) from None
 
 
-@arac(GozlemSonuc, title="Observe", annotations=OKUMA, meta=HEP_YUKLE)
+@arac(None, title="Observe", annotations=OKUMA, meta=HEP_YUKLE)
 def observe(
     window: Pencere = None,
     query: Annotated[str | None, Field(description="Keep items whose name/value/role contains one of 'a|b' (case- "
@@ -1147,8 +1155,8 @@ def observe(
                                                    "changed (~) and removed (-) items")] = None,
     desktop: Masaustu = "auto",
 ) -> Annotated[CallToolResult, GozlemSonuc]:
-    """Numbered list of what a window shows: accessibility elements (role, name, states, value, frame [x,y,w,h] in
-    window pixels, actions) and, when the tree is missing or small, OCR text lines (source "ocr"). Each item has a ref
+    """Numbered list of what a window shows: accessibility elements (role, name, @frame x,y,w,h in window pixels,
+    states, value) and, when the tree is missing or small, OCR text lines (ocr). Each item has a ref
     "<snapshot_id>:N" for click, type_text, scroll and drag. Use it to find targets and, after an action, to check what
     changed (since). No window = OCR of the whole screen. Large lists are paged (next_offset). Password field values are
     never returned; forbidden windows are refused [10]. Read-only; refs expire after 120 s."""
@@ -1192,7 +1200,7 @@ def observe(
                              "window": {"id": pb["id"], "title": pb["title"], "size": [w, h]},
                              "sources": kaynaklar, "total": len(liste), "offset": offset}
         satir_: list[str] = []
-        baslik = (f"snapshot {sid} | window {json.dumps(pb['title'], ensure_ascii=False)} {w}x{h} | "
+        baslik = (f"snapshot {sid} | window {pb['id']} {json.dumps(pb['title'], ensure_ascii=False)} {w}x{h} | "
                   f"sources {'+'.join(kaynaklar) or 'none'} | {len(liste)} items")
         if sayfa is not None:
             s["page"] = {"title": sayfa.get("baslik", ""), "url": sayfa.get("adres", ""),
@@ -1259,6 +1267,7 @@ def observe(
                                      int((y_m + h_) * olcek + 1)], fill=(0, 0, 0))
             im = gozlem.isaretle(im, numarali, kok, olcek)
             s["shot_id"] = cekim_kaydet(k, au.ad, geo, kok, olcek, im.size)
+            icerik[0].text += f"\nshot_id {s['shot_id']}: the image shows the item numbers"
             tampon = io.BytesIO()
             im.save(tampon, "PNG", optimize=True)
             icerik.insert(0, ImageContent(type="image", data=base64.b64encode(tampon.getvalue()).decode(),
@@ -2003,7 +2012,7 @@ def _bekle_adimi(sn: float) -> None:
         time.sleep(min(0.1, kalan))
 
 
-@arac(TopluSonuc, title="Batch", annotations=EYLEM)
+@arac(None, title="Batch", annotations=EYLEM)
 def batch(
     steps: Annotated[list[Adim], Field(min_length=1, max_length=TOPLU_EN_COK,
                                        description="Steps run in order: {tool, args}")],
@@ -2058,10 +2067,13 @@ def batch(
                        "changed" if any(e in ("confirmed", "changed") for e in etkiler) else
                        "no_change" if etkiler and all(e == "no_change" for e in etkiler) else "unverifiable")
     son_k = getattr(_SON, "k", None)
-    metin = [f"batch {s['status']}: {sum(1 for x in sonuclar if x['ok'])}/{len(hazir)} steps ok"]
+    metin = [f"batch {s['status']}: {sum(1 for x in sonuclar if x['ok'])}/{len(hazir)} steps ok" +
+             (f" | effect {s['effect']}" if s.get("effect") else "")]
     for x in sonuclar:
         metin.append(f"{x['i']}. {x['tool']} " + (x.get("effect") or "ok" if x["ok"] else f"ERROR {x['error']}") +
-                     (f" changed_region={x['changed_region']}" if x.get("changed_region") else ""))
+                     (f" changed_region={x['changed_region']}" if x.get("changed_region") else "") +
+                     (" approved_by_user" if x.get("approved_by_user") else "") +
+                     (f" warning: {x['warning']}" if x.get("warning") else ""))
     if s["status"] == "stopped":
         metin.append(f"stopped at step {s['failed_step']}; not sent: steps {s['not_sent'] or 'none'}; "
                      f"failed step sent: {sonuclar[-1]['sent']}; batch sent: {s['sent']}")

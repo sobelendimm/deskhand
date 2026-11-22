@@ -39,7 +39,9 @@ def metin(r):
 
 
 def yapi(r):
-    return r.structured_content or {}
+    """structuredContent; observe/batch'te yok (yalnız metin) → metin ayrıştırılır (tests/yardimci/mcp_metin.py)."""
+    import mcp_metin
+    return mcp_metin.yapi(r)
 
 
 async def sahte_testler():

@@ -557,6 +557,25 @@ def _onayli_etiket(g):
         g.etiket += " --onayli"
 
 
+def sistem_istemi_onay(k, onayli, ne, goruntu_al=True):
+    """Hedef (yazı/simge/renk/öge) ARANMADAN önce: pencere bir sistem yetki/parola/izin istemiyse insan onayı sorulur
+    (koordinatlı tık, ref/text/element tıklaması ve erişilebilirlik eylemi AYNI: hepsi sorar; gözetimsiz kipte ret →
+    10). Sorulmadan önce yasak, ajanın kendi istemcisi ve erişim seviyesi denetlenir (onay diyaloğu bunlardan sonra).
+    Onay bu eylem boyunca o pencere için geçerlidir; sonraki denetle/hassas_nokta yeniden sormaz. → onaylandı mı."""
+    if not k or k == EKRAN or not guvenlik.sistem_istemi_mi(k):
+        return False
+    yasak_denetle(k)
+    guvenlik.kendi_istemci_denetle(k)
+    guvenlik.seviye_denetle(k, "fare")
+    return guvenlik.sistem_istemi_engel(k, onayli, ne, goruntu_al=goruntu_al)
+
+
+def sistem_istemi_on(g, k, onayli, ne=None):
+    """sistem_istemi_onay + girdi etiketine --onayli (fare yolları: metin/simge/renk/öge tıklaması)."""
+    if sistem_istemi_onay(k, onayli, ne or _("tıklama")):
+        _onayli_etiket(g)
+
+
 def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=(), ek_basliklar=()):
     """Tıklanacak nokta ve oradaki yazı belli olduktan SONRA tek onay (bir eylem = bir onay): ödeme sayfası ve/veya
     hassas düğme. Onay isteği noktadaki yazıyı + hassas düğme metnini + çevresinin küçük görüntüsünü taşır.
@@ -1114,6 +1133,7 @@ def k_simgeye_tikla(a):
     g = girdi_al(f"simgeye-tikla '{a.ad}' {a.dugme}")
     try:
         _au().one_getir(a.kimlik)
+        sistem_istemi_on(g, a.kimlik, a.onayli)  # polkit/KWallet: aramadan önce onay (koordinatlı tık gibi)
         denetle(a.kimlik, a.baslik)
         kesin, yakin, geo = simge_bul_ic(a)
         if not kesin:
@@ -1145,6 +1165,7 @@ def k_renge_tikla(a):
     g = girdi_al(f"renge-tikla {a.renk} {a.dugme}")
     try:
         _au().one_getir(a.kimlik)
+        sistem_istemi_on(g, a.kimlik, a.onayli)  # polkit/KWallet: aramadan önce onay (koordinatlı tık gibi)
         denetle(a.kimlik, a.baslik)
         im, geo, kok = pencere_goruntusu(a.kimlik, bolge_coz(a.bolge))
         alanlar = renk_alanlari(im, a.renk, a.en_az)
@@ -1171,6 +1192,7 @@ def k_metne_tikla(a):
     bolge = bolge_coz(a.bolge)
     try:
         _au().one_getir(a.kimlik)
+        sistem_istemi_on(g, a.kimlik, a.onayli)  # polkit/KWallet: aramadan önce onay (koordinatlı tık gibi)
         denetle(a.kimlik, a.baslik)  # yanlış sekme / yasak pencerede boşuna okuma yapma
         ms, geo, kok, sure, ozet, im = bul_dongu(a.kimlik, a.metin, bolge, a.bekle, son_care=not a.kaydirarak)
         if not ms and a.kaydirarak:  # sayfayı aşağı kaydırarak ara (ardışık düzen)

@@ -458,8 +458,14 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     (`~/.config/mozilla`, `~/.mozilla`), Chromium ailesi profil kökleri (`~/.config/chromium`, `google-chrome*`,
     `vivaldi*`, `BraveSoftware`, `microsoft-edge*`), ajan/bulut/depo kimlik bilgileri (`~/.claude`, `~/.claude.json`,
     `~/.config/gh`, `~/.git-credentials`, `~/.netrc`, `~/.aws`, `~/.docker/config.json`, `~/.config/rclone`, `~/.kube`),
-    Deskhand'in kendi ayar/günlüğü (`~/.config/deskhand`, `~/.local/state/deskhand`) ve Flatpak uygulama verileri
-    (`~/.var/app`). Dizin → boş tmpfs (uygulama yazabilir, atılır), dosya → `/dev/null`; sembolik bağsa (ör.
+    Deskhand'in kendi ayar/günlüğü (`~/.config/deskhand`, `~/.local/state/deskhand`), Flatpak uygulama verileri
+    (`~/.var/app`), mesajlaşma oturumları (`~/.local/share/TelegramDesktop`, `~/.config/discord*`, `Signal`,
+    `Element*`, `Slack`, `WhatsApp*`, `teams*`, `Mattermost`), oyun platformu jetonları (`~/.steam/steam/config`,
+    `~/.local/share/Steam/config`, `ssfn*`, `~/.config/heroic`, `~/.config/lutris`), KDE Connect eşleşme anahtarları,
+    qBittorrent (WebUI parolası; Flatpak'i de), Syncthing anahtarları, OBS yayın anahtarı
+    (`~/.config/obs-studio/basic/profiles`), RustDesk, Thunderbird, FileZilla, Remmina, paket deposu jetonları
+    (`~/.npmrc`, `~/.pypirc`, `~/.cargo/credentials*`) ve kabuk geçmişleri. Örtülen bir dizinin içindeki ayrıca
+    listelenmiş yol tekrar bağlanmaz. Dizin → boş tmpfs (uygulama yazabilir, atılır), dosya → `/dev/null`; sembolik bağsa (ör.
     profile-sync-daemon) HEDEFİ örtülür (hedef ad alanında zaten boş olan /run/user ya da /tmp'deyse gerek yok). Örtü
     veri klasörü bağlarından SONRA, oturum kopyası ondan da SONRA bağlanır: arka plan Firefox'u kendi kopyasıyla
     (`--profile <kopya>`, `XDG_CONFIG_HOME=<kopya>/.xdg-config`), Flatpak Electron kopyası `--filesystem=<kopya>` + XDG_*
@@ -468,7 +474,12 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     Wayland soketi, erişilebilirlik veri yolu, kendi X soketi + Xauthority salt okunur) ve oturum kopyalarından YALNIZ
     politikanın bu uygulamaya verdiği kopya (`Hazirlik.kopya_yolu` → `baslat(..., kopya=)` → `arka_ortak.kopya_bagi`:
     kopya kökünün doğrudan alt dizini olmalı, değilse Dur 14). Kopya komut satırından/ortamdan ÇIKARILMAZ: komutta
-    başka kopyanın yolu geçse de o kopya görünmez.
+    başka kopyanın yolu geçse de o kopya görünmez. MCP `open_app`'in onaylı kullanıcı girdisi (izin listesi dışı .desktop)
+    `gio launch <RUNTIME_DIR/uygulama/özel kopya>` ile başlar: o TEK dosya salt okunur bağlanır (`baslat(...,
+    girdi=)` → `arka_ortak.girdi_kopyasi_bagi`: o dizinin doğrudan çocuğu, kullanıcıya ait düz `.desktop`, değilse
+    Dur 14); aynı dizindeki başka kopyalar görünmez. Sıra: `open_app` izin listesi + KOD_BARINDIRAN onayı + belge
+    argümanı kuralları (`uygulama.mcp_uygulama`) → onaylı programın özet denetimi (`onayli_program_denetle`) → bu
+    yalıtımlı başlatma (TEK yol: `masaustu.baslat` → `korumali_baslat`).
   - Uygulamanın `PATH`'i ve `LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT`'i yalnız son komuta (`--setenv`) gider; yardımcı zincir
     (sh, nice, ionice, bwrap) güvenli PATH ile ve mutlak yollarla çalışır (aşağıda "Güvenli yardımcı ikililer").
   - `--new-session` (TIOCSTI yok). `--die-with-parent` YOK (masaüstü CLI'den uzun yaşar); kafes ve PID temizliği aynen;
@@ -485,8 +496,7 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 
   **Neyi korumaz (bilerek / kalan riskler):**
   - **Okuma:** uygulama kullanıcının dosyalarını OKUYABİLİR (belgeler, veri klasörleri, SIR_YOLLARI dışındaki her
-    şey: listede olmayan uygulamaların ayar/oturum dosyaları, ör. Telegram/Discord yerel verisi, `~/.config` altındaki
-    diğer jetonlar). Sır listesi bilinen yerleri örter; tam liste değildir. Ad alanı yazmayı ve oturumlara/süreçlere/
+    şey: listede olmayan uygulamaların ayar/oturum dosyaları ve `~/.config` altındaki diğer jetonlar). Sır listesi bilinen yerleri örter; tam liste değildir. Ad alanı yazmayı ve oturumlara/süreçlere/
     aygıtlara erişimi keser; hangi uygulamanın arka planda açılacağı oturum politikasının (kopya/bekle/kapali/on)
     işidir.
   - **Veri klasörleri yazılabilir:** uygulama `~/İndirilenler`, `~/Belgeler`, `~/Projeler`… içindeki NORMAL dosyaları
@@ -732,10 +742,15 @@ kaydırmada görünüm değişti, pencere geometrisi değişti), `changed`, `no_
 metni: `[kod] ne oldu` + `sent: nothing_sent | maybe_partial` + `next: ne yapmalı (araç adıyla)`; aynısı
 `structuredContent.error` {code, message, reason, next}, `sent`, `effect` alanlarında. `sent` sayacı (`gonderim.py`)
 `api.arka()` girdi nesnesinin `gonder()`/`ham()` dönüşünde ve erişilebilirlik eylemi/değer yazma çağrısından hemen önce
-artar; bırakma (`zorla`) sayılmaz. outputSchema: `observe`, `batch`, `wait_for`, `click` için alanlı TypedDict, diğer girdi
-araçlarında genel nesne; şemalardaki otomatik `title` metinleri tools/list'i küçültmek için silinir.
+artar; bırakma (`zorla`) sayılmaz. outputSchema: `wait_for`, `click` için alanlı TypedDict, diğer girdi araçlarında
+genel nesne; `observe` ve `batch`'te outputSchema YOK ve başarılı sonuç YALNIZ kısa metindir (structuredContent
+gönderilmez: yapılandırılmış kopya metnin ~5 katı token'dı). observe satırı `[N] rol "ad" @x,y,w,h durumlar = "değer"
+!sensitive (ocr) (offscreen) href="…"`; başlıkta snapshot_id, pencere kimliği, kaynaklar; include_screenshot'ta
+`shot_id` satırı. batch metni adım başına etki/changed_region/approved_by_user/warning ve durma satırını taşır. Hata
+sonuçları (her araçta) küçük structuredContent'i korur. Şemalardaki otomatik `title` metinleri silinir.
 **Sınırlar.** Tarayıcı penceresinde observe yalnız sayfayı (belge) listeler: adres çubuğu/sekmeler için `press_key`
 (ctrl+l) ya da `read_text(source="tree")`. Web ögeleri yalnız görünenler (kaydırma alanı dışındakiler `read_text(source=
-"web", hidden=true)`). Sistem istemi penceresinde ref/text/element tıklaması pencere denetiminde onaysız istem olarak
-reddedilir (10; koordinatlı tık onay sorar). `structuredContent` metinden büyüktür (href, eylem adları): istemci ikisini
-de modele veriyorsa token maliyeti artar.
+"web", hidden=true)`). Sistem istemi penceresinde (polkit, KWallet, parola sorucusu) her tıklama türü — ref, text,
+element, simge, renk, koordinat, `via=action` — hedef aranmadan önce insan onayı ister (`eylem.sistem_istemi_on`;
+gözetimsiz kipte ret → 10). `type_text(ref=…)` iki çekirdek eylemdir (alan tıklaması + yazı): sistem isteminde iki
+onay sorulur.

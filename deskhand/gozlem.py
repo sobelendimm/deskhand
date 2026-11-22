@@ -167,10 +167,13 @@ def gorunur_suz(ogeler: list[dict], etkilesimli: bool) -> list[dict]:
 # ---------------------------------------------------------------- biçim
 
 def satir(o: dict, n: int) -> str:
-    """Kısa satır: `[N] rol "ad" durum,durum = "değer" !sensitive (ocr)` (boş alanlar yok)."""
+    """Kısa satır (observe'un TEK çıktısı; yapılandırılmış kopyası gönderilmez):
+    `[N] rol "ad" @x,y,w,h durum,durum = "değer" !sensitive (ocr) (offscreen) href="…"` (boş alanlar yok). Kutu her
+    zaman ad/rolden hemen sonra: adsız ögede rol (boşluk içerebilir) ile durumlar `@` ile ayrılır."""
     p = [f"[{n}]", o["rol"]]
     if o.get("ad"):
         p.append(json.dumps(kisalt(o["ad"], AD_SINIRI), ensure_ascii=False))
+    p.append("@" + ",".join(str(int(v)) for v in o["kutu"]))
     if o.get("durumlar"):
         p.append(",".join(o["durumlar"]))
     if o.get("deger"):
@@ -179,6 +182,10 @@ def satir(o: dict, n: int) -> str:
         p.append("!sensitive")
     if o["kaynak"] == "ocr":
         p.append("(ocr)")
+    if o.get("gorunmez"):
+        p.append("(offscreen)")
+    if o.get("href"):
+        p.append("href=" + json.dumps(kisalt(o["href"], 120), ensure_ascii=False))
     return " ".join(p)
 
 

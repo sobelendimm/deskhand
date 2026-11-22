@@ -21,7 +21,8 @@ import types
 
 from .arka_uc import EKRAN, sec
 from . import guvenlik, ucbirim
-from .eylem import _bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, tikla_ic
+from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, sistem_istemi_on,
+                    sistem_istemi_onay, tikla_ic)
 from .gunluk import gunluk
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, seviye_denetle,
                        yazi_onay_ister_mi)
@@ -941,6 +942,7 @@ def k_ogeye_tikla(a):
     g = girdi_al(f"ogeye-tikla '{a.ad}' {a.dugme}")
     try:
         sec().one_getir(a.kimlik)
+        sistem_istemi_on(g, a.kimlik, a.onayli)  # polkit/KWallet: aramadan önce onay (koordinatlı tık/eylem gibi)
         denetle(a.kimlik, a.baslik)
         w = _web_sec(a, "fare")  # tarayıcı penceresi: önce sayfa ögeleri (tarayıcının erişilebilirlik ağacı)
         if w is not None:
@@ -1011,11 +1013,12 @@ def _hassas_oge(k, onayli, ne, o, bilgi, ek_metinler=(), ek_basliklar=()):
     return onayli_oldu
 
 
-def _eylem_baglami(a, tur="fare"):
-    """Her iki faresiz komutun ortak girişi: eylem kimliği sıfırla, ilk denetimler, ağaçtan ögeyi seç.
-    → (öge, kademe, süre)."""
+def _eylem_baglami(a, tur="fare", basla=True):
+    """Her iki faresiz komutun ortak girişi: eylem kimliği sıfırla (basla=False: çağıran zaten sıfırladı ve sistem
+    istemi onayını aldı), ilk denetimler, ağaçtan ögeyi seç. → (öge, kademe, süre)."""
     from .guvenlik import eylem_basladi
-    eylem_basladi()
+    if basla:
+        eylem_basladi()
     if a.kimlik == EKRAN:
         raise Dur(1, _("erişilebilirlik eylemi pencere ister (masaüstü kipi değil)"))
     from .guvenlik import sistem_istemi_engel
@@ -1232,11 +1235,13 @@ def _ogeye_eylem(a):
     eylem_basladi()
     if a.kimlik == EKRAN:
         raise Dur(1, _("erişilebilirlik eylemi pencere ister (masaüstü kipi değil)"))
+    # sistem istemi (polkit, KWallet…): onay korumalardan ÖNCE sorulur (korumalar onaysız istemi sormadan reddeder)
+    sistem_istemi_onay(a.kimlik, getattr(a, "onayli", False), _("erişilebilirlik eylemi"), goruntu_al=False)
     _atspi_korumalari(a.kimlik, a.baslik, "fare")  # ağaca bile bakmadan: yasak/kilitli pencerede hiçbir şey
     w = _web_sec(a, "eylem")
     if w is not None:
         return _web_eylem(a, w)
-    o, kademe, sure = _eylem_baglami(a, "fare")
+    o, kademe, sure = _eylem_baglami(a, "fare", basla=False)
     k = a.kimlik
     bilgi = _atspi_calistir(_oge_istegi(k, o, "incele"))
     if not bilgi["eylemler"]:

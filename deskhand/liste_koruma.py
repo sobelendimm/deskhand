@@ -184,9 +184,10 @@ _ONBELLEK: dict[str, tuple[float, str | None]] = {}
 _ONBELLEK_KILIT = threading.Lock()
 
 
-def metin(tur: str) -> str | None:
+def metin(tur: str, olustur: bool = True) -> str | None:
     """Geçerli liste metni: panel açıksa panelden (bellekteki yetkili kopya), kapalıysa dosyadan + işaret denetimi.
-    → metin | None (seviye dosyası yok = kısıt yok). Kayıp/değişmiş işaretli dosyada Dur 10."""
+    → metin | None (seviye dosyası yok = kısıt yok). Kayıp/değişmiş işaretli dosyada Dur 10. olustur=False: ilk
+    kurulumda (işaret yok, dosya yok) varsayılan yasak listesi DÖNER ama dosya yazılmaz (salt okuyan durum yolları)."""
     if AKTIF is not None:
         return AKTIF.metin(tur)
     simdi = time.monotonic()
@@ -196,7 +197,7 @@ def metin(tur: str) -> str | None:
             return o[1]
     sonuc = _panelden(tur)
     if sonuc is _YOK:
-        return _dosyadan(tur)  # dosya yolu önbelleksiz (~20 µs): elle/panelden yazılan değişiklik hemen geçerli
+        return _dosyadan(tur, olustur)  # dosya yolu önbelleksiz (~20 µs): elle/panelden yazılan değişiklik hemen geçerli
     with _ONBELLEK_KILIT:
         _ONBELLEK[tur] = (time.monotonic(), sonuc)
     return sonuc
@@ -219,7 +220,7 @@ def _panelden(tur: str):
         return _YOK
 
 
-def _dosyadan(tur: str) -> str | None:
+def _dosyadan(tur: str, olustur: bool = True) -> str | None:
     yol = dosya(tur)
     mevcut = _oku(yol)
     isaret = isaret_oku(tur)
@@ -228,8 +229,9 @@ def _dosyadan(tur: str) -> str | None:
     if mevcut is None and tur == "yasak" and isaret is None:  # ilk kurulum: eski davranış
         from .guvenlik import VARSAYILAN_YASAK
         mevcut = _(VARSAYILAN_YASAK)
-        try:
-            _yaz_atomik(yol, mevcut)
-        except OSError:
-            pass
+        if olustur:
+            try:
+                _yaz_atomik(yol, mevcut)
+            except OSError:
+                pass
     return mevcut
