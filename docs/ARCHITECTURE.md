@@ -521,20 +521,31 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   (mikrofon) da yok. Soketler ad alanında görünmez (`/run/user/UID` boş tmpfs). İki durum (`ses_ortami_uygula`):
   (1) varsayılan: ortam var olmayan bir sokete yönlendirilir, uygulamalar sessiz çalışır; (2) DİNLEME (Tur 3): oturumun
   özel ses sunucusu kurulmuşsa (`ses.kur`; `manage_desktop(start, audio=true)`, ilk `listen` çağrısı ya da ayar
-  `[dinleme] ozel_ses = true` ile) ortam YALNIZ onu gösterir. Özel örnek: oturum dizininde `ses/` (0700; soketler
-  `native`, `pipewire-0`), masaüstünün bellek kafesinde üç süreç (`ses_pw`, `ses_wp`, `ses_pulse`), kendi yapılandırması
-  (ALSA/Bluetooth/kamera eklentisi YÜKLENMEZ, WirePlumber yalnız `policy` profili, XDG/HOME oturum dizininde: kullanıcının
-  ayarları/filtre zincirleri okunmaz). İçinde yalnız `deskhand-sessiz` çıkışı + monitörü vardır: mikrofon yok, ses
-  kullanıcının hoparlörüne/kulaklığına ASLA gitmez, kullanıcının varsayılan çıkışı/düzeyi/modülleri değişmez. Uygulamanın
-  ad alanına yalnız bu dizin SALT OKUNUR bağlanır (`ses_bagi`); soket yolu kayıttan değil çalışma dizininden kurulur ve
-  gerçek dosya sisteminden denetlenir (`ses.soket_hazir`). Kurulamazsa (araç yok, açılmadı, beklenmeyen aygıt) özellik
+  `[dinleme] ozel_ses = true` ile) ortam YALNIZ onun PULSE soketini gösterir. Özel örnek: oturum dizininde `ses/` (0700;
+  PipeWire soketleri `pipewire-0`/`-manager`, yapılandırma, günlükler) ve `ses/pulse/` (0700; yalnız `native`), kendi
+  yapılandırması (ALSA/Bluetooth/kamera eklentisi ve aygıt fabrikaları YÜKLENMEZ, WirePlumber yalnız `policy` profili,
+  XDG/HOME oturum dizininde: kullanıcının ayarları/filtre zincirleri okunmaz). pipewire-pulse'ta modül yükleme KAPALI
+  (`pulse.allow-module-loading = false`, `pulse.cmd` boş): `load-module` (tünel, LADSPA, pipe, TCP…) reddedilir. İçinde
+  yalnız `deskhand-sessiz` çıkışı + monitörü vardır: mikrofon yok, ses kullanıcının hoparlörüne/kulaklığına ASLA gitmez,
+  kullanıcının varsayılan çıkışı/düzeyi/modülleri değişmez. Uygulamanın ad alanına YALNIZ `ses/pulse/` SALT OKUNUR
+  bağlanır (`ses_bagi`); PipeWire'ın tam yetkili soketleri, yapılandırma ve günlükler bağlanmaz, PIPEWIRE_REMOTE var
+  olmayan yoldur. Soket yolu kayıttan değil çalışma dizininden kurulur ve gerçek dosya sisteminden denetlenir
+  (`ses.soket_hazir`); Deskhand'in `parec`'i bağlanmadan önce `ses.soket_denetle` (dizin/soket türü, sahip, sert bağ, karşı
+  uç = kayıtlı `ses_pulse`). Derinlemesine savunma: üç ses süreci TEK bwrap ad alanında (`ses.sunucu_argv`: ayrı
+  kullanıcı/PID/ağ/IPC/UTS — ağ yok; kök salt okunur; /run, /tmp, /var/tmp, /home ve ev, /mnt, /media, /srv, RUNTIME_DIR
+  boş tmpfs; asgari /dev: snd/dri/video/hidraw yok; yazılabilir tek yol `ses/`; RLIMIT_NICE/RTPRIO 0), 1 numaralı süreç
+  küçük yönetici kabuk (`ses_pw`; ölünce çekirdek hepsini öldürür), masaüstünün bellek kafesinde nice 10 + ionice idle.
+  Üç süreç aynı PID ad alanındadır: ayrı PID ad alanlarında PipeWire veri akışı kurulamıyor (ölçüldü). Kurulamazsa (araç yok, açılmadı, beklenmeyen aygıt) özellik
   kapalı kalır, uyarı döner. Flatpak uygulamaları `--nosocket=pulseaudio` ile kalır (kendi soketlerini ezerdi): sesleri
   dinlenemez. Eski boş çıkış (null sink) düzeneği ve ses bekçisi artık kurulmaz.
 - **Dinleme (`listen`).** `dinleme.dinle`: özel çıkışın monitöründen `parec` ile 16 kHz mono s16 BELLEKTE kayıt (en çok 120 sn;
   `until_silence`: ses duyulduktan sonra sessizlikte erken biter) → ses hiç duyulmadıysa motor çalışmaz → `whisper-cli`
   (`-mc 0`, silero VAD varsa, model `[dinleme] model`; yoksa açık hata + kurulum ipucu, HİÇBİR ŞEY indirilmez) → `{text,
   segments[{t0,t1,text}], language, duration}`. Geçici WAV/JSON yalnız `<oturum>/dinleme/` (0700, dosyalar 0600; uygulamalar
-  görmez) ve iş bitince silinir. Kullanıcı oyundaysa/tam ekrandaysa GPU kullanılmaz (`-ng`, CPU). Tanınan metin günlüğe
+  görmez) ve iş bitince silinir; çökmeden kalan eski kayıtlar sonraki tanımada silinir. whisper-cli masaüstünün bellek
+  kafesinde nice 10 + ionice idle ile çalışır; motor mutlak yolu yalnız root'a ait zincirden (`arka_ortak.arac`);
+  `HSA_OVERRIDE_GFX_VERSION` yalnız kullanıcı ortamında tanımlıysa aktarılır. Kullanıcı oyundaysa/tam ekrandaysa GPU
+  kullanılmaz (`-ng`, CPU, en çok 4 iş parçacığı). Tanınan metin günlüğe
   YAZILMAZ (yalnız süre/dil/parça sayısı). Sonuç `warning` alanıyla "güvenilmeyen veri" etiketlidir (ses içinden komut
   enjeksiyonu). Kullanıcının GERÇEK ekran sesi bu sürümde yoktur: `desktop="foreground"` reddedilir.
 - **Uygulama ortamı (iki tür).** `arka_ortak.ortam_tabani`: kullanıcının oturumuna ait değişkenler (gerçek veri yolu,

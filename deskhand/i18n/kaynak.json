@@ -1787,23 +1787,26 @@
   "eylem.py:233"
  ],
  "dil auto, tr ya da en olmalı": [
-  "dinleme.py:196"
+  "dinleme.py:219"
  ],
  "dinleme": [
   "mcp_sunucu.py:1457"
  ],
  "dinleme kapalı: {araclar} yok (özel ses sunucusu kurulamadı)": [
-  "ses.py:181"
+  "ses.py:353"
  ],
  "dinleme kapalı: özel ses sunucusu için eksik araç: {araclar}": [
   "mcp_sunucu.py:1467"
  ],
  "dinleme kapalı: özel ses sunucusu kurulamadı ({hata})": [
-  "ses.py:211"
+  "ses.py:381"
  ],
  "dinleme motoru hazır değil: {ipucu}": [
-  "dinleme.py:194",
+  "dinleme.py:217",
   "mcp_sunucu.py:1464"
+ ],
+ "dinleme: oturum dizini çalışan masaüstününki değil": [
+  "dinleme.py:126"
  ],
  "dizi boş": [
   "eylem.py:974"
@@ -2417,7 +2420,7 @@
   "eylem.py:842"
  ],
  "kayıt alınamadı (parec çıkış kodu {kod})": [
-  "dinleme.py:151"
+  "dinleme.py:174"
  ],
  "kdotool yok": [
   "arka_uc/kwin.py:179"
@@ -2460,13 +2463,13 @@
   "guvenlik.py:1472"
  ],
  "konuşma tanıma başarısız (çıkış kodu {kod}): {hata}": [
-  "dinleme.py:222"
+  "dinleme.py:248"
  ],
  "konuşma tanıma motoru yok (whisper-cli: `sudo pacman -S whisper.cpp` ya da AUR whisper.cpp-*; yolu ayarlar.toml [dinleme] motor ile ver)": [
-  "dinleme.py:79"
+  "dinleme.py:86"
  ],
  "konuşma tanıma {sn:.0f} sn içinde bitmedi": [
-  "dinleme.py:229"
+  "dinleme.py:299"
  ],
  "koordinat": [
   "mcp_sunucu.py:1565"
@@ -2679,7 +2682,7 @@
   "guvenlik.py:921"
  ],
  "model dosyası yok: {yol} (ggml biçimli bir Whisper modeli indirip yolunu ayarlar.toml [dinleme] model ile ver; Deskhand hiçbir şey indirmez)": [
-  "dinleme.py:82"
+  "dinleme.py:89"
  ],
  "modeller indirilmemiş": [
   "doktor.py:229"
@@ -2774,7 +2777,7 @@
   "guvenlik.py:1721"
  ],
  "oturum dizini yolu çok uzun (soket yolu 108 bayt sınırı)": [
-  "ses.py:189"
+  "ses.py:365"
  ],
  "oturum hazırlanamadı: {hata}": [
   "mcp_sunucu.py:1955"
@@ -3001,17 +3004,11 @@
  "pencerenin uygulaması erişilebilirlik ağacında yok (pid {pid}). Firefox GNOME_ACCESSIBILITY=1 ile, Chromium --force-renderer-accessibility ile başlatılmalı": [
   "web.py:265"
  ],
- "pipewire açılmadı": [
-  "ses.py:196"
- ],
- "pipewire çalışmadı (bkz. {log})": [
-  "ses.py:198"
- ],
  "pipewire, wireplumber, pipewire-pulse ve libpulse araçlarını kur": [
   "doktor.py:249"
  ],
  "pipewire-pulse soketi açılmadı": [
-  "ses.py:202"
+  "ses.py:372"
  ],
  "program bulunamadı: {p}": [
   "uygulama.py:350"
@@ -3143,6 +3140,7 @@
   "arka_uc/sanal.py:482",
   "arka_uc/sanal.py:492",
   "arka_uc/sanal.py:502",
+  "dinleme.py:122",
   "masaustu.py:385",
   "masaustu.py:422",
   "masaustu.py:450",
@@ -3185,16 +3183,22 @@
   "cli.py:137"
  ],
  "seconds 1..{en} arasında olmalı": [
-  "dinleme.py:249"
+  "dinleme.py:312"
  ],
  "sed e: komut çalıştırır": [
   "guvenlik.py:810"
+ ],
+ "ses ad alanı kurulamadı (bkz. {log})": [
+  "ses.py:331"
  ],
  "ses modülü kaldırılamadı: {hata}": [
   "arka_ortak.py:955"
  ],
  "ses sunucusu şimdi kuruldu: bundan ÖNCE açılan uygulamaların sesi buraya gelmez; onları kapatıp yeniden aç (ya da masaüstünü manage_desktop(start, audio=true) ile aç)": [
   "mcp_sunucu.py:1481"
+ ],
+ "ses süreçleri başlamadı (bkz. {log})": [
+  "ses.py:334"
  ],
  "seçenek (- ile başlıyor) verilemez": [
   "uygulama.py:296"
@@ -3621,6 +3625,9 @@
  "{ad} · {g}×{y}": [
   "gui/metinler.py:175"
  ],
+ "{ad} çalışmadı (bkz. {log})": [
+  "ses.py:338"
+ ],
  "{ad} şifre deposu gerektiriyor; arka planda açılamaz (kaydınızı bozma riski), Ekranınızda yapılabilir.": [
   "oturum/__init__.py:42"
  ],
@@ -3964,16 +3971,25 @@
   "kwin_oturum.py:889"
  ],
  "özel boş çıkış ({sink}) görünmedi": [
-  "ses.py:204"
+  "ses.py:374"
+ ],
+ "özel ses soketi güvensiz ya da yok (sembolik bağ / soket değil / başkasının / gevşek izinli dizin): {yol}; bağlanılmadı": [
+  "ses.py:160"
+ ],
+ "özel ses soketi kullanıcının gerçek soketinin sert bağı: {yol}; bağlanılmadı": [
+  "ses.py:164"
+ ],
+ "özel ses soketinin karşı tarafı bu oturumun ses süreci değil ({karsi}); bağlanılmadı": [
+  "ses.py:171"
  ],
  "özel ses sunucusu hazır değil: dinleme kapalı": [
-  "dinleme.py:115"
+  "dinleme.py:137"
  ],
  "özel ses sunucusu için eksik araç: {araclar}": [
   "doktor.py:248"
  ],
  "özel ses sunucusunda beklenmeyen aygıt var: {a}": [
-  "ses.py:207"
+  "ses.py:377"
  ],
  "özel veri yolu adresi beklenenden farklı: {adres}": [
   "kwin_oturum.py:868"

@@ -5,6 +5,7 @@
 ## Yayımlanmamış (Tur 3: dinleme)
 
 - **`listen` aracı.** Görünmez masaüstündeki uygulamaların SESİ yerel Whisper ile yazıya dökülür (video, sesli mesaj). Her masaüstü isterse kendi özel, donanımsız ses sunucusunu alır (`manage_desktop(start, audio=true)` ya da ilk `listen`); uygulamalar yalnız onu görür, ses kullanıcının hoparlörüne gitmez, mikrofon yoktur. Kayıt bellekte tutulur, metin günlüğe yazılmaz, kullanıcının kendi ekran sesi dinlenmez. `doctor` "Dinleme" satırı eklendi; ayarlar `[dinleme]`.
+- **Dinleme güvenlik düzeltmeleri (bağımsız inceleme).** Uygulamalar özel ses sunucusuna yalnız pulse soketinden ulaşır ve modül YÜKLETEMEZ (`load-module` kapalı: tünel ile gerçek mikrofona/hoparlöre bağlanma, LADSPA ile keyfi kod, pipe ile dosya yazma, TCP soketi açma engellendi). PipeWire'ın tam yetkili soketi uygulamaya hiç bağlanmaz. Üç ses süreci de kendi bwrap ad alanında çalışır: ağ yok, ses donanımı/GPU yok, kullanıcının gerçek oturum soketleri ve ev dizini görünmez, yalnız `ses/` yazılabilir, düşük öncelik. Konuşma tanıma masaüstünün bellek kafesinde düşük öncelikle çalışır; kullanıcı oyundayken CPU'da en çok 4 iş parçacığı kullanır.
 
 ## 0.6.0 (0.5.4'ten sonra)
 
