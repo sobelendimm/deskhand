@@ -5,7 +5,8 @@ saatlerce geri izler ve gözcü/yürütücü döngüsünü kilitler (kde arka uc
 modülü bağımlılık olarak eklenmez; bunun yerine desen SINIRLANIR ve açık kalıplar reddedilir:
 
 * uzunluk en çok MAKS_UZUNLUK (300) karakter,
-* geçersiz sözdizimi → hata (re.compile),
+* (geçersiz sözdizimi REDDEDİLMEZ: "* Claude Code" gibi sıradan başlıklar da desen olarak gelir; çağıranlar kendi
+  `re.error` yolunu — kaçışlı düz metin eşleşmesi ya da hata — korur),
 * tekrarlanan bir grubun İÇİNDE yine tekrar (`(a+)+`, `(a*)*`, `(.*a){5,}`, `(a{2,9})*`) ya da çakışan seçenek
   (`(a|a)+`, `(a|ab)*`) → ret,
 * tek desende MAKS_SINIRSIZ (4) taneden çok sınırsız niceleyici (`.*.*.*.*.*x`: çok terimli geri izleme) → ret.
@@ -64,13 +65,9 @@ def _cakisan_secenekler(govde: str) -> bool:
 
 
 def sorun(desen: str) -> str | None:
-    """Desen güvenli değilse nedeni (çevrilmiş kısa metin), değilse None. Geçersiz sözdizimini de bildirir."""
+    """Desen güvenli değilse nedeni (çevrilmiş kısa metin), değilse None. Geçersiz sözdizimi güvenli sayılır (yukarıya bak)."""
     if len(desen) > MAKS_UZUNLUK:
         return _("desen çok uzun ({n} karakter; en çok {maks})").format(n=len(desen), maks=MAKS_UZUNLUK)
-    try:
-        re.compile(desen)
-    except re.error as e:
-        return _("geçersiz desen: {hata}").format(hata=e)
     yigin = []  # her açık grup için [gövde başlangıcı, içinde tekrar var mı, içinde '|' var mı]
     sinirsiz = 0
     i, sinif = 0, False

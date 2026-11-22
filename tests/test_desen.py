@@ -36,7 +36,8 @@ for k in KOTU:
     kontrol(f"reddedilir: {k[:24]!r}", desen.sorun(k) is not None)
 for k in IYI:
     kontrol(f"geçer: {k[:24]!r}", desen.sorun(k) is None, str(desen.sorun(k)))
-kontrol("geçersiz sözdizimi: neden bildirilir", "geçersiz desen" in (desen.sorun("[a") or ""))
+for sade in ("* Claude Code - izin: Bash(rm -rf build) 1=Yes 2=No", "[a", "(", "a)", "?x"):  # sözdizimi hatalı ama sıradan başlık
+    kontrol(f"geçersiz sözdizimi reddedilmez (düz başlık olabilir): {sade[:20]!r}", desen.sorun(sade) is None, str(desen.sorun(sade)))
 t0 = time.monotonic()
 for _ in range(200):
     desen.sorun("(Firefox|Chrome) - .*" * 10)

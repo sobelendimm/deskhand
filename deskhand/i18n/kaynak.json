@@ -1759,10 +1759,10 @@
   "doktor.py:165"
  ],
  "desen reddedildi: {neden}; daha basit bir başlık deseni ya da pencere kimliği ver": [
-  "desen.py:137"
+  "desen.py:134"
  ],
  "desen çok uzun ({n} karakter; en çok {maks})": [
-  "desen.py:69"
+  "desen.py:70"
  ],
  "deskhand desktop stop; deskhand desktop start": [
   "doktor.py:199"
@@ -2133,9 +2133,6 @@
  "geçersiz başlık deseni: {hata}": [
   "mcp_sunucu.py:2311"
  ],
- "geçersiz desen: {hata}": [
-  "desen.py:73"
- ],
  "geçersiz ekran boyutu: {boyut}": [
   "kwin_oturum.py:816"
  ],
@@ -2397,7 +2394,7 @@
   "gui/metinler.py:100"
  ],
  "iç içe niceleyici (ör. (a+)+): geri izleme ile kilitlenebilir": [
-  "desen.py:110"
+  "desen.py:107"
  ],
  "kabuk/oturum başlangıç, otomatik başlatma ya da güvenlik dosyasına yazma ({hedef})": [
   "guvenlik.py:701",
@@ -3393,7 +3390,7 @@
   "eylem.py:1101"
  ],
  "tekrarlanan grupta çakışan seçenekler (ör. (a|ab)+): geri izleme ile kilitlenebilir": [
-  "desen.py:112"
+  "desen.py:109"
  ],
  "tesseract hata verdi: {hata}": [
   "ocr.py:268"
@@ -3979,7 +3976,7 @@
   "guvenlik.py:975"
  ],
  "çok fazla sınırsız niceleyici ({n}; en çok {maks})": [
-  "desen.py:127"
+  "desen.py:124"
  ],
  "çok uzun ya da denetim karakteri içeriyor": [
   "uygulama.py:294"
