@@ -369,6 +369,43 @@ kontrol("baslik / sinif / pid / kimlikler", au.baslik(k) == "kwin-arka ANA" and 
         f"{au.sinif(k)} {au.pid(k)} {p1.pid}")
 kontrol("aktif: yeni pencere odak aldı", bekle(lambda: au.aktif() == k, 3), au.aktif())
 kontrol("ekran_alani = oturum boyutu", au.ekran_alani() == (0, 0, 1600, 900), str(au.ekran_alani()))
+
+# eşzamanlı KWin betik çağrıları: kdotool her çağrıda betik yükler, KWin betik kimliğini sıralı atar → kilitsiz eşzamanlı
+# çağrılar 'No such object path /Scripting/ScriptN' / zaman aşımı ile BOŞ döner (eski hata: 'pencere yok')
+def _esz(is_, adet=24, tekrar=4):
+    sonuc, hatalar, kilit = [], [], threading.Lock()
+
+    def calis():
+        for _i in range(tekrar):
+            try:
+                v = is_()
+            except Exception as e:  # noqa: BLE001
+                v = e
+            with kilit:
+                (hatalar if isinstance(v, Exception) else sonuc).append(v)
+    th = [threading.Thread(target=calis) for _ in range(adet)]
+    t_ = time.monotonic()
+    [x.start() for x in th]
+    [x.join() for x in th]
+    return sonuc, hatalar, time.monotonic() - t_
+
+
+s_, h_, sn_ = _esz(lambda: [kk for kk, b, _g in au.pencereler("kwin-arka ANA")])
+olcum["eşzamanlı 24x4 listeleme"] = f"{sn_:.1f} sn"
+kontrol("eşzamanlı: 24 iş parçacığı x 4 listeleme HEP aynı tek pencereyi bulur (boş/hata yok)",
+        len(s_) == 96 and all(v == [k] for v in s_) and not h_, f"{len(s_)} {h_[:2]} {[v for v in s_ if v != [k]][:2]}")
+s_, h_, _sn = _esz(lambda: (au.pencere_coz("kwin-arka ANA"), au.baslik(k), au.geometri(k)[2:]), adet=12, tekrar=3)
+kontrol("eşzamanlı: pencere_coz + baslik + geometri (karışık sorgular) hep doğru",
+        len(s_) == 36 and all(v == (k, "kwin-arka ANA", (700, 460)) for v in s_) and not h_, f"{h_[:2]} {s_[:1]}")
+_eski_ham = au._kd_ham
+au._kd_ham = lambda *a, **kw: ("", 1, "Error: No such object path '/Scripting/Script9'")
+try:
+    kod_ = dur_kodu(au._liste)
+    kod2_ = dur_kodu(au.pencere_coz, "kwin-arka ANA")
+finally:
+    au._kd_ham = _eski_ham
+kontrol("boş/hatalı KWin yanıtı 'pencere yok' (8) DEĞİL gerçek hata (7); sağlam yanıtta yine bulunur",
+        kod_ == 7 and kod2_ == 7 and au.pencere_coz("kwin-arka ANA") == k, f"{kod_} {kod2_}")
 sure = []
 for _ in range(7):
     t = time.perf_counter()
