@@ -31,6 +31,7 @@
  *   hareketbekle MS          hareketten sonraki ilk düğme/kaydırma öncesi bekleme (varsayılan 0)
  *   birak                    basılı tutulan HER ŞEYİ hemen bırak
  *   basili                   (tanılama) "tamam tus=KOD,… dugme=KOD,…": bu bağlantının basılı tuttukları
+ *   plan METİN               (tanılama) girdi göndermez; "tamam U+KOD:evdev:mod …" (mod: 1 Shift, 2 AltGr; '-' yazılamaz)
  *   bilgi                    "tamam GENİŞLİK YÜKSEKLİK DÜZEN"
  *   cik                      hepsini bırak, çık
  *
@@ -200,6 +201,8 @@ static void eslem_ekle(uint32_t cp, xkb_keysym_t sym, int kod, int mod) {
     eslemler[eslem_n++] = (struct eslem){cp, sym, kod, mod};
 }
 
+static void harita_metinden(char *metin);
+
 /* aygıtın xkb haritasından (düzen 0) tüm (tuş, seviye) → (karakter, keysym, Shift/AltGr) eşlemlerini çıkar */
 static void harita_kur(struct ei_device *kbd) {
     struct ei_keymap *km = ei_device_keyboard_get_keymap(kbd);
@@ -215,6 +218,11 @@ static void harita_kur(struct ei_device *kbd) {
     memcpy(metin, m, boy);
     metin[boy] = 0;
     munmap(m, boy);
+    harita_metinden(metin);
+}
+
+/* xkb tuş haritası METNİNDEN eşlemleri kur (metni serbest bırakır). --harita-sina tanılaması da bunu kullanır. */
+static void harita_metinden(char *metin) {
     if (!xkb_baglam) xkb_baglam = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     struct xkb_keymap *xk = xkb_baglam ? xkb_keymap_new_from_string(xkb_baglam, metin, XKB_KEYMAP_FORMAT_TEXT_V1,
                                                                     XKB_KEYMAP_COMPILE_NO_FLAGS) : NULL;
@@ -258,13 +266,20 @@ static void harita_kur(struct ei_device *kbd) {
     xkb_keymap_unref(xk);
 }
 
-/* karakter (cp > 0) ya da keysym (cp == 0) için en az değiştiricili eşlem; yoksa NULL */
+/* X11 tuş kodu sınırı: xkb kodu (evdev + 8) 255'i aşan tuş XWayland istemcilerine (Firefox, GTK/X11, Wine) HİÇ
+ * ulaşmaz. tr düzeninde `$` ve `€` hem AltGr+4 / AltGr+E'de hem de değiştiricisiz KEY_DOLLAR (434) / KEY_EURO (435)
+ * "inet" tuşlarında durur; en az değiştirici kuralı bu yüksek tuşları seçiyordu → Qt/Wayland'de doğru, XWayland'de
+ * karakter SESSİZCE kayboluyordu (ölçüldü: Firefox 'a$b' → 'ab'). Önce X11'de var olan tuş seçilir. */
+#define X11_AZAMI_KOD (255 - 8)
+static int eslem_derece(const struct eslem *e) { return (e->kod > X11_AZAMI_KOD ? 4 : 0) + popcount_mod(e->mod); }
+
+/* karakter (cp > 0) ya da keysym (cp == 0) için en uygun eşlem (X11'de var olan tuş, sonra en az değiştirici); yoksa NULL */
 static const struct eslem *eslem_ara(uint32_t cp, xkb_keysym_t sym) {
     const struct eslem *iyi = NULL;
     for (size_t i = 0; i < eslem_n; i++) {
         const struct eslem *e = &eslemler[i];
         if (cp ? e->cp != cp : e->sym != sym) continue;
-        if (!iyi || popcount_mod(e->mod) < popcount_mod(iyi->mod)) iyi = e;
+        if (!iyi || eslem_derece(e) < eslem_derece(iyi)) iyi = e;
     }
     return iyi;
 }
@@ -643,6 +658,7 @@ static long plan_kur(const char *metin, struct plan **plan_out, char *yok, size_
         if (cp == '\n') { plan[say++] = (struct plan){KEY_ENTER, 0}; continue; }
         if (cp == '\t') { plan[say++] = (struct plan){KEY_TAB, 0}; continue; }
         const struct eslem *e = cp >= 0x20 && cp != 0x7f ? eslem_ara(cp, 0) : NULL;
+        if (e && e->kod > X11_AZAMI_KOD) e = NULL; /* yalnız X11 dışı tuşta: XWayland'de kaybolur → yazılamaz (pano yolu) */
         if (e) { plan[say++] = (struct plan){e->kod, e->mod}; continue; }
         size_t len = (size_t)(p - basla);
         bool var = false;
@@ -811,6 +827,24 @@ static void satir_isle(char *satir) {
         yanit("tamam tus=%s dugme=%s", t, b);
         return;
     }
+    else if (!strcmp(c, "plan")) { /* tanılama: METNİN tuş planı "tamam U+KOD:kod:mod …" (girdi göndermez) */
+        char cikti[1024] = "";
+        const char *p = arg;
+        while (*p && strlen(cikti) + 40 < sizeof cikti) {
+            uint32_t cp;
+            const char *bas = p;
+            if (utf8_coz(&p, &cp) < 0) { yanit("hata gecersiz-utf8"); return; }
+            char tek[8] = {0}, yok[16];
+            memcpy(tek, bas, (size_t)(p - bas));
+            struct plan *pl;
+            long k = plan_kur(tek, &pl, yok, sizeof yok);
+            if (k == 1 && !yok[0]) snprintf(cikti + strlen(cikti), sizeof cikti - strlen(cikti), " U+%04X:%d:%d", cp, pl[0].kod, pl[0].mod);
+            else snprintf(cikti + strlen(cikti), sizeof cikti - strlen(cikti), " U+%04X:-", cp);
+            if (k >= 0) free(pl);
+        }
+        yanit("tamam%s", cikti);
+        return;
+    }
     else if (!strcmp(c, "bilgi")) {
         double bx, by, bw, bh;
         sinirlar(&bx, &by, &bw, &bh);
@@ -926,9 +960,43 @@ static int karsi_denetle(sd_bus *bus, const char *adres, long beklenen_pid) {
     return -1;
 }
 
+/* tanılama/test: EIS'siz, verilen xkb harita dosyasıyla METNİN tuş planı. Satır başına "U+KOD kod mod" ya da
+ * "U+KOD yazilamaz". Girdi GÖNDERMEZ, veri yoluna bağlanmaz. */
+static int harita_sina(const char *dosya, const char *metin) {
+    FILE *f = fopen(dosya, "r");
+    if (!f) return 1;
+    char *icerik = NULL;
+    size_t boy = 0;
+    FILE *b = open_memstream(&icerik, &boy);
+    char tampon[4096];
+    size_t n;
+    while (b && (n = fread(tampon, 1, sizeof tampon, f)) > 0) fwrite(tampon, 1, n, b);
+    fclose(f);
+    if (!b) return 1;
+    fclose(b);
+    harita_metinden(icerik);
+    if (!eslem_n) return 2;
+    const char *p = metin;
+    while (*p) {
+        uint32_t cp;
+        const char *bas = p;
+        if (utf8_coz(&p, &cp) < 0) return 3;
+        struct plan *plan;
+        char yok[16];
+        char tek[8] = {0};
+        memcpy(tek, bas, (size_t)(p - bas));
+        long k = plan_kur(tek, &plan, yok, sizeof yok);
+        if (k == 1 && !yok[0]) printf("U+%04X %d %d\n", cp, plan[0].kod, plan[0].mod);
+        else printf("U+%04X yazilamaz\n", cp);
+        if (k >= 0) free(plan);
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *adres = NULL;
     long beklenen_pid = 0;
+    if (argc == 4 && !strcmp(argv[1], "--harita-sina")) return harita_sina(argv[2], argv[3]);
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bus") && i + 1 < argc) adres = argv[++i];
         else if (!strcmp(argv[i], "--dbus-pid") && i + 1 < argc) beklenen_pid = strtol(argv[++i], NULL, 10);
