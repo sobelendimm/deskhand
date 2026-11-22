@@ -60,6 +60,10 @@ class ArkaUc(ABC):
     @abstractmethod
     def ekran_alani(self) -> tuple[int, int, int, int]: ...
 
+    def masaustu_olcegi(self) -> int:
+        """Masaüstü ölçeği (HiDPI): KWin arka plan masaüstünde kayıttaki `olcek` (1/2); diğerlerinde 1."""
+        return 1
+
     @abstractmethod
     def goruntu(self):
         """Tüm ekranın görüntüsü: PIL.Image (RGB), ekran pikseli."""

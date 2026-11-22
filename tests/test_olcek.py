@@ -24,6 +24,71 @@ from deskhand import api, arka_uc, gorsel, kwin_oturum as ko, masalar, masaustu,
 from deskhand.arka_uc import sec  # noqa: E402
 from deskhand.hata import ARAC_EKSIK, Dur  # noqa: E402
 
+# ---------------------------------------------------------------- 0) saf birim: AT-SPI kutu bölme YALNIZ ölçek > 1
+from types import SimpleNamespace  # noqa: E402
+
+from deskhand import erisim  # noqa: E402
+
+_g0 = _t0 = 0
+
+
+def _kontrol0(ad, kosul, ek=""):
+    global _g0, _t0
+    _t0 += 1
+    _g0 += bool(kosul)
+    print(f"{'GEÇTİ' if kosul else 'KALDI'}  {ad}" + (f"  ({ek})" if ek and not kosul else ""), flush=True)
+
+
+class _Durum:
+    def contains(self, _s):
+        return True
+
+
+class _Oge:
+    def __init__(self, kutu, cocuklar=(), ad=""):
+        self.kutu, self.cocuklar, self.ad = kutu, list(cocuklar), ad
+
+    def get_extents(self, _tur):
+        return SimpleNamespace(x=self.kutu[0], y=self.kutu[1], width=self.kutu[2], height=self.kutu[3])
+
+    def get_state_set(self):
+        return _Durum()
+
+    def get_role_name(self):
+        return "push button" if self.ad else "frame"
+
+    def get_name(self):
+        return self.ad
+
+    def get_child_count(self):
+        return len(self.cocuklar)
+
+    def get_child_at_index(self, i):
+        return self.cocuklar[i]
+
+
+_Atspi = SimpleNamespace(CoordType=SimpleNamespace(WINDOW=1), StateType=SimpleNamespace(SHOWING=1, SENSITIVE=2))
+# pencere 700x460; uygulama çerçevesini İKİ KAT (1400x920) bildiriyor, düğme çerçevede (200,100) 160x40
+_cerceve = _Oge((0, 0, 1400, 920), [_Oge((200, 100, 160, 40), ad="Kaydet")])
+
+
+def _kutu(olcek):
+    o = erisim._tara(_Atspi, _cerceve, (0, 0, 700, 460), 100, 5.0, 100, olcek=olcek)["ogeler"]
+    return [(x["x"], x["y"], x["w"], x["h"]) for x in o]
+
+
+print("0) AT-SPI kutu bölme (saf birim)")
+_kontrol0("ölçek 1 + çerçeve pencerenin 2 katı → kutular BÖLÜNMEZ (eski davranış)", _kutu(1) == [(200, 100, 160, 40)],
+          str(_kutu(1)))
+_kontrol0("ölçek 2 + aynı çerçeve → kutular mantıksal piksele bölünür", _kutu(2) == [(100, 50, 80, 20)], str(_kutu(2)))
+_kontrol0("xwayland_orani: ölçek 1 hep 1; ölçek 2'de yalnız oran ≈ 2 (1.5x, 3x çerçeve → 1)",
+          erisim.xwayland_orani(1400, 920, 700, 460, 1) == 1 and erisim.xwayland_orani(1400, 920, 700, 460, 2) == 2
+          and erisim.xwayland_orani(1050, 690, 700, 460, 2) == 1 and erisim.xwayland_orani(2100, 1380, 700, 460, 2) == 1
+          and erisim.xwayland_orani(700, 460, 700, 460, 2) == 1 and erisim.xwayland_orani(1400, 920, 0, 460, 2) == 1)
+if _g0 != _t0:
+    print(f"\n{_g0}/{_t0} geçti")
+    sys.exit(1)
+
 ok_, neden_ = ko.kullanilabilir()
 if not ok_ or not shutil.which("kscreen-doctor") or not yollar.eis_bin() or not yollar.goruntu_bin():
     print(f"atlandı: KWin oturumu/kscreen-doctor/yardımcılar yok ({neden_})")
@@ -32,7 +97,7 @@ if not ok_ or not shutil.which("kscreen-doctor") or not yollar.eis_bin() or not 
 import atexit  # noqa: E402
 
 atexit.register(lambda: masaustu.durum_oku() is not None and masaustu.masaustu_durdur())
-gecen = toplam = 0
+gecen, toplam = _g0, _t0
 olcum = {}
 PENCERE = os.path.join(_yalitim.KOK, "tests", "yardimci", "kwin_test_pencere.py")
 LOG = os.path.join(_yalitim.PAYLASIM, "olcek.log")

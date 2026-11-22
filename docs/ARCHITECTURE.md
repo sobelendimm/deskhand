@@ -250,8 +250,10 @@ fiziksel kareyi mantıksala LANCZOS ile küçültür; `tam=True` küçültmez, `
 (tam kare `max_edge`'e küçültülür; `shot_id` ölçeği = küçültme × piksel ölçeği → `cekim_noktasi` mantıksal koordinat
 verir; küçük bölgeler 2× ayrıntıyla döner). XWayland: KWin `[Xwayland] Scale=2` (istemciler kendileri ölçekler, X11
 koordinatı fiziksel) → oturum uygulamalarına `GDK_SCALE=2` (Firefox dpr 2), Chromium/Electron'a
-`--force-device-scale-factor=2`; AT-SPI çerçevesi pencere geometrisinin ≥1,5 katıysa (`erisim._tara`) kutular bu
-orana bölünür. Xvfb türünde ölçek 2 Dur(9) ile reddedilir (çıkış ölçeği yok; uygulama başına bayraklar Qt/GTK/X11
+`--force-device-scale-factor=2`; AT-SPI kutuları YALNIZ ölçek > 1 masaüstünde (istekte `olcek`,
+`ArkaUc.masaustu_olcegi()`) ve çerçeve pencere geometrisinin ~ölçek katıysa (iki boyutta da |oran − ölçek| < 0,35;
+`erisim.xwayland_orani`) ölçeğe bölünür; ölçek 1'de hiç bölünmez (çerçevesini büyük bildiren uygulamada yanlış tık
+olmasın). Xvfb türünde ölçek 2 Dur(9) ile reddedilir (çıkış ölçeği yok; uygulama başına bayraklar Qt/GTK/X11
 karışımında tutarsız). Bellek: 2× kare ~4 kat çerçeve tamponu (1280x800'de Firefox'lu kafes ~500 MiB; 4 GB kafes
 yeter).
 Varsayılan `on` (kullanıcının gerçek masaüstü). `oto`, `deskhand decide` (karar) komutuna bağlanır: kullanıcı

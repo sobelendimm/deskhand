@@ -191,6 +191,9 @@ class KwinArkaUc(ArkaUc):
     def ekran_adi(self) -> str:
         return self._d()["ekran"]
 
+    def masaustu_olcegi(self) -> int:
+        return kwin_oturum.olcek_al(self._d())
+
     def _kd_ham(self, *a, d: dict | None = None, deneme: int = 4) -> tuple[str, int, str]:
         """kdotool (stdout, çıkış kodu, stderr). Her çağrı oturumun KWin betik kilidi altında (kd_sirala; sıralı betik
         kimliği çakışması: bkz. dosya başı notu). Okuma sorguları boş/hatalı dönerse kısa yeniden denenir; eylemler

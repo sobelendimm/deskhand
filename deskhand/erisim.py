@@ -438,7 +438,16 @@ def _deger_temizle(deger: str, *ipuclari: str) -> str | None:
     return deger or None
 
 
-def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayrinti=False):
+def xwayland_orani(fe_w, fe_h, W, H, olcek=1) -> int:
+    """AT-SPI çerçevesini mantıksal piksele bölme oranı. YALNIZ ölçek > 1 masaüstünde ve çerçeve pencerenin ~ölçek katıysa
+    (XWayland uygulaması X11 = fiziksel pikselle bildirir) → olcek; ölçek 1'de HER ZAMAN 1 (çerçevesini yanlış/büyük
+    bildiren uygulamada kutular bölünüp yanlış yere tıklanmasın)."""
+    if olcek <= 1 or W <= 0 or H <= 0:
+        return 1
+    return olcek if abs(fe_w / W - olcek) < 0.35 and abs(fe_h / H - olcek) < 0.35 else 1
+
+
+def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayrinti=False, olcek=1):
     """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi, çerçeveden çocuk-sıra yolu. Wayland'de
     ekran koordinatı yok → çerçeveye göre (WINDOW) konum + pencere dekorasyonu payı (pencere boyutu − AT-SPI boyutu).
     kimlik_ver: her ögeye `kimlik` = [veri yolu adı, nesne yolu] (MCP ref doğrulaması); ayrinti: + durumlar, eylemler,
@@ -449,8 +458,8 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
     WIN = Atspi.CoordType.WINDOW
     fe = cerceve.get_extents(WIN)
     # ölçek 2 masaüstünde XWayland uygulaması (Firefox/Chromium) X11 pikseliyle (fiziksel = mantıksal × 2) bildirir:
-    # çerçeve pencerenin iki katıysa kutular mantıksal piksele bölünür (ölçek 1'de çerçeve hiç bu kadar büyük olmaz)
-    r = round(fe.width / W) if W > 0 and H > 0 and fe.width >= 1.5 * W and fe.height >= 1.5 * H else 1
+    # çerçeve pencerenin ~ölçek katıysa kutular mantıksal piksele bölünür; ölçek 1'de r = 1 (eski davranış birebir)
+    r = xwayland_orani(fe.width, fe.height, W, H, olcek)
     fw, fh = fe.width / r, fe.height / r
     ox = max(0, round((W - fw) / 2)) if W > fw else 0
     oy = max(0, round(H - fh - ox)) if H > fh else 0
@@ -647,7 +656,7 @@ def _atspi_is(istek):
         return _odakli_kart(Atspi, cerceve)
     if islem == "tara":
         r = _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"],
-                  bool(istek.get("kimlik_ver")), bool(istek.get("ayrinti")))
+                  bool(istek.get("kimlik_ver")), bool(istek.get("ayrinti")), int(istek.get("olcek") or 1))
         r["cerceve_kimlik"] = _nesne_kimligi(cerceve)
         return r
     oge = _yoldan_bul(Atspi, cerceve, istek["yol"], istek["rol"], istek["ad"])
@@ -855,7 +864,11 @@ def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400, kimlik_ver=False,
         ek["kimlik_ver"] = True
     if ayrinti:
         ek["ayrinti"] = True
-    istek = _pencere_istegi(k, "tara", geo=list(sec().geometri(k)), en_cok=en_cok, sure=sure, cocuk_siniri=cocuk_siniri,
+    au = sec()
+    olcek = au.masaustu_olcegi() if hasattr(au, "masaustu_olcegi") else 1
+    if olcek != 1:
+        ek["olcek"] = olcek  # XWayland çerçevesi fiziksel pikselde: _tara yalnız bu ölçekte böler
+    istek = _pencere_istegi(k, "tara", geo=list(au.geometri(k)), en_cok=en_cok, sure=sure, cocuk_siniri=cocuk_siniri,
                             **ek)
     bitis = time.monotonic() + (4.0 if yeni else 0.0)  # az önce açıldı: çalışan uygulamalar ağaca kısa sürede girer
     while True:
