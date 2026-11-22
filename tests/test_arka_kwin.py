@@ -17,6 +17,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; Deskhand'den ÖNCE)
@@ -68,6 +69,19 @@ if not ok:
     sys.exit(0)
 
 
+def ata_pidler(pid):
+    """pid ve ataları (uygulama bwrap ad alanında: başlatılan PID bwrap'in kendisi, pencere sahibi onun çocuğu)."""
+    s_ = []
+    while pid and pid > 1 and len(s_) < 16:
+        s_.append(pid)
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return s_
+
+
 def sha1(yol):
     try:
         with open(os.path.expanduser(yol), "rb") as f:
@@ -91,6 +105,21 @@ GERCEK_DOSYALAR = ["~/.config/kwinrc", "~/.config/kwinoutputconfig.json", "~/.co
                    "~/.config/dconf/user"]
 sha0 = {y: sha1(y) for y in GERCEK_DOSYALAR}
 fare0 = gercek_fare()
+# K3: koşu BOYUNCA gerçek imleç örneklenir (salt okuma, 0,25 sn): bizim gönderdiğimiz bir noktaya hiç gitmemeli
+FARE_ORNEK = []
+_ornek_dur = threading.Event()
+
+
+def _fare_ornekle():
+    while not _ornek_dur.is_set():
+        f_ = gercek_fare()
+        if f_ is not None:
+            FARE_ORNEK.append(f_)
+        time.sleep(0.25)
+
+
+threading.Thread(target=_fare_ornekle, daemon=True).start()
+BIZIM_X = []  # bu testin oturumlarının X ekran numaraları (sonda hiçbiri kalmamalı)
 KWIN0 = sorted(p for p in pidler("kwin_wayland") if os.environ.get("WAYLAND_DISPLAY", "-") in
                subprocess.run(["cat", f"/proc/{p}/cmdline"], capture_output=True, text=True).stdout.replace("\0", " "))
 x0 = set(os.listdir("/tmp/.X11-unix"))
@@ -140,7 +169,8 @@ def aygit(dugum, boot, bagli, tumlesik, erisim=True):
 A_OYUN, A_TUM = aygit("/dev/dri/renderD128", "1", True, False), aygit("/dev/dri/renderD129", "0", False, True)
 kontrol("GPU: oyun GPU'su + tümleşik → tümleşik", (ko.render_sec([A_OYUN, A_TUM]) or {}).get("dugum") == A_TUM["dugum"])
 kontrol("GPU: tek aygıt → varsayılan (None)", ko.render_sec([A_OYUN]) is None)
-kontrol("GPU: tümleşik ekrana bağlıysa (çıkış var) seçilmez", ko.render_sec([A_OYUN, {**A_TUM, "bagli": True}]) is None)
+kontrol("GPU: 'bağlı çıkış' bilgisine güvenilmez (boot_vga=0 + tümleşik yeter)",
+        (ko.render_sec([A_OYUN, {**A_TUM, "bagli": True}]) or {}).get("dugum") == A_TUM["dugum"])
 kontrol("GPU: tümleşik boot_vga=1 ise seçilmez", ko.render_sec([A_OYUN, {**A_TUM, "boot_vga": "1"}]) is None)
 kontrol("GPU: iki ayrık kart (tümleşik yok) → varsayılan", ko.render_sec([A_OYUN, {**A_TUM, "tumlesik": False}]) is None)
 kontrol("GPU: erişilemeyen aygıt seçilmez", ko.render_sec([A_OYUN, {**A_TUM, "erisim": False}]) is None)
@@ -193,8 +223,9 @@ au = sec(arka_bayragi=True)
 kontrol("sec(): KWin arka ucu, ad 'sanal', tür 'kwin'", type(au).__name__ == "KwinArkaUc" and au.ad == "sanal" and
         au.tur == "kwin")
 kontrol("sec(arka:{…} kimliği) → aynı arka uç", sec("arka:{00000000-0000-0000-0000-000000000000}") is au)
-kontrol("kafes: KWin + dbus + bildirim + kayıt defteri + ses bekçisi aynı bellek kafesinde",
-        all(masaustu._cgroup(d["pid"][a]) == d["cgroup"] for a in ("kwin", "dbus", "bildirim", "a11y", "ses_bekcisi")),
+BIZIM_X.append(d["x_ana"])
+kontrol("kafes: KWin + dbus + bildirim + kayıt defteri + öncelik bekçisi aynı bellek kafesinde",
+        all(masaustu._cgroup(d["pid"][a]) == d["cgroup"] for a in ("kwin", "dbus", "bildirim", "a11y", "oncelik_bekcisi")),
         str({a: masaustu._cgroup(d["pid"].get(a)) for a in d["pid"]}))
 onc = ko.oncelik_durumu(d["pid"]["kwin"])
 io_ = subprocess.run(["ionice", "-p", str(d["pid"]["kwin"])], capture_output=True, text=True).stdout.strip()
@@ -209,7 +240,9 @@ kontrol("öncelik: KWin'in TÜM iş parçacıkları nice >= 10, gerçek zamanlı
         bekle(oncelik_iyi, 2, 0.1), f"{[x for x in onc if x[1] < 10 or x[2] in (1, 2, 6)][:5]} {io_}")
 with open(os.path.join(d["calisma"], "oncelik-bekcisi.log"), errors="replace") as f_:
     olcum["öncelik bekçisinin düzelttikleri (açılışta)"] = len(f_.read().splitlines())
-kontrol("ses: kendi boş çıkışı yüklü", masaustu._sink_modulu(d["ses"]["sink"]) == d["ses"]["modul"])
+kontrol("ses: boş çıkış/ses bekçisi YOK (arka plan uygulaması ses sunucusuna erişmez)",
+        d.get("ses") is None and "ses_bekcisi" not in d["pid"] and
+        masaustu._sink_modulu("deskhand-sessiz-kwin-" + d["kimlik"]) is None)
 kontrol("hazırlık: oturumun erişilebilirlik veri yolu, kullanıcınınkinden FARKLI ve oturum dizininde",
         d.get("a11y_adres") and d["calisma"] in d["a11y_adres"] and d["a11y_adres"] not in subprocess.run(
             ["busctl", "--user", "call", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress"],
@@ -255,8 +288,8 @@ kontrol("ortam: WAYLAND_DISPLAY oturumun MUTLAK soketi, DISPLAY oturumun XWaylan
         str({a: oe.get(a) for a in ("WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS")}))
 kontrol("ortam: SSH ajanı, kullanıcının erişilebilirlik adresi, EIS soketi, ses sunucusu GEÇMEDİ",
         not any(a in oe for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS", "LIBEI_SOCKET", "KDE_FULL_SESSION",
-                                   "SESSION_MANAGER")) and oe.get("PULSE_SINK") == d["ses"]["sink"] and
-        oe.get("PULSE_SERVER") == f"unix:/run/user/{os.getuid()}/pulse/native",
+                                   "SESSION_MANAGER", "PULSE_SINK")) and
+        oe.get("PULSE_SERVER") == f"unix:{d['calisma']}/ses-yok",
         str([a for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS", "LIBEI_SOCKET") if a in oe]) + str(oe.get("PULSE_SERVER")))
 kontrol("ortam: XDG_RUNTIME_DIR masaüstünün KENDİ klasörü (kullanıcınınki değil), HOME kullanıcının",
         oe.get("XDG_RUNTIME_DIR", "").startswith(d["calisma"]) and oe.get("HOME") == os.path.expanduser("~"),
@@ -323,7 +356,8 @@ kontrol("pencere_coz: ad → kimlik, kimlik → kimlik, {uuid} → arka:{uuid}, 
 kontrol("pencere_coz: yok → 8, yanlış biçim → 8", dur_kodu(au.pencere_coz, "yok-boyle") == 8 and
         dur_kodu(au.geometri, "arka:0x1234") == 8)
 kontrol("baslik / sinif / pid / kimlikler", au.baslik(k) == "kwin-arka ANA" and au.sinif(k) == au.sinif(k).lower()
-        and au.sinif(k) != "" and au.pid(k) == p1.pid and k in au.kimlikler(), f"{au.sinif(k)} {au.pid(k)} {p1.pid}")
+        and au.sinif(k) != "" and p1.pid in ata_pidler(au.pid(k)) and k in au.kimlikler(),
+        f"{au.sinif(k)} {au.pid(k)} {p1.pid}")
 kontrol("aktif: yeni pencere odak aldı", bekle(lambda: au.aktif() == k, 3), au.aktif())
 kontrol("ekran_alani = oturum boyutu", au.ekran_alani() == (0, 0, 1600, 900), str(au.ekran_alani()))
 sure = []
@@ -506,22 +540,25 @@ t = time.monotonic()
 ok_, notlar = masaustu.masaustu_durdur()
 olcum["kapanış"] = f"{(time.monotonic() - t) * 1000:.0f} ms"
 kontrol("durdur: kapatıldı, not yok", ok_ and not notlar, str(notlar))
-kontrol("durdur: süreçler (KWin, dbus, bildirim, kayıt defteri, ses bekçisi, uygulama) yok",
+kontrol("durdur: süreçler (KWin, dbus, bildirim, kayıt defteri, öncelik bekçisi, uygulama) yok",
         not any(masaustu._canli(p) for p in pids.values()) and bekle(lambda: p1.poll() is not None, 3))
 kontrol("durdur: kafes boş, çalışma dizini + durum dosyası silindi", not masaustu._kafes_surecleri(cg) and
         not os.path.exists(cdir) and not os.path.exists(masaustu.durum_yolu()))
 kontrol("durdur: XWayland soketleri/kilitleri kalmadı", not any(os.path.exists(y) for n in (xa, xa + 1) for y in (
     f"/tmp/.X11-unix/X{n}", f"/tmp/.X{n}-lock")))
-kontrol("durdur: boş ses çıkışı kaldırıldı", masaustu._sink_modulu(d["ses"]["sink"]) is None)
+kontrol("durdur: hiçbir deskhand-sessiz ses çıkışı kalmadı (hiç kurulmadı)",
+        masaustu._sink_modulu("deskhand-sessiz-kwin-" + d["kimlik"]) is None)
 kontrol("durdur: kapalıyken arka uç → Dur 14", dur_kodu(au.goruntu) == 14 and dur_kodu(au.girdi) == 14)
 
 # çökme: KWin SIGKILL → durum yok; sonraki başlatma kalıntıyı temizler
 d2_ = masaustu.masaustu_baslat("800x600")
+BIZIM_X.append(d2_.get("x_ana"))
 os.kill(d2_["pid"]["kwin"], signal.SIGKILL)
 bekle(lambda: not masaustu._canli(d2_["pid"]["kwin"]), 3)
 kontrol("çökme: KWin ölünce durum() None (bayat kayıt bağlanmaz)", masaustu.durum() is None and
         dur_kodu(sec(arka_bayragi=True).goruntu) == 14)
 d3_ = masaustu.masaustu_baslat("800x600")
+BIZIM_X.append(d3_.get("x_ana"))
 kalinti = {"dizin": os.path.exists(d2_["calisma"]),
            # eski oturumun kilidi kalmadı (aynı numarayı yeni oturum yeniden almış olabilir: onunki sayılmaz)
            "kilit": [n for n in (d2_["x_ana"], d2_["x_ana"] + 1) if os.path.exists(f"/tmp/.X{n}-lock")
@@ -536,17 +573,23 @@ masaustu.masaustu_durdur()
 print("\n11) gerçek oturum")
 for y in GERCEK_DOSYALAR:
     kontrol(f"gerçek dosya değişmedi: {y}", sha1(y) == sha0[y])
+_ornek_dur.set()
 fare1 = gercek_fare()
-sizdi = fare1 is not None and any(abs(fare1[0] - a) <= 2 and abs(fare1[1] - b) <= 2 for a, b in GONDERILEN)
-kontrol("gerçek fare bizim gönderdiğimiz bir noktaya gitmedi", not sizdi, f"{fare0} → {fare1}")
+konumlar = sorted(set(FARE_ORNEK + [fare1]) - {None})
+sizdi = [f_ for f_ in konumlar if any(abs(f_[0] - a) <= 2 and abs(f_[1] - b) <= 2 for a, b in GONDERILEN)]
+print(f"   gerçek imleç koşu boyunca: {len(FARE_ORNEK)} örnek, {len(konumlar)} farklı konum "
+      f"({'DEĞİŞTİ (kullanıcı)' if len(konumlar) > 1 else 'değişmedi'})")
+kontrol("gerçek imleç koşu BOYUNCA hiç bizim gönderdiğimiz bir noktaya gitmedi", not sizdi, f"{sizdi[:5]}")
 def kullanici_kwin():  # yalnız KULLANICININ KWin'i (kendi Wayland soketiyle); başka test oturumları sayılmaz
     gw_ = os.environ.get("WAYLAND_DISPLAY", "")
     return sorted(p for p in pidler("kwin_wayland") if gw_ and gw_ in masaustu._komut_satiri(p))
 
 
 kontrol("kullanıcının kwin_wayland süreci aynı (yeniden başlamadı)", kullanici_kwin() == KWIN0)
-kontrol("/tmp/.X11-unix: bizden kalan soket yok", not (set(os.listdir("/tmp/.X11-unix")) - x0 - {
-    f"X{n}" for n in range(90, 400)} ) and True)
+kalan_x = [n for x_ in BIZIM_X if x_ is not None for n in (x_, x_ + 1)
+           if os.path.exists(f"/tmp/.X11-unix/X{n}") or os.path.exists(f"/tmp/.X{n}-lock")]
+kontrol("/tmp/.X11-unix: bu testin oturumlarından soket/kilit kalmadı (hiçbir aralık dışlanmadan)", not kalan_x,
+        str(kalan_x))
 
 print("\nölçümler:")
 for a_, v_ in olcum.items():

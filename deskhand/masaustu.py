@@ -13,7 +13,8 @@ Xvfb türünün bileşenleri (hepsi TEK bellek kafesinde: systemd-run --user --s
   bildirim         org.freedesktop.Notifications yakalayıcı → STATE_DIR/bildirimler.jsonl (kullanıcıya düşmez)
   ses              `deskhand-sessiz` boş çıkış (null sink): arka plan sesi kullanıcının kulaklığına gitmez
 
-  ses bekçisi      ses_bekcisi.py: arka plan akışı boş çıkıştan başka bir çıkışa düşerse susturur ve kapatır
+  ses              YOK: arka plan uygulamaları kullanıcının ses sunucusuna erişmez (bwrap + ortam; sessiz çalışır)
+  uygulamalar      bwrap ad alanında (arka_ortak.korumali_baslat): gerçek runtime dizini görünmez
 
 Durum: RUNTIME_DIR/sanal.json. Uygulama başlatma: `baslat(argv, env)` (ortam + kafes).
 Tek seferde tek sanal masaüstü (aynı null sink adı, aynı durum dosyası).
@@ -38,7 +39,9 @@ from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYIL
                          VARSAYILAN_TAKAS, _atalar, _bekle, _bellek_siniri, _canli, _cgroup, _dbus_yapilandir,
                          _gunluk_dosyasi, _isaretli_surecler, _kafes_surecleri, _kafese_al, _komut_satiri,
                          _kullanici_bus_ortami, _oncelik, _ortam_oku, _pactl, _satir_bekle, _sink_modulu, _sinyal,
-                         _takas_siniri, _xauth_yaz, kafeste_baslat, oncelik_bekcisi_baslat, ortam_tabani, ses_kaldir, ses_kur,
+                         _takas_siniri, _xauth_yaz, kafeste_baslat, korumali_baslat, oncelik_bekcisi_baslat, ortam_tabani, pid_dogru,
+                         pid_kaydet, runtime_denetle, ses_kaldir, ses_kur, soket_karsi_pid, soket_kimligi,
+                         gercek_soket_kimlikleri,
                          ses_ortami_uygula, uygulama_runtime)
 from .hata import ARAC_EKSIK, SANAL_KAPALI, Dur
 from .i18n import _, h_
@@ -309,16 +312,82 @@ def canli_mi(d: dict) -> bool:
     return _xvfb_mi(d) and os.path.exists(f"/tmp/.X11-unix/X{d.get('no')}")
 
 
+def guvenli_kayit(d: dict) -> dict:
+    """Kayıttan YALNIZ tür + numara/kimlik alınır; yollar/adresler masaüstünün çalışma dizininden KURULUR (kayıttaki
+    `dbus_adres`, `calisma`, `xauth`… yok sayılır: `;` çoklu adres ya da başka yol hiçbir şeyi yönlendiremez).
+    kwin → kwin_oturum.guvenli_kayit; xvfb → RUNTIME_DIR/sanal-<no> (0700, kullanıcının). Geçersizse Dur(14)."""
+    if tur(d) == "kwin":
+        from . import kwin_oturum
+        return kwin_oturum.guvenli_kayit(d)
+    import stat as _stat
+    no = d.get("no")
+    if not (isinstance(no, int) and ILK_EKRAN <= no < ILK_EKRAN + 200):
+        raise Dur(SANAL_KAPALI, _("sanal masaüstü kaydı geçersiz (ekran no): {no}").format(no=repr(no)))
+    kok = os.path.realpath(yollar.runtime_dir())
+    runtime_denetle(kok)
+    cdir = os.path.join(kok, f"sanal-{no}")
+    try:
+        st = os.lstat(cdir)
+    except OSError:
+        raise Dur(SANAL_KAPALI, _("sanal masaüstü dizini yok: {dizin}").format(dizin=cdir))
+    if not _stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or (st.st_mode & 0o777) != 0o700:
+        raise Dur(SANAL_KAPALI, _("sanal masaüstü dizini güvensiz: {dizin}").format(dizin=cdir))
+    g = dict(d)
+    g.update(tur="xvfb", no=no, ekran=f":{no}", calisma=cdir, dbus_adres=f"unix:path={cdir}/bus",
+             xauth=os.path.join(cdir, XAUTH_DOSYA))
+    a11y = d.get("a11y_adres") or ""
+    if a11y and not re.fullmatch(re.escape(f"unix:path={cdir}/run/at-spi/bus") + r"(_\d+)?(,guid=[0-9a-f]{32})?",
+                                 a11y):
+        g["a11y_adres"] = None
+    kafes = d.get("kafes")
+    if kafes and not re.fullmatch(rf"deskhand-sanal-{no}-\d+\.scope", str(kafes)):
+        raise Dur(SANAL_KAPALI, _("sanal masaüstü kaydı geçersiz (kafes): {kafes}").format(kafes=repr(kafes)))
+    if (d.get("cgroup") or "") and not (kafes and str(d["cgroup"]).endswith("/" + kafes)):
+        g["cgroup"] = ""
+    return g
+
+
+def xvfb_karsi_denetle(g: dict) -> None:
+    """Xvfb türünde bağlanmadan önce karşı taraf (sert bağ / yer değiştirmeye karşı): özel veri yolu soketinin SO_PEERCRED
+    PID'i kayıttaki dbus-daemon (başlangıç zamanı aynı, komut satırında bu masaüstünün bus.conf'u), X soketininki
+    kayıttaki Xvfb; soketler kullanıcının gerçek soketlerinin sert bağı değil. Değilse Dur(14)."""
+    pid, bas = g.get("pid") or {}, g.get("pid_bas") or {}
+    gercek = gercek_soket_kimlikleri()
+    for yol, ad in ((os.path.join(g["calisma"], "bus"), "dbus"), (f"/tmp/.X11-unix/X{g['no']}", "xvfb")):
+        if soket_kimligi(yol) in gercek:
+            raise Dur(SANAL_KAPALI, _("masaüstü soketi kullanıcının gerçek soketinin sert bağı: {yol}").format(yol=yol))
+        karsi = soket_karsi_pid(yol)
+        if not karsi or karsi != pid.get(ad) or (bas.get(ad) and not pid_dogru(karsi, bas.get(ad))):
+            raise Dur(SANAL_KAPALI, _("masaüstü soketinin karşı tarafı bu masaüstünün {ad} süreci değil ({karsi})").format(
+                ad=ad, karsi=karsi))
+    if f"--config-file={g['calisma']}/bus.conf" not in _komut_satiri(pid.get("dbus")):
+        raise Dur(SANAL_KAPALI, _("özel veri yolu süreci bu masaüstünün yapılandırmasıyla çalışmıyor"))
+
+
+def baglanti_denetle(d: dict) -> dict:
+    """Türüne göre bağlantı kapısı → GÜVENLİ kayıt (yollar çalışma dizininden; karşı taraf doğrulanmış)."""
+    if tur(d) == "kwin":
+        from . import kwin_oturum
+        return kwin_oturum.baglanti_denetle(d)
+    g = guvenli_kayit(d)
+    xvfb_karsi_denetle(g)
+    return g
+
+
 def durum(dogrula: bool = True, saglik: bool = True) -> dict | None:
     """Çalışan arka plan masaüstünün durumu (TEK durum kaynağı; tür d["tur"]: kwin | xvfb); yoksa None. dogrula:
-    ekran sunucusu canlı mı (canli_mi). saglik: bileşen ayrıntısı d["saglik"] içinde (pactl çağırır; girdi yolunda
-    saglik=False: <1 ms)."""
+    ekran sunucusu canlı mı (canli_mi) ve kayıt geçerli mi (guvenli_kayit: yollar çalışma dizininden kurulur).
+    saglik: bileşen ayrıntısı d["saglik"] içinde (girdi yolunda saglik=False: <1 ms)."""
     d = durum_oku()
     if d is None or not dogrula:
         if d is not None:
             d.setdefault("tur", "xvfb")
         return d
     d.setdefault("tur", "xvfb")
+    try:
+        d = guvenli_kayit(d)
+    except Dur:
+        return None
     if not canli_mi(d):
         return None
     if not saglik:
@@ -558,9 +627,11 @@ def _xvfb_baslat(boyut: str | None, openbox: bool) -> dict:
     takas = _takas_siniri() if bellek else None
     if bellek and not shutil.which("systemd-run"):
         raise Dur(ARAC_EKSIK, _("systemd-run yok: bellek kafesi kurulamaz (bilerek kapatmak için DESKHAND_SANAL_BELLEK=0)"))
+    runtime_denetle(yollar.runtime_dir())
     no = bos_ekran()
     cdir = _calisma(no)
     os.makedirs(cdir, mode=0o700, exist_ok=True)
+    os.chmod(cdir, 0o700)
     d = {"surum": 1, "tur": "xvfb", "no": no, "ekran": f":{no}", "boyut": [g, y, derinlik], "kafes": None, "cgroup": "",
          "bellek": bellek, "takas": takas, "pid": {}, "dbus_adres": "", "ses": None, "openbox": False,
          "baslangic": time.time(), "kimlik": secrets.token_hex(8), "calisma": cdir, "uyarilar": []}
@@ -598,7 +669,7 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
             d["uyarilar"].append(_("bellek kafesi KAPALI (DESKHAND_SANAL_BELLEK=0)"))
             p = subprocess.Popen([*_oncelik(), *xvfb], stdin=subprocess.DEVNULL,
                                  stdout=log, stderr=log, env=ortam_x, start_new_session=True)
-    d["pid"]["xvfb"] = p.pid
+    pid_kaydet(d, "xvfb", p.pid)
     soket = f"/tmp/.X11-unix/X{no}"
     if not _bekle(lambda: os.path.exists(soket) or p.poll() is not None, 8):
         raise Dur(ARAC_EKSIK, _("Xvfb 8 sn içinde açılmadı"))
@@ -623,7 +694,8 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
     if not bagli:
         raise Dur(ARAC_EKSIK, _("Xvfb {ekran} ekranına bağlanılamadı").format(ekran=d["ekran"]))
 
-    uyari = oncelik_bekcisi_baslat(d, cdir)  # kafesteki her şey düşük öncelikte kalsın (ad tabanlı kurallara karşı)
+    # kafesteki her şey düşük öncelikte kalsın (ad tabanlı kurallara karşı); Xvfb SIGKILL/OOM ile ölürse oturumu kapatır
+    uyari = oncelik_bekcisi_baslat(d, cdir, izle=d["pid"].get("xvfb"), xno=d["no"])
     if uyari:
         d["uyarilar"].append(uyari)
     try:  # Türkçe harfler + sık noktalama boş tuş kodlarına (yazarken eşleme yarışı olmasın)
@@ -637,22 +709,8 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
     except Exception:  # noqa: BLE001
         pass
 
-    # ses: özel D-Bus'tan ÖNCE (etkinleştirilen servisler dbus-daemon'un ortamını, yani sessiz çıkışı alır)
-    ses, uyari = ses_kur(str(d["ekran"]).lstrip(":"))
-    d["ses"] = ses
-    if uyari:
-        d["uyarilar"].append(uyari)
-    if ses:  # ses bekçisi: arka plan akışı başka bir çıkışa düşerse sustur + kapat (ikinci savunma hattı)
-        from . import ses_bekcisi
-        with _gunluk_dosyasi(cdir, "ses-bekcisi") as log:
-            p = kafeste_baslat(d, [sys.executable, "-I", ses_bekcisi.__file__, d.get("kafes") or ""],
-                                uygulama_ortami(d), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=log)
-        d["pid"]["ses_bekcisi"] = p.pid
-        satir = _satir_bekle(p, 5)
-        if p.stdout:
-            p.stdout.close()
-        if satir != "hazir":
-            d["uyarilar"].append(_("ses bekçisi hazır olmadı ({yanit})").format(yanit=satir or _("yanıt yok")))
+    # ses: arka plan uygulamaları ses sunucusuna HİÇ erişmez (bwrap + ortam); boş çıkış / ses bekçisi yok
+    d["ses"] = None
 
     # özel D-Bus
     conf, adres = _dbus_yapilandir(cdir)
@@ -661,7 +719,7 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
         p = kafeste_baslat(d, ["dbus-daemon", f"--config-file={conf}", "--nofork", "--nopidfile",
                                 "--nosyslog"], uygulama_ortami(d), stdin=subprocess.DEVNULL, stdout=log,
                             stderr=log)
-    d["pid"]["dbus"] = p.pid
+    pid_kaydet(d, "dbus", p.pid)
     bus_soket = adres.split("=", 1)[1]
     if not _bekle(lambda: os.path.exists(bus_soket) or p.poll() is not None, 5) or p.poll() is not None:
         raise Dur(ARAC_EKSIK, _("özel D-Bus (dbus-daemon) açılmadı"))
@@ -685,7 +743,7 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
         with _gunluk_dosyasi(cdir, "openbox") as log:
             p = kafeste_baslat(d, ["openbox", "--config-file", rc, "--sm-disable"], ob_ortam,
                                 stdin=subprocess.DEVNULL, stdout=log, stderr=log)
-        d["pid"]["openbox"] = p.pid
+        pid_kaydet(d, "openbox", p.pid)
         if _bekle(lambda: _wm_hazir(d["ekran"]) or p.poll() is not None, 5) and p.poll() is None:
             d["openbox"] = True
         else:
@@ -702,7 +760,7 @@ def _bildirim_baslat(d: dict, cdir: str) -> None:
     with _gunluk_dosyasi(cdir, "bildirim") as log:
         p = kafeste_baslat(d, [sys.executable, "-I", bildirim_yakalayici.__file__, d["dbus_adres"], bildirim_yolu()],
                            uygulama_ortami(d), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=log)
-    d["pid"]["bildirim"] = p.pid
+    pid_kaydet(d, "bildirim", p.pid)
     satir = _satir_bekle(p, 5)
     if satir != "hazir":
         d["uyarilar"].append(_("bildirim yakalayıcı hazır olmadı ({yanit}): bildirimler kaybolabilir").format(
@@ -762,7 +820,7 @@ def _erisim_hazirla_ic(d: dict) -> str:
             p = kafeste_baslat(d, [kayit_exe], uygulama_ortami(d, {"AT_SPI_BUS_ADDRESS": a11y},
                                                                  izinli=("AT_SPI_BUS_ADDRESS",)),
                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            d.setdefault("pid", {})["a11y"] = p.pid
+            pid_kaydet(d, "a11y", p.pid)
             kayit = _bekle(lambda: _busctl(a11y, *sor) == "b true" or p.poll() is not None, 5, 0.1) \
                 and _busctl(a11y, *sor) == "b true"
     if not (a11y and acik and kayit):
@@ -797,16 +855,17 @@ def _kapat_ic(d: dict) -> list[str]:
         from . import kwin_oturum
         return kwin_oturum._kapat_ic(d)
     notlar = []
-    pid = {k: int(v) for k, v in (d.get("pid") or {}).items() if v}
-    cg = d.get("cgroup") or ""
-    if cg and not (d.get("kafes") and cg.endswith("/" + d["kafes"])):
+    pid = {k: int(v) for k, v in (d.get("pid") or {}).items() if isinstance(v, int) and v > 0}
+    bas = d.get("pid_bas") or {}
+    no = d.get("no")
+    no_ok = isinstance(no, int) and ILK_EKRAN <= no < ILK_EKRAN + 200
+    kafes, cg = str(d.get("kafes") or ""), str(d.get("cgroup") or "")
+    if not (no_ok and kafes and re.fullmatch(rf"deskhand-sanal-{no}-\d+\.scope", kafes) and cg.endswith("/" + kafes)):
         cg = ""  # beklenmeyen kafes yolu: içindekilere dokunma
     haric = _atalar()
-    cekirdek = []
-    for ad in ("bildirim", "ses_bekcisi", "oncelik_bekcisi", "openbox", "dbus", "xvfb"):
-        p = pid.get(ad)
-        if p and _canli(p) and (ad != "xvfb" or _xvfb_mi(d)):
-            cekirdek.append(p)
+    # bayat/oynanmış kayda karşı: PID'e yalnız başlangıç zamanı kayıttakiyle aynıysa (ve kafes varsa kafesteyse) sinyal
+    cekirdek = [p for ad in ("bildirim", "ses_bekcisi", "oncelik_bekcisi", "openbox", "a11y", "dbus", "xvfb")
+                if (p := pid.get(ad)) and pid_dogru(p, bas.get(ad), cg)]
 
     def surecler() -> list[int]:
         """Kafesteki + ortam işaretli (kafessiz / kafesten kaçmış) süreçler; bu süreç ve ataları hariç."""
@@ -831,14 +890,16 @@ def _kapat_ic(d: dict) -> list[str]:
         n = ses_kaldir(d.get("ses"))
         if n:
             notlar.append(n)
-    cdir = d.get("calisma")
-    if cdir and os.path.isdir(cdir) and os.path.basename(cdir).startswith("sanal-"):
+    # silinen dizin kayıttaki yol DEĞİL: RUNTIME_DIR/sanal-<no>
+    kok = os.path.realpath(yollar.runtime_dir())
+    cdir = os.path.join(kok, f"sanal-{no}") if no_ok else None
+    if cdir and os.path.isdir(cdir) and not os.path.islink(cdir):
         shutil.rmtree(cdir, ignore_errors=True)
-    for yol in (f"/tmp/.X{d.get('no')}-lock",):  # Xvfb SIGKILL ile öldüyse kilit kalır
+    for yol in ((f"/tmp/.X{no}-lock",) if no_ok else ()):  # Xvfb SIGKILL ile öldüyse kilit kalır
         try:
             if not _xvfb_mi(d) and os.path.exists(yol):
                 with open(yol) as f:
-                    if int(f.read().strip() or 0) == pid.get("xvfb"):
+                    if int(f.read().strip() or 0) == pid.get("xvfb") and not _canli(pid.get("xvfb")):
                         os.remove(yol)
         except (OSError, ValueError):
             pass
@@ -871,7 +932,7 @@ def baslat(argv: list[str], env: dict | None = None, **popen) -> subprocess.Pope
     WAYLAND_DISPLAY var olmayan yol; kwin: oturumun Wayland soketi + Wayland arka uçları, X11 isteyenler oturumun
     XWayland'ine), özel DBUS_SESSION_BUS_ADDRESS, sessiz ses çıkışı; süreç bellek kafesinin içinde (nice 10, ionice
     idle). env: os.environ'a eklenecek/değişecek değişkenler (masaüstü değerleri her zaman üstün)."""
-    d = gerekli()
+    d = baglanti_denetle(gerekli())  # kapı: yollar çalışma dizininden, karşı taraf doğrulanmış
     if not argv or not (shutil.which(argv[0]) or os.path.isfile(argv[0])):
         raise Dur(ARAC_EKSIK, _("başlatılamadı: {komut} bulunamadı").format(komut=argv[0] if argv else _("(boş komut)")))
     popen.setdefault("stdin", subprocess.DEVNULL)
@@ -887,12 +948,25 @@ def baslat(argv: list[str], env: dict | None = None, **popen) -> subprocess.Pope
         # PULSE_SERVER'ı kendi soketine EZER (ölçüldü) → ses kullanıcının kulaklığına giderdi
         argv.insert(argv.index("run") + 1, "--nosocket=pulseaudio")
     try:
-        return kafeste_baslat(d, argv, uygulama_ortami(d, env), **popen)
+        return korumali_baslat(d, argv, uygulama_ortami(d, env), uygulama_baglari(d), **popen)
     except FileNotFoundError as e:
         raise Dur(ARAC_EKSIK, _("başlatılamadı: {hata}").format(hata=e))
     finally:
         if log is not None:
             log.close()
+
+
+def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
+    """Uygulamanın bwrap ad alanında görebileceği masaüstü yolları (iki tür): kwin → kwin_oturum.uygulama_baglari;
+    xvfb → kendi runtime dizini, özel veri yolu soketi, X soketi + Xauthority (salt okunur), oturum kopyaları."""
+    if tur(g) == "kwin":
+        from . import kwin_oturum
+        return kwin_oturum.uygulama_baglari(g)
+    from .oturum import politika
+    from .arka_ortak import uygulama_runtime
+    c = g["calisma"]
+    return [(uygulama_runtime(c), False), (os.path.join(c, "bus"), False), (f"/tmp/.X11-unix/X{g['no']}", False),
+            (os.path.join(c, XAUTH_DOSYA), True), (politika.kopya_dizini(), False)]
 
 
 def _flatpak_run_mi(argv: list[str]) -> bool:

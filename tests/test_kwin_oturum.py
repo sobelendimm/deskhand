@@ -170,7 +170,8 @@ kontrol("ortam: WAYLAND_DISPLAY = oturumun MUTLAK soket yolu", e["WAYLAND_DISPLA
 kontrol("ortam: özel D-Bus adresi", e["DBUS_SESSION_BUS_ADDRESS"] == sahte["dbus_adres"])
 kontrol("ortam: Wayland araç takımı değişkenleri", e["QT_QPA_PLATFORM"] == "wayland" and e["GDK_BACKEND"] == "wayland"
         and e["MOZ_ENABLE_WAYLAND"] == "1")
-kontrol("ortam: ses boş çıkışa (PULSE_SINK)", e.get("PULSE_SINK") == "deskhand-sessiz-kwin-ab12")
+kontrol("ortam: ses sunucusu YOK (PULSE_SINK yok, PULSE_SERVER var olmayan sokete)", "PULSE_SINK" not in e and
+        e.get("PULSE_SERVER") == f"unix:{sahte['calisma']}/ses-yok")
 e2 = ko.uygulama_ortami({**sahte, "xwayland": ":123", "xauth": "/x/Xauthority"},
                         {"QT_QPA_PLATFORM": "xcb", "WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0",
                          "DBUS_SESSION_BUS_ADDRESS": gercek_bus})
@@ -613,7 +614,8 @@ kontrol("durdur: X soketleri ve kilitleri kalmadı", not any(os.path.exists(y) f
     f"/tmp/.X11-unix/X{xana}", f"/tmp/.X11-unix/X{xana + 1}", f"/tmp/.X{xana}-lock", f"/tmp/.X{xana + 1}-lock")))
 fazla = {a for a in x_soketleri() - x0 if re.fullmatch(r"X\d+", a) and int(a[1:]) >= 120}
 kontrol("/tmp/.X11-unix: oturumdan fazladan soket kalmadı", not fazla, str(fazla))
-kontrol("durdur: boş ses çıkışı kaldırıldı", masaustu._sink_modulu("deskhand-sessiz-kwin-" + kimlik) is None)
+kontrol("durdur: deskhand-sessiz ses çıkışı yok (hiç kurulmadı)",
+        masaustu._sink_modulu("deskhand-sessiz-kwin-" + kimlik) is None)
 if shutil.which("systemd-run"):
     kontrol("durdur: bellek kafesi (scope) kalmadı", subprocess.run(
         ["systemctl", "--user", "is-active", pidler and f"deskhand-kwin-{kimlik}-{os.getpid()}.scope"],

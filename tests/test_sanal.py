@@ -166,7 +166,7 @@ if KW:
             "değişken geçer", wd == d["wayland_yol"] and os.path.exists(wd) and ue["DISPLAY"] == d["xwayland"] and
             ue["XAUTHORITY"] == d["xauth"] and ue["DBUS_SESSION_BUS_ADDRESS"] == d["dbus_adres"] and
             ue["QT_QPA_PLATFORM"] == "wayland" and ue["GDK_BACKEND"] == "wayland" and ue["MOZ_ENABLE_WAYLAND"] == "1"
-            and ue["ELECTRON_OZONE_PLATFORM_HINT"] == "wayland" and ue["PULSE_SINK"].startswith("deskhand-sessiz")
+            and ue["ELECTRON_OZONE_PLATFORM_HINT"] == "wayland" and ue["PULSE_SERVER"].endswith("/ses-yok")
             and ue["BENIM"] == "1")
 else:
     kontrol("ortam: DISPLAY/özel D-Bus/x11 zorunlu, WAYLAND_DISPLAY = var olmayan mutlak yol, ek değişken geçer",
@@ -174,7 +174,7 @@ else:
             os.path.isabs(wd) and not os.path.exists(wd) and wd.startswith(d["calisma"]) and
             ue["QT_QPA_PLATFORM"] == "xcb" and ue["GDK_BACKEND"] == "x11" and
             ue["MOZ_ENABLE_WAYLAND"] == "0" and ue["SDL_VIDEODRIVER"] == "x11" and
-            ue["ELECTRON_OZONE_PLATFORM_HINT"] == "x11" and ue["PULSE_SINK"].startswith("deskhand-sessiz") and
+            ue["ELECTRON_OZONE_PLATFORM_HINT"] == "x11" and ue["PULSE_SERVER"].endswith("/ses-yok") and
             ue["BENIM"] == "1")
 kontrol("ortam: XDG_CURRENT_DESKTOP=KDE, KDE_SESSION_VERSION=6, XDG_SESSION_TYPE",
         (ue["XDG_CURRENT_DESKTOP"], ue["KDE_SESSION_VERSION"], ue["XDG_SESSION_TYPE"]) ==
@@ -182,10 +182,9 @@ kontrol("ortam: XDG_CURRENT_DESKTOP=KDE, KDE_SESSION_VERSION=6, XDG_SESSION_TYPE
 kontrol("ortam: kullanıcının SSH ajanı/erişilebilirlik adresi/EIS soketi geçmez, GSETTINGS_BACKEND=memory",
         not any(a in ue for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS", "LIBEI_SOCKET", "KDE_FULL_SESSION"))
         and ue.get("GSETTINGS_BACKEND") == "memory", str([a for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS") if a in ue]))
-kontrol("ortam: ses akışı boş çıkış kalkınca taşınmaz (pulse + pipewire dont-fallback/dont-reconnect)",
-        all(x in ue["PULSE_PROP"] for x in ("deskhand.sanal=1", "node.dont-fallback=true", "node.dont-reconnect=true"))
-        and "node.dont-fallback = true" in ue["PIPEWIRE_PROPS"] and "node.dont-reconnect = true" in ue["PIPEWIRE_PROPS"],
-        ue["PULSE_PROP"])
+kontrol("ortam: ses sunucusu YOK (PULSE_SERVER/PIPEWIRE_REMOTE var olmayan sokete; kullanıcının sunucusu yok)",
+        ue["PULSE_SERVER"] == f"unix:{ue['PIPEWIRE_REMOTE']}" and not os.path.exists(ue["PIPEWIRE_REMOTE"]) and
+        "PULSE_SINK" not in ue and "/run/user/" not in ue.get("PIPEWIRE_RUNTIME_DIR", ""), str(ue.get("PULSE_SERVER")))
 kontrol("ortam: masaüstü kimliği işareti (kafessiz durdurma için)",
         len(d.get("kimlik") or "") == (8 if KW else 16) and ue.get("DESKHAND_SANAL_KIMLIK") == d["kimlik"])
 if KW:
@@ -198,8 +197,7 @@ r = subprocess.run(["systemctl", "--user", "show", d["kafes"], "-p", "MemoryMax"
 kontrol("masaüstü: kafes MemoryMax = 4G", r.stdout.strip() == f"MemoryMax={4 * 1024 ** 3}", r.stdout)
 r = subprocess.run(["systemctl", "--user", "show", d["kafes"], "-p", "MemorySwapMax"], capture_output=True, text=True)
 kontrol("masaüstü: kafes MemorySwapMax = 0 (takasa taşmaz)", r.stdout.strip() == "MemorySwapMax=0", r.stdout)
-kontrol("masaüstü: ses bekçisi çalışıyor (kafeste)", masaustu._canli(d["pid"].get("ses_bekcisi")) and
-        masaustu._cgroup(d["pid"]["ses_bekcisi"]) == d["cgroup"], str(d.get("uyarilar")))
+kontrol("masaüstü: ses bekçisi YOK (ses sunucusuna erişim olmadığından gerekmez)", "ses_bekcisi" not in d["pid"])
 xpid = d["pid"]["kwin" if KW else "xvfb"]
 # ad tabanlı sistem kuralları (ör. ananicy: kwin_wayland → nice -12) exec anında yükseltebilir: kafesin öncelik
 # bekçisi en çok ~0,5 sn'de geri düşürür
@@ -209,9 +207,7 @@ kontrol("masaüstü: ekran sunucusu ionice idle", bekle(lambda: "idle" in subpro
     ["ionice", "-p", str(xpid)], capture_output=True, text=True).stdout, 2, 0.1))
 kontrol("masaüstü: öncelik bekçisi kafeste çalışıyor", masaustu._canli(d["pid"].get("oncelik_bekcisi")) and
         masaustu._cgroup(d["pid"]["oncelik_bekcisi"]) == d["cgroup"])
-ses = d.get("ses") or {}
-kontrol("masaüstü: kendi boş çıkışı (deskhand-sessiz-<no>) yüklü", ses.get("sink", "").startswith("deskhand-sessiz-") and
-        masaustu._sink_modulu(ses.get("sink")) == ses.get("modul"))
+kontrol("masaüstü: boş ses çıkışı KURULMADI", d.get("ses") is None)
 r = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True)
 kontrol("masaüstü: varsayılan ses çıkışı DEĞİŞMEDİ (deskhand-sessiz değil)", not r.stdout.strip().startswith("deskhand-sessiz"))
 
@@ -339,7 +335,19 @@ kontrol("pencere: yok → Dur 8", dur_kodu(au.pencere_coz, "yok-boyle-bir-pencer
 kontrol("pencere: yanlış önek → Dur 8", dur_kodu(au.geometri, "{00000000-0000-0000-0000-000000000000}") == 8)
 kontrol("pencere: başlık", au.baslik(k) == "deskhand-sanal ANA", au.baslik(k))
 kontrol("pencere: sınıf (WM_CLASS, küçük harf)", au.sinif(k) != "" and au.sinif(k) == au.sinif(k).lower(), au.sinif(k))
-kontrol("pencere: pid = başlatılan süreç (_NET_WM_PID)", au.pid(k) == p1.pid, f"{au.pid(k)} != {p1.pid}")
+def _atalar(pid):
+    s_ = []
+    while pid and pid > 1 and len(s_) < 16:
+        s_.append(pid)
+        try:
+            with open(f"/proc/{pid}/stat") as f_:
+                pid = int(f_.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return s_
+
+
+kontrol("pencere: pid = başlatılan sürecin (bwrap ad alanı) çocuğu", p1.pid in _atalar(au.pid(k)), f"{au.pid(k)} / {p1.pid}")
 kontrol("pencere: kimlikler() içeriyor", k in au.kimlikler())
 geo = au.geometri(k)
 W, H = au.ekran_alani()[2:]
@@ -674,24 +682,22 @@ if not KW_2B:
         os.remove(hata.dur_dosyasi())
         g3.kapat()
 
-# ---------------------------------------------------------------- 3) ses (SESSİZ kısa akış; yalnız sıfırlar)
-if shutil.which("pacat"):
-    e = masaustu.uygulama_ortami(masaustu.gerekli())
-    pz = subprocess.Popen("head -c 96000 /dev/zero | pacat --raw --format=s16le --rate=48000 --channels=2 "
-                          "--client-name=deskhand-sessiz-test", shell=True, env=e)
-
-    def akis_cikisi():
-        r = subprocess.run(["pactl", "-f", "json", "list", "sink-inputs"], capture_output=True, text=True)
-        sk = {s["index"]: s["name"] for s in json.loads(subprocess.run(["pactl", "-f", "json", "list", "sinks"],
-                                                                         capture_output=True, text=True).stdout)}
-        for si in json.loads(r.stdout or "[]"):
-            if si["properties"].get("application.name") == "deskhand-sessiz-test":
-                return sk.get(si["sink"]), si["properties"].get("deskhand.sanal")
-        return None
-    cikis = bekle(akis_cikisi, 2, 0.02)
-    pz.wait()
-    kontrol("ses: arka plan akışı deskhand-sessiz'e bağlandı + deskhand.sanal işareti", cikis == (d["ses"]["sink"], "1"),
-            str(cikis))
+# ---------------------------------------------------------------- 3) ses: arka plan uygulaması ses sunucusuna ERİŞEMEZ
+# (mikrofon gizliliği: çalma da kayıt da yok). Uygulama bwrap ad alanında gerçek runtime dizinini göremez; açık
+# PULSE_SERVER/PIPEWIRE_REMOTE verse bile soket görünmez. Yalnız sıfır (sessiz) veri denenir.
+if shutil.which("pactl"):
+    SES_LOG = os.path.join(GECICI, "ses.txt")
+    kod_ = ("import os, subprocess\nr = subprocess.run(['pactl', 'info'], capture_output=True, text=True, timeout=10)\n"
+            "r2 = subprocess.run(['pactl', 'info'], capture_output=True, text=True, timeout=10, env={**os.environ, "
+            "'PULSE_SERVER': f'unix:/run/user/{os.getuid()}/pulse/native'})\n"
+            f"open({SES_LOG!r}, 'w').write(f'{{r.returncode}} {{r2.returncode}} '"
+            " + str(os.path.exists(f'/run/user/{os.getuid()}/pulse/native')) + ' '"
+            " + str(os.path.exists(f'/run/user/{os.getuid()}/pipewire-0')))\n")
+    ps_ = masaustu.baslat([sys.executable, "-c", kod_])
+    ps_.wait(30)
+    ses_s = open(SES_LOG).read().split() if os.path.exists(SES_LOG) else []
+    kontrol("ses: arka plan uygulaması ses sunucusuna bağlanamaz (ortamla da, açık gerçek yolla da); soketler görünmez",
+            len(ses_s) == 4 and ses_s[0] != "0" and ses_s[1] != "0" and ses_s[2:] == ["False", "False"], str(ses_s))
 
 # ---------------------------------------------------------------- 4) CLI uçtan uca (gerçek güvenlik katmanıyla)
 
@@ -725,52 +731,6 @@ kod, out = deskhand("tus", k, "a")
 kontrol("cli: DUR açıkken → 13", kod == 13, f"{kod} {out[-200:]}")
 os.remove(hata.dur_dosyasi())
 
-# ---------------------------------------------------------------- 4b) boş çıkış dışarıdan kaldırılırsa (O5)
-# İki SESSİZ sonsuz akış (yalnız sıfırlar): A normal ortam (dont-fallback/dont-reconnect), B bunları YOK SAYAN
-# istemci taklidi (yalnız işaret). Boş çıkış kaldırılınca hiçbiri kullanıcının çıkışında kalmamalı.
-if shutil.which("pacat"):
-    def bizim_akislar():
-        r = subprocess.run(["pactl", "-f", "json", "list", "sink-inputs"], capture_output=True, text=True)
-        sk = {s_["index"]: s_["name"] for s_ in json.loads(subprocess.run(
-            ["pactl", "-f", "json", "list", "sinks", "short"], capture_output=True, text=True).stdout or "[]")}
-        return [(si["properties"].get("application.name"), sk.get(si["sink"], str(si["sink"])), si["mute"])
-                for si in json.loads(r.stdout or "[]") if si["properties"].get("deskhand.sanal") == "1"]
-    dd_ = masaustu.gerekli()
-    eA = masaustu.uygulama_ortami(dd_)
-    eB = eA | {"PULSE_PROP": "deskhand.sanal=1"}
-    PAC = ["pacat", "--raw", "--format=s16le", "--rate=48000", "--channels=2", "/dev/zero"]
-    pa = masaustu.kafeste_baslat(dd_, [*PAC, "--client-name=dh-test-A"], eA, stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL)
-    pb = masaustu.kafeste_baslat(dd_, [*PAC, "--client-name=dh-test-B"], eB, stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL)
-    ilk = bekle(lambda: len(bizim_akislar()) == 2 and bizim_akislar(), 3)
-    kontrol("ses-koruma: iki sessiz akış boş çıkışta", ilk and all(s_[1] == dd_["ses"]["sink"] for s_ in ilk), str(ilk))
-    subprocess.run(["pactl", "unload-module", str(dd_["ses"]["modul"])], capture_output=True)
-    t0 = time.monotonic()
-    disarida = 0.0  # B'nin (ya da A'nın) boş çıkış dışında SESİ AÇIK görüldüğü en uzun süre
-    while time.monotonic() - t0 < 2.0:
-        acik = [s_ for s_ in bizim_akislar() if not s_[1].startswith("deskhand-sessiz") and not s_[2]]
-        if acik:
-            disarida = time.monotonic() - t0
-        elif time.monotonic() - t0 > 0.5:
-            break
-        time.sleep(0.005)
-    son = bekle(lambda: not [s_ for s_ in bizim_akislar() if not s_[1].startswith("deskhand-sessiz")], 4, 0.05)
-    olcum["ses: boş çıkış kalkınca kaçak akışın sesi açık kaldığı süre (üst sınır)"] = f"{disarida * 1000:.0f} ms"
-    olcum["ses: kaçak akışın tamamen kapatılması"] = f"{(time.monotonic() - t0) * 1000:.0f} ms"
-    kontrol("ses-koruma: kaçak akış (B) 300 ms içinde susturuldu", disarida < 0.3, f"{disarida * 1000:.0f} ms")
-    kontrol("ses-koruma: sonra hiçbir arka plan akışı kullanıcının çıkışında kalmadı (kapatıldı)", son,
-            str(bizim_akislar()))
-    try:
-        with open(os.path.join(dd_["calisma"], "ses-bekcisi.log")) as f_:
-            bek_log = f_.read()
-    except OSError:
-        bek_log = ""
-    kontrol("ses-koruma: bekçi B'yi yakaladı (günlükte dh-test-B)", "dh-test-B" in bek_log, bek_log[-300:])
-    for p_ in (pa, pb):
-        p_.kill()
-        p_.wait()
-
 # ---------------------------------------------------------------- 5) bellek + durdur + temizlik
 try:
     r = subprocess.run(["systemctl", "--user", "show", d["kafes"], "-p", "MemoryCurrent", "-p", "MemoryPeak"],
@@ -795,7 +755,7 @@ if KW:
 else:
     kontrol("durdur: X soketi kalktı", not os.path.exists(f"/tmp/.X11-unix/X{d['no']}"))
 kontrol("durdur: kafes boşaldı", not masaustu._kafes_surecleri(cg))
-kontrol("durdur: kendi boş çıkışı kaldırıldı", masaustu._sink_modulu(d["ses"]["sink"]) is None)
+kontrol("durdur: hiçbir deskhand-sessiz ses çıkışı yok", masaustu._sink_modulu(f"deskhand-sessiz-{d.get('no')}") is None)
 kontrol("durdur: özel D-Bus soketi/çalışma klasörü silindi", not os.path.exists(d["calisma"]))
 kod, out = deskhand("bul", ".")
 kontrol("cli: masaüstü kapalıyken --arka → 14", kod == 14, f"{kod} {out[-200:]}")

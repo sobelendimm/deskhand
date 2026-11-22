@@ -183,6 +183,12 @@ document.title = 'WEBGL ' + r;</script></body></html>""")
     w = bekle(lambda: next(((k_, b) for k_, b, _ in au.pencereler("WEBGL") if "bekliyor" not in b), None), 60, 0.05)
     sonuc["firefox_acilis_sn"] = round(time.monotonic() - t, 2) if w else None
     sonuc["firefox_webgl"] = w[1] if w else "pencere açılmadı"
+    if w:  # erişilebilirlik ağacı (oturumun kendi a11y veri yolu; Firefox ad alanında)
+        time.sleep(1.5)
+        r = subprocess.run([sys.executable, "-m", "deskhand", "--arka", "agac", w[0]], capture_output=True, text=True,
+                           cwd=KOK, timeout=60)
+        sonuc["firefox_a11y_agac"] = f"çıkış {r.returncode}, {len(r.stdout.splitlines())} satır"
+        sonuc["firefox_ses_sunucusu"] = "yok (ad alanında gerçek runtime dizini görünmez)"
     time.sleep(3)
     sonuc["bellek_firefox_ile_mib"] = kafes_bellek(d)
     if BOSTA:

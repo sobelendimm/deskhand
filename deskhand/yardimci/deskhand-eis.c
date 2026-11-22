@@ -2,9 +2,12 @@
  * --virtual) girdi yolu: stdin'den dotool satır dilini (docs/ARCHITECTURE.md §2) okur, her satıra stdout'ta TEK satır
  * yanıt verir. Gerçek oturuma girdi göndermez: bağlandığı veri yolu --bus ile AÇIKÇA verilen özel adrestir.
  *
- * Kullanım:   deskhand-eis --bus unix:path=/özel/veri/yolu/bus
+ * Kullanım:   deskhand-eis --bus unix:path=/özel/veri/yolu/bus [--dbus-pid PID]
  *   --bus zorunlu; ortamdaki DBUS_SESSION_BUS_ADDRESS DEVRALINMAZ (argüman yoksa çıkış 2). Adres kullanıcının gerçek
- *   oturum veri yolu (/run/user/UID/bus) ise ya da "unix:path=" biçiminde değilse reddedilir (çıkış 2).
+ *   oturum veri yolu (/run/user/UID/bus; sert bağı dahil: aynı inode) ise ya da katı `unix:path=/yol[,guid=…]`
+ *   biçiminde değilse (`;` çoklu adres yok) reddedilir (çıkış 2). Bağlandıktan sonra karşı taraf SO_PEERCRED ile
+ *   doğrulanır: --dbus-pid verildiyse o PID, her durumda komut satırında `--config-file=<soket dizini>/bus.conf`
+ *   (çıkış 2, "hata bus-karsi").
  *
  * Açılışta: sd-bus ile adrese bağlan → org.kde.KWin.EIS.RemoteDesktop.connectToEIS(yetenekler=3) → fd → libei
  * gönderici bağlamı → seat'e pointer + pointer-absolute + keyboard + button + scroll → aygıtlar RESUMED olunca
@@ -60,6 +63,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <systemd/sd-bus.h>
 #include <time.h>
@@ -120,7 +124,7 @@ static int eis_cerez;
 static bool pong_geldi;
 static struct ei_device *son_klavye, *son_dugme; /* tuş/düğme olaylarının en son gönderildiği aygıtlar */
 
-static void izle_ekle(int *dizi, int *n, int azami, int kod);
+static bool izle_ekle(int *dizi, int *n, int azami, int kod);
 static int tus_gonder(int kod, bool bas);
 static int dugme_gonder(int kod, bool bas);
 static void artik_temizle(struct ei_device *d);
@@ -187,10 +191,11 @@ static struct ei_device *klavye_aygit(void) { return rol(EI_DEVICE_CAP_KEYBOARD,
 
 static void eslem_ekle(uint32_t cp, xkb_keysym_t sym, int kod, int mod) {
     if (eslem_n == eslem_kap) {
-        eslem_kap = eslem_kap ? eslem_kap * 2 : 512;
-        struct eslem *y = realloc(eslemler, eslem_kap * sizeof *y);
-        if (!y) return;
+        size_t yeni = eslem_kap ? eslem_kap * 2 : 512;
+        struct eslem *y = realloc(eslemler, yeni * sizeof *y);
+        if (!y) return; /* kapasite DEĞİŞMEZ: sonraki ekleme taşmaz */
         eslemler = y;
+        eslem_kap = yeni;
     }
     eslemler[eslem_n++] = (struct eslem){cp, sym, kod, mod};
 }
@@ -362,10 +367,18 @@ static int bekle_ms(int ms) {
 
 /* ------------------------------------------------------------------ düşük düzey girdi */
 
-static void izle_ekle(int *dizi, int *n, int azami, int kod) {
+/* basılı listesine ekle; liste DOLUYSA false (çağıran basmayı reddeder: izlenmeyen basılı tuş bırakılamazdı) */
+static bool izle_ekle(int *dizi, int *n, int azami, int kod) {
     for (int i = 0; i < *n; i++)
-        if (dizi[i] == kod) return;
-    if (*n < azami) dizi[(*n)++] = kod;
+        if (dizi[i] == kod) return true;
+    if (*n >= azami) return false;
+    dizi[(*n)++] = kod;
+    return true;
+}
+static bool izlenebilir(const int *dizi, int n, int azami, int kod) {
+    for (int i = 0; i < n; i++)
+        if (dizi[i] == kod) return true;
+    return n < azami;
 }
 static void izle_sil(int *dizi, int *n, int kod) {
     for (int i = 0; i < *n; i++)
@@ -397,6 +410,7 @@ static void hareket_sonrasi_bekle(void) {
 }
 
 static int tus_gonder(int kod, bool bas) {
+    if (bas && !izlenebilir(basili_tus, basili_tus_n, BASILI_AZAMI, kod)) return -2; /* basılı listesi dolu */
     struct ei_device *k = aygit_bekle(klavye_aygit);
     if (!k) return -1;
     ei_device_keyboard_key(k, (uint32_t)kod, bas);
@@ -408,6 +422,7 @@ static int tus_gonder(int kod, bool bas) {
 }
 
 static int dugme_gonder(int kod, bool bas) {
+    if (bas && !izlenebilir(basili_dugme, basili_dugme_n, 8, kod)) return -2;
     struct ei_device *p = aygit_bekle(dugme_aygit);
     if (!p) return -1;
     if (bas) hareket_sonrasi_bekle();
@@ -583,8 +598,10 @@ static const char *komut_key(char *arg, int mod) /* mod: 0 key (bas+bırak), 1 k
     if (!klavye_aygit()) return "klavye-yok";
     if (mod == 1) {
         for (int i = 0; i < an; i++)
-            for (int j = 0; j < akorlar[i].n; j++)
-                if (tus_gonder(akorlar[i].kod[j], true) < 0) return "klavye-yok";
+            for (int j = 0; j < akorlar[i].n; j++) {
+                int r = tus_gonder(akorlar[i].kod[j], true);
+                if (r < 0) return r == -2 ? "basili-cok" : "klavye-yok";
+            }
         return NULL;
     }
     if (mod == 2) {
@@ -594,8 +611,13 @@ static const char *komut_key(char *arg, int mod) /* mod: 0 key (bas+bırak), 1 k
         return NULL;
     }
     for (int i = 0; i < an; i++) {
-        for (int j = 0; j < akorlar[i].n; j++)
-            if (tus_gonder(akorlar[i].kod[j], true) < 0) return "klavye-yok";
+        for (int j = 0; j < akorlar[i].n; j++) {
+            int r = tus_gonder(akorlar[i].kod[j], true);
+            if (r < 0) { /* bu akorda basılanları bırak */
+                for (int k = j - 1; k >= 0; k--) tus_gonder(akorlar[i].kod[k], false);
+                return r == -2 ? "basili-cok" : "klavye-yok";
+            }
+        }
         int r = bekle_ms(keyhold);
         for (int j = akorlar[i].n - 1; j >= 0; j--) tus_gonder(akorlar[i].kod[j], false);
         if (r < 0) return kes_hatasi();
@@ -733,7 +755,10 @@ static const char *komut_dugme(char *arg, const char *komut) {
     int kod = dugme_kodu(g);
     if (kod < 0) return "bilinmeyen-dugme (left|right|middle)";
     if (!dugme_aygit()) return "fare-yok";
-    if (strcmp(komut, "buttonup")) dugme_gonder(kod, true);
+    if (strcmp(komut, "buttonup")) {
+        int r = dugme_gonder(kod, true);
+        if (r < 0) return r == -2 ? "basili-cok" : "fare-yok";
+    }
     if (!strcmp(komut, "click")) {
         if (bekle_ms(keyhold) < 0) { dugme_gonder(kod, false); return kes_hatasi(); }
     }
@@ -831,32 +856,83 @@ static void cik(int kod) {
     exit(kod);
 }
 
+/* KATI adres biçimi: yalnız `unix:path=/yol[,guid=<32 küçük onaltılık>]`. `;` ile çoklu adres (sd-bus ilki olmazsa
+ * SONRAKİNE geçer: gerçek veri yoluna kaçış), başka anahtarlar, göreli yol → ret. Yol `yol` tamponuna yazılır. */
+static int adres_coz(const char *adres, char *yol, size_t boy) {
+    if (strncmp(adres, "unix:path=", 10) || strchr(adres, ';')) return -1;
+    const char *p = adres + 10;
+    size_t n = strcspn(p, ",");
+    if (!n || n >= boy || p[0] != '/') return -1;
+    memcpy(yol, p, n);
+    yol[n] = 0;
+    const char *k = p + n;
+    if (*k) {
+        if (strncmp(k, ",guid=", 6) || strlen(k + 6) != 32) return -1;
+        for (const char *c = k + 6; *c; c++)
+            if (!((*c >= '0' && *c <= '9') || (*c >= 'a' && *c <= 'f'))) return -1;
+    }
+    return 0;
+}
+
 static int adres_denetle(const char *adres) {
-    if (strncmp(adres, "unix:path=", 10)) {
-        fprintf(stderr, "deskhand-eis: --bus yalnız unix:path=... biçiminde olabilir\n");
+    char yol[PATH_MAX];
+    if (adres_coz(adres, yol, sizeof yol) < 0) {
+        fprintf(stderr, "deskhand-eis: --bus yalnız unix:path=/yol[,guid=...] biçiminde olabilir (';' yok)\n");
         return -1;
     }
-    char yol[PATH_MAX];
-    size_t n = strcspn(adres + 10, ",");
-    if (!n || n >= sizeof yol) return -1;
-    memcpy(yol, adres + 10, n);
-    yol[n] = 0;
     char gercek[PATH_MAX];
     snprintf(gercek, sizeof gercek, "/run/user/%u/bus", (unsigned)getuid());
     char a[PATH_MAX], b[PATH_MAX];
     const char *ya = realpath(yol, a) ? a : yol, *yb = realpath(gercek, b) ? b : gercek;
-    if (!strcmp(yol, gercek) || !strcmp(ya, yb)) {
+    struct stat s1, s2;
+    bool ayni_inode = stat(yol, &s1) == 0 && stat(gercek, &s2) == 0 && s1.st_dev == s2.st_dev && s1.st_ino == s2.st_ino;
+    if (!strcmp(yol, gercek) || !strcmp(ya, yb) || ayni_inode) {
         fprintf(stderr, "deskhand-eis: --bus kullanıcının GERÇEK oturum veri yolu (%s); reddedildi\n", gercek);
         return -1;
     }
     return 0;
 }
 
+/* bağlandıktan SONRA karşı tarafı doğrula (sert bağ / yer değiştirme): SO_PEERCRED PID'i --dbus-pid verildiyse o olmalı;
+ * her durumda karşı sürecin komut satırında `--config-file=<soket dizini>/bus.conf` bulunmalı (Deskhand'in özel
+ * dbus-daemon'u). 0 = tamam. */
+static int karsi_denetle(sd_bus *bus, const char *adres, long beklenen_pid) {
+    char yol[PATH_MAX];
+    if (adres_coz(adres, yol, sizeof yol) < 0) return -1;
+    int fd = sd_bus_get_fd(bus);
+    struct ucred cr;
+    socklen_t ln = sizeof cr;
+    if (fd < 0 || getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &ln) < 0 || cr.pid <= 0) return -1;
+    if (beklenen_pid > 0 && cr.pid != (pid_t)beklenen_pid) {
+        fprintf(stderr, "deskhand-eis: veri yolunun karşı tarafı (pid %d) beklenen süreç (%ld) değil\n", (int)cr.pid,
+                beklenen_pid);
+        return -1;
+    }
+    char *son = strrchr(yol, '/');
+    if (!son) return -1;
+    *son = 0;
+    char beklenen[PATH_MAX + 32];
+    snprintf(beklenen, sizeof beklenen, "--config-file=%s/bus.conf", yol);
+    char cl[16384], dosya[64];
+    snprintf(dosya, sizeof dosya, "/proc/%d/cmdline", (int)cr.pid);
+    FILE *f = fopen(dosya, "rb");
+    if (!f) return -1;
+    size_t n = fread(cl, 1, sizeof cl - 1, f);
+    fclose(f);
+    cl[n] = 0;
+    for (size_t i = 0; i < n; i += strlen(cl + i) + 1)
+        if (!strcmp(cl + i, beklenen)) return 0;
+    fprintf(stderr, "deskhand-eis: veri yolunun karşı tarafı Deskhand'in özel dbus-daemon'u değil (pid %d)\n", (int)cr.pid);
+    return -1;
+}
+
 int main(int argc, char **argv) {
     const char *adres = NULL;
+    long beklenen_pid = 0;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bus") && i + 1 < argc) adres = argv[++i];
-        else { fprintf(stderr, "kullanım: deskhand-eis --bus unix:path=/özel/veri/yolu/bus\n"); return 1; }
+        else if (!strcmp(argv[i], "--dbus-pid") && i + 1 < argc) beklenen_pid = strtol(argv[++i], NULL, 10);
+        else { fprintf(stderr, "kullanım: deskhand-eis --bus unix:path=/özel/veri/yolu/bus [--dbus-pid PID]\n"); return 1; }
     }
     if (!adres || !*adres) {
         fprintf(stderr, "deskhand-eis: --bus ADRES zorunlu (ortamdan devralınmaz)\n");
@@ -886,6 +962,10 @@ int main(int argc, char **argv) {
         fprintf(stderr, "deskhand-eis: veri yoluna bağlanılamadı (%s): %s\n", adres, strerror(-r));
         yanit("hata bus-baglanti");
         return 3;
+    }
+    if (karsi_denetle(bus, adres, beklenen_pid) < 0) {
+        yanit("hata bus-karsi");
+        return 2;
     }
     r = sd_bus_call_method(bus, HIZMET, NESNE, ARAYUZ, "connectToEIS", &hata, &yan, "i", YETENEK_KLAVYE_FARE);
     if (r < 0) {

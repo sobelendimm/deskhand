@@ -32,7 +32,8 @@ SILINECEK_ORTAM = ("WAYLAND_DISPLAY", "WAYLAND_SOCKET", "XAUTHORITY", "DESKTOP_S
 # AT_SPI_BUS_ADDRESS: kullanıcının erişilebilirlik veri yolu (erisim.py süreç ortamına geçici koyar) asla geçmez;
 # yalnız masaüstünün KENDİ kayıt defteri izinli_env ile alır. SSH_AUTH_SOCK/SSH_AGENT_PID: arka plan uygulaması
 # kullanıcının SSH anahtarlarını kullanamaz. XDG_RUNTIME_DIR masaüstünün kendi klasörüne çevrilir (uygulama_runtime);
-# HOME BİLEREK kullanıcınındır (uygulamalar kullanıcının dosyalarıyla çalışır; bkz. docs/ARCHITECTURE.md §4).
+# HOME BİLEREK kullanıcınındır (uygulamalar kullanıcının dosyalarıyla çalışır; bkz. docs/ARCHITECTURE.md §4 "sınır").
+# Asıl yalıtım ad alanıdır (korumali_argv): değişkenler yalnız ikinci hat.
 CIKARILACAK_ORTAM = frozenset({
     *SILINECEK_ORTAM, "DBUS_SESSION_BUS_ADDRESS", "AT_SPI_BUS_ADDRESS", "DISPLAY", "LIBEI_SOCKET", "EIS_SOCKET",
     "GNOME_KEYRING_CONTROL", "KDE_FULL_SESSION", "SSH_AUTH_SOCK", "SSH_AGENT_PID", "PULSE_SERVER", "PULSE_SINK",
@@ -170,6 +171,128 @@ def _isaretli_surecler(d: dict) -> list[int]:
     return sonuc
 
 
+def surec_baslangic(pid) -> str | None:
+    """/proc/PID/stat'ın 22. alanı (süreç başlangıç zamanı): PID yeniden kullanımına karşı kimlik."""
+    try:
+        with open(f"/proc/{int(pid)}/stat") as f:
+            s = f.read()
+        return s[s.rindex(")") + 2:].split()[19]
+    except (OSError, ValueError, IndexError, TypeError):
+        return None
+
+
+def pid_dogru(pid, bas, cg: str = "") -> bool:
+    """Kayıttaki PID hâlâ AYNI süreç mi: canlı, başlangıç zamanı kayıttakiyle aynı ve (kafes verildiyse) kafesin
+    cgroup'unda. Bayat/oynanmış kayıt ilgisiz bir süreci öldürtemesin."""
+    if not pid or not bas or not _canli(pid) or surec_baslangic(pid) != str(bas):
+        return False
+    return not cg or _cgroup(pid) == cg
+
+
+def pid_kaydet(d: dict, ad: str, pid: int) -> None:
+    """Bileşen PID'ini BAŞLANGIÇ ZAMANIYLA kaydet (d["pid"][ad], d["pid_bas"][ad]): kapatma/temizlik yalnız aynı
+    sürece sinyal gönderir (pid_dogru)."""
+    d.setdefault("pid", {})[ad] = pid
+    d.setdefault("pid_bas", {})[ad] = surec_baslangic(pid)
+
+
+ADRES_RX = re.compile(r"unix:path=([^,;]+)(,guid=[0-9a-f]{32})?")
+
+
+def bus_yolu_kati(adres: str) -> str | None:
+    """Veri yolu adresinin TEK soket yolu: yalnız `unix:path=/yol[,guid=<32 hex>]`. `;` (çoklu adres: sd-bus/libdbus
+    ilki olmazsa sonrakine geçer), başka anahtar ya da biçim → None."""
+    m = ADRES_RX.fullmatch(adres or "")
+    return m.group(1) if m else None
+
+
+def soket_karsi_pid(yol: str) -> int | None:
+    """Unix soketine bağlan, karşı tarafın PID'ini (SO_PEERCRED) al, kapat. Bağlanılamazsa None."""
+    import socket
+    import struct
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(1.0)
+    try:
+        s.connect(yol)
+        pid, _uid, _gid = struct.unpack("3i", s.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        return pid
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def soket_kimligi(yol: str) -> tuple[int, int] | None:
+    try:
+        st = os.stat(yol)
+        return st.st_dev, st.st_ino
+    except OSError:
+        return None
+
+
+def gercek_soket_kimlikleri() -> set[tuple[int, int]]:
+    """Kullanıcının gerçek runtime dizinindeki soketlerin (veri yolu, Wayland, ses, erişilebilirlik…) (st_dev, st_ino)
+    kümesi: bir oturum soketi bunlardan birinin SERT BAĞI ise reddedilir."""
+    import glob
+    import stat as _stat
+    rt = gercek_runtime()
+    sonuc = set()
+    for y in glob.glob(os.path.join(rt, "*")) + glob.glob(os.path.join(rt, "*", "*")):
+        try:
+            st = os.stat(y)
+        except OSError:
+            continue
+        if _stat.S_ISSOCK(st.st_mode):
+            sonuc.add((st.st_dev, st.st_ino))
+    return sonuc
+
+
+def runtime_denetle(yol: str) -> None:
+    """Deskhand'in RUNTIME_DIR'i (var olan dizin) kullanıcıya ait ve 0700 olmalı (başkasının hazırladığı dizine
+    oturum soketi/durum dosyası konmasın). Değilse Dur(14)."""
+    try:
+        st = os.stat(yol)
+    except FileNotFoundError:
+        return
+    if st.st_uid != os.getuid() or (st.st_mode & 0o777) != 0o700:
+        raise Dur(14, _("çalışma dizini güvensiz (sahibi/izinleri): {yol} ({mod})").format(
+            yol=yol, mod=oct(st.st_mode & 0o777)))
+
+
+# ---------------------------------------------------------------- uygulama ad alanı yalıtımı (bwrap)
+
+def bwrap_var() -> bool:
+    return bool(shutil.which("bwrap"))
+
+
+def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, bool]]) -> list[str]:
+    """Arka plan UYGULAMASININ komutu bwrap ad alanında: kök dosya sistemi aynen (`--dev-bind / /`), ama kullanıcının
+    gerçek runtime dizini (/run/user/UID: Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh, xauth, at-spi, portal
+    soketleri) ve Deskhand'in kendi RUNTIME_DIR'i (girdi.sock, sanal.json, diğer oturumlar) BOŞ tmpfs ile örtülür,
+    /tmp/.X11-unix boşaltılır; yalnız `baglar` (oturumun kendi soketleri/dizinleri; (yol, salt_okunur)) geri bağlanır.
+    --die-with-parent YOK (masaüstü CLI'den uzun yaşar); kafes ve PID temizliği aynen geçerli."""
+    uid = os.getuid()
+    a = ["bwrap", "--dev-bind", "/", "/", "--tmpfs", f"/run/user/{uid}"]
+    rk = os.path.realpath(runtime_kok)
+    if not (rk == f"/run/user/{uid}" or rk.startswith(f"/run/user/{uid}/")):
+        a += ["--tmpfs", rk]
+    a += ["--tmpfs", "/tmp/.X11-unix", "--new-session"]
+    for yol, ro in baglar:
+        if yol and os.path.exists(yol):
+            a += ["--ro-bind" if ro else "--bind", yol, yol]
+    return [*a, "--", *argv]
+
+
+def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str, bool]], **popen) -> subprocess.Popen:
+    """Arka plan UYGULAMASINI başlatmanın TEK yolu (iki tür): bwrap ad alanı (korumali_argv) + bellek kafesi + düşük
+    öncelik. bwrap yoksa Dur(9): yalıtımsız başlatma yok."""
+    if not bwrap_var():
+        raise Dur(ARAC_EKSIK, _("bwrap (bubblewrap) yok: arka plan uygulaması yalıtılamaz, başlatılmadı"))
+    from . import yollar
+    popen.setdefault("stdin", subprocess.DEVNULL)
+    return kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar), env, **popen)
+
+
 def _sinyal(pids, sig) -> None:
     for pid in pids:
         try:
@@ -244,19 +367,26 @@ def kafeste_baslat(d: dict, argv: list[str], env: dict, pass_fds=(), **popen) ->
     return p
 
 
-def oncelik_bekcisi_baslat(d: dict, cdir: str) -> str | None:
+def oncelik_bekcisi_baslat(d: dict, cdir: str, izle: int | None = None, xno: int | None = None) -> str | None:
     """Kafesin öncelik bekçisi (oncelik_bekcisi.py; iki türde de): kafesteki her iş parçacığını nice >= 10, gerçek
-    zamanlı olmayan zamanlama ve idle G/Ç'de tutar (ad tabanlı sistem kuralları yükseltse bile). Kafes yoksa
-    başlatılmaz. → uyarı metni | None. PID d["pid"]["oncelik_bekcisi"]."""
+    zamanlı olmayan zamanlama ve idle G/Ç'de tutar (ad tabanlı sistem kuralları yükseltse bile). izle: ekran sunucusu
+    PID'i — SIGKILL/OOM ile ölürse bekçi kafesi boşaltır, X soket/kilitlerini (xno) ve çalışma dizinini siler. Kafes
+    yoksa başlatılmaz. → uyarı metni | None. PID d["pid"]["oncelik_bekcisi"]."""
     if not d.get("cgroup"):
         return _("bellek kafesi yok: öncelik bekçisi çalışmıyor (ad tabanlı sistem kuralları önceliği yükseltebilir)")
     import sys
     from . import oncelik_bekcisi
+    ek = []
+    if izle and surec_baslangic(izle):
+        ek += ["--izle", str(izle), surec_baslangic(izle)]
+    if xno is not None:
+        ek += ["--x", str(int(xno))]
+    ek += ["--dizin", cdir]
     with _gunluk_dosyasi(cdir, "oncelik-bekcisi") as log:
-        p = kafeste_baslat(d, [sys.executable, "-I", oncelik_bekcisi.__file__, d["cgroup"]],
+        p = kafeste_baslat(d, [sys.executable, "-I", oncelik_bekcisi.__file__, d["cgroup"], *ek],
                            {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": os.environ.get("LANG") or "C.UTF-8"},
                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=log)
-    d.setdefault("pid", {})["oncelik_bekcisi"] = p.pid
+    pid_kaydet(d, "oncelik_bekcisi", p.pid)
     satir = _satir_bekle(p, 5)
     if p.stdout:
         p.stdout.close()
@@ -316,7 +446,9 @@ def ses_kur(ek: str = "") -> tuple[dict | None, str | None]:
 
 
 def ses_kaldir(ses: dict | None) -> str | None:
-    if not ses or ses.get("modul") is None or ses.get("onceden"):
+    """(Eski kayıtlar için) Deskhand'in yüklediği boş çıkışı kaldır. Yalnız `deskhand-sessiz` adlı çıkışın modülü:
+    oynanmış kayıt kullanıcının başka bir ses modülünü kaldırtamaz."""
+    if not ses or ses.get("modul") is None or ses.get("onceden") or not str(ses.get("sink") or "").startswith(SINK):
         return None  # önceden vardı: sahibi biz değiliz, başka bir masaüstü kullanıyor olabilir
     if _sink_modulu(ses.get("sink")) != ses["modul"]:
         return None  # zaten yok (ya da başka biri yeniden yükledi: dokunma)
@@ -342,30 +474,15 @@ def uygulama_runtime(cdir: str) -> str:
 
 
 def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
-    """Uygulama ortamının SES bölümü (iki tür için aynı): boş çıkış varsa ona yönlendir, yoksa sesi tamamen kapat.
-    Uygulamanın XDG_RUNTIME_DIR'i masaüstünün kendi klasörü olduğundan ses sunucusu AÇIK yolla verilir
-    (PULSE_SERVER + PIPEWIRE_RUNTIME_DIR: kullanıcının ses sunucusu; akış yine yalnız boş çıkışa gider)."""
-    ses = ses or {}
-    if ses.get("sink"):
-        rt = gercek_runtime()
-        e["PULSE_SERVER"] = f"unix:{rt}/pulse/native"
-        e["PIPEWIRE_RUNTIME_DIR"] = rt
-        s = ses["sink"]
-        e["PULSE_SINK"] = s
-        e["PULSE_SOURCE"] = f"{s}.monitor"  # kayıt da sessizlikten: arka plan uygulaması mikrofonu duymaz
-        # PULSE_PROP: işaret (ses yönlendiricileri bu akışları tanıyıp dokunmasın) +
-        # dont-fallback/dont-reconnect: boş çıkış kalkarsa akış varsayılan çıkışa (kullanıcının kulaklığına)
-        # TAŞINMAZ, öldürülür. Ölçüldü (pipewire-pulse): yalnız işaretle akış kulaklığa düştü; bunlarla "Entity
-        # killed". PULSE_* değişkenleri flatpak sandbox'ına da geçiyor (ölçüldü).
-        e["PULSE_PROP"] = "deskhand.sanal=1 node.dont-fallback=true node.dont-reconnect=true"
-        e["PIPEWIRE_NODE"] = s
-        e["PIPEWIRE_PROPS"] = (f'{{ target.object = "{s}" node.dont-fallback = true node.dont-reconnect = true '
-                               f'deskhand.sanal = 1 }}')
-    else:  # boş çıkış kurulamadı: ses tamamen kapalı (varsayılan çıkışa, yani kullanıcının kulağına düşmesin)
-        e["PULSE_SERVER"] = f"unix:{yok_yolu}"
-        e["PIPEWIRE_REMOTE"] = yok_yolu
-        e["PIPEWIRE_RUNTIME_DIR"] = os.path.dirname(yok_yolu)
-        e.pop("PULSE_SINK", None)
+    """Uygulama ortamının SES bölümü (iki tür için aynı): arka plan uygulamaları kullanıcının ses sunucusuna
+    (pipewire/pulse) HİÇ erişmez — çalma da kayıt (mikrofon) da yok. Uygulama bwrap ad alanında gerçek runtime
+    dizinini göremez; ortam da var olmayan bir sokete yönlendirilir (uygulamalar sessiz çalışır). `ses` yok sayılır
+    (geriye uyum: eski boş çıkış düzeneği kaldırıldı)."""
+    for k in [k for k in e if k.startswith(("PULSE_", "PIPEWIRE_"))]:
+        del e[k]
+    e["PULSE_SERVER"] = f"unix:{yok_yolu}"
+    e["PIPEWIRE_REMOTE"] = yok_yolu
+    e["PIPEWIRE_RUNTIME_DIR"] = os.path.dirname(yok_yolu)
 
 
 def _cikarilacak_mi(k: str) -> bool:

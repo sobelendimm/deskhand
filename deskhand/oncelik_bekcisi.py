@@ -7,8 +7,12 @@ tarayıcılar) kök olarak süreçleri yeniden yükseltebiliyor (ölçüldü: ar
 yalnız `kwin_wayland` dosya adıyla çalıştığı için ad değiştirilemiyor. Bu bekçi onları kısa sürede geri düşürür:
 arka plan masaüstü, oyun oynayan kullanıcıdan işlemci/disk çalmaz.
 
+İkinci görev (ölü oturum temizliği): --izle PID BAŞLANGIÇ ile ekran sunucusu (KWin / Xvfb) izlenir; SIGKILL/OOM ile
+ölürse kafes boşaltılır (SIGTERM, 2 sn, SIGKILL), oturumun X soket/kilitleri (--x N: kilit içeriği ölen PID ise) ve
+çalışma dizini (--dizin) silinir, bekçi çıkar. Böylece dbus-daemon / bekçiler / at-spi süresiz kalmaz.
+
 Tek başına betik (yalnız standart kitaplık), `python3 -I` ile çalışır; masaüstü kafesin içinde başlatır:
-    python3 -I oncelik_bekcisi.py CGROUP_YOLU [ARALIK_SN]
+    python3 -I oncelik_bekcisi.py CGROUP_YOLU [--aralik SN] [--izle PID BAŞLANGIÇ] [--x N] [--dizin YOL]
 Hazır olunca stdout'a "hazir" yazar; düzelttiği her iş parçacığını stderr'e (masaüstü günlüğü) bir kez yazar.
 Yalnız kafesin cgroup.procs listesindeki süreçlere dokunur (kendi kullanıcının süreçleri; yükseltme YOK, yalnız düşürme).
 """
@@ -90,17 +94,91 @@ def tur(cg: str, gorulen: set) -> int:
     return n
 
 
+def _baslangic(pid: int) -> str | None:
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            v = f.read()
+        return v[v.rindex(")") + 2:].split()[19]
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _durum(pid: int) -> str:
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
+        return "X"
+
+
+def oturumu_kapat(cg: str, pid: int, xno: int | None, dizin: str | None) -> None:
+    """Ekran sunucusu öldü: kafesteki her şeyi (bu bekçi hariç) kapat, X soket/kilitlerini ve çalışma dizinini sil."""
+    import signal
+    import shutil
+    ben = os.getpid()
+    hedef = [p for p in surecler(cg) if p != ben]
+    for p in hedef:
+        try:
+            os.kill(p, signal.SIGTERM)
+        except OSError:
+            pass
+    bitis = time.monotonic() + 2.0
+    while time.monotonic() < bitis and any(_durum(p) not in ("X", "Z") for p in surecler(cg) if p != ben):
+        time.sleep(0.05)
+    for p in surecler(cg):
+        if p != ben:
+            try:
+                os.kill(p, signal.SIGKILL)
+            except OSError:
+                pass
+    if xno is not None:
+        for n in (xno, xno + 1):
+            kilit = f"/tmp/.X{n}-lock"
+            try:
+                with open(kilit) as f:
+                    sahip = int(f.read().strip() or 0)
+            except (OSError, ValueError):
+                continue
+            if sahip == pid:  # yalnız ÖLEN sunucunun kilidi: başkasınınkine dokunulmaz
+                for y in (kilit, f"/tmp/.X11-unix/X{n}"):
+                    try:
+                        os.unlink(y)
+                    except OSError:
+                        pass
+    if dizin and os.path.basename(dizin.rstrip("/")).startswith(("kwin-", "sanal-")) and os.path.isdir(dizin):
+        shutil.rmtree(dizin, ignore_errors=True)
+    print(f"oncelik-bekcisi: ekran sunucusu ({pid}) öldü; oturum kapatıldı", file=sys.stderr, flush=True)
+
+
 def main(argv: list[str]) -> int:
     if not argv:
-        print("kullanım: oncelik_bekcisi.py CGROUP_YOLU [ARALIK_SN]", file=sys.stderr)
+        print("kullanım: oncelik_bekcisi.py CGROUP_YOLU [--aralik SN] [--izle PID BAŞLANGIÇ] [--x N] [--dizin YOL]",
+              file=sys.stderr)
         return 2
     cg = argv[0]
-    aralik = float(argv[1]) if len(argv) > 1 else 0.5
+    aralik, izle, bas, xno, dizin = 0.5, None, None, None, None
+    i = 1
+    while i < len(argv):
+        a = argv[i]
+        if a == "--aralik":
+            aralik, i = float(argv[i + 1]), i + 2
+        elif a == "--izle":
+            izle, bas, i = int(argv[i + 1]), argv[i + 2], i + 3
+        elif a == "--x":
+            xno, i = int(argv[i + 1]), i + 2
+        elif a == "--dizin":
+            dizin, i = argv[i + 1], i + 2
+        else:
+            print(f"bilinmeyen argüman: {a}", file=sys.stderr)
+            return 2
     gorulen: set = set()
     tur(cg, gorulen)
     print("hazir", flush=True)
     while True:
         time.sleep(aralik)
+        if izle is not None and (_baslangic(izle) != bas or _durum(izle) in ("X", "Z")):
+            oturumu_kapat(cg, izle, xno, dizin)
+            return 0
         if not surecler(cg):
             return 0
         tur(cg, gorulen)

@@ -114,8 +114,7 @@ class KwinArkaUc(ArkaUc):
         d = masaustu.durum(saglik=False)
         if d is None or masaustu.tur(d) != "kwin":
             raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
-        kwin_oturum.baglanti_denetle(d)
-        return d
+        return kwin_oturum.baglanti_denetle(d)  # GÜVENLİ kayıt: yollar oturum dizininden, karşı taraf doğrulanmış
 
     def ekran_adi(self) -> str:
         return self._d()["ekran"]
