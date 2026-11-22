@@ -559,6 +559,9 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
     """Paneldeki insandan bir kez izin iste ve bekle (en çok `sure` sn). → OnaySonucu.
     masaustu: "ekran" (kullanıcının ekranı) | "arka" (görünmez masaüstü).
     goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu."""
+    if not os.environ.get("DESKHAND_RUNTIME_DIR"):  # kullanıcının GERÇEK panelinde iletişim kutusu açılır
+        from .hata import gercek_ekran_denetle
+        gercek_ekran_denetle(_("onay iletişim kutusu"))
     masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
 
     def bitir(s: OnaySonucu) -> OnaySonucu:

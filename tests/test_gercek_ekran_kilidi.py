@@ -22,6 +22,8 @@ import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler + DESKHAND_GERCEK_
 from deskhand import api, arka_uc, doktor, erisim, girdi_merkezi as GM, hata, masaustu, mesgul
 from deskhand.arka_uc import EKRAN, kde, kde_goruntu
 from deskhand.hata import Dur
+from deskhand import onay as _onay_mod  # noqa: E402
+_ASIL_ISTE = _onay_mod.iste_sonuc  # sahte_masaustu.kur() sonra sahteler; E bölümü GERÇEĞİNİ sınar
 
 gecen = toplam = 0
 
@@ -122,7 +124,8 @@ for deger in ("", "acik", "salt-okuma", "kapali", "KAPALI ", "yanlis", "0", "fal
 del os.environ[DEG]
 kiplar["(ayarsız)"] = hata.gercek_ekran_kipi()
 os.environ[DEG] = "kapali"
-kontrol("kip: boş / acik / ayarsız → acik", kiplar[""] == kiplar["acik"] == kiplar["(ayarsız)"] == "acik", str(kiplar))
+kontrol("kip: acik / ayarsız → acik; ayarlı ama BOŞ → kapali (VAR=$AYARSIZ kilidi açmasın)",
+        kiplar["acik"] == kiplar["(ayarsız)"] == "acik" and kiplar[""] == "kapali", str(kiplar))
 kontrol("kip: salt-okuma → salt-okuma; kapali (büyük harf/boşluk dahil) → kapali",
         kiplar["salt-okuma"] == "salt-okuma" and kiplar["kapali"] == kiplar["KAPALI "] == "kapali", str(kiplar))
 kontrol("kip: tanınmayan değer (yazım hatası, 0, false) → kapali (kilidi açmaz)",
@@ -338,6 +341,41 @@ g = sau.girdi("sahte")
 g.gonder("{sahte-1}", None, "click left")
 kontrol("D: sahte kde arka ucu kilitten etkilenmez (gerçek araç çağırmaz)", sau.satirlar[-1] == "click left", str(sau.satirlar))
 kontrol("D: sahte kde ile api.tikla → 17 DEĞİL", dur_kodu(api.tikla, "{sahte-1}", 10, 10)[0] != 17)
+
+# ---------------------------------------------------------------- E. inceleme ekleri (web eylemi, onay kanalı, kwinscript)
+from deskhand import onay, web  # noqa: E402
+from deskhand.mesgul import KWIN_BETIK  # noqa: E402
+
+_asil_baglam = web._baglam
+try:
+    web._baglam = lambda k, ne: (types.SimpleNamespace(ad="kde"), object(), "bus", None)
+    kontrol("E: web.eylem_yap gerçek oturumda (kde) → 17, DoAction yok",
+            dur_kodu(web.eylem_yap, "{k}", {"_bus": ":1.9", "_yol": "/x"})[0] == 17)
+finally:
+    web._baglam = _asil_baglam
+_rt = os.environ.pop("DESKHAND_RUNTIME_DIR")
+try:
+    _r = dur_kodu(_ASIL_ISTE, "tıkla", "deneme")
+    kontrol("E: onay.iste_sonuc GERÇEK çalışma dizininde (kullanıcının paneli) → 17", _r[0] == 17, str(_r))
+finally:
+    os.environ["DESKHAND_RUNTIME_DIR"] = _rt
+kontrol("E: kwinscript yalnız mesgul'ün sabit betiği okuma; başka inline/dosya betik yan etki",
+        not kde._yan_etkili_mi(["kdotool", "kwinscript", "--inline", KWIN_BETIK]) and
+        kde._yan_etkili_mi(["kdotool", "kwinscript", "--inline", "workspace.activeWindow.closeWindow()"]) and
+        kde._yan_etkili_mi(["kdotool", "kwinscript", "betik.js"]))
+kontrol("E: zincirli bilinmeyen eylem sözleri (set_desktop_for_window, windowlower) yan etki",
+        all(kde._yan_etkili_mi(["kdotool", "getwindowname", "K", s_, "K", "1"])
+            for s_ in ("set_desktop_for_window", "set_desktop", "windowlower", "set_num_desktops")))
+_eski = os.environ.get(DEG)
+try:
+    os.environ[DEG] = ""
+    kontrol("E: ayarlı ama BOŞ değer (VAR=$AYARSIZ) → kapali", hata.gercek_ekran_kipi() == "kapali")
+finally:
+    os.environ[DEG] = _eski
+_kodlar = {k: v for k, v in vars(hata).items() if k.isupper() and isinstance(v, int) and not isinstance(v, bool)
+           and 0 < v < 64}
+kontrol("E: hata.py çıkış kodu sabitleri BENZERSİZ (iki özellik aynı koda düşmesin)",
+        len(set(_kodlar.values())) == len(_kodlar), str(sorted(_kodlar.items(), key=lambda x: x[1])))
 
 print(f"\n{gecen}/{toplam} gerçek ekran kilidi testi geçti")
 sys.exit(0 if gecen == toplam else 1)
