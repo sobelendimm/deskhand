@@ -970,6 +970,11 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
     paylasim = test_paylasimi()
     if paylasim:
         a += ["--bind", paylasim, paylasim]
+        # YALNIZ test takımı: deponun tests/ dizini (test pencere betikleri) salt okunur görünür — ev dizini boş tmpfs
+        # olduğu için depo ev altındaysa görünmezdi. Paket dizinine kardeş `tests/` dışında hiçbir şey açılmaz.
+        testler = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "tests")
+        if os.path.isdir(testler) and not os.path.islink(testler):
+            a += ["--ro-bind", testler, testler]
     for yol, ro in baglar:
         if yol and os.path.exists(yol):
             a += ["--ro-bind" if ro else "--bind", yol, yol]
