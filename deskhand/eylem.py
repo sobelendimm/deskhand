@@ -696,7 +696,7 @@ def k_tikla(a):
             with open(yollar.son_foto()) as fp:
                 s = json.load(fp)
         except (OSError, ValueError):
-            raise Dur(1, _("--foto: önce `ekran foto` alınmalı"))
+            raise Dur(1, _("--foto: önce `deskhand screenshot` alınmalı"))
         if s["kimlik"] != a.kimlik:
             raise Dur(1, _("--foto: son foto başka pencereye ait ({kimlik})").format(kimlik=s["kimlik"]))
         geo = tuple(s["geo"])
@@ -1316,7 +1316,7 @@ def k_metne_tikla(a):
             sure += time.monotonic() - t0
             print(_("# {adim} kez kaydırıldı ({sn} sn)").format(adim=adim, sn=f"{sure:.1f}"))
         if not ms:
-            raise Dur(6, _("'{metin}' bulunamadı ({sn} sn). İpucu: `ekran metin {kimlik}` ile satırlara bak").format(
+            raise Dur(6, _("'{metin}' bulunamadı ({sn} sn). İpucu: `deskhand read {kimlik}` ile satırlara bak").format(
                 metin=a.metin, sn=f"{sure:.1f}", kimlik=a.kimlik))
         if a.sira is None and len(ms) > 1:
             print(_("# '{metin}' için {sayi} eşleşme:").format(metin=a.metin, sayi=len(ms)))

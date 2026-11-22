@@ -2,6 +2,25 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
+## 0.9.0 (22 Kasım 2026)
+
+- **Yeni: `choose-file` (`dosya-sec`).** Dosya seçici diyaloğunda dosyayı doğrulayarak seçer: konum girdisi odakta mı
+  (AT-SPI), yazılan yol geri okunur, eşleşmezse Enter'a basılmaz; diyalog kapanana kadar beklenir. Arka planda XDG
+  dışındaki dosya için açık ileti. Gerçek Firefox `<input type=file>` ile sınandı. Tarayıcının yerel diyaloğunda
+  (dosya seçici) klavye artık "sayfa okunamadı" diye reddedilmiyor.
+- **`tree` diyaloğun kendi ağacını okur:** başlığı ana pencerenin adını içeren GTK diyaloğu için ana Firefox ağacı
+  dönüyordu (tam başlık eşleşmesi artık önce).
+- **Panel çökmez:** slottaki yakalanmayan istisna (ör. disk dolu) SIGABRT ile paneli öldürüyordu; artık günlüğe yazılır,
+  tepsiden uyarılır, panel ve DUR düğmesi çalışmaya devam eder. Devral ve ayar kayıtları yazılamazsa iletiyle döner.
+- **Eski MCP sunucusu algılanır:** `get_status` diskteki sürüm farklıysa `stale_server` + "/mcp ile yeniden bağla";
+  `doctor` çalışan `deskhand mcp` süreçlerini listeler, güncellemeden önce başlamış olanları uyarır.
+- **Gizlilik:** günlük dosyaları 0600, `~/.local/state/deskhand` ve `~/.cache/deskhand` 0700 (eski izinler açılışta
+  düzeltilir). `secret` olmadan yazılan metin günlükte görünür.
+- **observe sayfalama:** aynı içerikli anlık görüntüler tek yer tutar; beşinci sayfa ilk sayfanın ref'lerini düşürmez.
+  Tekrar sınırı iletileri `observe` önerir; düşen ref iletisi nedenini (pencere başına 4) söyler.
+- İpuçları eski `ekran …` adları yerine çalıştırılabilir `deskhand …` komutu verir; güvenlik, onay, CAPTCHA devri,
+  hesap oturumu ve MCP metinlerinin İngilizce çevirileri tamamlandı; `server.json` sürümü paketle eşitlendi.
+
 ## 0.8.2 (22 Kasım 2026)
 
 - **Yeni: 2× (HiDPI) görünmez masaüstü — keskin ekran görüntüsü.** Görünmez masaüstünden alınan görüntüler ürün

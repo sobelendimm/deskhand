@@ -89,7 +89,7 @@ def uygulama_bul(ad):
         liste = "\n".join(f"  {g['kimlik']} | {g['ad']} | {g['exec']}" for g in gorunur[:15])
         raise Dur(5, _("'{ad}' {sayi} uygulamaya uyuyor; tam adını ya da kimliğini ver:\n{liste}").format(
             ad=ad, sayi=len(gorunur), liste=liste))
-    raise Dur(6, _("'{ad}' adlı uygulama bulunamadı (.desktop); komutla başlatmak için: ekran ac --komut \"…\""
+    raise Dur(6, _("'{ad}' adlı uygulama bulunamadı (.desktop); komutla başlatmak için: deskhand open --command \"…\""
                    ).format(ad=ad))
 
 

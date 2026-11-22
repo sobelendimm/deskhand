@@ -93,7 +93,7 @@ YARDIM_KOMUTLAR = (
        "                    [--approved]"),
     N_("  ekran goto (git) <kimlik> <http(s)-adres> [--approved]   tarayıcı penceresinde adres çubuğuyla adrese git\n"
        "                                          (ctrl+l → adres → Return; tüm girdi denetimleri aynen; yalnız http/https)"),
-    N_("  ekran choose-file (dosya-sec) <diyalog-kimliği> </tam/yol>   dosya seçicide dosyayı seç: konum girdisi odakta\n"
+    N_("  ekran choose-file (dosya-sec) <diyalog-kimliği> <TAM-YOL>   dosya seçicide dosyayı seç: konum girdisi odakta\n"
        "                                          mı, yazılan yol geri okunur, eşleşmezse Enter'a basılmaz; diyalog kapanır"),
     N_("  ekran open (ac) <uygulama [http(s)-adres] | --command \"KOMUT\"> [--url ADRES] [-b DESEN] [-s SINIF] [--timeout 30]\n"
        "                                          başlat → YENİ penceresini bekle → kimlik | başlık | sınıf "

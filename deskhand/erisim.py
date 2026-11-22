@@ -24,6 +24,7 @@ from . import dogrulama_sinamasi, guvenlik, ucbirim
 from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, insan_dogrulama_nokta,
                     insan_dogrulama_oge, sistem_istemi_on, sistem_istemi_onay, tikla_ic)
 from .gunluk import gunluk
+from .ipucu import komut as ipucu_komut
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, seviye_denetle,
                        yazi_onay_ister_mi)
 from .hata import Dur, dur_denetle, gercek_ekran_denetle
@@ -1086,8 +1087,8 @@ def _oge_secimi(a, ogeler, sure):
         from . import web
         ipucu = ("\n" + _("Web sayfası ögeleri için: `web {kimlik} '{ad}'`").format(kimlik=a.kimlik, ad=a.ad)
                  if web.tarayici_mi(a.kimlik) else "")
-        raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `ekran agac {kimlik}`"
-                       ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", kimlik=a.kimlik) + ipucu)
+        raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `{komut}`"
+                       ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", komut=ipucu_komut("tree", a.kimlik)) + ipucu)
     if a.sira is None and len(bulunan) > 1 and tercih and kademe == "tam":
         # değer yazma: etiket (label) ile giriş alanı aynı ADI (TAM eşleşme) taşırsa yalnız BİRİ yazılabilirse
         # (entry/text…) o seçilir; bulanık (içerir/benzer) eşleşmede eski davranış: belirsizlik (5) sorulur

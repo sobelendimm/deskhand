@@ -55,7 +55,7 @@ def yol_denetle(yol: str, arka: bool) -> str:
         raise Dur(1, _("yolda satır sonu/sekme var: dosya seçiciye yazılamaz"))
     if arka and not arka_planda_gorunur(yol):
         raise Dur(1, _("bu dosya görünmez masaüstündeki uygulamaya görünmez ({yol}): arka planda yalnız XDG veri "
-                       "klasörleri görünür (/tmp ve diğer ev klasörleri görünmez). Dosyayı ~/İndirilenler gibi bir XDG "
+                       "klasörleri görünür (/tmp ve diğer ev klasörleri görünmez). Dosyayı İndirilenler (Downloads) gibi bir XDG "
                        "klasörüne kopyalayın ve o yolu verin").format(yol=yol))
     return yol
 

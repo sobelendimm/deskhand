@@ -129,5 +129,17 @@ kontrol("server.json version == __version__", sj["version"] == __version__, sj["
 kontrol("server.json packages[].version + indirme adresi == __version__",
         all(p["version"] == __version__ and f"/v{__version__}/" in p["identifier"] for p in sj["packages"]))
 
+# ======================================================================= 4) i18n: güvenlik/onay/panel/MCP kapsamı
+with open(os.path.join(_yalitim.KOK, "deskhand", "i18n", "kaynak.json"), encoding="utf-8") as f:
+    kaynak = json.load(f)
+with open(os.path.join(_yalitim.KOK, "deskhand", "i18n", "en.json"), encoding="utf-8") as f:
+    en = json.load(f)
+ESIK = {"gui/": 100, "onay.py": 100, "guvenlik.py": 100, "dogrulama_sinamasi.py": 100, "mcp_sunucu.py": 95}
+for kap, esik in ESIK.items():
+    ms = [m for m, yer in kaynak.items() if any(y.startswith(kap) for y in yer)]
+    oran = 100.0 * sum(1 for m in ms if en.get(m)) / max(1, len(ms))
+    kontrol(f"i18n: {kap} İngilizce kapsamı ≥ %{esik} (kullanıcıya görünen güvenlik/onay metinleri)", oran >= esik,
+            f"%{oran:.1f} ({len(ms)} metin); çevir: tools/i18n_cikar.py + deskhand/i18n/en.json")
+
 print(f"\n{gecen}/{toplam} test geçti")
 sys.exit(0 if gecen == toplam else 1)

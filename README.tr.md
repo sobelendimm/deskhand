@@ -348,6 +348,26 @@ esac
 deskhand $NEREDE open --command "okular ~/fatura.pdf"
 ```
 
+Genel seçenekler (`--desktop-name AD`, `--background`) **komuttan ÖNCE** yazılır; `--` kullanıyorsanız da önce
+gelirler: `deskhand --desktop-name is1 --background tree <kimlik>`. zsh boşluklu bir değişkeni (`$NEREDE="--a --b"`)
+bölmez; bunun yerine ortamı kullanın: `export DESKHAND_HEDEF=arka DESKHAND_MASAUSTU=is1`, sonra yalın
+`deskhand tree <kimlik>`. Hata iletilerindeki ipuçları bu biçimde, olduğu gibi çalıştırılabilir tam komut verir.
+
+### Dosya yükleme (dosya seçici)
+
+Bir sayfadaki "Dosya seç" düğmesi GTK dosya seçicisini açar. Yolu elle yazmayın (ctrl+l → yol → Enter):
+konum girdisi açılmazsa yazılan yol listedeki "yazarak ara"ya gider ve Enter yanlış dosyayı seçebilir. Bunun yerine:
+
+```bash
+deskhand --background windows                       # diyaloğun kimliğini bulun ("File Upload - …")
+deskhand --background choose-file <diyalog> ~/İndirilenler/belge.pdf   # Türkçe: dosya-sec
+```
+
+`choose-file` konum girdisinin odakta olduğunu AT-SPI ile doğrular, yazdığı yolu geri okur (tam eşleşmezse Enter'a
+basmaz, 8 ile durur) ve diyaloğun kapandığını bekler. Görünmez masaüstündeki uygulamalar yalnız XDG klasörlerini
+(İndirilenler, Belgeler, Masaüstü…) görür: `/tmp` ya da başka ev klasörlerindeki dosyayı önce örneğin
+`~/İndirilenler`'e kopyalayın.
+
 Ajanlar için kurallar: 10, 12, 13, 15, 16 ve 18 çıkış kodlarında durun ve kullanıcıya söyleyin;
 tıklamadan önce okuyun, sonra doğrulayın; `--approved`'ı yalnız kullanıcı o adımı sohbette
 açıkça onayladıysa verin. Verilmezse Deskhand kullanıcıya panelden sorar.
