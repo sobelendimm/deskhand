@@ -568,21 +568,33 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   yalnız şu iki sınıfta onay sorar: (1) para düğmeleri (`guvenlik.PARA_DUGMESI`: satın al, hemen al, öde, ödemeyi
   tamamla, siparişi onayla/tamamla, buy now, pay, place order, complete purchase, confirm payment… — HASSAS'ın para alt
   kümesi + son sipariş/abonelik/bağış düğmeleri: place/submit/complete order, confirm (and) pay, siparişi ver/gönder/
-  onayla/tamamla, onayla ve bitir/öde, abone ol/subscribe, bağış yap/donate, ödemeyi yap/tamamla; "Devam Et"/"Continue"
-  para düğmesi SAYILMAZ; ödeme sayfası dışında da) ve ödeme/sipariş sayfasında HER tıklama ile Enter/boşluk — düğme yazısı
+  onayla/tamamla, onayla ve öde, bağış yap/donate, ödemeyi yap/tamamla; "Devam Et"/"Continue", "Abone ol"/"Subscribe"/"Subscriptions",
+  "Onayla ve Bitir", durum yazısı "Siparişiniz onaylandı/gönderildi" para düğmesi SAYILMAZ (kullanıcı: yalnız kart
+  kullanırken sor); ödeme sayfası dışında da) ve ödeme/sipariş sayfasında HER tıklama ile Enter/boşluk — sayfa kalıbı
+  `kart` kipinde DAR (`guvenlik.HASSAS_SAYFA_KART`: checkout, ödeme [ödeme geçmişi/yöntemlerim hariç], sipariş özeti,
+  siparişi onayla/tamamla, order review/summary, place order, payment details/information/page/step, billing
+  details/information, 3D Secure/Doğrulama; `kasa`, tek başına `billing`/`payment` YOK: "PC Kasa Modelleri", "Payment
+  Request API", "Google Cloud Billing" sormaz), `hepsi` kipinde geniş `HASSAS_SAYFA` aynen (`hassas_sayfa_kalibi()`) — düğme yazısı
   okunabilse de, ajanın verdiği ad ya da noktanın yanındaki yazı ("Toplam 249,90 TL") karara girmez, muafiyet YOKTUR
   (kayıtlı kartta kart yazma kapısı hiç tetiklenmez; son sipariş tıklamasını bu kapı yakalar) (`hassas_engel`,
   `hassas_sayfa_engel`, `hassas_nokta`, AT-SPI/web hassas öge); (2) kart bilgisi yazma
   (`guvenlik.kart_bilgisi_engel`: yazı, yapıştırarak yazma, AT-SPI değer yazma; hedef alan kart alanıysa — AT-SPI/web ad,
   etiket, açıklama ya da autocomplete/id/placeholder: kart numarası, card number, cc-number, cvc/cvv, güvenlik kodu, son
   kullanma, expiry — ya da metinde 13–19 haneli, Luhn'dan geçen numara varsa: boşluk/nokta/tire/bölü ayırıcılı, çift
-  boşluklu, ek rakam/SKT/CVV bitişik; dizinin kendisi 13–19 hane değilse alt pencereler yalnız bilinen kart ailesi ön eki +
-  uzunluğuyla aranır: sahte alarmı keser). Panoya YAZILAN metin de aynı denetimden geçer (`guvenlik.pano_yazma_engel`: API
+  boşluklu, ek rakam/SKT/CVV bitişik). YANLIŞ ALARM kuralları (`guvenlik.kart_numarasi`): ayırıcı yalnız boşluk/nokta/tire/
+  bölü (en çok 3; satır sonu/Tab diziyi BİTİRİR, tampon da öyle); dizi ≤23 hane; pencere kart ailesi ön eki + uzunluğuna
+  (Visa/MC/Amex/Troy/Diners/JCB/Discover/UnionPay/Maestro) VE Luhn'a uymalı, yalnız GRUP BAŞINDA başlar, SON hariç her
+  grubu 4–6 haneli olmalı; tarih (`22.11.2026`) ve geçerli IBAN (mod-97, `TR33…`) aday değildir. Ölçüm (4000'er örnek):
+  rastgele 30/50 hane, TR/DE IBAN, iki tarih, 20 sayılık tablo, TC+telefon, boşluklu küçük sayılar %0; 10–14 haneli
+  sipariş no %0,03 (eskiden %69/94, %48, %10, %100, %38, %30, %4). Bilinen sınır: bitişik 16 haneli, kart ön ekli
+  (4/5/34/37/6…) bir sipariş numarası Luhn şansıyla (~%10 × önek olasılığı) hâlâ alarm verebilir.) Panoya YAZILAN metin de aynı denetimden geçer (`guvenlik.pano_yazma_engel`: API
   `pano_yaz`, MCP `clipboard write`, CLI `pano yaz`); aynı pencereye 60 sn içinde yazılan parçalar ve rakam tuşları
   (`tus`/`bas`) süreç içi küçük bir tamponda (yalnız metnin SONUNDAKİ ≤48 karakterlik rakam dizisi, yalnız bellek)
   birleştirilip denenir (`guvenlik.kart_tampon_denetle`; CLI'de her çağrı ayrı süreç: tampon yalnız MCP/Python API
-  sürecinde işler). Onay isteğinde yalnız son 4
-  hane görünür; metin kendiliğinden gizli sayılır (günlüğe tam numara yazılmaz). Bu iki sınıfta CLI `--onayli`/`--approved`
+  sürecinde işler; tıklama o pencerenin tamponunu boşaltır, süresi dolan kayıt okunurken silinir; metin uzunluğu
+  kesilmez). Onay isteğinde yalnız son 4 hane görünür; `kart` kipinde tampona rakam giren HER `yaz`/`tus` girdisi (ve ≥8
+  rakamlı yazı) `gizli` sayılır: günlükte `type ***(n)`, `key/keydown/keyup ***`, etiket `tus ***` (`guvenlik.gizli_satir`/
+  `gizli_etiket`; kde/kwin/sanal arka uçlar) — günlüğe tam numara ya da kart rakamı yazılmaz. Bu iki sınıfta CLI `--onayli`/`--approved`
   YOK SAYILIR (`guvenlik.onayli_gecerli_kati`): onay her zaman panelden gelir (terminali serbest ajan CLI'yi `--onayli`
   ile çağırıp atlatamasın); panel kapalıyken ya da gözetimsiz kipte ret (10). Onaysız serbest kalanlar
   (`guvenlik.onaysiz_serbest`: tek koşul, tek satır günlük `onay kapsamı kart: onaysız geçti | …`): hesap silme ve OAuth
