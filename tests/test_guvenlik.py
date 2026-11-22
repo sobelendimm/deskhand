@@ -131,6 +131,10 @@ def sahte_iste_sonuc(eylem_, hedef, ayrinti="", masaustu="ekran", sure=120, goru
 onay.iste_sonuc = sahte_iste_sonuc
 gercek_nokta_metni = eylem.nokta_metni
 eylem.nokta_metni = lambda k, x, y: ["Siparişi onayla"]  # OCR yok: noktadaki yazı sabit
+# Bu takım ödeme/para onayını sınar: sahte pencereler İNSAN-DOĞRULAMA kapısı için "okunur, sınama yok" sayılır
+# (okunamayan tarayıcıda tek başına Enter zaten 18 ile reddedilir — fail-closed; kapı: tests/test_dogrulama_devri.py)
+from deskhand import dogrulama_sinamasi as _dsk  # noqa: E402
+_dsk.hazir_oku = lambda k_, baslik=None: (None, True)
 
 # ================================================================ 1. Enter/boşluk eşdeğerleri (K1)
 for ad_ in ("kde", "sanal"):
@@ -143,6 +147,10 @@ for ad_ in ("kde", "sanal"):
             ISTEKLER.clear()
             n0 = len(au.satirlar)
             kod = kod_al(eylem.k_tus, ns(kombinasyon=tus))
+            if tus == "k:abc":  # 0.7.0: geçersiz ham kod (k: 1–255 dışı/sayı değil) en baştan Dur(1) — onaya bile gelmez
+                kontrol(f"[{ad_}] ödeme sayfası: tus {tus!r} → geçersiz tuş (1), onay sorulmaz, girdi yok",
+                        kod == 1 and not ISTEKLER and len(au.satirlar) == n0, f"{kod} {len(ISTEKLER)}")
+                continue
             kontrol(f"[{ad_}] ödeme sayfası: tus {tus!r} → onay istendi, red → 10, girdi yok",
                     kod == 10 and len(ISTEKLER) == 1 and len(au.satirlar) == n0, f"{kod} {len(ISTEKLER)}")
         for tus in ("tab", "x:a", "k:30", "ctrl+s", "x:Escape"):

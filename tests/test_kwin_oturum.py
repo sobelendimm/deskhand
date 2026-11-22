@@ -596,6 +596,9 @@ finally:
 print("\n7) pano + erişilebilirlik")
 if shutil.which("wl-copy"):
     wenv = {"PATH": "/usr/bin", "WAYLAND_DISPLAY": D["wayland_yol"], "XDG_RUNTIME_DIR": D["calisma"]}
+    # gerçek pano ölçümü işlemin HEMEN öncesinde: kullanıcı test sürerken kendi bir şey kopyalarsa yanlış alarm olmasın
+    r0 = subprocess.run(["wl-paste", "-n"], capture_output=True, timeout=5)
+    gercek_pano0 = hashlib.sha1(r0.stdout).hexdigest()
     kopya = subprocess.run(["wl-copy", "kwin-pano-denemesi-ş"], env=wenv, stdin=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)  # arka planda sahip kalır
     oku_ = subprocess.run(["wl-paste", "-n"], env=wenv, capture_output=True, text=True, timeout=10)
