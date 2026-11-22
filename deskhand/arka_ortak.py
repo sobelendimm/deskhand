@@ -975,9 +975,10 @@ def uygulama_runtime(cdir: str) -> str:
 def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
     """Uygulama ortamının SES bölümü (iki tür için aynı). Uygulamalar kullanıcının ses sunucusuna (pipewire/pulse)
     HİÇ erişmez — çalma da kayıt (mikrofon) da yok: bwrap ad alanında gerçek runtime dizini görünmez. İki durum:
-      - oturuma özel ses sunucusu hazırsa (ses.py; `<çalışma>/ses/native` kullanıcıya ait gerçek soket) ortam YALNIZ
-        onu gösterir (PULSE_SERVER/PIPEWIRE_REMOTE): çıkış boş (deskhand-sessiz), mikrofon yok, ses kullanıcının
-        hoparlörüne gitmez; Deskhand aynı örneğin monitöründen dinler (listen aracı);
+      - oturuma özel ses sunucusu hazırsa (ses.py; `<çalışma>/ses/pulse/native` kullanıcıya ait gerçek soket) ortam
+        YALNIZ onun PULSE soketini gösterir: çıkış boş (deskhand-sessiz), mikrofon yok, modül yükleme kapalı, ses
+        kullanıcının hoparlörüne gitmez; Deskhand aynı örneğin monitöründen dinler (listen aracı). PipeWire'ın kendi
+        (tam yetkili) soketi VERİLMEZ: PIPEWIRE_REMOTE var olmayan yol (ad alanında `ses/` değil yalnız `ses/pulse/`);
       - değilse ortam var olmayan bir sokete yönlendirilir (uygulamalar sessiz çalışır).
     `ses` (durum kaydı) KULLANILMAZ: soket yolu çalışma dizininden kurulur ve varlığı gerçek dosya sisteminden denetlenir
     (oynanmış kayıt başka bir soketi gösteremez)."""
@@ -986,11 +987,10 @@ def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
         del e[k]
     cdir = os.path.dirname(yok_yolu)
     if _ses.soket_hazir(cdir):
-        dz = _ses.dizin(cdir)
-        e["PULSE_SERVER"] = f"unix:{os.path.join(dz, _ses.PULSE_SOKET)}"
-        e["PIPEWIRE_REMOTE"] = os.path.join(dz, _ses.PW_SOKET)
-        e["PIPEWIRE_RUNTIME_DIR"] = dz
-        e["PULSE_RUNTIME_PATH"] = dz
+        e["PULSE_SERVER"] = f"unix:{_ses.pulse_soketi(cdir)}"
+        e["PULSE_RUNTIME_PATH"] = _ses.pulse_dizini(cdir)
+        e["PIPEWIRE_REMOTE"] = yok_yolu
+        e["PIPEWIRE_RUNTIME_DIR"] = os.path.dirname(yok_yolu)
         return
     e["PULSE_SERVER"] = f"unix:{yok_yolu}"
     e["PIPEWIRE_REMOTE"] = yok_yolu
@@ -998,10 +998,11 @@ def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
 
 
 def ses_bagi(cdir: str) -> list[tuple[str, bool]]:
-    """Özel ses sunucusu hazırsa uygulamanın ad alanına bağlanacak TEK ses yolu: `<çalışma>/ses` (SALT OKUNUR; soketlere
-    connect salt okunur bağda çalışır, uygulama soketi/yapılandırmayı değiştiremez). Hazır değilse hiçbir şey."""
+    """Özel ses sunucusu hazırsa uygulamanın ad alanına bağlanacak TEK ses yolu: `<çalışma>/ses/pulse` (yalnız pulse
+    soketi; SALT OKUNUR: connect salt okunur bağda çalışır, uygulama soketi değiştiremez). PipeWire soketleri,
+    yapılandırma ve günlükler (`ses/`) bağlanmaz. Hazır değilse hiçbir şey."""
     from . import ses as _ses
-    return [(_ses.dizin(cdir), True)] if _ses.soket_hazir(cdir) else []
+    return [(_ses.pulse_dizini(cdir), True)] if _ses.soket_hazir(cdir) else []
 
 
 def _cikarilacak_mi(k: str) -> bool:

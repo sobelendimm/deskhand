@@ -160,10 +160,23 @@ def akis_idleri():
     return {l.split("\t")[0] for l in gercek("list", "short", "sink-inputs").splitlines() if l.strip()}
 
 
+def gercek_ozet():
+    """(f) kullanıcının GERÇEK sunucusunun özeti (YALNIZ salt okunur list sorguları)."""
+    return {t: gercek("list", "short", t) for t in ("modules", "sinks", "sources", "sink-inputs", "source-outputs")}
+
+
 once_akis = akis_idleri()
 once_varsayilan = gercek("get-default-sink").strip()
 once_cikislar = gercek("list", "short", "sinks")
 once_modul = gercek("list", "short", "modules")
+once_ozet = gercek_ozet()
+
+# ZORUNLU: bu testteki her api çağrısı görünmez masaüstüne gider; arka uç "sanal" değilse ÇIK
+from deskhand import api  # noqa: E402
+with api.hedef("sanal"):
+    if api.sec().ad != "sanal":
+        print("DUR: arka uç 'sanal' değil; kullanıcının ekranına istek gitmemesi için test durduruldu")
+        sys.exit(2)
 
 d = masaustu.masaustu_baslat()
 TUR = masaustu.tur(d)
@@ -178,7 +191,7 @@ olcum["özel ses sunucusu kurulum"] = f"{(time.monotonic() - t) * 1000:.0f} ms"
 kontrol("ses: özel sunucu kuruldu (uyarı yok)", cdir2 == cdir and uyari is None and masaustu.ses_var(), str(uyari))
 kontrol("ses: ikinci ses_hazirla yeni süreç açmaz", masaustu.ses_hazirla() == (cdir, None))
 dz = ses.dizin(cdir)
-sk = os.lstat(os.path.join(dz, ses.PULSE_SOKET))
+sk = os.lstat(ses.pulse_soketi(cdir))
 kontrol("ses: dizin 0700, yalnız oturum dizininde; yol 108 bayt sınırının altında",
         (os.stat(dz).st_mode & 0o777) == 0o700 and dz.startswith(GECICI) and len(os.path.join(dz, "pipewire-0-manager")) < 108)
 sinks, sources = ses.kaynaklar_ve_cikislar(dz)
@@ -205,6 +218,46 @@ kontrol("GÜVENLİK: özel sunucu süreçleri hiçbir ses donanımı (/dev/snd),
         not any(a.startswith(("/dev/snd", "/dev/hidraw", "/dev/video")) for a in acik),
         str([a for a in acik if a.startswith("/dev/")]))
 
+# (c) ses süreçlerinin KENDİ ad alanı: gerçek ev, gerçek /run/user/UID, /dev/snd YOK, ağ YOK, nice 10
+EV = os.path.expanduser("~")
+
+
+def ns_bak(pid):
+    kok = f"/proc/{pid}/root"
+    try:
+        ev_ls = os.listdir(kok + EV)
+    except OSError:
+        ev_ls = []
+    try:
+        ag = [s.split(":")[0].strip() for s in open(f"/proc/{pid}/net/dev").read().splitlines()[2:]]
+    except OSError:
+        ag = None
+    return {"ev": ev_ls, "run_user": os.path.exists(f"{kok}/run/user/{os.getuid()}"),
+            "pulse_gercek": os.path.exists(f"{kok}/run/user/{os.getuid()}/pulse"),
+            "snd": os.path.exists(f"{kok}/dev/snd"), "dri": os.path.exists(f"{kok}/dev/dri"),
+            "ag_ns_ayri": os.stat(f"/proc/{pid}/ns/net").st_ino != os.stat("/proc/self/ns/net").st_ino,
+            "pid_ns_ayri": os.stat(f"/proc/{pid}/ns/pid").st_ino != os.stat("/proc/self/ns/pid").st_ino,
+            "ag": ag, "nice": os.getpriority(os.PRIO_PROCESS, pid),
+            "ses_yazilabilir": os.access(f"{kok}{dz}", os.W_OK)}
+
+
+nsler = {ad: ns_bak(dd["pid"][ad]) for ad in ses.SURECLER}
+kontrol("(c) GÜVENLİK: ses süreçleri bwrap'te: ayrı PID + AĞ ad alanı, ağda yalnız lo",
+        all(n["ag_ns_ayri"] and n["pid_ns_ayri"] and n["ag"] == ["lo"] for n in nsler.values()), str(nsler))
+kontrol("(c) GÜVENLİK: ses süreçlerinin ad alanında gerçek ev BOŞ, gerçek /run/user/UID YOK",
+        all(n["ev"] == [] and not n["run_user"] and not n["pulse_gercek"] for n in nsler.values()), str(nsler))
+kontrol("(c) GÜVENLİK: ses süreçlerinin ad alanında /dev/snd ve /dev/dri YOK",
+        all(not n["snd"] and not n["dri"] for n in nsler.values()), str(nsler))
+kontrol("(c) ses süreçleri nice 10 (düşük öncelik)", all(n["nice"] >= 10 for n in nsler.values()), str(nsler))
+kontrol("ses: PipeWire soketleri yalnız `ses/`, pulse soketi ayrı `ses/pulse/` dizininde",
+        os.path.exists(os.path.join(dz, ses.PW_SOKET)) and sorted(os.listdir(ses.pulse_dizini(cdir)))[:1] == ["native"]
+        and not any(f.startswith("pipewire") for f in os.listdir(ses.pulse_dizini(cdir))),
+        str(os.listdir(ses.pulse_dizini(cdir))))
+kontrol("parec soket denetimi: kayıtlı ses_pulse süreci → geçer",
+        dur_kodu(ses.soket_denetle, cdir, dinleme.oturum_kaydi(cdir)) is None)
+kontrol("parec soket denetimi: kayıtta başka PID → Dur 14",
+        dur_kodu(ses.soket_denetle, cdir, {**dinleme.oturum_kaydi(cdir), "pid": {"ses_pulse": os.getpid()}}) == 14)
+
 # ---- uygulama ad alanından ölçüm
 OLCUM_DOSYA = os.path.join(_yalitim.PAYLASIM, "ses-olcum.json")
 kod_ = f"""
@@ -230,6 +283,23 @@ try:
     s["ses_dizini_yazilabilir"] = True
 except OSError:
     s["ses_dizini_yazilabilir"] = False
+# (a) SALDIRI (yalnız ÖZEL sunucuya: PULSE_SERVER = oturumun soketi): modül yükleme reddedilmeli
+PAY = {_yalitim.PAYLASIM!r}
+s["mod_null"] = calistir("pactl", "load-module", "module-null-sink", "sink_name=saldiri")
+s["mod_tunnel"] = calistir("pactl", "load-module", "module-tunnel-source", "server=unix:" + PAY + "/yok-soket")
+s["mod_pipe"] = calistir("pactl", "load-module", "module-pipe-sink", "file=" + PAY + "/saldiri-pipe", "sink_name=saldiri2")
+s["mod_tcp"] = calistir("pactl", "load-module", "module-native-protocol-tcp", "port=46713", "listen=127.0.0.1")
+s["pipe_dosyasi"] = os.path.exists(PAY + "/saldiri-pipe")
+s["sinks_sonra"] = calistir("pactl", "list", "short", "sinks")
+s["mods_sonra"] = calistir("pactl", "list", "short", "modules")
+# (b) PipeWire soketi: görünmemeli, bağlanma başarısız
+s["ses_dizini_ls"] = sorted(os.listdir({dz!r})) if os.path.isdir({dz!r}) else []
+s["pw_soketi_gorunur"] = os.path.exists({os.path.join(dz, ses.PW_SOKET)!r})
+s["pulse_dizini_ls"] = sorted(os.listdir(os.path.dirname(os.environ["PULSE_SERVER"][5:])))
+s["pw_cli"] = calistir("pw-cli", "info", "0")
+s["pw_cli_acik"] = calistir("pw-cli", "-r", {os.path.join(dz, ses.PW_SOKET)!r}, "info", "0")
+s["pw_cli_yonetici"] = calistir("pw-cli", "-r", {os.path.join(dz, ses.PW_SOKET + "-manager")!r}, "info", "0")
+s["pw_dump"] = calistir("pw-dump")
 json.dump(s, open({OLCUM_DOSYA!r}, "w"))
 """
 from deskhand import api  # noqa: E402
@@ -240,9 +310,24 @@ try:
 except (OSError, ValueError):
     o = {}
 env_o = o.get("env", {})
-kontrol("GÜVENLİK: uygulama ortamı YALNIZ özel sokete yönlendirilmiş (oturum dizini)",
-        env_o.get("PULSE_SERVER") == f"unix:{dz}/{ses.PULSE_SOKET}" and env_o.get("PIPEWIRE_REMOTE") == f"{dz}/{ses.PW_SOKET}",
-        str(env_o))
+kontrol("GÜVENLİK: uygulama ortamı YALNIZ özel pulse soketine yönlendirilmiş; PIPEWIRE_REMOTE var olmayan yol",
+        env_o.get("PULSE_SERVER") == f"unix:{ses.pulse_soketi(cdir)}" and env_o.get("PIPEWIRE_REMOTE")
+        and not env_o["PIPEWIRE_REMOTE"].startswith(dz + "/") and not os.path.exists(env_o["PIPEWIRE_REMOTE"]), str(env_o))
+ok_ = lambda k: (o.get(k) or [0, ""])[0] != 0  # noqa: E731  komut BAŞARISIZ
+kontrol("(a) GÜVENLİK: load-module (null-sink, tunnel-source, pipe-sink, native-protocol-tcp) REDDEDİLDİ",
+        all(ok_(k) for k in ("mod_null", "mod_tunnel", "mod_pipe", "mod_tcp")),
+        str({k: o.get(k) for k in ("mod_null", "mod_tunnel", "mod_pipe", "mod_tcp")}))
+kontrol("(a) GÜVENLİK: pipe-sink dosyası oluşmadı, yeni çıkış/modül yok",
+        o.get("pipe_dosyasi") is False and "saldiri" not in (o.get("sinks_sonra") or [1, ""])[1]
+        and "module-pipe-sink" not in (o.get("mods_sonra") or [1, ""])[1]
+        and "tunnel" not in (o.get("mods_sonra") or [1, ""])[1], str((o.get("sinks_sonra"), o.get("mods_sonra"))))
+kontrol("(b) GÜVENLİK: ad alanında `ses/` içinde yalnız `pulse/` (PipeWire soketi, yapılandırma, günlük GÖRÜNMEZ); pulse dizininde yalnız native",
+        o.get("ses_dizini_ls") in ([], ["pulse"]) and o.get("pw_soketi_gorunur") is False
+        and o.get("pulse_dizini_ls", [""])[:1] == ["native"] and not any("pipewire" in f for f in o.get("pulse_dizini_ls", [])),
+        str((o.get("ses_dizini_ls"), o.get("pw_soketi_gorunur"), o.get("pulse_dizini_ls"))))
+kontrol("(b) GÜVENLİK: pw-cli / pw-dump PipeWire'a bağlanamaz (varsayılan, açık yol, -manager)",
+        all(ok_(k) for k in ("pw_cli", "pw_cli_acik", "pw_cli_yonetici", "pw_dump")),
+        str({k: o.get(k) for k in ("pw_cli", "pw_cli_acik", "pw_cli_yonetici", "pw_dump")})[:600])
 kontrol("GÜVENLİK: ad alanında kullanıcının GERÇEK pulse/pipewire soketi yok (/run/user/UID boş)",
         o.get("gercek_pulse") is False and o.get("gercek_pw") is False and o.get("runtime_ls") == [], str(o.get("runtime_ls")))
 kontrol("GÜVENLİK: açık gerçek yolla bağlanma BAŞARISIZ", o.get("gercek_yolla") not in (0, None), str(o.get("gercek_yolla")))
@@ -309,6 +394,28 @@ else:
 kontrol("ölçüm: varsayılan çıkış değişmedi", gercek("get-default-sink").strip() == once_varsayilan)
 kontrol("ölçüm: kullanıcının gerçek çıkış listesi/modülleri değişmedi",
         gercek("list", "short", "sinks") == once_cikislar and gercek("list", "short", "modules") == once_modul)
+sonra_ozet = gercek_ozet()
+kontrol("(f) kullanıcının GERÇEK sunucusunda yeni modül/çıkış/kaynak/akış YOK (önce/sonra, salt okunur sorgu)",
+        sonra_ozet == once_ozet, str({k: (once_ozet[k], sonra_ozet[k]) for k in once_ozet if once_ozet[k] != sonra_ozet[k]}))
+# eski kayıt temizliği (çökmeden kalan WAV): eski dosya silinir, yenisine dokunulmaz
+gd = os.path.join(cdir, "dinleme")
+os.makedirs(gd, mode=0o700, exist_ok=True)
+for ad_, yas_ in (("kayit-eski.wav", 3600), ("kayit-yeni.wav", 0)):
+    open(os.path.join(gd, ad_), "wb").close()
+    os.utime(os.path.join(gd, ad_), (time.time() - yas_, time.time() - yas_))
+kontrol("çökme sonrası kalan WAV: eski silinir, eşzamanlı (yeni) dosyaya dokunulmaz",
+        dinleme.eski_kayitlari_sil(gd) == 1 and os.listdir(gd) == ["kayit-yeni.wav"], str(os.listdir(gd)))
+os.remove(os.path.join(gd, "kayit-yeni.wav"))
+# kur yeniden çalışınca eski süreçler kapanır (yeni PID'ler, eskiler ölü)
+eski_pidler = [masaustu.durum()["pid"][ad] for ad in ses.SURECLER]
+os.unlink(ses.pulse_soketi(cdir))  # soket "kaybolmuş": ses_hazirla yeniden kurar
+cdir3, uyari3 = masaustu.ses_hazirla()
+yeni_pidler = [masaustu.durum()["pid"][ad] for ad in ses.SURECLER]
+kontrol("kur yeniden: eski ses süreçleri öldürüldü, yenileri çalışıyor, uyarı yok",
+        uyari3 is None and bekle(lambda: not any(ao._canli(p) for p in eski_pidler), 6)
+        and all(ao._canli(p) for p in yeni_pidler) and set(eski_pidler).isdisjoint(yeni_pidler),
+        f"{uyari3} {eski_pidler} -> {yeni_pidler}")
+dd = masaustu.durum()
 
 # ---------------------------------------------------------------- 4) kapanış
 pidler = [dd["pid"][ad] for ad in ses.SURECLER]
