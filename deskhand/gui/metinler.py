@@ -34,6 +34,7 @@ M_GOREV = N_("Görev ver…")
 M_PANEL = N_("Paneli aç")
 M_ARKA = N_("Arka plan ekranını göster")
 M_CIK = N_("Çık")
+P_BEKLENMEYEN_HATA = N_("Panelde beklenmeyen bir hata oluştu ({hata}); panel çalışmaya devam ediyor. Ayrıntı günlükte.")
 
 # ---- başlık şeridi
 DUR_DUGME = N_("DUR")
@@ -87,6 +88,7 @@ A_BIRAK = N_("Bırak")
 A_DEVRAL_IPUCU = N_("Fare ve klavyeniz önizleme üzerinden arka plan masaüstüne gider; bu sırada ajan bekler. "
                     "DUR açıkken girdi gönderilmez.")
 A_DEVRAL_NOT = N_("Devraldınız: önizlemeye tıklayın, yazın. Bitince Bırak.")
+A_DEVRAL_HATA = N_("Devral açılamadı: {hata}")
 A_ONIZLEME_YOK = N_("Önizleme yok")
 A_ONIZLEME_HATA = N_("Önizleme yok: {hata}")
 A_GIRDI_HATA = N_("Girdi gönderilemedi: {hata}")
@@ -204,6 +206,7 @@ Y_KISAYOL_NOT = N_("Varsayılan kapalıdır. Açınca kısayol KDE'ye bu uygulam
                    "silinir. Çalışmazsa tepsi simgesindeki DUR yeterlidir.")
 Y_KISAYOL_CAKISMA = N_("Çakışma: {tus} şu an «{eylem}» ({bilesen}) için kullanılıyor.")
 Y_KISAYOL_BOS = N_("{tus} boşta görünüyor.")
+Y_KAYIT_HATA = N_("Kaydedilemedi: {hata}")
 Y_KISAYOL_HATA = N_("Kısayol kaydedilemedi: {hata}")
 Y_KISAYOL_TAMAM = N_("Kısayol etkin: {tus}")
 

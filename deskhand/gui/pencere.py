@@ -436,11 +436,25 @@ class ArkaPlanSekmesi(QWidget):
         yol = self.devral_yolu_f()
         if acik:
             from .durum import devral_icerik
-            os.makedirs(os.path.dirname(yol), mode=0o700, exist_ok=True)
             gecici = f"{yol}.{os.getpid()}"
-            with open(gecici, "w") as f:
-                f.write(devral_icerik())  # "panel <pid> <başlangıç>": panel çökerse ajan bayat dosyada beklemez
-            os.replace(gecici, yol)
+            try:  # /run/user dolu (ENOSPC) / yazılamıyor: slottan fırlayan istisna paneli öldürmesin; Devral açılmaz
+                os.makedirs(os.path.dirname(yol), mode=0o700, exist_ok=True)
+                with open(gecici, "w") as f:
+                    f.write(devral_icerik())  # "panel <pid> <başlangıç>": panel çökerse ajan bayat dosyada beklemez
+                os.replace(gecici, yol)
+            except OSError as e:
+                try:
+                    os.remove(gecici)
+                except OSError:
+                    pass
+                from ..gunluk import gunluk
+                gunluk(f"Devral açılamadı: {e}")
+                self.b_devral.blockSignals(True)
+                self.b_devral.setChecked(False)
+                self.b_devral.blockSignals(False)
+                self.b_devral.setText(_(T.A_DEVRAL))
+                self.l_not.setText(_(T.A_DEVRAL_HATA).format(hata=e))
+                return
             if yol not in _DEVRAL_ATEXIT:
                 _DEVRAL_ATEXIT.add(yol)
                 atexit.register(_devral_temizle, yol)
@@ -988,7 +1002,11 @@ class AyarlarSekmesi(QScrollArea):
         if h:
             self.l_yasak.setText(_(T.Y_DESEN_HATA).format(no=h[0], hata=h[1]))
             return False
-        A.yasak_kaydet(metin)
+        try:
+            A.yasak_kaydet(metin)
+        except OSError as e:  # disk dolu / salt okunur: slottan fırlamasın (panel çökmesin)
+            self.l_yasak.setText(_(T.Y_KAYIT_HATA).format(hata=e))
+            return False
         self.l_yasak.setText(_(T.Y_KAYDEDILDI))
         return True
 
@@ -1002,7 +1020,11 @@ class AyarlarSekmesi(QScrollArea):
         if h:
             self.l_seviye.setText(_(T.Y_SEVIYE_HATA).format(no=h[0], hata=h[1]))
             return False
-        A.seviye_kaydet(metin)
+        try:
+            A.seviye_kaydet(metin)
+        except OSError as e:  # disk dolu / salt okunur: slottan fırlamasın (panel çökmesin)
+            self.l_seviye.setText(_(T.Y_KAYIT_HATA).format(hata=e))
+            return False
         self.l_seviye.setText(_(T.Y_KAYDEDILDI))
         return True
 
@@ -1023,7 +1045,11 @@ class AyarlarSekmesi(QScrollArea):
     def _kisayol_kaydet(self, *_a):
         d = A.panel_oku()
         d["kisayol_acik"], d["kisayol"] = self.k_acik.isChecked(), self.tus()
-        A.panel_yaz(d)
+        try:
+            A.panel_yaz(d)
+        except OSError as e:  # disk dolu / salt okunur: slottan fırlamasın (panel çökmesin)
+            self.l_kisayol.setText(_(T.Y_KAYIT_HATA).format(hata=e))
+            return
         self.cakisma_goster()
         self.kisayol_degisti.emit(d["kisayol_acik"], d["kisayol"])
 

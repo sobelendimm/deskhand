@@ -87,6 +87,50 @@ def tek_ornek(mesaj: bytes = b"goster\n", deneme_ms: int = 3000) -> QLocalServer
     return sunucu
 
 
+HATA_BILDIRIM_ARALIK_SN = 30.0  # aynı hata döngüde tekrarlarsa tepsi bildirimi en çok bu sıklıkla
+
+
+def istisna_yakalayici_kur(panel: "Panel | None" = None) -> None:
+    """Panelin genel istisna yakalayıcısı. PyQt6, bir slotta (QTimer, düğme, soket) yakalanmayan istisnada
+    sys.excepthook varsayılansa qFatal → SIGABRT ile süreci öldürür (ör. disk dolu: OSError(28) → çıkış 134; panel
+    ölünce DUR düğmesi ve onaylar da gider). Burada: istisna günlüğe (ve stderr'e) yazılır, tepsiden kısa bir uyarı
+    gösterilir (en çok HATA_BILDIRIM_ARALIK_SN'de bir) ve süreç SÜRER. İş parçacığı istisnaları da günlüğe yazılır."""
+    import sys
+    import threading
+    import traceback
+
+    son = [0.0]
+
+    def yaz(tur, deger, iz, kaynak: str) -> None:
+        try:
+            metin = "".join(traceback.format_exception(tur, deger, iz))
+            sys.stderr.write(metin)
+            ozet = f"{tur.__name__}: {deger}"
+            gunluk(f"PANEL HATASI ({kaynak}): {ozet} | {metin.strip().splitlines()[-2].strip() if iz else ''}")
+            t = getattr(panel, "tepsi", None) if panel is not None else None
+            if t is not None and time.monotonic() - son[0] >= HATA_BILDIRIM_ARALIK_SN:
+                son[0] = time.monotonic()
+                from PyQt6.QtWidgets import QSystemTrayIcon
+                t.ikon.showMessage("Deskhand", _(T.P_BEKLENMEYEN_HATA).format(hata=ozet[:200]),
+                                   QSystemTrayIcon.MessageIcon.Warning, 8000)
+        except Exception:  # noqa: BLE001 - yakalayıcının kendisi asla fırlatmamalı (yoksa PyQt yine abort eder)
+            pass
+
+    def kanca(tur, deger, iz):
+        if issubclass(tur, KeyboardInterrupt):
+            sys.__excepthook__(tur, deger, iz)
+            return
+        yaz(tur, deger, iz, "slot")
+
+    def is_kanca(a):
+        if a.exc_type is SystemExit:
+            return
+        yaz(a.exc_type, a.exc_value, a.exc_traceback, f"iş parçacığı {getattr(a.thread, 'name', '?')}")
+
+    sys.excepthook = kanca
+    threading.excepthook = is_kanca
+
+
 def uygulama_simgesi() -> QIcon:
     yedek = QIcon(SIMGE_SVG) if os.path.isfile(SIMGE_SVG) else durum_simgesi(Durum())
     return QIcon.fromTheme(onay.PANEL_SINIF, yedek)
