@@ -221,7 +221,64 @@ def soket_karsi_pid(yol: str) -> int | None:
         s.close()
 
 
-def a11y_soket_denetle(adres: str, dizin: str, cgroup: str = "") -> str:
+def _a11y_dizin_denetle(dizin: str, kimlik=None) -> os.stat_result:
+    """a11y dizini: gerçek dizin (sembolik bağ değil), kullanıcının, 0700; kimlik ([st_dev, st_ino], masaüstü
+    açılışında kaydedilen) verilmişse AYNI dizin. Değilse Dur(14). → lstat sonucu."""
+    import stat as _stat
+    try:
+        st = os.lstat(dizin)
+    except OSError as e:
+        raise Dur(14, _("erişilebilirlik dizini yok: {hata}").format(hata=e))
+    if not _stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise Dur(14, _("erişilebilirlik dizini güvensiz (sembolik bağ / dizin değil / başkasının / gevşek izinli): "
+                        "{dizin}").format(dizin=dizin))
+    if kimlik is not None and [st.st_dev, st.st_ino] != [int(kimlik[0]), int(kimlik[1])]:
+        raise Dur(14, _("erişilebilirlik dizini masaüstü açıldığından beri değişmiş (başka dizin): {dizin}").format(
+            dizin=dizin))
+    return st
+
+
+def a11y_kimlik_temizle(d: dict) -> list[int] | None:
+    """Kayıttaki a11y dizin kimliği: yalnız iki tamsayı ([st_dev, st_ino]); başka biçim yok sayılır (None)."""
+    k = (d or {}).get("a11y_dizin_kimlik")
+    if isinstance(k, (list, tuple)) and len(k) == 2 and all(isinstance(x, int) and not isinstance(x, bool) for x in k):
+        return [k[0], k[1]]
+    return None
+
+
+def a11y_dizini_hazirla(dizin: str, kalinti_sil: bool = False) -> list[int]:
+    """Masaüstü açılışında, HİÇBİR uygulama başlamadan ÖNCE: a11y dizinini Deskhand kendisi 0700 olarak oluşturur
+    (erişilebilirlik hazırlığı sonradan başarısız olsa bile): yazılabilir runtime'ın altında uygulama onu kendisi
+    yaratıp soketin sahte kopyasını koyabilirdi (denetim ile bağlantı arası TOCTOU). Zaten varsa kabul edilmez
+    (açılışta temiz oturum dizini; var olan = başkası koymuş). → [st_dev, st_ino] (kayıtta saklanır, her denetimde
+    karşılaştırılır). kalinti_sil: çökmüş eski oturumdan kalan dizin/bağ silinip yeniden yaratılır (Xvfb: çalışma
+    dizini ekran numarasına göre yeniden kullanılabilir)."""
+    if kalinti_sil:
+        import shutil
+        if os.path.islink(dizin) or os.path.isfile(dizin):
+            os.unlink(dizin)
+        elif os.path.isdir(dizin):
+            shutil.rmtree(dizin, ignore_errors=True)
+    try:
+        os.mkdir(dizin, 0o700)
+    except FileExistsError:
+        raise Dur(14, _("erişilebilirlik dizini zaten var (açılışta olmamalı): {dizin}").format(dizin=dizin))
+    os.chmod(dizin, 0o700)  # umask'tan bağımsız
+    st = _a11y_dizin_denetle(dizin)
+    return [st.st_dev, st.st_ino]
+
+
+def a11y_bagi(dizin: str, kimlik=None) -> tuple[str, bool]:
+    """Korumalı başlatmada a11y dizininin SALT OKUNUR bağı (fail-closed: bağ kurulamıyorsa uygulama BAŞLATILMAZ,
+    Dur 14). kimlik kayıtlıysa dizin yoksa/başka dizinse reddedilir; kimlik yoksa (eski sürümle açılmış masaüstü)
+    dizin yoksa şimdi, uygulama başlamadan önce 0700 oluşturulur."""
+    if kimlik is None and not os.path.lexists(dizin):
+        a11y_dizini_hazirla(dizin)
+    _a11y_dizin_denetle(dizin, kimlik)
+    return dizin, True
+
+
+def a11y_soket_denetle(adres: str, dizin: str, cgroup: str = "", kimlik=None) -> str:
     """Erişilebilirlik (at-spi) veri yolu soketi bağlanmadan önce (_karsi_denetle deseninin a11y'ye genişlemesi):
     adres TEK `unix:path=<dizin>/bus[_N][,guid=…]`; dizin gerçek dizin (sembolik bağ değil, kullanıcının); soket
     sembolik bağ DEĞİL, S_ISSOCK, kullanıcının; (st_dev, st_ino) kullanıcının gerçek soketlerinden biri değil
@@ -238,6 +295,8 @@ def a11y_soket_denetle(adres: str, dizin: str, cgroup: str = "") -> str:
         raise Dur(14, _("erişilebilirlik soketi yok: {hata}").format(hata=e))
     if not _stat.S_ISDIR(sd.st_mode) or sd.st_uid != os.getuid():
         raise Dur(14, _("erişilebilirlik dizini güvensiz: {dizin}").format(dizin=dizin))
+    if kimlik is not None:  # açılışta kaydedilen (st_dev, st_ino): dizin değiştirilmiş/yeniden yaratılmış olamaz
+        _a11y_dizin_denetle(dizin, kimlik)
     if _stat.S_ISLNK(ss.st_mode) or not _stat.S_ISSOCK(ss.st_mode) or ss.st_uid != os.getuid():
         raise Dur(14, _("erişilebilirlik soketi güvensiz (sembolik bağ / soket değil / başkasının): {yol}; "
                         "bağlanılmadı").format(yol=yol))

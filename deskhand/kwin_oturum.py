@@ -162,6 +162,7 @@ def guvenli_kayit(d: dict) -> dict:
     a11y = d.get("a11y_adres") or ""
     if a11y and not re.fullmatch(re.escape(f"unix:path={cdir}/at-spi/bus") + r"(_\d+)?(,guid=[0-9a-f]{32})?", a11y):
         g["a11y_adres"] = None
+    g["a11y_dizin_kimlik"] = ao.a11y_kimlik_temizle(d)
     kafes = d.get("kafes")
     if kafes and not re.fullmatch(rf"deskhand-kwin-{kimlik}-\d+\.scope", str(kafes)):
         raise Dur(SANAL_KAPALI, _("KWin oturum kaydı geçersiz (kafes): {kafes}").format(kafes=repr(kafes)))
@@ -784,6 +785,8 @@ def _baslat_tek(boyut, xwayland: bool, duzen: tuple[str, str], render_dugumu: st
         # XDG_*_HOME'lar + standart yerleri (Qt var olmayan standart veri dizininde qFatal verebiliyor)
         for a in ("config", "cache", "data", "state", ".config", ".cache", ".local/share", ".local/state"):
             os.makedirs(os.path.join(ev, a), mode=0o700)
+        # a11y dizinini Deskhand kendisi yaratır (uygulama başlamadan önce); kimliği kayıtta karşılaştırılır
+        d["a11y_dizin_kimlik"] = ao.a11y_dizini_hazirla(os.path.join(cdir, "at-spi"))
         xekran = None
         if xwayland:
             no = _bos_x_cifti()
@@ -1001,8 +1004,9 @@ def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
     şey (oturum.json, kwin.log, ev/, BAŞKA uygulamaların oturum kopyaları) yok; uygulamanın kendi kopyası
     korumali_baslat'ta (politikanın kararından, kopya=) eklenir."""
     c = g["calisma"]
+    # a11y dizini SALT OKUNUR + FAIL-CLOSED (yok/başka dizin/sembolik bağ → Dur 14, uygulama başlatılmaz)
     b = [(ao.uygulama_runtime(c), False), (os.path.join(c, "bus"), False), (g["wayland_yol"], False),
-         (os.path.join(c, "at-spi"), True)]  # a11y dizini SALT OKUNUR: uygulama soketin yerine sembolik bağ koyamaz
+         ao.a11y_bagi(os.path.join(c, "at-spi"), ao.a11y_kimlik_temizle(g))]
     if g.get("x_ana") is not None:
         b += [(f"{X_DIZIN}/X{g['x_ana']}", False), (g["xauth"], True)]
     return b  # oturum kopyası: yalnız politikanın verdiği (arka_ortak.korumali_baslat, kopya=)
