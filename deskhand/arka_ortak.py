@@ -884,7 +884,7 @@ def ses_kur(ek: str = "") -> tuple[dict | None, str | None]:
 def ses_kaldir(ses: dict | None) -> str | None:
     """(Eski kayıtlar için) Deskhand'in yüklediği boş çıkışı kaldır. Yalnız `deskhand-sessiz` adlı çıkışın modülü:
     oynanmış kayıt kullanıcının başka bir ses modülünü kaldırtamaz."""
-    if not ses or ses.get("modul") is None or ses.get("onceden") or not str(ses.get("sink") or "").startswith(SINK):
+    if not isinstance(ses, dict) or ses.get("modul") is None or ses.get("onceden") or not str(ses.get("sink") or "").startswith(SINK):
         return None  # önceden vardı: sahibi biz değiliz, başka bir masaüstü kullanıyor olabilir
     if _sink_modulu(ses.get("sink")) != ses["modul"]:
         return None  # zaten yok (ya da başka biri yeniden yükledi: dokunma)
