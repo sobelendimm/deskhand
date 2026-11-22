@@ -84,6 +84,9 @@ os.environ.pop(masalar.ORTAM, None)
 
 # ---------------------------------------------------------------- 3) sahiplik + kapı
 print("\n3) sahiplik + kapı")
+# testin kendisi "ajan" sayılsın (claude altında koşmasa da başka-oturum kuralı belirlenimci olsun)
+with open("/proc/self/comm") as f_:
+    masalar.AJAN_ADLARI = frozenset({"claude", f_.read().strip()})
 kontrol("sahipsiz → izinli", masalar.izinli_mi("s1"))
 kontrol("sahiplen (bu süreç)", masalar.sahiplen("s1"))
 s = masalar.sahip_oku("s1")
@@ -293,6 +296,104 @@ except ValueError:
 kontrol("CLI desktop list --json", isinstance(liste, list) and any(m["ad"] == "s5" for m in liste), r.stdout[-300:])
 kontrol("list: sahipsiz oto masaüstü temizlenir", liste is not None and not any(m["ad"] == "s9" for m in liste)
         and not os.path.exists(masalar.kok("s9")))
+
+# ---------------------------------------------------------------- 12) yeni kurallar
+print("\n12) PID ad alanı, insan kuralı, görev önceliği")
+yabanci = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+bas = masalar._baslangic(yabanci.pid)
+try:
+    kontrol("sahip_icerik 7 alan, son alan PID ad alanı", masalar.sahip_icerik().split()[6] == masalar.pid_ad_alani()
+            and len(masalar.sahip_icerik().split()) == 7)
+    masalar.kok_hazirla("n1")
+    with open(masalar.sahip_yolu("n1"), "w") as f:  # başka PID ad alanındaki (ör. flatpak içi) sahip
+        f.write(f"mcp {os.getpid()} {masalar._baslangic(os.getpid())} 1 - 0 4026531999\n")
+    s_ = masalar.sahip_oku("n1")
+    kontrol("başka ad alanındaki sahip serbest SAYILMAZ (yabanci_ns)", s_ is not None and s_["yabanci_ns"])
+    kontrol("başka ad alanı → izinli değil, Dur 14", not masalar.izinli_mi("n1")
+            and dur_kodu(masalar.erisim_kapisi, "n1") == 14)
+    kontrol("başka ad alanındaki sahipliğe yazılamaz", not masalar.sahiplen("n1"))
+    masalar.kok_sil("n1")
+    # insan kuralı: ata zincirinde ajan yoksa izinli
+    masalar.kok_hazirla("h1")
+    with open(masalar.sahip_yolu("h1"), "w") as f:
+        f.write(f"mcp {yabanci.pid} {bas} {yabanci.pid} {bas} 0 {masalar.pid_ad_alani()}\n")
+    eski_ajan = masalar.AJAN_ADLARI
+    masalar.AJAN_ADLARI = frozenset({"bu-ad-yok"})
+    kontrol("ata zincirinde ajan yok (insan) → izinli", masalar.izinli_mi("h1"))
+    masalar.AJAN_ADLARI = eski_ajan
+    kontrol("ata zincirinde ajan var, sahibin oturumu değil → Dur 14", dur_kodu(masalar.erisim_kapisi, "h1") == 14)
+    # gerçek süreçlerle: claude atası olmayan CLI (çift çatallanmış, ebeveyni systemd) → izin; sahte 'claude'
+    # sarmalayıcısının altındaki CLI → Dur 14
+    sonuc = os.path.join(_yalitim.GECICI, "insan.json")
+    kod = ("import json, os, subprocess, sys, time\n"
+           "if os.fork():\n    os._exit(0)\n"
+           "os.setsid()\n"
+           "ilk = os.getppid()\n"
+           "for _ in range(100):\n"
+           "    if os.getppid() != ilk: break\n"
+           "    time.sleep(0.02)\n"
+           "r = subprocess.run(sys.argv[2:], capture_output=True, text=True)\n"
+           "json.dump([r.returncode, r.stdout, r.stderr], open(sys.argv[1], 'w'))\n")
+    cli = [sys.executable, os.path.join(KOK, "bin", "deskhand"), "--desktop-name", "h1", "desktop", "status", "--json"]
+    subprocess.run([sys.executable, "-c", kod, sonuc, *cli], timeout=30)
+    for _i in range(300):
+        if os.path.exists(sonuc):
+            break
+        time.sleep(0.05)
+    time.sleep(0.1)
+    try:
+        r_ = json.load(open(sonuc))
+    except (OSError, ValueError):
+        r_ = None
+    kontrol("claude atası OLMAYAN CLI (insan) → başka oturumun masaüstüne izin (status null)",
+            r_ is not None and r_[1].strip() == "null" and "oturumun" not in r_[2], str(r_)[-300:])
+    sahte_claude = os.path.join(_yalitim.GECICI, "claude")
+    if not os.path.exists(sahte_claude):
+        os.symlink(sys.executable, sahte_claude)
+    sarm = [sahte_claude, "-c", "import subprocess, sys; sys.exit(subprocess.run(sys.argv[1:]).returncode)"]
+    r = subprocess.run([*sarm, *cli], capture_output=True, text=True, timeout=60)
+    kontrol("başka claude oturumunun Bash'i → Dur 14", r.returncode == 14 and "oturumun" in r.stderr,
+            f"{r.returncode} {r.stderr[-200:]}")
+    masalar.kok_sil("h1")
+    # görev önceliği: varsayılanın sahibi (kullanıcının Claude MCP'si benzetimi = bu süreç) canlıyken görev başlar
+    from deskhand import gorev_kipi
+    for a_ in ("",):
+        try:
+            os.remove(masalar.sahip_yolu(a_))
+        except OSError:
+            pass
+    kontrol("kullanıcının MCP'si varsayılanı sahiplendi", masalar.sahiplen(""))
+    gorev_kipi.masaustu_ayir()
+    os.environ[gorev_kipi.ORTAM] = "1"
+    mcp_sunucu._MASA.update(bagli=False, ad="", oto=False, sahip=False, sabit=None, ilk_ppid=None)
+    kontrol("görev MCP'si → varsayılan (oturum-N'e kaymaz), sahipliğe dokunmaz",
+            mcp_sunucu.masa_bagla() == "" and not mcp_sunucu._MASA["sahip"]
+            and (masalar.sahip_oku("") or {}).get("pid") == os.getpid())
+    os.environ.pop(masalar.ORTAM, None)
+    kontrol("görev kipi: varsayılana erişim (görev işareti) → geçer", dur_kodu(masalar.erisim_kapisi, "") is None)
+    os.environ[gorev_kipi.ORTAM] = "0"
+    kontrol("görev sürerken kullanıcının Claude'u (sahip olsa da) → Dur 14 görev masaüstü",
+            dur_kodu(masalar.erisim_kapisi, "") == 14)
+    gorev_kipi.GOZLEMCI = True
+    kontrol("görev sürerken panel (önizleme/Devral/kapatma) → geçer", dur_kodu(masalar.erisim_kapisi, "") is None)
+    gorev_kipi.GOZLEMCI = False
+    gorev_kipi.masaustu_birak()
+    kontrol("görev bitince sahiplik geri: kullanıcının Claude'u erişir",
+            dur_kodu(masalar.erisim_kapisi, "") is None and (masalar.sahip_oku("") or {}).get("pid") == os.getpid())
+    masalar.birak("")
+    os.environ.pop(gorev_kipi.ORTAM, None)
+    # Not A: MCP ebeveyni öldü (systemd'ye geçti) → bağlanılmaz
+    mcp_sunucu._MASA.update(bagli=False, sabit=None, ilk_ppid=os.getppid() + 999999)
+    kontrol("MCP ilk ebeveyni değişti → masa_bagla Dur 14", dur_kodu(mcp_sunucu.masa_bagla) == 14)
+    mcp_sunucu._MASA.update(ilk_ppid=os.getppid())
+    os.environ.pop(masalar.ORTAM, None)
+    ad_ = mcp_sunucu.masa_bagla()
+    kontrol("MCP sahip dosyasında ebeveyn = ilk ebeveyn", (masalar.sahip_oku(ad_) or {}).get("ebeveyn") == os.getppid())
+    masalar.birak(ad_)
+    os.environ.pop(masalar.ORTAM, None)
+finally:
+    yabanci.kill()
+    yabanci.wait()
 
 # ---------------------------------------------------------------- 11) MCP otomatik bağlama
 print("\n11) MCP otomatik bağlama (masa_bagla)")

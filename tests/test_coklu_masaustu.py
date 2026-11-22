@@ -174,9 +174,15 @@ try:
         bas = masalar._baslangic(yabanci.pid)
         with open(masalar.sahip_yolu("b"), "w") as f:
             f.write(f"mcp {yabanci.pid} {bas} {yabanci.pid} {bas} 0\n")
+        # başka bir Claude oturumunun Bash'i: sahte `claude` sarmalayıcısının altında (insan kuralı: claude atası olmayan
+        # çağrı izinlidir; test claude altında koşmasa da belirlenimci)
+        sahte_claude = os.path.join(_yalitim.GECICI, "claude")
+        if not os.path.exists(sahte_claude):
+            os.symlink(sys.executable, sahte_claude)
+        sarm = [sahte_claude, "-c", "import subprocess, sys; sys.exit(subprocess.run(sys.argv[1:]).returncode)"]
         for arg in (["desktop", "status"], ["windows"], ["desktop", "stop"]):
-            r = subprocess.run([sys.executable, DESKHAND, "--desktop-name", "b", *arg], capture_output=True, text=True,
-                               timeout=60, env={**os.environ, "DESKHAND_HEDEF": "arka"})
+            r = subprocess.run([*sarm, sys.executable, DESKHAND, "--desktop-name", "b", *arg], capture_output=True,
+                               text=True, timeout=60, env={**os.environ, "DESKHAND_HEDEF": "arka"})
             kontrol(f"CLI {' '.join(arg)} (başka oturum) → 14 'başka bir oturumun'",
                     r.returncode == 14 and "oturumun" in r.stderr, f"{r.returncode} {r.stderr[-200:]}")
         kontrol("B hâlâ açık (durdurma reddedildi)", masaustu._canli(dB["pid"]["kwin"]))

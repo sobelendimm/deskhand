@@ -400,7 +400,7 @@ def masaustu_coz(desktop: str, ozet: str) -> tuple[str, str]:
 # boş `oturum-N` (oto: oturum bitince ayrık temizleyici kapatır). Varsayılanın sahibi bu sunucunun atasıysa (sunucuyu
 # o başlattı) varsayılan paylaşılır. Aynı Claude oturumunun Bash'i (CLI) sahibin masaüstüne erişebilir
 # (masalar.erisim_kapisi: ata zinciri).
-_MASA: dict = {"bagli": False, "ad": "", "oto": False, "sahip": False, "sabit": None}
+_MASA: dict = {"bagli": False, "ad": "", "oto": False, "sahip": False, "sabit": None, "ilk_ppid": None}
 _MASA_KILIT = threading.Lock()
 
 
@@ -410,6 +410,11 @@ def masa_bagla() -> str:
     with _MASA_KILIT:
         if _MASA["bagli"]:
             return _MASA["ad"]
+        ilk = _MASA["ilk_ppid"]
+        if ilk is not None and os.getppid() != ilk:  # Claude oturumu öldü (systemd'ye geçtik): kimin adına?
+            raise hata.Dur(14, _("MCP sunucusunun ebeveyni (Claude oturumu) artık yok; görünmez masaüstüne "
+                                 "bağlanılmaz"))
+        eb = ilk if ilk is not None else os.getppid()
         masalar.kok_hazirla("")
         os.makedirs(masalar.masa_koku(), mode=0o700, exist_ok=True)
         with open(os.path.join(masalar.masa_koku(), ".secim.lock"), "w") as kf:
@@ -418,18 +423,22 @@ def masa_bagla() -> str:
             oto = sahip = False
             if sabit is not None:
                 ad = masalar.dogrula(sabit, ayrilmis_serbest=gorev_kipi.etkin())
-                sahip = masalar.sahiplen(ad)
+                sahip = masalar.sahiplen(ad, ebeveyn=eb)
                 if not sahip:
                     masalar.erisim_kapisi(ad)  # başka oturumun → Dur(14); aynı Claude oturumu → paylaşır
+            elif gorev_kipi.etkin():
+                # görev kipi: panel görevi VARSAYILAN masaüstünde yürütür (önizleme, Devral, kapanış ona bakar);
+                # yetki görev işaretindedir (masalar.erisim_kapisi), sahiplik dosyasına dokunulmaz
+                ad = ""
             elif (vs := masalar.sahip_oku("")) is None:
-                ad, sahip = "", masalar.sahiplen("")
+                ad, sahip = "", masalar.sahiplen("", ebeveyn=eb)
             elif any(p == vs["pid"] and b == vs["bas"] for p, b in masalar._atalar()):
                 ad = ""  # varsayılanın sahibi bu sunucunun ATASI (onu başlatan süreç): onun işinin parçası, paylaşır
             else:
                 dolu = {a for a in masalar.adlar() if masalar.sahip_oku(a) is not None
                         or masaustu.durum_oku(a) is not None}
                 ad, oto = masalar.oto_ad(dolu), True
-                sahip = masalar.sahiplen(ad, oto=True)
+                sahip = masalar.sahiplen(ad, oto=True, ebeveyn=eb)
         os.environ[masalar.ORTAM] = ad
         _MASA.update(bagli=True, ad=ad, oto=oto, sahip=sahip)
         log.info("görünmez masaüstü: %r (%s)", ad, "oto" if oto else ("sahip" if sahip else "paylaşılan"))
@@ -2917,6 +2926,7 @@ def main(argv: list[str] | None = None) -> None:
         if i + 1 < len(argv):
             os.environ[masalar.ORTAM] = masalar.dogrula(argv[i + 1])
     _MASA["sabit"] = os.environ.get(masalar.ORTAM) or None
+    _MASA["ilk_ppid"] = os.getppid()  # sahiplik bu Claude oturumu adına (sonradan systemd'ye geçersek bağlanılmaz)
     if "--desktop" in argv:  # `deskhand mcp --desktop background` = deskhand-bg
         i = argv.index("--desktop")
         if i + 1 < len(argv) and argv[i + 1] == "background":

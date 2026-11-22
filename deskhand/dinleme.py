@@ -117,9 +117,16 @@ def rms(parca: bytes) -> float:
 def oturum_kaydi(cdir: str, ad: str | None = None) -> dict:
     """Çalışan masaüstünün GÜVENLİ kaydı (masaustu.baglanti_denetle: kafes/cgroup ve PID'ler doğrulanmış); çalışma
     dizini `cdir` değilse Dur(14). ad: dinlenen masaüstü (None: bu sürecin bağlı olduğu, masalar.secili()); kayıt
-    O masaüstününkidir (başka masaüstünün sesi yazıya dökülmez) ve kapıdan (sahiplik) geçer."""
+    O masaüstününkidir (başka masaüstünün sesi yazıya dökülmez) ve kapıdan (sahiplik) geçer: gövde o masaüstünün
+    bağlamında çalışır (kapı ve kayıt aynı masaüstüne bakar)."""
+    from . import masalar
+    with masalar.masa_sabit(ad):
+        return _oturum_kaydi_ic(cdir)
+
+
+def _oturum_kaydi_ic(cdir: str) -> dict:
     from . import masaustu
-    d = masaustu.durum_oku(ad)
+    d = masaustu.durum_oku()
     if d is None:
         raise Dur(14, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
     d.setdefault("tur", "xvfb")

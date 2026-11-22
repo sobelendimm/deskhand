@@ -267,12 +267,11 @@ def sarmala(argv: list[str], uygulama: str, kayit: str, bellek: str | None, kopy
 
 def _yeni_ornek(once: set[str], cocuk_pid: int, uygulama: str) -> dict | None:
     simdiki = ornekler() or []
-    for o in simdiki:  # 1) flatpak run exec ile bwrap'e geçer: örneğin PID'i = çocuğun PID'i
+    for o in simdiki:  # flatpak run exec ile bwrap'e geçer: örneğin PID'i = çocuğun PID'i
         if o["pid"] == cocuk_pid and o["instance"] not in once:
             return o
-    for o in simdiki:  # 2) gio launch gibi aracılar: aynı kimlikle yeni örnek
-        if o["application"] == uygulama and o["instance"] not in once:
-            return o
+    # Uygulama ADIYLA eşleştirme YOK: iki görünmez masaüstü aynı Flatpak'i aynı anda açınca A'nın kaydı B'nin örneğini
+    # alır ve A kapanırken B'ninkini öldürürdü. PID tutmazsa örnek kaydedilmez (uyarı günlüğe yazılır).
     return None
 
 

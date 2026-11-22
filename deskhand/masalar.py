@@ -8,9 +8,12 @@ Ad biçimi `[a-z0-9][a-z0-9-]{0,15}`; "" = varsayılan masaüstü ve yolları ES
 Adlı masaüstü: RUNTIME_DIR/masa/<ad>/{sanal.json, sanal.lock, devral, girdi.lock, sahip, oturum/}.
 `gorev` adı görev kipine ayrılmıştır (Aşama 2).
 
-Sahiplik (`sahip` dosyası): "mcp <pid> <başlangıç> <ebeveyn_pid> <ebeveyn_başlangıç> <oto>". Kapı (erisim_kapisi):
-sahibi ölü/bozuk → serbest; çağıran sahip → izin; çağıranın ata zincirinde sahibin ebeveyni var (aynı Claude
-oturumunun Bash'i) → izin; panel (gorev_kipi.GOZLEMCI) → izin; diğer → Dur(14) (okuma dahil).
+Sahiplik (`sahip` dosyası): "mcp <pid> <başlangıç> <ebeveyn_pid> <ebeveyn_başlangıç> <oto> <pid ad alanı>". Kapı
+(erisim_kapisi): varsayılan masaüstü göreve ayrılmışsa görev işareti önce (görev kipi geçer, diğerleri Dur 14);
+sahibi ölü/bozuk → serbest; sahip başka PID ad alanında → Dur 14; çağıran sahip → izin; çağıranın ata zincirinde
+sahibin ebeveyni var (aynı Claude oturumunun Bash'i) → izin; ata zincirinde hiç `claude` yok (insan) → izin; panel
+(gorev_kipi.GOZLEMCI) → izin; diğer → Dur(14) (okuma dahil). Bu bir KOORDİNASYON kuralıdır, aynı kullanıcının kabuk
+koduna karşı güvenlik sınırı değildir.
 """
 from __future__ import annotations
 
@@ -186,44 +189,91 @@ def _atalar(pid: int | None = None) -> list[tuple[int, str | None]]:
     return s
 
 
-def sahip_icerik(pid: int | None = None, oto: bool = False) -> str:
+# Yapay zekâ ajanı süreçlerinin adları (comm ya da argv[0..1] dosya adı). Ata zincirinde bunlardan biri OLMAYAN çağrı
+# insanındır (kullanıcının kendi terminali / KDE kısayolu) ve panel gibi izinlidir.
+AJAN_ADLARI = frozenset({"claude"})
+
+
+def _ajan_mi(pid: int) -> bool:
+    try:
+        with open(f"/proc/{int(pid)}/comm") as f:
+            if f.read().strip() in AJAN_ADLARI:
+                return True
+        with open(f"/proc/{int(pid)}/cmdline", "rb") as f:
+            argv = f.read(4096).split(b"\0")[:2]
+    except (OSError, ValueError):
+        return False
+    for a in argv:
+        ad = os.path.basename(a.decode(errors="replace"))
+        if ad in AJAN_ADLARI or "claude-code" in a.decode(errors="replace"):
+            return True
+    return False
+
+
+def ajan_atasi_var(pid: int | None = None) -> bool:
+    """Çağıranın ata zincirinde bir yapay zekâ ajanı (claude) süreci var mı."""
+    return any(_ajan_mi(p) for p, _b in _atalar(pid))
+
+
+def pid_ad_alani() -> str:
+    """Bu sürecin PID ad alanı kimliği (/proc/self/ns/pid düğümü): sahip PID'leri yalnız aynı ad alanında anlamlıdır."""
+    try:
+        return str(os.stat("/proc/self/ns/pid").st_ino)
+    except OSError:
+        return "-"
+
+
+def sahip_icerik(pid: int | None = None, oto: bool = False, ebeveyn: int | None = None) -> str:
+    """"mcp <pid> <başlangıç> <ebeveyn_pid> <ebeveyn_başlangıç> <oto> <pid ad alanı>". ebeveyn: MCP sunucusunun İLK
+    ebeveyni (main'de saklanır; sonradan systemd'ye geçmiş olsa da Claude oturumu o)."""
     pid = os.getpid() if pid is None else int(pid)
-    eb = _ebeveyn(pid) or 0
-    return f"mcp {pid} {_baslangic(pid) or '-'} {eb} {_baslangic(eb) or '-'} {1 if oto else 0}\n"
+    eb = (_ebeveyn(pid) or 0) if ebeveyn is None else int(ebeveyn)
+    return f"mcp {pid} {_baslangic(pid) or '-'} {eb} {_baslangic(eb) or '-'} {1 if oto else 0} {pid_ad_alani()}\n"
 
 
-def sahip_oku(ad: str | None = None) -> dict | None:
-    """CANLI sahip kaydı → {pid, bas, ebeveyn, ebeveyn_bas, oto}; dosya yok / bozuk / sahip ölmüş / PID başka sürece
-    geçmiş → None."""
+def _sahip_alanlari(ad: str | None) -> list[str] | None:
     try:
         with open(sahip_yolu(ad)) as f:
             p = f.read(300).split()
     except OSError:
         return None
-    if len(p) != 6 or p[0] != "mcp":
+    if len(p) not in (6, 7) or p[0] != "mcp":
+        return None
+    return p
+
+
+def sahip_oku(ad: str | None = None) -> dict | None:
+    """CANLI sahip kaydı → {pid, bas, ebeveyn, ebeveyn_bas, oto, yabanci_ns}; dosya yok / bozuk / sahip ölmüş / PID
+    başka sürece geçmiş → None. Sahip BAŞKA bir PID ad alanındaysa (yabanci_ns) PID'i burada denetlenemez: serbest
+    SAYILMAZ (canlı yabancı sahip gibi)."""
+    p = _sahip_alanlari(ad)
+    if p is None:
         return None
     try:
         pid, eb = int(p[1]), int(p[3])
     except ValueError:
         return None
-    if pid <= 1 or p[2] == "-" or _baslangic(pid) != p[2]:
+    if pid <= 1 or p[2] == "-":
         return None
-    return {"pid": pid, "bas": p[2], "ebeveyn": eb, "ebeveyn_bas": p[4], "oto": p[5] == "1"}
+    yabanci = len(p) == 7 and p[6] != "-" and p[6] != pid_ad_alani()
+    if not yabanci and _baslangic(pid) != p[2]:
+        return None
+    return {"pid": pid, "bas": p[2], "ebeveyn": eb, "ebeveyn_bas": p[4], "oto": p[5] == "1", "yabanci_ns": yabanci}
 
 
-def sahiplen(ad: str | None = None, oto: bool = False, pid: int | None = None) -> bool:
+def sahiplen(ad: str | None = None, oto: bool = False, pid: int | None = None, ebeveyn: int | None = None) -> bool:
     """Masaüstünü bu sürece (pid) yaz. Canlı başka sahip varsa False (değiştirmez)."""
     ad = _ad(ad)
     pid = os.getpid() if pid is None else int(pid)
     s = sahip_oku(ad)
-    if s is not None and s["pid"] != pid:
+    if s is not None and (s["pid"] != pid or s["yabanci_ns"]):
         return False
     kok_hazirla(ad)
     yol = sahip_yolu(ad)
     gecici = f"{yol}.{os.getpid()}"
     fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
-        f.write(sahip_icerik(pid, oto))
+        f.write(sahip_icerik(pid, oto, ebeveyn))
     os.replace(gecici, yol)
     return True
 
@@ -235,7 +285,7 @@ def birak(ad: str | None = None, pid: int | None = None) -> bool:
     if not os.path.exists(yol):
         return False
     s = sahip_oku(ad)
-    if s is not None and s["pid"] != pid:
+    if s is not None and (s["pid"] != pid or s["yabanci_ns"]):
         return False
     try:
         os.remove(yol)
@@ -246,33 +296,42 @@ def birak(ad: str | None = None, pid: int | None = None) -> bool:
 
 def oto_mu(ad: str | None = None) -> bool:
     """Sahip dosyasında oto bayrağı (sahip ölü olsa da okunur)."""
-    try:
-        with open(sahip_yolu(ad)) as f:
-            p = f.read(300).split()
-        return len(p) == 6 and p[0] == "mcp" and p[5] == "1"
-    except OSError:
-        return False
+    p = _sahip_alanlari(ad)
+    return p is not None and p[5] == "1"
 
 
 def izinli_mi(ad: str | None = None, pid: int | None = None) -> bool:
-    """Kapı kuralı (Dur vermeden): sahipsiz → True; sahip pid ya da sahibin ebeveyni pid'in ata zincirinde → True."""
+    """Kapı kuralı (Dur vermeden): sahipsiz → True; sahip pid ya da sahibin ebeveyni pid'in ata zincirinde → True;
+    ata zincirinde HİÇ yapay zekâ ajanı (claude) yoksa (insan: kendi terminali, KDE kısayolu) → True. Sahip başka PID
+    ad alanında → False. KOORDİNASYON kuralıdır (ajan oturumları birbirinin işini bozmasın), aynı kullanıcının kabuk
+    koduna karşı güvenlik sınırı DEĞİLDİR."""
     s = sahip_oku(ad)
     if s is None:
         return True
+    if s["yabanci_ns"]:
+        return False
     zincir = _atalar(pid)
     if any(p == s["pid"] for p, _b in zincir):
         return True
-    if s["ebeveyn"] > 1 and s["ebeveyn_bas"] != "-":
-        return any(p == s["ebeveyn"] and b == s["ebeveyn_bas"] for p, b in zincir)
-    return False
+    if s["ebeveyn"] > 1 and s["ebeveyn_bas"] != "-" and any(
+            p == s["ebeveyn"] and b == s["ebeveyn_bas"] for p, b in zincir):
+        return True
+    return not any(_ajan_mi(p) for p, _b in zincir)
 
 
 def erisim_kapisi(ad: str | None = None) -> None:
-    """Başka oturumun masaüstüne erişimi (okuma dahil) durdurur: Dur(14). Panel (GOZLEMCI) serbest."""
+    """Başka oturumun masaüstüne erişimi (okuma dahil) durdurur: Dur(14). Panel (GOZLEMCI) serbest. Varsayılan
+    masaüstü bir göreve ayrılmışsa (gorev_kipi işareti canlı) yetki SAHİPLİKTEN ÖNCE görev işaretindedir: görev
+    kipindeki süreç geçer (görevin masaüstü), diğerleri görev masaüstü kuralıyla Dur(14)."""
     from . import gorev_kipi
     if gorev_kipi.GOZLEMCI:
         return
     ad = _ad(ad)
+    if ad == "" and gorev_kipi.masaustu_ayrildi():
+        if gorev_kipi.etkin():
+            return
+        raise Dur(14, _("görünmez masaüstü şu an panelin görev ajanına ayrılmış; görev bitince yeniden deneyin "
+                        "(ya da panelden görevi durdurun)"))
     if not izinli_mi(ad):
         raise Dur(14, _("görünmez masaüstü {ad} başka bir oturumun masaüstü; ona erişilmez "
                         "(kendi masaüstünüzü kullanın: --desktop-name)").format(ad=repr(ad or "varsayılan")))
