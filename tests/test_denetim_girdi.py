@@ -242,6 +242,7 @@ def kur(ad="kde"):
     au = SahteAU(ad)
     arka_uc._ORNEKLER[ad] = au
     guvenlik._SISTEM_ONBELLEK.clear()  # sistem istemi önbelleği (arka uç, kimlik) → yeni sahte pencere
+    guvenlik._UCBIRIM_ONBELLEK.clear()
     ISTEKLER.clear()
     YANIT["izin"] = False
     return au
@@ -317,14 +318,36 @@ ZARARSIZ = [
     "curl -s u | jq .", "wget -qO- u | tar xz", "node -v", "npm run build", "cargo build --release", "pip list",
     "ssh host uptime", "echo ${HOME}", "printf '%s\\n' a b", "ls | grep -v x", "history | tail", "cd - && ls",
     "time make", "watch -n 1 date", "sort -u f", "awk '{print $1}' f", "sed -i 's/a/b/' f", "du -sh *",
-    "python3 manage.py runserver", "python3 -m http.server", "ruby -v", "perl -v", "bash script.sh",
-    "sh -c 'echo hi'", "bash -c 'ls -la'", "eval echo hi", "nohup ./run.sh &", "jobs", "fg", "kill %1",
+    "python3 -m http.server", "ruby -v", "perl -v", "bash script.sh",
+    "sh -c 'echo hi'", "bash -c 'ls -la'", "nohup ./run.sh &", "jobs", "fg", "kill %1",
     "echo reboot > notlar.txt", "echo sudo", "git log --oneline | head", "git push -u origin feature",
     "make install DESTDIR=/tmp/x", "ln -s a b", "mkdir -p a/b/c", "touch a", "less f", "vim f", "nano f",
     "htop", "df -h", "free -m", "uname -a", "whoami", "id", "date", "cal", "pwd", "true && false || echo x",
-    "[[ -n $x ]] && echo y", "case $x in a) echo a;; esac", "f() { echo x; }; f", "alias ll='ls -la'",
-    "source ~/.bashrc", ". venv/bin/activate", "exec zsh", "command -v git", "type ls", "hash -r",
+    "[[ -n $x ]] && echo y", "case $x in a) echo a;; esac", "f() { echo x; }; f",
+    "exec zsh", "command -v git", "type ls", "hash -r",
 ]
+ZARARSIZ += [  # denetim 2 kurallarına yakın zararsızlar
+    "git clean -n", "git clean -nd", "kill -9 1234", "kill -1 1234", "kill %2", "pkill firefox", "killall vlc",
+    "crontab -l", "cp a.txt b.txt", "cp -r src dst", "mv eski.txt yeni.txt", "echo hi > out.txt", "date | tee log.txt",
+    "rsync -a src/ dst/", "rsync -a --delete build/ /srv/site/", "bash ./build.sh", "sh install.sh", "sh ./run.sh",
+    "truncate -s 10M disk.img", "ln -s a b", "ln -sf ../x y", "tmux ls", "tmux attach -t 0", "screen -ls",
+    "awk '{print $2}' f", "history | grep git", "history", "fc-list", "printf 'a\\n' > notlar.txt",
+    "git -c color.ui=always log", "export EDITOR=vim", "PS1='$ '", "echo $PATH", "cat ~/.bashrc", "grep x ~/.zshrc",
+    "less ~/.profile", "base64 dosya.bin", "base64 -d < a.b64 > a.bin", "printf '%s' x | base64",
+    "echo 'kill -9 -1' > notlar.md", "tee -a log.txt", "ssh host 'ls -la'", "echo !", "echo 'a != b'",
+    "[ \"$a\" != b ] && echo farkli", "rm -i ~/a.txt", "python3 -V", "node --version", "perl -v", "sed -n 1p f",
+]
+# denetim 2 kararıyla ARTIK onay isteyenler (dolaylı yürütme): eval, alias, source/., betik dosyasını yorumlayıcıyla çalıştırma
+YENI_RISKLI = ["eval echo hi", "alias ll='ls -la'", "source ~/.bashrc", ". venv/bin/activate", "python3 manage.py runserver"]
+for m in YENI_RISKLI:
+    kontrol(f"denetim 2 kararı: artık onay ister: {m!r}", guvenlik.riskli_komut(m) is not None)
+KALIP = [l.strip().rstrip(",").strip() for l in open(os.path.join(KOK, "tests", "denetim2_kalip.py"))
+         if l.startswith("    ") and l.strip().startswith(("\"", "'"))] if os.path.exists(
+    os.path.join(KOK, "tests", "denetim2_kalip.py")) else []
+import ast  # noqa: E402
+KALIP = [ast.literal_eval(x) for x in KALIP]
+kontrol(f"denetim 2 kalıpları: {len(KALIP)} örneğin HEPSİ onay ister", len(KALIP) == 44 and
+        all(guvenlik.riskli_komut(m) for m in KALIP), str([m for m in KALIP if not guvenlik.riskli_komut(m)]))
 yp = [m for m in ZARARSIZ if guvenlik.riskli_komut(m)]
 kontrol(f"yanlış pozitif yok: {len(ZARARSIZ)} zararsız komutta 0", not yp, str([(m, guvenlik.riskli_komut(m)) for m in yp]))
 ISTEMLI = ["user@host:~$ ls -la", "[user@host proje]$ git status", "user@host ~> make -j4", "❯ npm run build",
@@ -401,6 +424,7 @@ for ad_ in ("kde", "sanal"):
                 kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0 and not ISTEKLER)
         # uçbirim olmayan pencere: kapı yok
         au.pen["{w}"][1] = "kwrite"
+        guvenlik._UCBIRIM_ONBELLEK.clear()  # sahte pencerenin sınıfı değişti (gerçekte bir pencerenin sınıfı değişmez)
         eylem.k_yaz(ns(metin="sud"))
         kontrol(f"[{ad_}] uçbirim olmayan pencere: 'o reboot' + Enter serbest",
                 kod_al(eylem.k_yaz, ns(metin="o reboot")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0)
@@ -792,8 +816,28 @@ kontrol("denetim 2a/2b: X penceresinin PID'i ağaçta yoksa başlık benzerliği
 kontrol("PID bilinmiyorsa → 6", kod_al(erisim._cerceve_bul, A, "", "Deskhand") == 6)
 c, p, _ad = erisim._cerceve_bul(A, os.getpid(), "Deskhand notlar")
 kontrol("aynı PID: başlığa en yakın çerçeve", c.ad == "Deskhand notlar" and p == os.getpid())
-c, p, _ad = erisim._cerceve_bul(SahteAtspi([Uyg(os.getpid(), "x", [Cerceve("Pencere")])]), os.getppid(), "Pencere")
-kontrol("çok süreçli uygulama: çerçeve pencere sahibinin TORUNUNDA (aynı süreç ağacı) → bulunur", p == os.getpid())
+torun = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])  # aynı exe, bu sürecin çocuğu
+try:
+    c, p, _ad = erisim._cerceve_bul(SahteAtspi([Uyg(torun.pid, "x", [Cerceve("Pencere")])]), os.getpid(), "Pencere")
+    kontrol("çok süreçli uygulama: TORUN süreç, aynı exe, başlık aynı → bulunur", p == torun.pid)
+    kontrol("torun ama başlık benzerliği < 0,9 → 6",
+            kod_al(erisim._cerceve_bul, SahteAtspi([Uyg(torun.pid, "x", [Cerceve("Bambaşka")])]), os.getpid(), "Pencere") == 6)
+    e = hata_al(erisim._cerceve_bul, SahteAtspi([Uyg(os.getpid(), "Ebeveyn Uygulama", [Cerceve("Ebeveyn Uygulama")])]),
+                torun.pid, "Cocuk Notlar")
+    kontrol("denetim2 B (YO1): pencerenin ATASI olan uygulamanın çerçevesine düşülmez → 6", e is not None and e.kod == 6,
+            str(e))
+    e = hata_al(erisim._cerceve_bul, SahteAtspi([Uyg(os.getpid(), "x", [Cerceve("Pencere")])]), torun.pid, "Pencere")
+    kontrol("ata süreç, başlık AYNI olsa bile → 6", e is not None and e.kod == 6)
+finally:
+    torun.kill()
+    torun.wait()
+kabuk = subprocess.Popen(["sh", "-c", "sleep 60"])  # torun ama başka program
+try:
+    kontrol("torun ama BAŞKA exe → 6",
+            kod_al(erisim._cerceve_bul, SahteAtspi([Uyg(kabuk.pid, "x", [Cerceve("Pencere")])]), os.getpid(), "Pencere") == 6)
+finally:
+    kabuk.kill()
+    kabuk.wait()
 onceki_ppid = onay.panel_pid
 onay.panel_pid = lambda: 99991
 kontrol("çerçeve Deskhand paneli sürecine ait → her zaman 10 (okuma dahil)",
@@ -803,6 +847,96 @@ kontrol("çerçeve adı yerleşik yasak desene (^deskhand$) uyar → 10", kod_al
 kendi.sifirla()
 kontrol("çerçeve ajanın kendi süreç zincirinde → eylemde 10", kod_al(erisim._cerceve_denetle, os.getppid(), "a", "b", "eylem") == 10)
 kontrol("sıradan çerçeve → serbest", kod_al(erisim._cerceve_denetle, 424242, "kwrite", "Belge", "eylem") == 0)
+arka_uc._ORNEKLER.clear()
+
+# ================================================================ A10) denetim 2: gömülü uçbirim, geçmiş, menü yapıştırma, ad alanı
+print("A10) denetim 2 (birim)")
+GOMULU = {1: ("systemd", 0, 1, -1), 500: ("dolphin", 1, 500, -1), 501: ("bash", 500, 501, 501),
+          600: ("kate", 1, 600, -1), 601: ("sh", 600, 601, -1)}
+gp = sahte_proc(GOMULU)
+for pid_, satir_ in ((501, "bash"), (601, "sh")):  # tty_nr alanı: 501 → 34816 (pts), 601 → 0 (uçbirimsiz)
+    with open(f"{gp}/{pid_}/stat", "w") as f:
+        f.write(f"{pid_} ({satir_}) S {GOMULU[pid_][1]} {pid_} {pid_} {34816 if pid_ == 501 else 0} "
+                f"{GOMULU[pid_][3]} 0 0 0\n")
+kontrol("gömülü uçbirim: Dolphin'in torununda tty'li kabuk var → uçbirim barındırır",
+        kendi.kabuk_torunlari(500, gp) == [501], str(kendi.kabuk_torunlari(500, gp)))
+kontrol("uçbirimsiz kabuk çocuğu (tty yok: betik) → uçbirim DEĞİL", kendi.kabuk_torunlari(600, gp) == [])
+onceki_kt = kendi.kabuk_torunlari
+for ad_ in ("kde", "sanal"):
+    au = kur(ad_)
+    with arka_uc.hedef_sabit(ad_):
+        guvenlik._UCBIRIM_ONBELLEK.clear()
+        au.pen["{w}"][1], au.pen["{w}"][3] = "org.kde.dolphin", "500"
+        kendi.kabuk_torunlari = lambda pid, proc=None, tablo=None: [501]
+        SATIR["oku"] = ["~/Belgeler $ sudo reboot"]
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] Dolphin (gömülü uçbirimli): Enter kapısı uygulanır → 10",
+                kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10 and len(ISTEKLER) == 1)
+        kontrol(f"[{ad_}] Dolphin (gömülü uçbirimli): yıkıcı komut yazma onay ister → 10",
+                kod_al(eylem.k_yaz, ns(metin="sudo ls")) == 10)
+        guvenlik._UCBIRIM_ONBELLEK.clear()
+        kendi.kabuk_torunlari = lambda pid, proc=None, tablo=None: []
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] Dolphin (uçbirimsiz): 'sudo reboot\\n' sıradan yazı, Enter sorulmaz (yanlış pozitif yok)",
+                kod_al(eylem.k_yaz, ns(metin="sudo reboot\n")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0
+                and not ISTEKLER)
+        au.pen["{w}"][1] = "org.kde.kate"
+        guvenlik._UCBIRIM_ONBELLEK.clear()
+        kontrol(f"[{ad_}] Kate (uçbirimsiz): düz yazı + Enter sorulmaz",
+                kod_al(eylem.k_yaz, ns(metin="Merhaba dünya\nrm -rf notu\n")) == 0 and not ISTEKLER)
+        au.pen["{w}"][1], au.pen["{w}"][3] = "Code", None
+        guvenlik._UCBIRIM_ONBELLEK.clear()
+        kontrol(f"[{ad_}] PID'i bilinmeyen gömebilen sınıf (Code) → güvenli tarafta uçbirim",
+                guvenlik.ucbirim_penceresi_mi("{w}"))
+        au.pen["{w}"][1] = "firefox"
+        guvenlik._UCBIRIM_ONBELLEK.clear()
+        kontrol(f"[{ad_}] PID'siz sıradan uygulama (firefox) → uçbirim değil", not guvenlik.ucbirim_penceresi_mi("{w}"))
+        SATIR["oku"] = None
+kendi.kabuk_torunlari = onceki_kt
+# geçmiş açılımı (Enter kapısı)
+au = kur("kde")
+with arka_uc.hedef_sabit("kde"):
+    for satir_, beklenen in (("~ $ !!", 10), ("~ $ !-2", 10), ("~ $ ^foo^bar", 10), ("~ $ fc -s", 10), ("~ $ r", 10),
+                             ("~ $ history -s 'sudo reboot'", 10), ("~ $ sudo !!", 10), ("~ $ echo merhaba", 0),
+                             ("~ $ [ a != b ] && echo x", 0), ("~ $ git log --oneline", 0)):
+        SATIR["oku"] = [satir_]
+        kontrol(f"Enter kapısı: {satir_!r} → {beklenen or 'serbest'}", kod_al(eylem.k_tus, ns(kombinasyon="enter")) == beklenen)
+    SATIR["oku"] = None
+# menüden yapıştırma (YO3)
+for ad_ in ("kde", "sanal"):
+    au = kur(ad_)
+    au.pen["{w}"][1] = "kwrite"
+    au.pano = "kullanıcının panosu"
+    with arka_uc.hedef_sabit(ad_):
+        for yazi in ("Yapıştır    Ctrl+V", "&Paste", "Einfügen", "Paste Special…"):
+            NOKTA["metin"] = [yazi]
+            ISTEKLER.clear()
+            kod = kod_al(eylem.k_tikla, ns(x=50, y=50))
+            kontrol(f"[{ad_}] menüden yapıştırma '{yazi}' → {'onay, red → 10' if ad_ == 'kde' else 'serbest'}",
+                    (kod == 10 and len(ISTEKLER) == 1) if ad_ == "kde" else kod == 0, f"{kod}")
+        NOKTA["metin"] = ["Kopyala Ctrl+C"]
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] 'Kopyala' menüsü → sorulmaz", kod_al(eylem.k_tikla, ns(x=50, y=50)) == 0 and not ISTEKLER)
+        NOKTA["metin"] = []
+kontrol("AT-SPI eylem yolu da aynı kuraldan geçer (hassas_engel içinde): öge adı 'Paste' tanınır",
+        guvenlik.yapistirma_metni_mi("Paste") and not guvenlik.yapistirma_metni_mi("Copy-paste tutorial for beginners ok"))
+# ad alanı (YK2)
+NS = {1: ("systemd", 0, 1, -1), 10: ("bwrap", 1, 10, -1), 11: ("ghostty", 10, 11, -1), 12: ("fish", 11, 12, 13),
+      13: ("python3", 12, 13, 13)}
+nsp = sahte_proc(NS)
+with open(f"{nsp}/11/status", "w") as f:
+    f.write("Name:\tghostty\nNSpid:\t73011\t11\n")
+k6 = kendi.hesapla(13, nsp, {}, lambda o: [])
+kontrol("ad alanı (flatpak/bwrap): NSpid ile dış PID kümede, ad_alani işaretli", 73011 in k6.pidler and k6.ad_alani,
+        str(k6.pidler))
+kendi.kume = lambda tazele=False: k6
+kontrol("ad alanında PID eşleşmezse sınıf yedeği: başka PID'li Ghostty penceresi → kendi istemci",
+        bool(kendi.kendi_mi(88888, "com.mitchellh.ghostty", "kde", guvenlik.ucbirim_mi)))
+kendi.kume = lambda tazele=False: k1
+kontrol("ad alanı yokken başka PID'li Ghostty penceresi → kendi DEĞİL (yanlış pozitif yok)",
+        not kendi.kendi_mi(88888, "com.mitchellh.ghostty", "kde", guvenlik.ucbirim_mi))
+kendi.kume = onceki_kume
+kendi.sifirla()
 arka_uc._ORNEKLER.clear()
 
 # ================================================================ B) GÖRÜNMEZ SANAL MASAÜSTÜ
@@ -938,6 +1072,31 @@ else:
         kontrol("tampon kirliyken OCR okuması yakalar: ctrl+j → 10", r3 is not None and r3.kod == 10 and
                 not any(l == "CALISTI:sudo reboot" for l in oku("ucb")), str(r3))
         api.tus(kt, "ctrl+u")
+    # ---- denetim 2 A (YB1): GÖMÜLÜ uçbirim — sınıfı org.kde.dolphin, sürecinin torununda pty'li `sh` (F4 taklidi)
+    kd = pencere("dolf", "Belgeler - Dolphin", "org.kde.dolphin", (950, 560, 900, 300), -1, "ucbirim+kabuk")
+    kd2 = pencere("dolf2", "Indirilenler - Dolphin", "org.kde.dolphin", (950, 120, 900, 300), -1, "ucbirim")
+    with api.hedef("sanal"):
+        guvenlik._UCBIRIM_ONBELLEK.clear()
+        kontrol("gömülü uçbirim süreçle tanınır (sınıf org.kde.dolphin, torunda tty'li sh)",
+                guvenlik.ucbirim_penceresi_mi(kd) and not guvenlik.ucbirim_penceresi_mi(kd2))
+        api.tus(kd, "ctrl+u")
+        r1 = hata_al(api.yaz, kd, "echo merhaba\n")
+        api.yaz(kd, "sud")
+        api.yaz(kd, "o reboot")
+        ISTEKLER.clear()
+        r2 = hata_al(api.tus, kd, "Return")
+        r3 = hata_al(api.yaz, kd, "\n")
+        time.sleep(0.4)
+        kontrol("denetim 2 A: gömülü uçbirimde zararsız komut çalışır, 'sud'+'o reboot'+Return ve '\\n' → 10, ÇALIŞMADI",
+                r1 is None and "CALISTI:echo merhaba" in oku("dolf") and r2 is not None and r2.kod == 10 and
+                r3 is not None and r3.kod == 10 and not any(l == "CALISTI:sudo reboot" for l in oku("dolf")),
+                f"{r1} {r2} {r3} {oku('dolf')[-4:]}")
+        api.tus(kd, "ctrl+u")
+        ISTEKLER.clear()
+        r5 = hata_al(api.yaz, kd2, "sudo reboot\n")
+        time.sleep(0.3)
+        kontrol("yanlış pozitif yok: uçbirimsiz Dolphin'de 'sudo reboot\\n' sıradan yazı (sorulmadı)",
+                r5 is None and not ISTEKLER and "CALISTI:sudo reboot" in oku("dolf2"), f"{r5} {oku('dolf2')[-3:]}")
     ucbirim.satir_oku = lambda k: SATIR["oku"]
 
     # ---- 2a/2b: AT-SPI çerçeve karışıklığı (gerçek Qt penceresi, CLI alt süreç)
@@ -966,6 +1125,35 @@ else:
             ka_ != 0 and not any(l.startswith("isaret:Onayla") for l in yeni), f"{ka_} {ca_[-200:]} {yeni}")
     kontrol("denetim 2b: aynı yolla yasak pencerenin metin alanına değer YAZILMADI",
             kb_ != 0 and not any("ajan-yazdi" in l for l in yeni), f"{kb_} {cb_[-200:]}")
+    # ---- denetim 2 B (YO1): AT-SPI'siz çocuk pencerenin eylemi ATA uygulamanın çerçevesine gitmesin
+    LOGE = os.path.join(G, "ebeveyn.log")
+    XC = os.path.join(G, "x_cocuk.py")
+    with open(XC, "w") as f:
+        f.write("import os\nfrom Xlib import X, display\nd = display.Display(); s = d.screen()\n"
+                "w = s.root.create_window(1300, 520, 500, 400, 0, s.root_depth, X.InputOutput, X.CopyFromParent,"
+                " background_pixel=s.white_pixel)\nw.set_wm_name('Cocuk Notlar'); w.set_wm_class('cocuk', 'Cocuk')\n"
+                "w.change_property(d.intern_atom('_NET_WM_PID'), d.intern_atom('CARDINAL'), 32, [os.getpid()])\n"
+                "w.map(); d.flush()\nwhile True:\n    d.next_event()\n")
+    SAR = os.path.join(G, "ebeveyn.py")
+    with open(SAR, "w") as f:
+        f.write(f"import subprocess, sys, runpy\nsubprocess.Popen([sys.executable, {XC!r}])\n"
+                f"runpy.run_path({os.path.join(KOK, 'tests/yardimci/a11y_pencere.py')!r}, run_name='__main__')\n")
+    masaustu.baslat([sys.executable, SAR], {"LOG": LOGE, "PENCERE_BASLIK": "Ebeveyn Uygulama"})
+    t_ = time.monotonic() + 20
+    while time.monotonic() < t_ and "hazir" not in (open(LOGE).read() if os.path.exists(LOGE) else ""):
+        time.sleep(0.2)
+    for _i in range(30):
+        if "Onayla" in cli_("tree", "Ebeveyn Uygulama", "--all")[1]:
+            break
+        time.sleep(0.5)
+    n0 = len(open(LOGE).read().splitlines())
+    kb_, cb_ = cli_("click-element", "Cocuk Notlar", "Onayla", "--action")
+    time.sleep(0.4)
+    kontrol("denetim 2 B: 'Cocuk Notlar' eylemi ATA uygulamanın onay kutusunu DEĞİŞTİRMEDİ",
+            kb_ != 0 and not any(l.startswith("isaret:Onayla") for l in open(LOGE).read().splitlines()[n0:]),
+            f"{kb_} {cb_[-200:]}")
+    kontrol("…ebeveynin kendi penceresine eylem yine çalışır",
+            cli_("click-element", "Ebeveyn Uygulama", "Onayla", "--action")[0] == 0)
     # parola alanı (gerçek Qt QLineEdit Password): değer yazma ve klavyeyle yazma onay ister (panel kapalı → 10)
     os.makedirs(os.path.dirname(yollar.yasak_dosya()), exist_ok=True)
     with open(yollar.yasak_dosya(), "w") as f:

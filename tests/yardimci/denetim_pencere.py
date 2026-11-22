@@ -1,7 +1,9 @@
 """Denetim testleri için düz X penceresi (yalnız görünmez sanal masaüstünde): her girdi LOG dosyasına yazılır.
 Kullanım: LOG=… python3 denetim_pencere.py BAŞLIK SINIF X Y G Y PID KİP
   PID: _NET_WM_PID olarak yazılır (0 = yazılmaz); KİP: "duz" | "ucbirim" (yazılanı "$ " istemiyle çizer; Return →
-  CALISTI:<satır>, BackSpace siler; ctrl+u satırı temizler) | "ustte" (her zaman üstte)."""
+  CALISTI:<satır>, BackSpace siler; ctrl+u satırı temizler) | "ustte" (her zaman üstte) | "ucbirim+kabuk" (ucbirim
+  gibi çizer + denetim uçbirimi pty olan bir `sh` çocuğu başlatır: Dolphin F4 gibi GÖMÜLÜ uçbirim taklidi; sh hiçbir
+  komut çalıştırmaz, yalnız bekler)."""
 import os
 import sys
 
@@ -12,6 +14,15 @@ LOG = os.environ["LOG"]
 baslik, sinif = sys.argv[1], sys.argv[2]
 x, y, w, h = map(int, sys.argv[3:7])
 pid, kip = int(sys.argv[7]), sys.argv[8]
+if pid == -1:
+    pid = os.getpid()
+if kip.endswith("+kabuk"):
+    import fcntl, pty, subprocess, termios
+    ana, yan = pty.openpty()
+    KABUK = subprocess.Popen(["sh", "-i"], stdin=yan, stdout=yan, stderr=yan, start_new_session=True,
+                             preexec_fn=lambda: fcntl.ioctl(0, termios.TIOCSCTTY, 0),
+                             env={"PATH": "/usr/bin:/bin", "HISTFILE": "/dev/null", "PS1": "$ ", "ENV": "/dev/null"})
+    kip = "ucbirim"
 
 
 def log(s):
