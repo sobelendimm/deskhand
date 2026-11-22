@@ -637,6 +637,9 @@ def eylem_yap(k, oge, eylem=None) -> dict:
     # eylemden HEMEN önce çerçeve yeniden seçilir ve eylem düzeyinde denetlenir (panel/yasak/kendi istemci/seviye):
     # öge, pencerenin süreç ağacındaki bu çerçevenin bağlantısında olmalı (başka uygulamaya eylem gitmez)
     _au, yol, bus, *_x = _baglam(k, "eylem")
+    if getattr(_au, "ad", "") != "sanal":  # gerçek oturumun a11y yoluna DoAction = gerçek ekranda tık
+        from .hata import gercek_ekran_denetle
+        gercek_ekran_denetle(_("erişilebilirlik eylemi (web)"))
     try:
         if oge["_bus"] != bus:
             raise Dur(8, _("web ögesi artık pencerenin erişilebilirlik bağlantısında değil (uygulama değişti); "

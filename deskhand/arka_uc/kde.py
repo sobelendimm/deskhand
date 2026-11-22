@@ -38,7 +38,8 @@ _KD_OKUMA = {"getactivewindow", "getwindowgeometry", "getwindowname", "getwindow
 # mesgul.py'nin sabit, salt okuma KWin betiği (etkin pencerenin tam ekran bayrağı) için — ajan argümanı geçemez.
 _KD_SORGU = _KD_OKUMA | {"search", "kwinscript"}
 _KD_EYLEM = {"windowactivate", "windowraise", "windowfocus", "windowclose", "windowkill", "windowmove", "windowsize",
-             "windowminimize", "windowstate", "windowquit", "key", "type", "click", "mousemove"}
+             "windowminimize", "windowstate", "windowquit", "key", "type", "click", "mousemove", "windowlower",
+             "set_desktop", "set_desktop_for_window", "set_num_desktops", "windowunmap", "windowmap"}
 
 
 def _yan_etkili_mi(a):
@@ -48,6 +49,9 @@ def _yan_etkili_mi(a):
     if not a:
         return False
     if os.path.basename(a[0]) == "kdotool":
+        if len(a) > 1 and a[1] == "kwinscript":
+            from ..mesgul import KWIN_BETIK  # yalnız sabit salt okuma betiği; başka her betik yüklemesi yan etkidir
+            return list(a[1:]) != ["kwinscript", "--inline", KWIN_BETIK]
         return not a[1:] or a[1] not in _KD_SORGU or any(x in _KD_EYLEM for x in a[2:])
     if os.path.basename(a[0]) == "dotool":
         return tuple(a[1:]) != ("--list-keys",)

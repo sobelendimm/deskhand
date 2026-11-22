@@ -187,6 +187,7 @@ IPUCU = {
     14: "start it with manage_desktop(action='start')",
     15: "the user is gaming or watching: use desktop='background' or try later",
     16: "use desktop='foreground' when the user is not busy, or tell the user",
+    17: "the real screen is locked for this process (DESKHAND_GERCEK_EKRAN): use desktop='background'",
 }
 
 
