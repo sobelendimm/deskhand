@@ -299,7 +299,7 @@ fi
 # ---------------------------------------------------------------- activity helper (C)
 if (( HELPER_OK )); then
     say "$(L 'Klavye/fare etkinliği yardımcısı derleniyor' 'Building the keyboard/mouse activity helper')"
-    if ! run make -s -C "$PKG_DIR/yardimci"; then
+    if ! run make -s -C "$PKG_DIR/yardimci" deskhand-etkinlik; then
         warn "$(L 'yardımcı derlenemedi; insan önceliği yalnız fareye bakacak' 'the helper could not be built; human priority will watch the mouse only')"
     fi
 fi
@@ -315,13 +315,14 @@ if (( SHOT_OK )); then
                    'the screenshot helper could not be built; screenshots will fall back to slow spectacle')"; fi
 fi
 # input helper of the isolated KWin background desktop (libei); without it the background desktop uses Xvfb
-if command -v cc >/dev/null 2>&1 && quiet pkg-config --exists libei-1.0 xkbcommon libsystemd; then
+if command -v cc >/dev/null 2>&1 && command -v make >/dev/null 2>&1 && command -v pkg-config >/dev/null 2>&1 \
+        && quiet pkg-config --exists libei-1.0 xkbcommon libsystemd; then
     say "$(L 'Arka plan girdi yardımcısı derleniyor (KWin EIS)' 'Building the background input helper (KWin EIS)')"
     run make -s -C "$PKG_DIR/yardimci" deskhand-eis || warn "$(L 'arka plan girdi yardımcısı derlenemedi; arka plan masaüstü Xvfb ile açılır' \
         'the background input helper could not be built; the background desktop will use Xvfb')"
 else
-    warn "$(L 'libei/xkbcommon yok: arka plan masaüstü GPU'"'"'lu KWin yerine Xvfb ile açılır (paketler: libei libxkbcommon)' \
-              'no libei/xkbcommon: the background desktop uses Xvfb instead of the GPU-accelerated KWin (packages: libei libxkbcommon)')"
+    warn "$(L 'derleyici/make/pkg-config ya da libei/xkbcommon yok: arka plan masaüstü GPU'"'"'lu KWin yerine Xvfb ile açılır (paketler: libei libxkbcommon)' \
+              'no compiler/make/pkg-config or libei/xkbcommon: the background desktop uses Xvfb instead of the GPU-accelerated KWin (packages: libei libxkbcommon)')"
 fi
 # KWin before 6.8 serves ScreenShot2 only to a program whose desktop entry (matched by the Exec= path)
 # lists it in X-KDE-DBUS-Restricted-Interfaces; newer KWin ignores the entry.
