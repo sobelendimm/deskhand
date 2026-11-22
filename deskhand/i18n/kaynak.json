@@ -432,10 +432,10 @@
   "doktor.py:59"
  ],
  "Ajan bir parola alanına {n} karakter yazmak istiyor ({ne}).": [
-  "guvenlik.py:1555"
+  "guvenlik.py:1556"
  ],
  "Ajan kullanıcının panosundaki metni ({n} karakter) bu pencereye yapıştırmak istiyor ({ne}).": [
-  "guvenlik.py:1539"
+  "guvenlik.py:1540"
  ],
  "Ajan panonun metnini okumak istiyor ({n} karakter)": [
   "mcp_sunucu.py:1055"
@@ -538,7 +538,7 @@
   "gui/metinler.py:132"
  ],
  "Bu pencere bir sistem yetki/parola/izin istemi ({ad}). Ajan ona {ne} göndermek istiyor.": [
-  "guvenlik.py:1454"
+  "guvenlik.py:1455"
  ],
  "Bırak": [
   "gui/metinler.py:84"
@@ -627,8 +627,8 @@
   "gui/metinler.py:41"
  ],
  "DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir": [
-  "guvenlik.py:1658",
-  "guvenlik.py:1678"
+  "guvenlik.py:1659",
+  "guvenlik.py:1679"
  ],
  "DUR: açık ({yol}); hiçbir girdi gönderilmez. Kaldırmak için: {prog} devam": [
   "cli.py:234"
@@ -777,13 +777,13 @@
   "cli.py:223"
  ],
  "HASSAS pano: {ne} kullanıcının panosunu ajanın görebileceği yere taşır; kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1542"
+  "guvenlik.py:1543"
  ],
  "HASSAS sayfa ({eslesen} ← {baslik}): bu sayfada {eylem} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
   "guvenlik.py:1241"
  ],
  "HASSAS: parola alanına {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1558"
+  "guvenlik.py:1559"
  ],
  "Hassas düğme: “{dugme}”": [
   "guvenlik.py:1234"
@@ -931,10 +931,10 @@
   "cli.py:221"
  ],
  "Panoyu yapıştır": [
-  "guvenlik.py:1539"
+  "guvenlik.py:1540"
  ],
  "Parola alanına yaz": [
-  "guvenlik.py:1555"
+  "guvenlik.py:1556"
  ],
  "Pencere": [
   "gui/metinler.py:56"
@@ -982,7 +982,7 @@
   "gui/metinler.py:166"
  ],
  "Sistem istemine girdi: {ad}": [
-  "guvenlik.py:1453"
+  "guvenlik.py:1454"
  ],
  "Sonra": [
   "mesgul.py:48"
@@ -1000,10 +1000,10 @@
   "gui/metinler.py:58"
  ],
  "SİSTEM İSTEMİ ({ad} ← {baslik}): yetki/parola/izin istemine {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1457"
+  "guvenlik.py:1458"
  ],
  "SİSTEM İSTEMİ: {baslik} ({ad}) bir yetki/parola/izin istemi; girdi kullanıcının onayını ister (bu eylem için onay alınmadı)": [
-  "guvenlik.py:1436"
+  "guvenlik.py:1437"
  ],
  "Tam ekranda da sor": [
   "gui/metinler.py:129"
@@ -1284,7 +1284,7 @@
   "eylem.py:860"
  ],
  "bekleniyor: kullanıcı bilgisayarı kullanıyor…": [
-  "guvenlik.py:1577"
+  "guvenlik.py:1578"
  ],
  "bekleniyor: kullanıcı fareyi kullanıyor…": [
   "insan.py:158"
@@ -2105,7 +2105,7 @@
   "arka_uc/kde.py:323"
  ],
  "kullanıcı {sn} sn boyunca bilgisayarı kullandı (insan önceliği); {ne} yapılmadı": [
-  "guvenlik.py:1580"
+  "guvenlik.py:1581"
  ],
  "kullanıcı {sn} sn boyunca fareyi kullandı (insan önceliği); girdi gönderilmedi": [
   "insan.py:169"
@@ -2271,7 +2271,7 @@
   "masaustu.py:907"
  ],
  "orta tıkla seçimi yapıştırma": [
-  "guvenlik.py:1538"
+  "guvenlik.py:1539"
  ],
  "oturum hazırlanamadı: {hata}": [
   "mcp_sunucu.py:1221"
@@ -2363,7 +2363,7 @@
   "mcp_sunucu.py:1038"
  ],
  "panodan yapıştırma": [
-  "guvenlik.py:1538"
+  "guvenlik.py:1539"
  ],
  "panoya yazıldı: {karakter} karakter": [
   "cli.py:212"
