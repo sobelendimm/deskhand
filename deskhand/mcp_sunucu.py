@@ -1308,6 +1308,10 @@ def get_status(
     desktops). Read-only."""
     s: dict[str, Any] = {"version": __version__, "only_background": sadece_arka(),
                          "stop_switch": guvenlik.dur_acik(), "stop_by": guvenlik.dur_kaynagi()}
+    from .surum import eski_sunucu
+    eski = eski_sunucu(__version__)  # güncellemeden sonra yeniden bağlanmamış sunucu: diskteki sürüm farklı
+    if eski is not None:
+        s["stale_server"] = eski
     m = _mesgul()
     if m is not None and hasattr(m, "durum"):
         try:

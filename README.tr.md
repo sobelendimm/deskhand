@@ -52,8 +52,9 @@ Ajan ya da izin kipi ne derse desin, iki masaüstünde de aracın kendisi uygula
 - **DUR anahtarı.** Paneldeki düğme, tepsi menüsü ya da isteğe bağlı genel kısayol. Açıkken
   hiçbir girdi gönderilmez, basılı tuşlar bırakılır. Ajan da DUR diyebilir, ama **sizin
   koyduğunuz DUR'u kaldıramaz**; onu yalnız panel kaldırır.
-- **Etkinlik günlüğü.** Her girdi günlüğe yazılır (`~/.local/state/deskhand`, 7 gün) ve
-  panelde canlı görünür.
+- **Etkinlik günlüğü.** Her girdi günlüğe yazılır (`~/.local/state/deskhand`, 7 gün; yalnız siz
+  okuyabilirsiniz: klasör 0700, dosyalar 0600) ve panelde canlı görünür. `secret` olmadan yazılan metinler
+  günlükte parça parça görünür: parola, kod ve kişisel bilgileri `secret=true` (`--secret`) ile yazın.
 
 ### Arka plan masaüstü
 
@@ -359,8 +360,8 @@ açıkça onayladıysa verin. Verilmezse Deskhand kullanıcıya panelden sorar.
 | `~/.config/deskhand/ayarlar.toml` | meşgulken davranış (`[karar]`: sor / arka / bekle, süre, tam ekranda da sor) |
 | `~/.config/deskhand/oturum.toml` | arka plan için uygulama başına oturum politikası (varsayılanların üstüne birleşir) |
 | `~/.local/share/deskhand/` | kayıtlı simgeler (`simgeler/`), akışlar (`akislar/`) |
-| `~/.local/state/deskhand/` | girdi günlüğü (7 gün), yakalanan arka plan bildirimleri |
-| `~/.cache/deskhand/` | ekran görüntüleri, OCR önbelleği (5 gün) |
+| `~/.local/state/deskhand/` | girdi günlüğü (7 gün), yakalanan arka plan bildirimleri (0700) |
+| `~/.cache/deskhand/` | ekran görüntüleri, OCR önbelleği (5 gün, 0700) |
 | `$XDG_RUNTIME_DIR/deskhand/` | DUR anahtarı, onay istekleri, arka plan masaüstü durumu, oturum kopyaları (tmpfs, 0700) |
 
 Her klasör `DESKHAND_CONFIG_DIR`, `DESKHAND_STATE_DIR`, `DESKHAND_CACHE_DIR`,

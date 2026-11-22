@@ -111,6 +111,27 @@ def satir_panel():
                   "deskhand panel --tepsi")
 
 
+def satir_mcp_surecleri():
+    """Bu kullanıcının çalışan `deskhand mcp` süreçleri; güncellemeden ÖNCE başlamış olan (eski kod) uyarı verir."""
+    import time
+
+    from . import surum
+    ss = surum.mcp_surecleri()
+    if not ss:
+        return _satir(_("MCP sunucuları"), "tamam", _("çalışan yok"))
+    parcalar = []
+    for p in ss:
+        ne = time.strftime("%d.%m %H:%M", time.localtime(p["started"])) if p["started"] else "?"
+        surum_m = p["version"] or _("{kurulu} öncesi (eski kod)").format(kurulu=p["installed"] or "?")
+        parcalar.append(f"pid {p['pid']} [{p['args']}] {surum_m}, {ne}")
+    eski = [p for p in ss if p["stale"]]
+    if eski:
+        return _satir(_("MCP sunucuları"), "uyari", "; ".join(parcalar),
+                      _("{n} sunucu kurulum güncellenmeden önce başlamış: istemcide MCP'yi yeniden bağla (/mcp)")
+                      .format(n=len(eski)))
+    return _satir(_("MCP sunucuları"), "tamam", "; ".join(parcalar))
+
+
 def satir_onay_kapsami():
     from . import guvenlik
     kap = guvenlik.onay_kapsami(taze=True)
@@ -321,7 +342,7 @@ def satir_dinleme():
                   _("pipewire, wireplumber, pipewire-pulse ve libpulse araçlarını kur"))
 
 
-SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_onay_kapsami, satir_hesap_oturumlari, satir_girdi_merkezi, satir_yardimcilar,
+SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_mcp_surecleri, satir_onay_kapsami, satir_hesap_oturumlari, satir_girdi_merkezi, satir_yardimcilar,
             satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_oturum_kopyalari, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
 
 
