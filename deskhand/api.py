@@ -565,23 +565,27 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
         _baslat(au, argv, fp, env, kopya, girdi)  # arka planda: masaustu.baslat → arka_ortak.korumali_baslat (bwrap)
     gunluk(f"ac | {ad} | {shlex.join(argv)}" + (f" | env {sorted(env)}" if env else ""))
     t0 = time.monotonic()
+    son_kwin = None  # son yutulan geçici pencere listesi hatası (zaman aşımında iletiye eklenir)
     while time.monotonic() - t0 < sure:
         time.sleep(0.25)
-        try:
+        try:  # yoklama gövdesinin TAMAMI (KWin geçici hatası au.baslik/sinif/yasak_mi/aktif'te de çıkabilir)
             yeni = tum_pencereler() - once
+            for w in yeni:
+                b, s = au.baslik(w), au.sinif(w)
+                if (b or s) and (not baslik or re.search(baslik, b, re.I)):
+                    y = yasak_mi(w)
+                    return {"status": "opened", "window": {"id": w, "title": "(yasak pencere)" if y else b,
+                                                           "class": s, "forbidden": bool(y)},
+                            "seconds": round(time.monotonic() - t0, 1)}
         except Dur as e:
             if e.kod != 7:
                 raise
-            continue  # geçici pencere listesi hatası: uygulama zaten başladı, süre bitene dek yoklamaya devam
-        for w in yeni:
-            b, s = au.baslik(w), au.sinif(w)
-            if (b or s) and (not baslik or re.search(baslik, b, re.I)):
-                y = yasak_mi(w)
-                return {"status": "opened", "window": {"id": w, "title": "(yasak pencere)" if y else b,
-                                                       "class": s, "forbidden": bool(y)},
-                        "seconds": round(time.monotonic() - t0, 1)}
-    return {"status": "timeout", "window": None, "seconds": round(time.monotonic() - t0, 1),
-            "message": _("{sn} sn içinde yeni pencere görünmedi (çıktı: {log})").format(sn=f"{sure:.0f}", log=log)}
+            son_kwin = e.mesaj  # geçici pencere listesi hatası: uygulama zaten başladı, süre bitene dek yoklamaya devam
+            continue
+    mesaj = _("{sn} sn içinde yeni pencere görünmedi (çıktı: {log})").format(sn=f"{sure:.0f}", log=log)
+    if son_kwin:
+        mesaj += "; " + _("KWin pencere listesi alınamadı: {hata}").format(hata=son_kwin)
+    return {"status": "timeout", "window": None, "seconds": round(time.monotonic() - t0, 1), "message": mesaj}
 
 
 # ---------------------------------------------------------------- akışlar

@@ -214,12 +214,25 @@ def yapisal(o: dict, sid: str, n: int) -> dict:
 
 # ---------------------------------------------------------------- anlık görüntü önbelleği
 
+_SAYAC = re.compile(r"(?:%\s*)?\d+(?:[.,]\d+)*(?:\s*%)?")
+_SAYAC_PAREN = re.compile(r"[(\[]\s*#\s*[)\]]")
+
+
+def baslik_norm(b: str | None) -> str:
+    """Pencere başlığını sayaçlardan arındır: rakam dizileri/yüzdeler → '#', parantez içi salt sayaç atılır, boşluklar
+    sadeleşir. "(3) Gmail" ≡ "(4) Gmail" ≡ "Gmail"; "İndiriliyor %45" ≡ "%46"; ama "A.txt — KWrite" ≠ "B.txt — KWrite"."""
+    s = _SAYAC.sub("#", b or "")
+    s = _SAYAC_PAREN.sub(" ", s)
+    return " ".join(s.split())
+
+
 class Anlik:
     """Bir observe sonucu: pencere, masaüstü, pencere boyutu, ögeler (numara = sıra + 1)."""
-    __slots__ = ("sid", "k", "masaustu", "boyut", "baslik", "zaman", "ogeler", "anahtarlar")
+    __slots__ = ("sid", "k", "masaustu", "boyut", "baslik", "zaman", "ogeler", "anahtarlar", "adres")
 
-    def __init__(self, sid, k, masaustu, boyut, baslik, ogeler):
+    def __init__(self, sid, k, masaustu, boyut, baslik, ogeler, adres=None):
         self.sid, self.k, self.masaustu, self.boyut, self.baslik = sid, k, masaustu, tuple(boyut), baslik
+        self.adres = adres or None  # web belgesinin adresi (parça dahil); web ref'lerinde bağlam denetimi
         self.zaman = time.monotonic()
         self.ogeler = ogeler
         self.anahtarlar = {anahtar(o): i for i, o in enumerate(ogeler)}

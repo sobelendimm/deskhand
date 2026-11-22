@@ -413,7 +413,7 @@
   "guvenlik.py:966"
  ],
  "; açılan başka pencereler: {pencereler}": [
-  "uygulama.py:784"
+  "uygulama.py:786"
  ],
  "; en yakın aday benzerliği {benzerlik}": [
   "eylem.py:1163"
@@ -428,7 +428,7 @@
   "ocr.py:598"
  ],
  "; çıktı: {log}": [
-  "uygulama.py:785"
+  "uygulama.py:787"
  ],
  "> /dev/diskaygıtı: diskin üzerine yazar": [
   "guvenlik.py:828",
@@ -456,7 +456,7 @@
   "guvenlik.py:1706"
  ],
  "Ajan panonun metnini okumak istiyor ({n} karakter)": [
-  "mcp_sunucu.py:1644"
+  "mcp_sunucu.py:1677"
  ],
  "Ajanın tüm girdilerini hemen durdurur (basılı tuşlar bırakılır).": [
   "gui/metinler.py:40"
@@ -667,7 +667,7 @@
   "cli.py:242"
  ],
  "DURDURULDU ({kod}): {mesaj}": [
-  "masaustu.py:1069"
+  "masaustu.py:1071"
  ],
  "DURDURULDU: {mesaj}": [
   "cli.py:517"
@@ -797,7 +797,7 @@
   "erisim.py:234"
  ],
  "GENxYÜK[xDERİNLİK] (varsayılan $DESKHAND_SANAL_BOYUT ya da {boyut})": [
-  "masaustu.py:1038"
+  "masaustu.py:1040"
  ],
  "GPU metin okuma (OCR)": [
   "doktor.py:223"
@@ -938,6 +938,10 @@
  "KWin pencere listesi alınamadı: {ayrinti}": [
   "arka_uc/kwin.py:220"
  ],
+ "KWin pencere listesi alınamadı: {hata}": [
+  "api.py:587",
+  "uygulama.py:788"
+ ],
  "KWin süreci doğrulanamadı (pid {pid})": [
   "kwin_oturum.py:949"
  ],
@@ -1033,7 +1037,7 @@
   "gui/metinler.py:184"
  ],
  "OCR satırının erişilebilirlik eylemi yok: via='mouse' kullan": [
-  "mcp_sunucu.py:1474"
+  "mcp_sunucu.py:1507"
  ],
  "ONAY İSTEYEN RİSKLİ EYLEMLER (yasak değil, insan onayı; --approved ya da panelden): oturumu/ekranı sonlandıran\ntuşlar (ctrl+alt+delete/backspace/F1-F12, meta+l, alt+sysrq+…) ve uçbirime yıkıcı komut yazma (rm -r, sudo,\ncurl | sh, mkfs, dd of=/dev/…, git push --force…). ~/.config/deskhand/uygulama-seviyeleri.txt (varsayılan: yok)\nuygulama başına 'DESEN = goruntule | tikla | tam' ile girdiyi sınırlar (goruntule: girdi yok; tikla: klavye yok).": [
   "cli.py:45"
@@ -1190,8 +1194,8 @@
  "UYARI: {uyari}": [
   "eylem.py:372",
   "eylem.py:1151",
-  "masaustu.py:1030",
-  "masaustu.py:1057"
+  "masaustu.py:1032",
+  "masaustu.py:1059"
  ],
  "UYGULAMA SEVİYESİ (erişilebilirlik çerçevesi): {baslik} ({uygulama}) bu eylemi kabul etmiyor": [
   "erisim.py:335"
@@ -1280,7 +1284,7 @@
   "ucbirim.py:382"
  ],
  "YOK": [
-  "masaustu.py:1015"
+  "masaustu.py:1017"
  ],
  "Yalnız DUR": [
   "gui/metinler.py:59"
@@ -1315,13 +1319,13 @@
   "erisim.py:932"
  ],
  "adım {i} ({arac}): geçersiz argüman: {alanlar}": [
-  "mcp_sunucu.py:2018"
+  "mcp_sunucu.py:2051"
  ],
  "adım {i}: desktop batch'in desktop değeriyle aynı olmalı": [
-  "mcp_sunucu.py:2001"
+  "mcp_sunucu.py:2034"
  ],
  "adım {i}: wait yalnız {{\"seconds\": 0-{en_cok}}} alır": [
-  "mcp_sunucu.py:2009"
+  "mcp_sunucu.py:2042"
  ],
  "ajan/komut satırı durdurdu": [
   "gui/metinler.py:24"
@@ -1335,10 +1339,10 @@
   "guvenlik.py:1190"
  ],
  "akış '{ad}' önceden onaylı (--onayli) adımlar içeriyor": [
-  "mcp_sunucu.py:1968"
+  "mcp_sunucu.py:2001"
  ],
  "akış adı yalnız harf/rakam/._- içermeli: {ad} (list ile adlara bak)": [
-  "api.py:612"
+  "api.py:616"
  ],
  "akış dosyası okunamadı: {hata}": [
   "akis.py:43"
@@ -1359,10 +1363,10 @@
   "akis.py:167"
  ],
  "akış yok: {ad} ({dizin})": [
-  "api.py:615"
+  "api.py:619"
  ],
  "akış {ad}: {pencere}": [
-  "mcp_sunucu.py:1956"
+  "mcp_sunucu.py:1989"
  ],
  "arayüz (python-pyqt6)": [
   "gui/saglik.py:22"
@@ -1425,7 +1429,7 @@
   "oturum/cli.py:120"
  ],
  "açıldı ({sn} sn)": [
-  "uygulama.py:774"
+  "uygulama.py:771"
  ],
  "basılı tutuldu ({dugme}, {sn} sn): pencere ({x},{y}) = ekran ({ex},{ey})": [
   "eylem.py:219"
@@ -1456,14 +1460,14 @@
   "mcp_sunucu.py:438"
  ],
  "başlangıç için from_ref YA DA from_x+from_y, bitiş için to_ref YA DA to_x+to_y ver": [
-  "mcp_sunucu.py:1768"
+  "mcp_sunucu.py:1801"
  ],
  "başlatılacak komut boş": [
   "arka_ortak.py:843"
  ],
  "başlatılamadı: {hata}": [
   "insan.py:57",
-  "masaustu.py:980"
+  "masaustu.py:982"
  ],
  "başlatılamadı: {komut} bulunamadı": [
   "kwin_oturum.py:1071",
@@ -1494,7 +1498,7 @@
   "mcp_sunucu.py:135"
  ],
  "bekleme: {kosul}": [
-  "mcp_sunucu.py:2206"
+  "mcp_sunucu.py:2239"
  ],
  "beklendi: {sn} sn": [
   "eylem.py:961"
@@ -1563,7 +1567,7 @@
   "masaustu.py:784"
  ],
  "bileşenler: {bilesenler}": [
-  "masaustu.py:1027"
+  "masaustu.py:1029"
  ],
  "bilinmeyen ayar yok sayıldı: {ayar}": [
   "ayarlar.py:108"
@@ -1587,7 +1591,7 @@
   "arka_uc/sanal.py:1001"
  ],
  "bilinmeyen oturum kararı: {karar}": [
-  "mcp_sunucu.py:1885"
+  "mcp_sunucu.py:1918"
  ],
  "bilinmeyen pencere işlemi: {islem}": [
   "eylem.py:1076"
@@ -1603,7 +1607,7 @@
   "eylem.py:686"
  ],
  "bilinmiyor": [
-  "mcp_sunucu.py:1200"
+  "mcp_sunucu.py:1232"
  ],
  "birden çok (ya da eşiğe yakın) eşleşme; --sira N ile seç ya da --bolge ile daralt": [
   "eylem.py:1171"
@@ -1667,7 +1671,7 @@
   "arka_uc/sanal.py:111"
  ],
  "bu sunucu yalnız görünmez masaüstünde çalışır": [
-  "mcp_sunucu.py:1115"
+  "mcp_sunucu.py:1147"
  ],
  "bu sunucu yalnız görünmez masaüstünde çalışır (deskhand-bg): desktop='background' ya da 'auto' kullan": [
   "mcp_sunucu.py:357"
@@ -1742,7 +1746,7 @@
   "cli.py:247"
  ],
  "deskhand-bg: yalnız görünmez masaüstü": [
-  "mcp_sunucu.py:1114"
+  "mcp_sunucu.py:1146"
  ],
  "deskhand-eis yok (libei + libxkbcommon + libsystemd geliştirme dosyaları gerekir): KWin arka planı kullanılamaz, Xvfb kullanılacak": [
   "doktor.py:148"
@@ -1854,7 +1858,7 @@
   "arka_uc/kde_goruntu.py:59"
  ],
  "ekran görüntüsü: {pencere}": [
-  "mcp_sunucu.py:1318"
+  "mcp_sunucu.py:1351"
  ],
  "ekran kartı yok: yalnız tesseract kullanılır": [
   "doktor.py:228"
@@ -2042,7 +2046,7 @@
   "guvenlik.py:855"
  ],
  "from_ref ve to_ref aynı pencerede olmalı": [
-  "mcp_sunucu.py:1780"
+  "mcp_sunucu.py:1813"
  ],
  "genişlik ve yükseklik en az 1 olmalı": [
   "eylem.py:1099"
@@ -2063,7 +2067,7 @@
   "arka_uc/kwin.py:129"
  ],
  "geçersiz başlık deseni: {hata}": [
-  "mcp_sunucu.py:2205"
+  "mcp_sunucu.py:2238"
  ],
  "geçersiz ekran boyutu: {boyut}": [
   "kwin_oturum.py:816"
@@ -2196,20 +2200,20 @@
   "cli.py:451"
  ],
  "görünmez ikinci masaüstü (arka plan kipi)": [
-  "masaustu.py:1034"
+  "masaustu.py:1036"
  ],
  "görünmez ikinci masaüstünde (sanal arka uç)": [
   "cli.py:336",
   "cli.py:337"
  ],
  "görünmez masaüstü başlatıldı": [
-  "mcp_sunucu.py:1849"
+  "mcp_sunucu.py:1882"
  ],
  "görünmez masaüstünde erişilebilirlik hazırlanamadı (at-spi2-core kurulu mu?)": [
   "erisim.py:135"
  ],
  "görüntü": [
-  "mcp_sunucu.py:1468"
+  "mcp_sunucu.py:1501"
  ],
  "görüntü (python-pillow)": [
   "gui/saglik.py:24"
@@ -2237,7 +2241,7 @@
   "onay.py:65"
  ],
  "gözlem: {pencere}": [
-  "mcp_sunucu.py:1189"
+  "mcp_sunucu.py:1221"
  ],
  "günlüğe metni yazma": [
   "cli.py:397",
@@ -2278,7 +2282,7 @@
   "onay_hedef.py:93"
  ],
  "hedef: {hedef}": [
-  "mcp_sunucu.py:1519"
+  "mcp_sunucu.py:1552"
  ],
  "hepsi: ayar dosyasında 'kart' var ama panel teyit etmiyor (panel kapalı ya da panel dışında yazılmış); tüm onaylar açık": [
   "doktor.py:115"
@@ -2324,7 +2328,7 @@
  ],
  "kapalı": [
   "cli.py:246",
-  "masaustu.py:1017",
+  "masaustu.py:1019",
   "oturum/cli.py:90"
  ],
  "kapalı (gerektiğinde açılır: deskhand desktop start)": [
@@ -2349,7 +2353,7 @@
   "mcp_sunucu.py:371"
  ],
  "karar alınamadı: {hata}": [
-  "mcp_sunucu.py:1127"
+  "mcp_sunucu.py:1159"
  ],
  "karar: {karar}": [
   "oturum/cli.py:118"
@@ -2376,7 +2380,7 @@
   "eylem.py:242"
  ],
  "kaydırma: {pencere}": [
-  "mcp_sunucu.py:1713"
+  "mcp_sunucu.py:1746"
  ],
  "kaydırıldı: {yon} ({adim} adım)": [
   "erisim.py:1177"
@@ -2400,10 +2404,10 @@
   "guvenlik.py:740"
  ],
  "kind=color için color gerekli": [
-  "mcp_sunucu.py:1414"
+  "mcp_sunucu.py:1447"
  ],
  "kind=icon için name gerekli": [
-  "mcp_sunucu.py:1410"
+  "mcp_sunucu.py:1443"
  ],
  "klavye": [
   "guvenlik.py:1124"
@@ -2425,7 +2429,7 @@
   "guvenlik.py:1456"
  ],
  "koordinat": [
-  "mcp_sunucu.py:1467"
+  "mcp_sunucu.py:1500"
  ],
  "koordinat için shot_id gerekli: önce screenshot ya da read_text çağır": [
   "mcp_sunucu.py:673"
@@ -2475,13 +2479,13 @@
   "mcp_sunucu.py:606"
  ],
  "kullanıcı onayı alınamadı: {neden}. Akış çalıştırılmadı; kullanıcıya bildir.": [
-  "mcp_sunucu.py:1972"
+  "mcp_sunucu.py:2005"
  ],
  "kullanıcı onayı alınamadı: {neden}. Eylem yapılmadı; kullanıcıya bildir, kendi kendine yeniden deneme. ({mesaj})": [
   "mcp_sunucu.py:638"
  ],
  "kullanıcı onayı alınamadı: {neden}. Pano okunmadı; kullanıcıya bildir, kendi kendine yeniden deneme.": [
-  "mcp_sunucu.py:1647"
+  "mcp_sunucu.py:1680"
  ],
  "kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı açıkça izin verdiyse)": [
   "cli.py:339",
@@ -2528,7 +2532,7 @@
   "insan.py:148"
  ],
  "kullanıcının panosu": [
-  "mcp_sunucu.py:1643"
+  "mcp_sunucu.py:1676"
  ],
  "kullanıcının panosuna görünmez masaüstü ortamından erişilemez (WAYLAND_DISPLAY sahte)": [
   "arka_uc/kde.py:614"
@@ -2590,13 +2594,13 @@
   "masaustu.py:364"
  ],
  "metin erişilebilirlik ağacında hiç görülmedi; pencere önde değilken OCR yapılmaz — pencereyi öne getirip yeniden dene ya da window deseniyle arka plan masaüstünü kullan": [
-  "mcp_sunucu.py:2306"
+  "mcp_sunucu.py:2339"
  ],
  "metin okuma (tesseract)": [
   "gui/saglik.py:15"
  ],
  "metin okuma: {pencere}": [
-  "mcp_sunucu.py:1376"
+  "mcp_sunucu.py:1409"
  ],
  "metin sanal panoya sığmıyor (en çok {mb} MB)": [
   "arka_uc/kwin.py:564",
@@ -2612,14 +2616,14 @@
   "mesgul.py:544"
  ],
  "meşgul durumu okunamadı: {hata}": [
-  "mcp_sunucu.py:1078"
+  "mcp_sunucu.py:1110"
  ],
  "meşgul modülü yok": [
-  "mcp_sunucu.py:1081",
-  "mcp_sunucu.py:1118"
+  "mcp_sunucu.py:1113",
+  "mcp_sunucu.py:1150"
  ],
  "meşgul modülü yok: güvenli taraf": [
-  "mcp_sunucu.py:1119"
+  "mcp_sunucu.py:1151"
  ],
  "meşgul modülü yok: güvenli tarafta görünmez masaüstü seçildi": [
   "mcp_sunucu.py:366"
@@ -2637,7 +2641,7 @@
   "arka_uc/sanal.py:1096"
  ],
  "move için x ve y gerekli": [
-  "mcp_sunucu.py:1926"
+  "mcp_sunucu.py:1959"
  ],
  "move: X Y (ekran pikseli); resize: GENİŞLİK YÜKSEKLİK": [
   "cli.py:395"
@@ -2720,7 +2724,7 @@
   "guvenlik.py:1705"
  ],
  "oturum hazırlanamadı: {hata}": [
-  "mcp_sunucu.py:1857"
+  "mcp_sunucu.py:1890"
  ],
  "oturum kilidi durumu okunamadı (ScreenSaver / logind): güvenli tarafta girdi gönderilmez ({ne})": [
   "arka_uc/kde.py:305"
@@ -2735,10 +2739,10 @@
   "arka_ortak.py:750"
  ],
  "oturum köprüsü yok: görünmez masaüstünde uygulama başlatılamaz; '{uygulama}' başlatılmadı. desktop='foreground' (kullanıcının ekranı) kullan ya da kullanıcıya bildir.": [
-  "mcp_sunucu.py:1840"
+  "mcp_sunucu.py:1873"
  ],
  "oturum politikası: {karar}": [
-  "mcp_sunucu.py:1882"
+  "mcp_sunucu.py:1915"
  ],
  "oturum soketi kullanıcının gerçek soketinin sert bağı: {yol}; bağlanılmadı": [
   "kwin_oturum.py:247"
@@ -2777,7 +2781,7 @@
   "doktor.py:59"
  ],
  "panel kapalı (hassas eylemler reddedilir)": [
-  "mcp_sunucu.py:1102"
+  "mcp_sunucu.py:1134"
  ],
  "panel kapalıydı": [
   "gui/metinler.py:101"
@@ -2816,7 +2820,7 @@
   "guvenlik.py:1838"
  ],
  "pano: {islem}": [
-  "mcp_sunucu.py:1626"
+  "mcp_sunucu.py:1659"
  ],
  "panodan yapıştırma": [
   "guvenlik.py:1705"
@@ -2902,7 +2906,7 @@
   "mcp_sunucu.py:136"
  ],
  "pencere yöneticisi başlatma": [
-  "masaustu.py:1041"
+  "masaustu.py:1043"
  ],
  "pencere yöneticisi istenenden farklı bir geometri verdi: istenen {istenen}, olan {olan}": [
   "eylem.py:1124"
@@ -2921,10 +2925,10 @@
   "eylem.py:1137"
  ],
  "pencere {islem}: {pencere}": [
-  "mcp_sunucu.py:1911"
+  "mcp_sunucu.py:1944"
  ],
  "pencere önde değil; ön planda bekleme yalnız erişilebilirlik ağacıyla (pencere öne getirilmez)": [
-  "mcp_sunucu.py:2240"
+  "mcp_sunucu.py:2273"
  ],
  "pencere öne getirme": [
   "arka_uc/kde.py:806"
@@ -2961,51 +2965,54 @@
  ],
  "red": [
   "mcp_sunucu.py:639",
-  "mcp_sunucu.py:1648",
-  "mcp_sunucu.py:1973"
+  "mcp_sunucu.py:1681",
+  "mcp_sunucu.py:2006"
  ],
  "reddedildi": [
   "gui/metinler.py:100"
  ],
  "ref bayat: {sid} anlık görüntüsü bilinmiyor (eskidi ya da başka bir sunucu oturumunun); eylem yapılmadı. observe çağırıp yeni ref kullan": [
-  "mcp_sunucu.py:928"
+  "mcp_sunucu.py:945"
  ],
  "ref bayat: {sid} anlık görüntüsünün süresi doldu (120 sn); eylem yapılmadı. observe çağırıp yeni ref kullan": [
-  "mcp_sunucu.py:926"
+  "mcp_sunucu.py:943"
  ],
  "ref başka masaüstüne ait; eylem yapılmadı. Aynı desktop değeriyle observe çağır": [
-  "mcp_sunucu.py:932"
- ],
- "ref başka pencereye ait; eylem yapılmadı. Bu pencere için observe çağır": [
-  "mcp_sunucu.py:936"
- ],
- "ref biçimi '<snapshot_id>:N' olmalı (observe çıktısındaki gibi): {ref}": [
-  "mcp_sunucu.py:920"
- ],
- "ref ile element birlikte verilmez: tek hedef": [
-  "mcp_sunucu.py:1565"
- ],
- "ref ile x/y birlikte verilmez: tek nokta": [
-  "mcp_sunucu.py:1710"
- ],
- "ref {ref}: anlık görüntüde {n} numaralı öge yok; observe çıktısındaki ref'leri kullan": [
   "mcp_sunucu.py:949"
  ],
+ "ref başka pencereye ait; eylem yapılmadı. Bu pencere için observe çağır": [
+  "mcp_sunucu.py:953"
+ ],
+ "ref biçimi '<snapshot_id>:N' olmalı (observe çıktısındaki gibi): {ref}": [
+  "mcp_sunucu.py:937"
+ ],
+ "ref ile element birlikte verilmez: tek hedef": [
+  "mcp_sunucu.py:1598"
+ ],
+ "ref ile x/y birlikte verilmez: tek nokta": [
+  "mcp_sunucu.py:1743"
+ ],
+ "ref {ref}: anlık görüntüde {n} numaralı öge yok; observe çıktısındaki ref'leri kullan": [
+  "mcp_sunucu.py:966"
+ ],
  "ref'in penceresi kapandı ya da artık yok; eylem yapılmadı. get_status ve observe çağır": [
-  "mcp_sunucu.py:941"
+  "mcp_sunucu.py:958"
  ],
  "ref'in penceresinin başlığı değişti (başka belge/sekme olabilir); eylem yapılmadı. observe çağırıp yeni ref kullan. Başlığı sürekli değişen pencerelerde (indirme yüzdesi, \"(3) Gmail\") ref yerine window deseni + text/koordinat kullan": [
-  "mcp_sunucu.py:957"
+  "mcp_sunucu.py:989"
  ],
  "ref'in penceresinin boyutu değişti ({once} → {simdi}); eylem yapılmadı. observe çağırıp yeni ref kullan": [
-  "mcp_sunucu.py:944"
+  "mcp_sunucu.py:961"
+ ],
+ "ref'in sayfası değişti (adres: {once} → {simdi}); eylem yapılmadı. observe çağırıp yeni ref kullan": [
+  "mcp_sunucu.py:981"
  ],
  "ref'teki yazı artık yerinde değil (ekran değişti): eylem yapılmadı; observe çağırıp yeni ref kullan": [
-  "mcp_sunucu.py:978"
+  "mcp_sunucu.py:1010"
  ],
  "ref'teki öge artık görüş alanında değil: eylem yapılmadı; observe çağırıp yeni ref kullan": [
   "erisim.py:1101",
-  "mcp_sunucu.py:1010"
+  "mcp_sunucu.py:1042"
  ],
  "ref'teki öge artık yok (arayüz değişti): eylem yapılmadı; observe çağırıp yeni ref kullan": [
   "erisim.py:925"
@@ -3017,13 +3024,13 @@
   "eylem.py:1206"
  ],
  "resize için width ve height gerekli": [
-  "mcp_sunucu.py:1928"
+  "mcp_sunucu.py:1961"
  ],
  "rm -r: özyinelemeli silme (geri alınamaz)": [
   "guvenlik.py:954"
  ],
  "role yalnız element hedefiyle kullanılır": [
-  "mcp_sunucu.py:1466"
+  "mcp_sunucu.py:1499"
  ],
  "rolü değişti": [
   "erisim.py:934"
@@ -3035,7 +3042,7 @@
   "guvenlik.py:794"
  ],
  "run için name gerekli (action=list ile adlar)": [
-  "mcp_sunucu.py:1955"
+  "mcp_sunucu.py:1988"
  ],
  "sanal ekran adı kullanıcının gerçek ekranıyla aynı ({ekran}); bağlanılmadı": [
   "masaustu.py:515"
@@ -3049,13 +3056,13 @@
   "arka_uc/sanal.py:1305"
  ],
  "sanal masaüstü AÇIK (KWin {surum}): {ekran} {genislik}x{yukseklik} | kafes {kafes} (bellek {bellek}) | ses {ses} | XWayland {xwayland} | GPU {gpu}": [
-  "masaustu.py:1019"
+  "masaustu.py:1021"
  ],
  "sanal masaüstü AÇIK: {ekran} {genislik}x{yukseklik} | kafes {kafes} (bellek {bellek}) | ses {ses} | openbox {openbox}": [
-  "masaustu.py:1024"
+  "masaustu.py:1026"
  ],
  "sanal masaüstü KAPALI": [
-  "masaustu.py:1064"
+  "masaustu.py:1066"
  ],
  "sanal masaüstü bağlantısı koptu: {hata}": [
   "arka_uc/sanal.py:516"
@@ -3079,7 +3086,7 @@
   "mcp_sunucu.py:139"
  ],
  "sanal masaüstü kapatıldı": [
-  "masaustu.py:1058"
+  "masaustu.py:1060"
  ],
  "sanal masaüstü kaydı geçersiz (ekran no): {no}": [
   "masaustu.py:327"
@@ -3091,7 +3098,7 @@
   "cli.py:181"
  ],
  "sanal masaüstü zaten kapalı": [
-  "masaustu.py:1058"
+  "masaustu.py:1060"
  ],
  "sanal masaüstünde pencere yöneticisi yok: pencere durumu değiştirilemez": [
   "arka_uc/sanal.py:329"
@@ -3154,13 +3161,13 @@
   "gorsel.py:171"
  ],
  "simge/renk arama: {pencere}": [
-  "mcp_sunucu.py:1405"
+  "mcp_sunucu.py:1438"
  ],
  "since başka bir pencerenin anlık görüntüsü; bu pencere için since olmadan observe çağır": [
-  "mcp_sunucu.py:1202"
+  "mcp_sunucu.py:1234"
  ],
  "since: {sid} anlık görüntüsü {durum}; since olmadan observe çağır": [
-  "mcp_sunucu.py:1199"
+  "mcp_sunucu.py:1231"
  ],
  "sira 1..{en_cok} olmalı": [
   "web.py:541"
@@ -3181,7 +3188,7 @@
   "akis.py:164"
  ],
  "submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)": [
-  "mcp_sunucu.py:1578"
+  "mcp_sunucu.py:1611"
  ],
  "systemctl ile masaüstü/oturum hizmetini durdurma": [
   "guvenlik.py:778"
@@ -3197,7 +3204,7 @@
   "gui/metinler.py:100"
  ],
  "süresi doldu": [
-  "mcp_sunucu.py:1200"
+  "mcp_sunucu.py:1232"
  ],
  "süreç bellek kafesine alınamadı ({kafes}): {hata}": [
   "arka_ortak.py:829"
@@ -3209,10 +3216,10 @@
   "eylem.py:935"
  ],
  "sürükleme: {bas} → {son}": [
-  "mcp_sunucu.py:1806"
+  "mcp_sunucu.py:1839"
  ],
  "sürükleme: {pencere}": [
-  "mcp_sunucu.py:1771"
+  "mcp_sunucu.py:1804"
  ],
  "sürüklendi ({dugme}): ({x1},{y1}) → ({x2},{y2}) {sn} sn": [
   "eylem.py:955"
@@ -3227,7 +3234,7 @@
   "cli.py:333"
  ],
  "sınırsız": [
-  "masaustu.py:1016"
+  "masaustu.py:1018"
  ],
  "tam ekran": [
   "mesgul.py:551"
@@ -3236,7 +3243,7 @@
   "mesgul.py:616"
  ],
  "tam olarak BİR hedef ver: text, icon, element ya da x+y (+shot_id)": [
-  "mcp_sunucu.py:1461"
+  "mcp_sunucu.py:1494"
  ],
  "taşıma": [
   "arka_uc/__init__.py:136",
@@ -3252,14 +3259,14 @@
   "guvenlik.py:758"
  ],
  "toplu adım": [
-  "mcp_sunucu.py:2026",
-  "mcp_sunucu.py:2029"
+  "mcp_sunucu.py:2059",
+  "mcp_sunucu.py:2062"
  ],
  "toplu bekleme": [
-  "mcp_sunucu.py:2080"
+  "mcp_sunucu.py:2113"
  ],
  "toplu iş": [
-  "mcp_sunucu.py:2059"
+  "mcp_sunucu.py:2092"
  ],
  "truncate -s 0: dosyanın içeriğini siler": [
   "guvenlik.py:754"
@@ -3272,20 +3279,20 @@
   "arka_uc/sanal.py:1069"
  ],
  "tuş {tuslar}: {pencere}": [
-  "mcp_sunucu.py:1668"
+  "mcp_sunucu.py:1701"
  ],
  "tuş: {kombinasyon}": [
   "eylem.py:719",
   "eylem.py:775",
   "guvenlik.py:1405",
-  "mcp_sunucu.py:1683"
+  "mcp_sunucu.py:1716"
  ],
  "tüm ekran": [
   "mcp_sunucu.py:634",
-  "mcp_sunucu.py:1189",
-  "mcp_sunucu.py:1318",
-  "mcp_sunucu.py:1376",
-  "mcp_sunucu.py:1405"
+  "mcp_sunucu.py:1221",
+  "mcp_sunucu.py:1351",
+  "mcp_sunucu.py:1409",
+  "mcp_sunucu.py:1438"
  ],
  "tüm oturum kopyalarını sil": [
   "oturum/cli.py:75"
@@ -3314,7 +3321,7 @@
   "erisim.py:1306"
  ],
  "tıklama: {hedef} @ {pencere}": [
-  "mcp_sunucu.py:1467"
+  "mcp_sunucu.py:1500"
  ],
  "tıklandı ({dugme}{tekrar}): pencere ({x},{y}) = ekran ({ex},{ey})": [
   "eylem.py:230"
@@ -3335,7 +3342,7 @@
   "mcp_sunucu.py:141"
  ],
  "uygulama aç: {uygulama}": [
-  "mcp_sunucu.py:1831"
+  "mcp_sunucu.py:1864"
  ],
  "uygulama açma": [
   "arka_uc/kde.py:907"
@@ -3363,11 +3370,11 @@
   "ucbirim.py:372"
  ],
  "value gerekli (stable dışındaki koşullar)": [
-  "mcp_sunucu.py:2200"
+  "mcp_sunucu.py:2233"
  ],
  "var": [
   "gui/metinler.py:180",
-  "masaustu.py:1025"
+  "masaustu.py:1027"
  ],
  "var (panel hazır girdi sunuyor)": [
   "doktor.py:128"
@@ -3376,7 +3383,7 @@
   "doktor.py:213"
  ],
  "via='action' yalnız ref/element hedefiyle, button='left' ile ve değiştirici tuşsuz kullanılır": [
-  "mcp_sunucu.py:1463"
+  "mcp_sunucu.py:1496"
  ],
  "video/film izliyor ({oynatici})": [
   "mesgul.py:631"
@@ -3389,21 +3396,21 @@
   "web.py:642"
  ],
  "window ya da ref gerekli": [
-  "mcp_sunucu.py:1567",
-  "mcp_sunucu.py:1712",
-  "mcp_sunucu.py:1770"
+  "mcp_sunucu.py:1600",
+  "mcp_sunucu.py:1745",
+  "mcp_sunucu.py:1803"
  ],
  "wl-copy başarısız ({kod}): {hata}": [
   "arka_uc/kde.py:704",
   "arka_uc/kwin.py:550"
  ],
  "write için text gerekli ('' panoyu temizler)": [
-  "mcp_sunucu.py:1630"
+  "mcp_sunucu.py:1663"
  ],
  "x ve y birlikte verilmeli": [
-  "mcp_sunucu.py:1477",
-  "mcp_sunucu.py:1724",
-  "mcp_sunucu.py:1787"
+  "mcp_sunucu.py:1510",
+  "mcp_sunucu.py:1757",
+  "mcp_sunucu.py:1820"
  ],
  "x,y (varsayılan: pencere ortası)": [
   "cli.py:404"
@@ -3445,15 +3452,15 @@
   "mcp_sunucu.py:137"
  ],
  "yasak/hassas: yapılmadı: {neden}": [
-  "mcp_sunucu.py:1193",
-  "mcp_sunucu.py:1487",
-  "mcp_sunucu.py:1792",
-  "mcp_sunucu.py:1916",
-  "mcp_sunucu.py:1962",
-  "mcp_sunucu.py:2213"
+  "mcp_sunucu.py:1225",
+  "mcp_sunucu.py:1520",
+  "mcp_sunucu.py:1825",
+  "mcp_sunucu.py:1949",
+  "mcp_sunucu.py:1995",
+  "mcp_sunucu.py:2246"
  ],
  "yasak/hassas: yapılmadı: {uygulama} için oturum politikası 'kapali'": [
-  "mcp_sunucu.py:1871"
+  "mcp_sunucu.py:1904"
  ],
  "yazma kesildi": [
   "eylem.py:335",
@@ -3468,7 +3475,7 @@
   "eylem.py:264"
  ],
  "yazı: {pencere}": [
-  "mcp_sunucu.py:1568"
+  "mcp_sunucu.py:1601"
  ],
  "yazılacak metin yok: pano yaz <metin> ya da metni stdin'den ver": [
   "cli.py:205"
@@ -3497,9 +3504,9 @@
  ],
  "yok": [
   "gui/metinler.py:181",
-  "masaustu.py:1021",
-  "masaustu.py:1025",
-  "mcp_sunucu.py:1102",
+  "masaustu.py:1023",
+  "masaustu.py:1027",
+  "mcp_sunucu.py:1134",
   "oturum/cli.py:89"
  ],
  "yok: panel kapalıyken her komut kendi girdi sürecini açar (ilk girdi ~0,7 sn gecikir)": [
@@ -3519,10 +3526,10 @@
   "mcp_sunucu.py:136"
  ],
  "zaten açık": [
-  "masaustu.py:1051"
+  "masaustu.py:1053"
  ],
  "zaten açıktı, öne geldi ({sn} sn)": [
-  "uygulama.py:780"
+  "uygulama.py:777"
  ],
  "zip -TT: komut çalıştırır": [
   "guvenlik.py:802"
@@ -3716,13 +3723,13 @@
   "akis.py:259"
  ],
  "{sn} sn içinde uygun pencere açılmadı": [
-  "uygulama.py:783"
+  "uygulama.py:785"
  ],
  "{sn} sn içinde yanıt yok": [
   "mesgul.py:504"
  ],
  "{sn} sn içinde yeni pencere görünmedi (çıktı: {log})": [
-  "api.py:584"
+  "api.py:585"
  ],
  "{tus} boşta görünüyor.": [
   "gui/metinler.py:165"
@@ -3731,10 +3738,10 @@
   "uygulama.py:701"
  ],
  "{uygulama} görünmez masaüstünde açılamaz (şifre deposu ya da kasa gerektiriyor); kullanıcı meşgul değilse desktop='foreground'.": [
-  "mcp_sunucu.py:1867"
+  "mcp_sunucu.py:1900"
  ],
  "{uygulama} kullanıcının ekranında açık; aynı anda iki oturum çakışır. Kullanıcı kapatınca yeniden dene ya da kullanıcıya sor.": [
-  "mcp_sunucu.py:1862"
+  "mcp_sunucu.py:1895"
  ],
  "{uygulama} userData yok (hiç açılmamış)": [
   "oturum/chromium.py:86"

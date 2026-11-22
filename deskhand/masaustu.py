@@ -971,7 +971,9 @@ def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, g
         argv.insert(argv.index("run") + 1, "--nosocket=pulseaudio")
     if tur(d) == "kwin" and d.get("xwayland"):  # Gecko (Firefox…) XWayland'den: yerel Wayland'de erişilebilirlik koordinatları mutlak değil
         from . import kwin_oturum
-        argv, chromium_env = kwin_oturum.chromium_x11(argv)  # Chromium/Electron: aynı gerekçe (--ozone-platform=x11)
+        # Chromium/Electron: aynı gerekçe (--ozone-platform=x11). Flatpak UYGULAMASI hariç: fallback-x11 yetkisiyle gelen
+        # Flatpak uygulamasına WAYLAND varken X soketi verilmez (sandbox'ta X yok) → X11 bayrağı açılmazlığa yol açar.
+        argv, chromium_env = (argv, {}) if _flatpak_run_mi(argv) else kwin_oturum.chromium_x11(argv)
         env = {**kwin_oturum.gecko_ipuclari(argv), **chromium_env, **(env or {})} or None
     try:
         return korumali_baslat(d, argv, uygulama_ortami(d, env), uygulama_baglari(d), kopya=kopya, girdi=girdi,

@@ -912,6 +912,23 @@ def _ocr_topla(k: str) -> list[dict]:
     return [gozlem.ocr_ogesi(s) for s in r["items"] if gozlem.temiz(s["text"])]
 
 
+def kisalt_adres(a: str, n: int = 80) -> str:
+    return a if len(a) <= n else a[:n - 1] + "…"
+
+
+def _web_adresi(k: str) -> str | None:
+    """Pencerenin şu anki web belgesi adresi (parça dahil); okunamazsa None (başlık denetimine düşülür)."""
+    try:
+        a = _web().sayfa_bilgisi(k).get("adres")
+    except hata.Dur as e:
+        if e.kod in (10, 13):
+            raise
+        return None
+    except Exception:  # noqa: BLE001  (adres bağlam ipucudur; okunamazsa başlık denetimi var)
+        return None
+    return a or None
+
+
 def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str | None]:
     """ref → (pencere kimliği, gözlem ögesi, anlık görüntüdeki pencere başlığı). Anlık görüntü düzeyindeki bayatlık burada, ÖGE düzeyindeki doğrulama
     çekirdekte (erisim.ref_oge_sec; güncel ağaç) yapılır. Üç neden ayrı iletilir: snapshot / window / element."""
@@ -949,11 +966,26 @@ def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str | None]:
         raise _ref_hatasi("element", _("ref {ref}: anlık görüntüde {n} numaralı öge yok; observe çıktısındaki "
                                        "ref'leri kullan").format(ref=ref, n=n))
     _SON.k = an.k
-    # Başlık denetimi YALNIZ OCR ref'lerinde: OCR ögesi yalnız ekrandaki yazı + kutudur, aynı pencerede başka belge/sekme
-    # aynı yerde aynı yazıyı gösterebilir. Ağaç/web ögeleri ise eylem anında veri yolu adı + nesne yolu + rol/ad ile
-    # yeniden doğrulanır (erisim.ref_oge_sec); başlığı sürekli değişen sayfalarda ("(3) Gmail", sayaçlar) ref bozulmasın.
-    ocr_ref = o.get("kaynak") == "ocr"
-    if ocr_ref and baslik_simdi != an.baslik:
+    # Bağlam ("aynı nesne" değil "aynı belge/sayfa mı") denetimi; öge kimliği (erisim.ref_oge_sec) yalnız nesneyi doğrular,
+    # SPA gezinmesinde (Gmail A→B iletisi) aynı düğüm başka bağlamı gösterir:
+    #  - web ref'i: belge ADRESİ (parça dahil) aynı olmalı; adres okunamazsa normalize başlığa düşülür;
+    #  - ağaç ref'i: NORMALİZE başlık ("(3) Gmail" ≡ "(4) Gmail", yüzde/sayaç atılır; "A.txt" ≠ "B.txt");
+    #  - OCR ref'i: TAM başlık (yalnız yazı + kutu, en zayıf kimlik).
+    kaynak = o.get("kaynak")
+    ocr_ref = kaynak == "ocr"
+    degisti = None
+    if kaynak == "web" and an.adres:
+        simdi = _web_adresi(an.k)
+        if simdi:
+            if simdi != an.adres:
+                raise _ref_hatasi("window", _("ref'in sayfası değişti (adres: {once} → {simdi}); eylem yapılmadı. observe "
+                                              "çağırıp yeni ref kullan").format(once=kisalt_adres(an.adres),
+                                                                                simdi=kisalt_adres(simdi)))
+            degisti = False
+    if degisti is None:
+        degisti = (baslik_simdi != an.baslik) if ocr_ref else \
+            (gozlem.baslik_norm(baslik_simdi) != gozlem.baslik_norm(an.baslik))
+    if degisti:
         raise _ref_hatasi("window", _("ref'in penceresinin başlığı değişti (başka belge/sekme olabilir); eylem "
                                       "yapılmadı. observe çağırıp yeni ref kullan. Başlığı sürekli değişen pencerelerde "
                                       "(indirme yüzdesi, \"(3) Gmail\") ref yerine window deseni + text/koordinat kullan"))
@@ -1218,7 +1250,8 @@ def observe(
         else:
             liste = gozlem.gorunur_suz(agac, interactive_only) + satirlar
         sid = GOZLEM.yeni_kimlik()
-        GOZLEM.ekle(gozlem.Anlik(sid, k, au.ad, pb["geometry"][2:], pb["title"], liste))
+        GOZLEM.ekle(gozlem.Anlik(sid, k, au.ad, pb["geometry"][2:], pb["title"], liste,
+                                 adres=(sayfa or {}).get("adres") if kaynak == "web" else None))
         _SON.k = k
         kaynaklar = [x for x in (kaynak, "ocr" if ocr_ac else None) if x]
         w, h = pb["geometry"][2:]
