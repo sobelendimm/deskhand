@@ -403,8 +403,16 @@ QT_PENCERE = ("import sys\nfrom PyQt6.QtWidgets import QApplication, QWidget\nap
               "int(sys.argv[3])); w.show(); app.exec()")
 
 
+# Xvfb türünde test penceresi: kendi X bağlantısıyla tek bir Xlib penceresi (süreç, pencere kapanınca/öldürülünce biter)
+X_PENCERE = ("import sys, time\nfrom Xlib import X, display\nbaslik, x, y, g, h = sys.argv[1], *map(int, sys.argv[2:6])\n"
+             "d = display.Display()\nek = d.screen()\nw = ek.root.create_window(x, y, g, h, 0, ek.root_depth, X.InputOutput, "
+             "X.CopyFromParent, background_pixel=ek.white_pixel, event_mask=X.StructureNotifyMask)\nw.set_wm_name(baslik)\n"
+             "w.set_wm_normal_hints(flags=(1 << 2) | (1 << 0), x=x, y=y, width=g, height=h)\nw.map()\nd.sync()\n"
+             "try:\n    while True:\n        d.next_event()\nexcept Exception:\n    pass\n")
+
+
 def x_pencere(baslik, x, y, g, h):
-    """Kendi bağlantısıyla sanal ekranda bir pencere (kapatma XKillClient'ı yalnız bu bağlantıyı öldürür). KWin türünde
+    """Ayrı alt süreçte sanal ekranda bir pencere (kapatma XKillClient'ı yalnız o süreci öldürür). KWin türünde
     Wayland Qt penceresi (aynı başlık/boyut), sonra arka ucun taşı yöntemiyle (x, y)'ye."""
     if KW:
         au.baslat([sys.executable, "-c", QT_PENCERE, baslik, str(g), str(h)])
@@ -413,18 +421,11 @@ def x_pencere(baslik, x, y, g, h):
             au.tasi(k, x, y)
             bekle(lambda: au.geometri(k)[:2] == (x, y), 3, 0.05)
         return None, None, k
-    from Xlib import X
-    dpy = masaustu.x_ac(d["ekran"])
-    ek = dpy.screen()
-    w = ek.root.create_window(x, y, g, h, 0, ek.root_depth, X.InputOutput, X.CopyFromParent,
-                              background_pixel=ek.white_pixel, event_mask=X.StructureNotifyMask)
-    w.set_wm_name(baslik)
-    w.set_wm_normal_hints(flags=(1 << 2) | (1 << 0), x=x, y=y, width=g, height=h)  # PPosition|USPosition benzeri
-    w.map()
-    dpy.sync()
-    BAGLANTILAR.append(dpy)
-    k = bekle(lambda: next((k for k, b, _ in au.pencereler(re.escape(baslik))), None), 10, 0.05)
-    return dpy, w, k
+    # Pencere ayrı bir ALT süreçte (testin torunu): Xvfb'de XRes sahibi test sürecinin kendisi görünürse "ajanın kendi
+    # istemcisi" koruması (Dur 10) haklı olarak devreye girerdi; kendi.py kümesi YAMALANMAZ.
+    au.baslat([sys.executable, "-c", X_PENCERE, baslik, str(x), str(y), str(g), str(h)])
+    k = bekle(lambda: next((k for k, b, _ in au.pencereler(re.escape(baslik))), None), 15, 0.05)
+    return None, None, k
 
 
 _, _, KA = x_pencere("pencere-test A", 60, 70, 300, 200)
