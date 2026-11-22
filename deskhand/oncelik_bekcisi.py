@@ -39,12 +39,24 @@ def _ioprio_idle(tid: int) -> None:
     _libc.syscall(SYS_IOPRIO_SET, IOPRIO_WHO_PROCESS, tid, IOPRIO_CLASS_IDLE << 13)
 
 
-def surecler(cg: str) -> list[int]:
+OKUMA_HATASI_AZAMI = 60  # art arda bu kadar okuma hatası (aralık 0,5 sn → ~30 sn) sonra bekçi çıkar
+
+
+def surecler_oku(cg: str) -> list[int] | None:
+    """Kafesteki süreçler. [] = kafes boş ya da kaldırılmış (cgroup.procs yok); None = GEÇİCİ okuma hatası (EMFILE,
+    EINTR, ENOMEM, bozuk içerik…): bilinmiyor. Önceden ikisi de [] dönüyordu ve tek bir geçici hata bekçiyi
+    'kafes boş' sanıp çıkarıyordu (arka plan masaüstü öncelik korumasız kalıyordu)."""
     try:
         with open(os.path.join("/sys/fs/cgroup", cg.lstrip("/"), "cgroup.procs")) as f:
             return [int(x) for x in f.read().split()]
-    except (OSError, ValueError):
+    except (FileNotFoundError, NotADirectoryError):
         return []
+    except (OSError, ValueError):
+        return None
+
+
+def surecler(cg: str) -> list[int]:
+    return surecler_oku(cg) or []
 
 
 def is_parcaciklari(pid: int):
@@ -199,12 +211,21 @@ def main(argv: list[str]) -> int:
     gorulen: set = set()
     tur(cg, gorulen)
     print("hazir", flush=True)
+    hata = 0
     while True:
         time.sleep(aralik)
         if izle is not None and kesin_olu(izle, bas):
             oturumu_kapat(cg, izle, xno, dizin)
             return 0
-        if not surecler(cg):
+        liste = surecler_oku(cg)
+        if liste is None:  # geçici okuma hatası: kafes boş SAYILMAZ (bekçi sürer)
+            hata += 1
+            if hata >= OKUMA_HATASI_AZAMI:
+                print(f"oncelik-bekcisi: kafes {hata} kez okunamadı; çıkılıyor", file=sys.stderr, flush=True)
+                return 1
+            continue
+        hata = 0
+        if not liste:
             return 0
         tur(cg, gorulen)
 
