@@ -41,7 +41,7 @@ def takma_adlar(tr: str) -> list[str]:
 # Türkçe seçenek → İngilizce. `--sure` anlamına göre (bekleme sınırı → --timeout, eylem süresi → --duration)
 # çağıran yerde seçilir; burada yok.
 SECENEKLER = {
-    "--baslik": "--title", "--sinif": "--class", "--arka": "--background", "--ekranimda": "--on-my-screen",
+    "--baslik": "--title", "--baslik-kilitsiz": "--no-title-lock", "--sinif": "--class", "--arka": "--background", "--ekranimda": "--on-my-screen",
     "--gozetimsiz": "--unattended",
     "--sira": "--nth", "--bolge": "--region", "--bekle": "--wait", "--kay": "--offset",
     "--kaydirarak": "--scroll-search", "--onayli": "--approved", "--hassas": "--precise", "--hepsi": "--all",

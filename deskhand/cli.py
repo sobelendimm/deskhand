@@ -11,7 +11,7 @@ import sys
 
 from . import __version__, api, desen, guvenlik, hata, yollar
 from .akis import k_akis
-from .arka_uc import ARKA_ONEK, hedef_ad, sec
+from .arka_uc import ARKA_ONEK, EKRAN, hedef_ad, sec
 from .doktor import k_doktor
 from .erisim import k_agac, k_erisim, k_ogeye_tikla, k_ogeye_yaz
 from .eylem import (GIRDI_KOMUTLARI, KAYDIR_YON, OKUMA_KOMUTLARI, k_bas, k_dizi, k_fare, k_kapat, k_kaydir,
@@ -395,6 +395,8 @@ def ayristirici(prog=None, sessiz=False):
     ortak = sinif(add_help=False, allow_abbrev=False)
     secenek(ortak, "-b", "--baslik", default=argparse.SUPPRESS, help=h_("başlık kilidi (regex)"))
     secenek(ortak, "-s", "--sinif", default=argparse.SUPPRESS, help=h_("pencere sınıfı kilidi (regex), ör. krunner"))
+    secenek(ortak, "--baslik-kilitsiz", action="store_true", default=argparse.SUPPRESS,
+            help=h_("kimlikle verilen girdi komutunda otomatik tam başlık kilidini kapat"))
     okuma = sinif(add_help=False, allow_abbrev=False)
     secenek(okuma, "--kal", action="store_true", help=h_("bitince önceki pencereyi geri getirme"))
     p = sinif(prog=prog or prog_adi(), description=yardim_metni(), formatter_class=_YardimBicimleyici,
@@ -589,6 +591,26 @@ def _masa_secenegi(argv: list) -> list:
     return argv
 
 
+# Kimlikle (başlık deseni değil) verilen bu girdi komutlarında -b yoksa şimdiki TAM başlığa kilit (^…$): komut sürerken
+# sekme/sayfa değişirse girdi yanlış yere gitmez (Dur 4). --no-title-lock kapatır.
+OTOMATIK_BASLIK_KOMUTLARI = {"yaz", "tus", "tikla", "dizi", "kaydir"}
+
+
+def otomatik_baslik_kilidi(a, au) -> bool:
+    """a.baslik yoksa ve pencere KİMLİKLE verildiyse (çözülmüş kimlik = verilen) şimdiki tam başlığa kilitle.
+    → kilit kondu mu."""
+    if a.komut not in OTOMATIK_BASLIK_KOMUTLARI or getattr(a, "baslik", None) or getattr(a, "baslik_kilitsiz", False):
+        return False
+    k = getattr(a, "kimlik", None)
+    if not k or k == EKRAN or getattr(a, "kimlik_ham", None) != k:
+        return False
+    b = au.baslik(k)
+    if not b:
+        return False
+    a.baslik = "^" + re.escape(b) + "$"
+    return True
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
@@ -619,6 +641,7 @@ def main(argv=None):
         os.environ["DESKHAND_GOZETIMSIZ"] = "1"  # başında insan yok: onay diyaloğu açılmaz, hassas eylem reddedilir
     guvenlik.SINIF_DESEN = a.sinif
     onceki = au = None
+    otomatik_kilit = False
     try:
         for alan in ("baslik", "sinif", "kimlik", "desen"):  # ajanın verdiği düzenli ifadeler: ReDoS sınırı (desen.py)
             if isinstance(getattr(a, alan, None), str):
@@ -639,10 +662,14 @@ def main(argv=None):
             a.kimlik = au.pencere_coz(a.kimlik)
         if a.komut in GIRDI_KOMUTLARI:
             yasak_denetle(a.kimlik)  # yasak pencerede hiçbir şeye başlama
+            otomatik_kilit = otomatik_baslik_kilidi(a, au)
         if a.komut in OKUMA_KOMUTLARI and not a.kal:
             onceki = au.aktif()
         a.f(a)
     except Dur as e:
+        if e.kod == 4 and otomatik_kilit:
+            e.mesaj += "\n" + _("başlık değişti (otomatik tam başlık kilidi): sayfa başlığı değişen akışlarda -b ile esnek "
+                                "desen ver ya da --no-title-lock kullan")
         print(_("DURDURULDU: {mesaj}").format(mesaj=e.mesaj), file=sys.stderr)
         if a.komut in GIRDI_KOMUTLARI or a.komut == "ac":
             gunluk(f"DUR {e.kod} | {a.komut} {getattr(a, 'kimlik', '')} | {e.mesaj.splitlines()[0]}")
