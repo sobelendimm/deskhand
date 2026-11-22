@@ -36,6 +36,7 @@ for satir in sys.stdin:
         print("sahte uyarı: " + satir, file=sys.stderr, flush=True)
 """)
 os.chmod(os.path.join(SAHTE, "dotool"), 0o755)
+_yalitim.tuzak_araclari_kur(SAHTE)  # kdotool/wl-copy/wl-paste/spectacle/busctl: çalıştırılırsa işaret + 99 (sonda denetlenir)
 open(AYGIT, "w").close()
 os.environ.update(PATH=SAHTE + os.pathsep + os.environ.get("PATH", ""), SAHTE_AYGIT=AYGIT, SAHTE_KAYIT=KAYIT)
 if shutil.which("dotool") != os.path.join(SAHTE, "dotool"):
@@ -62,6 +63,7 @@ def _sayac():
 
 
 kde._goreli_imlec_sayisi = _sayac  # /proc/bus/input/devices yerine sahte aygıt listesi
+kde.KILIT_SORGU = lambda: False  # gerçek oturumun kilit durumu (busctl) okunmasın
 
 gecen = toplam = 0
 
@@ -484,6 +486,9 @@ merkez_hazir(pm)
 ep = pm._p
 pm.durdur()
 kontrol("panel: durdurunca soket silindi, dotool kapandı", not os.path.exists(yol) and ep.poll() is not None)
+
+kontrol("tuzak: gerçek masaüstü araçları (kdotool/wl-copy/wl-paste/spectacle/busctl) hiç çalıştırılmadı",
+        not _yalitim.tuzak_cagrilari(), str(_yalitim.tuzak_cagrilari()))
 
 print(f"\n{gecen}/{toplam} girdi merkezi testi geçti")
 sys.exit(0 if gecen == toplam else 1)

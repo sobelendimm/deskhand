@@ -14,6 +14,7 @@ from PIL import Image
 # Gerçek ekran kilidi (_yalitim: kapali) burada açılır: bu test ekran görüntüsü yardımcısını SAHTE bir ikiliyle
 # (bin_yolu / yollar.goruntu_bin taklidi) ve spectacle'ı sahte işlevle değiştirir; gerçek ekran görüntüsü alınmaz.
 os.environ["DESKHAND_GERCEK_EKRAN"] = "acik"
+_yalitim.tuzak_araclari_kur(os.path.join(_yalitim.GECICI, "tuzak-bin"))  # sızarsa gerçek araç yerine işaret + 99
 
 from deskhand import yollar
 from deskhand.arka_uc import kde, kde_goruntu
@@ -211,6 +212,9 @@ if gercek:
                 f"{p.returncode}")
 else:
     print("ATLANDI  gerçek ikili derlenmemiş (make -C deskhand/yardimci deskhand-goruntu)")
+
+kontrol("tuzak: gerçek masaüstü araçları (kdotool/wl-copy/wl-paste/spectacle/busctl) hiç çalıştırılmadı",
+        not _yalitim.tuzak_cagrilari(), str(_yalitim.tuzak_cagrilari()))
 
 print(f"\n{gecen}/{toplam} görüntü testi geçti")
 sys.exit(0 if gecen == toplam else 1)

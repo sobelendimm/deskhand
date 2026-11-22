@@ -38,3 +38,35 @@ if KOK not in sys.path:
 
 if os.environ.get("DESKHAND_TEST_SAKLA") != "1":
     atexit.register(shutil.rmtree, GECICI, True)
+
+
+# ---------------------------------------------------------------- gerçek masaüstü araçları için TUZAK ikililer
+# Gerçek ekran kilidini dosya boyunca açan testler (test_girdi_merkezi, test_goruntu) için ikinci güvence: PATH'in başına
+# kdotool / wl-copy / wl-paste / spectacle / busctl adlı "çalıştırılırsa işaret dosyasına yaz + 99 ile çık" sahteleri konur;
+# test sonunda işaret dosyası YOKSA geçer (gerçek araç bir yerden sızmış olsaydı gerçek ekrana dokunurdu).
+TUZAK_ARACLAR = ("kdotool", "wl-copy", "wl-paste", "spectacle", "busctl")
+TUZAK_ISARET = os.path.join(GECICI, "tuzak-isareti.log")
+
+
+def tuzak_araclari_kur(dizin, haric=()):
+    """`dizin`e tuzak ikilileri yazar (var olan sahtelere dokunmaz) ve dizini PATH'in başına koyar."""
+    os.makedirs(dizin, exist_ok=True)
+    for ad in TUZAK_ARACLAR:
+        yol = os.path.join(dizin, ad)
+        if ad in haric or os.path.exists(yol):
+            continue
+        with open(yol, "w") as f:
+            f.write(f'#!/bin/sh\necho "{ad} $*" >> "{TUZAK_ISARET}"\nexit 99\n')
+        os.chmod(yol, 0o755)
+    yollar = os.environ.get("PATH", "").split(os.pathsep)
+    if not yollar or yollar[0] != dizin:
+        os.environ["PATH"] = dizin + os.pathsep + os.environ.get("PATH", "")
+
+
+def tuzak_cagrilari():
+    """Tuzak ikililerinin çağrı satırları (boş liste = hiçbiri çalıştırılmadı)."""
+    try:
+        with open(TUZAK_ISARET) as f:
+            return [s.rstrip("\n") for s in f if s.strip()]
+    except OSError:
+        return []
