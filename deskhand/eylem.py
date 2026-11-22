@@ -305,7 +305,8 @@ def _yazi_hassas(g, k, onayli, metin, goruntu_al=True):
     sayfa = False
     if any(c.isspace() for c in metin):
         sayfa = hassas_sayfa_engel(k, onayli, _("yazı (Enter/Tab/boşluk içeriyor)"),
-                                   ek=_("yazılacak: {metin}").format(metin=goster), goruntu_al=goruntu_al)
+                                   ek=_("yazılacak: {metin}").format(metin=goster), goruntu_al=goruntu_al,
+                                   metin=metin)  # goto: adres çubuğu çıkışı (guvenlik.sayfadan_cikis)
     komut = guvenlik.ucbirim_komut_engel(k, onayli, metin, g.gizli, goruntu_al=goruntu_al)
     return sayfa or komut
 

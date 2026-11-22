@@ -581,10 +581,13 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
     OnaySonucu(izin=False, neden="kosul"): izin DEĞİL, yalnız "beklenen şey kendiliğinden oldu" (isteği kapatma yetkisi
     ajanda değil: koşul sayfanın gerçek durumudur ve bekleme boyunca ajanın girdisi o masaüstüne kapalıdır).
     goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu."""
-    if not os.environ.get("DESKHAND_RUNTIME_DIR"):  # kullanıcının GERÇEK panelinde iletişim kutusu açılır
+    masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
+    # Gerçek ekran kilidi (DESKHAND_GERCEK_EKRAN=kapali) gerçek oturuma GİRDİYİ keser. Görünmez masaüstündeki bir eylemin
+    # onayını panelde göstermek gerçek ekrana girdi değildir: yalnız hedef kullanıcının ekranıysa reddedilir (yoksa
+    # görünmez masaüstündeki ödeme sayfası onaysız kalıp tümüyle kilitlenirdi).
+    if masaustu == "ekran" and not os.environ.get("DESKHAND_RUNTIME_DIR"):  # kullanıcının GERÇEK paneli
         from .hata import gercek_ekran_denetle
         gercek_ekran_denetle(_("onay iletişim kutusu"))
-    masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
 
     def bitir(s: OnaySonucu) -> OnaySonucu:
         if gunluge_yaz:

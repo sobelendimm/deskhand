@@ -4,7 +4,7 @@ sayfa onayı (ödeme sayfasında Enter) ve insan doğrulaması (CAPTCHA) kapıs�
 YOKTUR. Yalnız http/https adresi (uygulama.web_adresi_denetle)."""
 from __future__ import annotations
 
-from . import api, gorev_kipi, web
+from . import api, gorev_kipi, guvenlik, web
 from .arka_uc import EKRAN
 from .gunluk import gunluk
 from .hata import Dur
@@ -25,7 +25,9 @@ def adrese_git(k: str, adres: str, baslik: str | None = None, onayli: bool = Fal
     api.tus(k, "ctrl+l", baslik=baslik, onayli=onayli)   # adres çubuğuna odaklan + seç
     # adres + Enter TEK yazı eylemi: CAPTCHA kapısı ve (ödeme sayfasında) onay Enter'ı adresle birlikte BİR kez görür;
     # okunamayan sayfada odak sorgusu adres çubuğunu (belge dışı) görür → izin
-    api.yaz(k, adres + "\n", baslik=baslik, onayli=onayli)
+    # ödeme sayfasından ÇIKIŞ: odak doğrulanmış biçimde adres çubuğundaysa (belge dışı) Enter formu gönderemez → onaysız
+    with guvenlik.sayfadan_cikis(k, adres + "\n"):
+        api.yaz(k, adres + "\n", baslik=baslik, onayli=onayli)
     gunluk(f"goto | {k} | {adres[:200]}")
     return adres
 

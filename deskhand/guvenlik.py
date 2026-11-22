@@ -1302,7 +1302,12 @@ def _panelden_onay(eylem, hedef, ayrinti, goruntu=None):
         from . import onay
     except Exception as e:  # noqa: BLE001
         return False, _("onay modülü yüklenemedi: {hata}").format(hata=e)
-    s = onay.iste_sonuc(eylem, hedef, ayrinti, masaustu=sec().ad, goruntu=goruntu)
+    try:
+        s = onay.iste_sonuc(eylem, hedef, ayrinti, masaustu=sec().ad, goruntu=goruntu)
+    except Dur as e:  # gerçek ekran kilidi (17): onayı NEYİN tetiklediği iletide görünsün
+        neden_satiri = (ayrinti or "").splitlines()[0] if ayrinti else ""
+        raise Dur(e.kod, e.mesaj + "; " + _("onay gerekçesi: {eylem} — {neden}").format(
+            eylem=eylem, neden=neden_satiri or hedef), tur=e.tur) from None
     if s.izin:
         _EYLEM.onaylandi = True
     return s.izin, s.mesaj
@@ -1345,7 +1350,41 @@ def _nokta_ayrintisi(nokta, yakin):
     return "\n" + _("{x},{y} noktasındaki yazı: {yazi}").format(x=round(nokta[0]), y=round(nokta[1]), yazi=yazi)
 
 
-def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=True, ek_basliklar=()):
+_CIKIS = threading.local()  # goto: adres çubuğuna yazılan adres + Enter (sayfadan ÇIKIŞ) bu iş parçacığında
+
+
+class sayfadan_cikis:
+    """`with guvenlik.sayfadan_cikis(k, metin):` (gezin.adrese_git): bu blokta k penceresine TAM OLARAK `metin`
+    yazılırken (adres + Enter) ödeme sayfası kapısı, odak erişilebilirlik ağacında DOĞRULANMIŞ biçimde belge DIŞINDAYSA
+    (adres çubuğu) onay sormaz: Enter yalnız gezinir, formu gönderemez. Odak bilinmiyor/sayfa içindeyse kural aynen."""
+
+    def __init__(self, k, metin):
+        self.deger = (k, metin)
+
+    def __enter__(self):
+        self.eski = getattr(_CIKIS, "deger", None)
+        _CIKIS.deger = self.deger
+        return self
+
+    def __exit__(self, *a):
+        _CIKIS.deger = self.eski
+        return False
+
+
+def adres_cubugu_cikisi_mi(k, metin) -> bool:
+    """Yazı (metin) goto'nun adres çubuğuna yazdığı adres + Enter mi VE odak şu an belge dışında mı (doğrulanmış)?"""
+    d = getattr(_CIKIS, "deger", None)
+    if d is None or d[0] != k or metin is None or d[1] != metin:
+        return False
+    try:
+        from .erisim import odak_bilgisi
+        odak = odak_bilgisi(k)
+    except Exception:  # noqa: BLE001 - bilinmiyor: kural aynen
+        return False
+    return isinstance(odak, dict) and not odak.get("belge_ici", True)
+
+
+def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=True, ek_basliklar=(), metin=None):
     """Başlığı ödeme/onay sayfası olan pencerede eylem (tıklama, Enter/boşluk, Enter/boşluklu yazı) onay ister.
     yakin: tıklanacak noktadaki yazılar, nokta: (x, y) pencere pikseli, ek: ayrıntıya eklenecek satır (tuş, yazı),
     goruntu_al: onay isteğine hedefin küçük görüntüsü eklensin mi (pencereyi öne getirir).
@@ -1362,6 +1401,10 @@ def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=Tr
         if m:
             b = eb
     onayli = onayli_gecerli_kati(onayli)
+    if m and not onayli and adres_cubugu_cikisi_mi(k, metin):  # goto: sayfadan çıkış, odak adres çubuğunda
+        from .gunluk import gunluk
+        gunluk(f"hassas sayfa | [{b}] | goto: odak adres çubuğunda (belge dışı) → onaysız gezinme")
+        return False  # onay alınmadı (gerekmedi): çağıran eylemi "onaylı" diye etiketlemesin
     if m and not onayli:
         ayrinti = _("Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}").format(eslesen=repr(m.group(0)))
         ayrinti += _nokta_ayrintisi(nokta, yakin)
