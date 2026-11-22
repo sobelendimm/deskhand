@@ -146,7 +146,7 @@ try:
     olcum["Firefox açılışı (geçici profil)"] = f"{time.monotonic() - t0:.1f} sn"
     k = ff.k
     profil_denetle("Firefox açıldı")
-    kontrol("firefox: pencere arka plan masaüstünde, kendi süreci", k and k.startswith("arka:") and au.pid(k) == ff.p.pid)
+    kontrol("firefox: pencere arka plan masaüstünde, kendi süreci", k and k.startswith("arka:") and ff.p.pid in wt.ata_pidler(au.pid(k)))
     kontrol("firefox: geçici profil kendi XDG yapılandırma kökünü kullandı (installs.ini oraya yazıldı ya da hiç)",
             not os.path.exists(os.path.join(wt.FF_KOK, os.path.basename(ff.profil))))
     bekle(lambda: "Form" in ff.baslik(), 10)
