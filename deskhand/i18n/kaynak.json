@@ -449,6 +449,12 @@
  "AUR paketini kur: {paket}": [
   "doktor.py:61"
  ],
+ "Adım dizisi çalıştırılıyor": [
+  "gui/metinler.py:244"
+ ],
+ "Adımlar": [
+  "gui/metinler.py:205"
+ ],
  "Ajan bir kart bilgisi yazmak istiyor ({ne}).": [
   "guvenlik.py:1950"
  ],
@@ -462,25 +468,28 @@
   "mcp_sunucu.py:1750"
  ],
  "Ajanın tüm girdilerini hemen durdurur (basılı tuşlar bırakılır).": [
-  "gui/metinler.py:40"
+  "gui/metinler.py:41"
  ],
  "Alt+SysRq+tuş: çekirdek müdahale (SysRq) kısayolu; sistemi yeniden başlatabilir/kapatabilir": [
   "guvenlik.py:190"
  ],
  "Arayüzün dili. Panel ve tepsi menüsü hemen değişir; komut satırı ve ajanın (MCP) iletileri yeni başlatılan süreçlerde geçerli olur. Etkinlik günlüğü Türkçe kaydedilir.": [
-  "gui/metinler.py:154"
+  "gui/metinler.py:156"
+ ],
+ "Araç çalışıyor: {arac}": [
+  "gui/metinler.py:246"
  ],
  "Arka plan": [
-  "gui/metinler.py:59"
+  "gui/metinler.py:61"
  ],
  "Arka plan (görünmez masaüstü)": [
-  "gui/metinler.py:103"
+  "gui/metinler.py:105"
  ],
  "Arka plan ekranı": [
-  "gui/metinler.py:48"
+  "gui/metinler.py:50"
  ],
  "Arka plan ekranını göster": [
-  "gui/metinler.py:34"
+  "gui/metinler.py:35"
  ],
  "Arka plan masaüstü": [
   "doktor.py:189"
@@ -492,7 +501,7 @@
   "gui/metinler.py:27"
  ],
  "Arka plan masaüstü kapalı.": [
-  "gui/metinler.py:76"
+  "gui/metinler.py:78"
  ],
  "Arka plan masaüstü türü": [
   "doktor.py:220"
@@ -501,17 +510,17 @@
   "gui/metinler.py:28"
  ],
  "Arka planda yap": [
-  "gui/metinler.py:127",
+  "gui/metinler.py:129",
   "mesgul.py:48"
  ],
  "Arka planda çalışıyor": [
   "gui/metinler.py:21"
  ],
  "Ayarlar": [
-  "gui/metinler.py:51"
+  "gui/metinler.py:53"
  ],
  "Ayrıntı": [
-  "gui/metinler.py:110"
+  "gui/metinler.py:112"
  ],
  "AÇIK": [
   "oturum/cli.py:90"
@@ -520,7 +529,7 @@
   "cli.py:247"
  ],
  "Açık: {ekran} · {g}×{y}": [
-  "gui/metinler.py:75"
+  "gui/metinler.py:77"
  ],
  "BENİM EYLEMİM DIŞINDA (kullanıcı/dış etki)": [
   "akis.py:166"
@@ -529,43 +538,66 @@
   "doktor.py:275"
  ],
  "Başlat": [
-  "gui/metinler.py:79"
+  "gui/metinler.py:81",
+  "gui/metinler.py:195"
  ],
  "Başlatılıyor…": [
-  "gui/metinler.py:81"
+  "gui/metinler.py:83"
  ],
  "Bekle": [
-  "gui/metinler.py:127"
+  "gui/metinler.py:129"
+ ],
+ "Bekleniyor: {value}": [
+  "gui/metinler.py:233"
  ],
  "Bekleyen istekler": [
-  "gui/metinler.py:94"
+  "gui/metinler.py:96"
  ],
  "Bekleyen onay isteği yok.": [
-  "gui/metinler.py:98"
+  "gui/metinler.py:100"
  ],
  "Bileşen": [
-  "gui/metinler.py:179"
+  "gui/metinler.py:181"
+ ],
+ "Bir görev zaten çalışıyor (başka bir panel ya da komuttan).": [
+  "gorev.py:420"
+ ],
+ "Bir görev zaten çalışıyor.": [
+  "gorev.py:354"
  ],
  "Bir kez izin ver": [
-  "gui/metinler.py:113"
+  "gui/metinler.py:115"
  ],
  "Bir yapay zekâ ajanı kullanıcının panosunun metnini okumak istiyor": [
   "cli.py:223"
  ],
+ "Bir öğe tıklanıyor": [
+  "gui/metinler.py:224"
+ ],
  "Bitmesini bekle": [
-  "gui/metinler.py:123"
+  "gui/metinler.py:125"
+ ],
+ "Bitmesini bekleyin ya da Durdur'a basın.": [
+  "gorev.py:354"
+ ],
+ "Bitmesini bekleyin.": [
+  "gorev.py:421"
+ ],
+ "Bitti.": [
+  "gui/metinler.py:211"
  ],
  "Boşta": [
   "gui/metinler.py:19"
  ],
  "Bu desenlere (regex, büyük/küçük harf duyarsız) uyan pencere başlığı ya da sınıfına hiçbir girdi gönderilmez ve bu uygulamalar başlatılmaz. # ile başlayan satırlar açıklamadır.": [
-  "gui/metinler.py:132"
+  "gui/metinler.py:134"
  ],
  "Bu pencere bir sistem yetki/parola/izin istemi ({ad}). Ajan ona {ne} göndermek istiyor.": [
   "guvenlik.py:1635"
  ],
  "Bırak": [
-  "gui/metinler.py:84"
+  "gui/metinler.py:86",
+  "gui/metinler.py:200"
  ],
  "C yardımcıları": [
   "doktor.py:164",
@@ -574,8 +606,11 @@
  "Chromium/Electron --force-renderer-accessibility ile başlatılmalı (görünmez masaüstünde `ac` bunu kendiliğinden ekler; çalışan uygulamayı bu bayrakla yeniden başlat)": [
   "erisim.py:238"
  ],
+ "Claude Code'u kurun (https://claude.com/claude-code) ve terminalde bir kez `claude` çalıştırıp giriş yapın.": [
+  "gorev.py:363"
+ ],
  "Claude bir işlem için izninizi istiyor": [
-  "gui/metinler.py:106"
+  "gui/metinler.py:108"
  ],
  "Claude izleme ve yönetme paneli": [
   "gui/metinler.py:15"
@@ -605,7 +640,7 @@
   "masaustu.py:602"
  ],
  "DESKHAND_DIL ortam değişkeni bu süreçte dili zorluyor ({dil}); seçim kaydedildi, sonraki açılışta geçerli olur.": [
-  "gui/metinler.py:156"
+  "gui/metinler.py:158"
  ],
  "DESKHAND_SANAL_BOYUT GENxYÜK[x24] olmalı: {deger}": [
   "masaustu.py:232"
@@ -615,7 +650,7 @@
  ],
  "DUR": [
   "gui/dil.py:78",
-  "gui/metinler.py:38"
+  "gui/metinler.py:39"
  ],
  "DUR (tüm girdileri durdur)": [
   "gui/kisayol.py:25"
@@ -624,37 +659,37 @@
   "cli.py:49"
  ],
  "DUR anahtarı açıldı": [
-  "gui/metinler.py:67"
- ],
- "DUR anahtarı açıldı (panel)": [
   "gui/metinler.py:69"
  ],
+ "DUR anahtarı açıldı (panel)": [
+  "gui/metinler.py:71"
+ ],
  "DUR anahtarı kaldırıldı": [
-  "gui/metinler.py:68"
+  "gui/metinler.py:70"
  ],
  "DUR anahtarı kaldırıldı (panel)": [
-  "gui/metinler.py:70"
+  "gui/metinler.py:72"
  ],
  "DUR açık": [
   "gui/metinler.py:22"
  ],
  "DUR açık kalsın": [
-  "gui/metinler.py:44"
+  "gui/metinler.py:45"
  ],
  "DUR kaldırılsın mı? Ajan yeniden girdi gönderebilir.": [
-  "gui/metinler.py:43"
+  "gui/metinler.py:44"
  ],
  "DUR nedeniyle red": [
-  "gui/metinler.py:101"
+  "gui/metinler.py:103"
  ],
  "DUR — tüm girdileri durdur": [
   "gui/metinler.py:31"
  ],
  "DUR'u ajan koydu; buradan kaldırabilirsiniz.": [
-  "gui/metinler.py:42"
+  "gui/metinler.py:43"
  ],
  "DUR'u kaldırır; ajan yeniden girdi gönderebilir.": [
-  "gui/metinler.py:41"
+  "gui/metinler.py:42"
  ],
  "DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir": [
   "guvenlik.py:2072",
@@ -674,6 +709,9 @@
  ],
  "DURDURULDU: {mesaj}": [
   "cli.py:518"
+ ],
+ "Deskhand araçları yüklenemedi (durum: {durum})": [
+  "gorev.py:216"
  ],
  "Deskhand ayar dosyası ({dosya}) kayıp ya da panel dışında değişti; güvenli tarafta hiçbir girdi gönderilmez; Deskhand paneli açın (panel kendi kaydını geri yükler).": [
   "liste_koruma.py:45"
@@ -700,44 +738,56 @@
   "guvenlik.py:912"
  ],
  "Devam et": [
-  "gui/metinler.py:39"
+  "gui/metinler.py:40"
  ],
  "Devam et (DUR'u kaldır)": [
   "gui/metinler.py:32"
  ],
  "Devral": [
-  "gui/metinler.py:83"
+  "gui/metinler.py:85",
+  "gui/metinler.py:199"
  ],
  "Devraldınız: önizlemeye tıklayın, yazın. Bitince Bırak.": [
-  "gui/metinler.py:87"
+  "gui/metinler.py:89"
  ],
  "Dil": [
-  "gui/metinler.py:152"
+  "gui/metinler.py:154"
  ],
  "Dil kaydedilemedi: {hata}": [
-  "gui/metinler.py:158"
+  "gui/metinler.py:160"
  ],
  "Dinleme": [
   "doktor.py:252"
  ],
  "Diyaloğu aç": [
-  "gui/metinler.py:99"
+  "gui/metinler.py:101"
  ],
  "Doğrulanmamış uygulama girdisi ({neden})": [
   "uygulama.py:540"
  ],
  "Durdur": [
-  "gui/metinler.py:80"
+  "gui/metinler.py:82",
+  "gui/metinler.py:197"
+ ],
+ "Durduruldu.": [
+  "gui/metinler.py:211"
  ],
  "Durduruluyor…": [
-  "gui/metinler.py:82"
+  "gui/metinler.py:84",
+  "gui/metinler.py:213"
  ],
  "Durum": [
-  "gui/metinler.py:97",
-  "gui/metinler.py:179"
+  "gui/metinler.py:99",
+  "gui/metinler.py:181"
+ ],
+ "Durum kontrol ediliyor": [
+  "gui/metinler.py:235"
  ],
  "Düğmeye tıkla: “{dugme}”": [
   "guvenlik.py:1395"
+ ],
+ "Düşünüyor…": [
+  "gui/metinler.py:218"
  ],
  "EIS bölgesi {boyut} ≠ oturum {hedef}": [
   "kwin_oturum.py:661"
@@ -746,13 +796,22 @@
   "doktor.py:242"
  ],
  "Ekran": [
-  "gui/metinler.py:59"
+  "gui/metinler.py:61"
+ ],
+ "Ekran görüntüsü alınıyor": [
+  "gui/metinler.py:230"
+ ],
+ "Ekrandaki metin okunuyor": [
+  "gui/metinler.py:231"
  ],
  "Ekranımda yap": [
   "mesgul.py:48"
  ],
+ "Ekranın oturması bekleniyor": [
+  "gui/metinler.py:234"
+ ],
  "Ekranınız": [
-  "gui/metinler.py:103"
+  "gui/metinler.py:105"
  ],
  "Ekranınızda çalışıyor": [
   "gui/metinler.py:20"
@@ -764,10 +823,10 @@
   "doktor.py:172"
  ],
  "Etkinlik": [
-  "gui/metinler.py:47"
+  "gui/metinler.py:49"
  ],
  "Evet": [
-  "gui/metinler.py:187"
+  "gui/metinler.py:189"
  ],
  "Exec satırı boş ya da çözümlenemedi": [
   "uygulama.py:200"
@@ -788,13 +847,13 @@
   "uygulama.py:541"
  ],
  "Eylem": [
-  "gui/metinler.py:56",
-  "gui/metinler.py:96",
-  "gui/metinler.py:97",
-  "gui/metinler.py:107"
+  "gui/metinler.py:58",
+  "gui/metinler.py:98",
+  "gui/metinler.py:99",
+  "gui/metinler.py:109"
  ],
  "Fare ve klavyeniz önizleme üzerinden arka plan masaüstüne gider; bu sırada ajan bekler. DUR açıkken girdi gönderilmez.": [
-  "gui/metinler.py:85"
+  "gui/metinler.py:87"
  ],
  "Firefox profili bulunamadı (profiles.ini)": [
   "oturum/firefox.py:109"
@@ -812,20 +871,23 @@
   "gui/saglik.py:18"
  ],
  "Genel kısayol": [
-  "gui/metinler.py:159"
+  "gui/metinler.py:161"
  ],
  "Geri al": [
-  "gui/metinler.py:141"
+  "gui/metinler.py:143"
  ],
  "Gerçek ekran": [
   "doktor.py:100",
   "doktor.py:102"
  ],
  "Geçmiş": [
-  "gui/metinler.py:95"
+  "gui/metinler.py:97"
+ ],
+ "Geçmiş görevler (çift tıkla: metni kutuya al)": [
+  "gui/metinler.py:207"
  ],
  "Girdi gönderilemedi: {hata}": [
-  "gui/metinler.py:90"
+  "gui/metinler.py:92"
  ],
  "Girdi merkezi soketi": [
   "doktor.py:141",
@@ -833,6 +895,63 @@
  ],
  "GÜVENLİK: her girdi (tıklama/tuş/yazı/kaydırma) hedef pencere öne gelip AKTİF olduğu doğrulanınca\ngönderilir. -b DESEN verilirse pencere BAŞLIĞI da (tarayıcıda sekme) her girdiden HEMEN önce\ndenetlenir. Yazılar kelime kelime gönderilir, her parçadan önce yeniden denetlenir.": [
   "cli.py:37"
+ ],
+ "Görev": [
+  "gui/metinler.py:48"
+ ],
+ "Görev başlatılamadı: {hata}": [
+  "gui/metinler.py:217"
+ ],
+ "Görev boş.": [
+  "gorev.py:357"
+ ],
+ "Görev kilidi açılamadı: {hata}": [
+  "gorev.py:423"
+ ],
+ "Görev sonuç vermeden bitti.": [
+  "gorev.py:526"
+ ],
+ "Görev tamamlanamadı.": [
+  "gui/metinler.py:211"
+ ],
+ "Görev ver…": [
+  "gui/metinler.py:33"
+ ],
+ "Görev {dk} dakikayı aştı, durduruldu.": [
+  "gorev.py:513"
+ ],
+ "Görev çalışırken görünmez masaüstü burada canlı görünür.": [
+  "gui/metinler.py:215"
+ ],
+ "Görev çok uzun ({n} karakter, en çok {sinir}).": [
+  "gorev.py:359"
+ ],
+ "Görevi Claude'a verir (Ctrl+Enter). Claude görünmez masaüstünde çalışır; ekranınıza dokunmaz.": [
+  "gui/metinler.py:196"
+ ],
+ "Görevi hemen durdurur. Görünmez masaüstü açık kalır.": [
+  "gui/metinler.py:198"
+ ],
+ "Görevi yapan Claude modeli (Claude Code aboneliğiniz kullanılır).": [
+  "gui/metinler.py:204"
+ ],
+ "Görünmez masaüstü açılıyor": [
+  "gui/metinler.py:237"
+ ],
+ "Görünmez masaüstü henüz açık değil. Claude açınca burada canlı görünür.": [
+  "gui/metinler.py:214"
+ ],
+ "Görünmez masaüstü inceleniyor": [
+  "gui/metinler.py:239"
+ ],
+ "Görünmez masaüstü kapatılıyor": [
+  "gui/metinler.py:238"
+ ],
+ "Görünmez masaüstünü siz kullanın (Arka plan ekranı sekmesi): giriş, CAPTCHA, doğrulama kodu…": [
+  "gui/metinler.py:201"
+ ],
+ "Görüntü alınamadı: {hata}": [
+  "gui/metinler.py:216"
  ],
  "HASSAS": [
   "web.py:558"
@@ -855,36 +974,45 @@
  "HASSAS: parola alanına {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
   "guvenlik.py:1972"
  ],
+ "Haiku (hızlı, basit)": [
+  "gui/metinler.py:203"
+ ],
  "Hassas düğme: “{dugme}”": [
   "guvenlik.py:1329"
  ],
  "Hassas sayfada {eylem}": [
   "guvenlik.py:1334"
  ],
+ "Hata: {ozet}": [
+  "gui/metinler.py:219"
+ ],
  "Hayır": [
-  "gui/metinler.py:188"
+  "gui/metinler.py:190"
+ ],
+ "Hazır. Görevi yazıp Başlat'a basın.": [
+  "gui/metinler.py:208"
  ],
  "Hedef": [
-  "gui/metinler.py:96",
-  "gui/metinler.py:97",
-  "gui/metinler.py:108"
+  "gui/metinler.py:98",
+  "gui/metinler.py:99",
+  "gui/metinler.py:110"
  ],
  "Henüz günlük satırı yok. Ajan bir şey yaptığında burada görünür.": [
-  "gui/metinler.py:61"
+  "gui/metinler.py:63"
  ],
  "Hep arka planda yap": [
-  "gui/metinler.py:122",
-  "gui/metinler.py:123"
+  "gui/metinler.py:124",
+  "gui/metinler.py:125"
  ],
  "Hepsi": [
-  "gui/metinler.py:59",
-  "gui/metinler.py:146"
+  "gui/metinler.py:61",
+  "gui/metinler.py:148"
  ],
  "Hepsi: bugünkü davranış; tüm riskli eylemler (uçbirimde Enter, pano, riskli tuş, sistem istemleri…) sorar. Yalnız kartla ödeme: yalnızca satın alma/ödeme düğmeleri (ve ödeme sayfasında Enter) ile kart bilgisi yazma sorar; diğerleri sormadan yapılır (günlüğe yazılır). Yasaklar, erişim seviyeleri ve DUR bundan etkilenmez.": [
-  "gui/metinler.py:147"
+  "gui/metinler.py:149"
  ],
  "Her satır: DESEN = goruntule | tikla | tam. DESEN pencere başlığı ya da sınıfı için regex'tir (büyük/küçük harf duyarsız). goruntule: hiçbir girdi gönderilmez (okuma ve ekran görüntüsü serbest); tikla: fare serbest, klavye (yaz/tuş) yok; tam: kısıt yok. Birden çok satır uyarsa en kısıtlayıcı olan geçerlidir. Varsayılan: boş (hiçbir kısıt yok).": [
-  "gui/metinler.py:135"
+  "gui/metinler.py:137"
  ],
  "KOMUT": [
   "cli.py:335"
@@ -968,37 +1096,40 @@
   "kwin_oturum.py:947"
  ],
  "Kalan": [
-  "gui/metinler.py:96"
+  "gui/metinler.py:98"
  ],
  "Kalan süre: {s} — yanıt vermezseniz reddedilir": [
-  "gui/metinler.py:112"
+  "gui/metinler.py:114"
  ],
  "Kapalıysa film/oyun sırasında bildirim gösterilmez, 'Yanıt yoksa' seçeneği uygulanır.": [
-  "gui/metinler.py:130"
+  "gui/metinler.py:132"
  ],
  "Kapat": [
-  "gui/metinler.py:189"
+  "gui/metinler.py:191"
  ],
  "Kart bilgisi yaz": [
   "guvenlik.py:1953"
  ],
  "Kaydedildi.": [
-  "gui/metinler.py:142"
+  "gui/metinler.py:144"
  ],
  "Kaydet": [
-  "gui/metinler.py:140"
+  "gui/metinler.py:142"
  ],
  "Kaydırma bu sanal arka uç sürümünde Devral sırasında desteklenmiyor": [
-  "gui/metinler.py:91"
+  "gui/metinler.py:93"
+ ],
+ "Kayıtlı akış çalıştırılıyor": [
+  "gui/metinler.py:243"
  ],
  "Kayıtlı simge yok. Ajan `simge-kaydet` ile yazısız düğmeleri kaydettiğinde burada görünür.": [
-  "gui/metinler.py:170"
+  "gui/metinler.py:172"
  ],
  "Kazara izne karşı: birkaç saniye sonra ve fareyi bu pencerenin üzerinde gezdirince etkinleşir.": [
-  "gui/metinler.py:116"
+  "gui/metinler.py:118"
  ],
  "Klavye kısayoluyla DUR (KDE genel kısayolu)": [
-  "gui/metinler.py:160"
+  "gui/metinler.py:162"
  ],
  "Komut başlat: {komut}": [
   "guvenlik.py:1471"
@@ -1007,44 +1138,59 @@
   "cli.py:53"
  ],
  "Kısayol etkin: {tus}": [
-  "gui/metinler.py:167"
+  "gui/metinler.py:169"
  ],
  "Kısayol kaydedilemedi: {hata}": [
-  "gui/metinler.py:166"
+  "gui/metinler.py:168"
  ],
  "MCP sunucusu (python-mcp)": [
   "gui/saglik.py:25"
  ],
  "Masaüstü": [
-  "gui/metinler.py:56",
-  "gui/metinler.py:96",
-  "gui/metinler.py:97",
-  "gui/metinler.py:109"
+  "gui/metinler.py:58",
+  "gui/metinler.py:98",
+  "gui/metinler.py:99",
+  "gui/metinler.py:111"
  ],
  "Masaüstü oturumu": [
   "doktor.py:79",
   "doktor.py:80"
  ],
+ "Masaüstü seçiliyor": [
+  "gui/metinler.py:236"
+ ],
  "Meta+L: ekranı kilitler": [
   "guvenlik.py:188"
  ],
+ "Metin yazılıyor": [
+  "gui/metinler.py:225"
+ ],
  "Meşgul algılama ayarları bu kurulumda bulunamadı (deskhand.ayarlar yüklenemedi).": [
-  "gui/metinler.py:120"
+  "gui/metinler.py:122"
  ],
  "Meşgulken": [
-  "gui/metinler.py:121"
+  "gui/metinler.py:123"
  ],
  "Meşgulken davranış": [
-  "gui/metinler.py:119"
+  "gui/metinler.py:121"
+ ],
+ "Model": [
+  "gui/metinler.py:202"
  ],
  "N kez tıkla": [
   "cli.py:373"
  ],
+ "Ne yapılmasını istediğinizi yazın.": [
+  "gorev.py:357"
+ ],
+ "Ne yapılmasını istiyorsunuz? Örn: «Trendyol'da şu kasayı sepete ekle», «İndirilenler'i düzenle»": [
+  "gui/metinler.py:194"
+ ],
  "Not": [
-  "gui/metinler.py:179"
+  "gui/metinler.py:181"
  ],
  "OCR dili": [
-  "gui/metinler.py:184"
+  "gui/metinler.py:186"
  ],
  "OCR satırının erişilebilirlik eylemi yok: via='mouse' kullan": [
   "mcp_sunucu.py:1575"
@@ -1053,7 +1199,10 @@
   "cli.py:45"
  ],
  "Onay ayarı kaydedilemedi: {hata}": [
-  "gui/metinler.py:151"
+  "gui/metinler.py:153"
+ ],
+ "Onay bekleniyor ({n}): onay penceresine bakın — Claude sizin kararınızı bekliyor.": [
+  "gui/metinler.py:210"
  ],
  "Onay kapsamı": [
   "doktor.py:118",
@@ -1070,24 +1219,27 @@
   "liste_koruma.py:200"
  ],
  "Onay soruları": [
-  "gui/metinler.py:144",
-  "gui/metinler.py:145"
+  "gui/metinler.py:146",
+  "gui/metinler.py:147"
  ],
  "Onaylar": [
-  "gui/metinler.py:49",
-  "gui/metinler.py:60"
+  "gui/metinler.py:51",
+  "gui/metinler.py:62"
  ],
  "Onaylar ({n})": [
-  "gui/metinler.py:50"
+  "gui/metinler.py:52"
+ ],
+ "Opus (güçlü, yavaş)": [
+  "gui/metinler.py:203"
  ],
  "Ortak: -b/--title (--baslik) DESEN  başlık bu deseni (regex, büyük/küçük harf duyarsız) içermezse DUR.": [
   "cli.py:128"
  ],
  "Otomatik (sistem dili: {dil})": [
-  "gui/metinler.py:153"
+  "gui/metinler.py:155"
  ],
  "Otomatik kaydır": [
-  "gui/metinler.py:62"
+  "gui/metinler.py:64"
  ],
  "Oturum köprüsü": [
   "oturum/cli.py:53"
@@ -1100,7 +1252,10 @@
   "doktor.py:110"
  ],
  "Paneli aç": [
-  "gui/metinler.py:33"
+  "gui/metinler.py:34"
+ ],
+ "Pano kullanılıyor": [
+  "gui/metinler.py:241"
  ],
  "Panoyu oku": [
   "cli.py:223"
@@ -1112,13 +1267,19 @@
   "guvenlik.py:1969"
  ],
  "Pencere": [
-  "gui/metinler.py:56"
+  "gui/metinler.py:58"
+ ],
+ "Pencere düzenleniyor": [
+  "gui/metinler.py:240"
+ ],
+ "Pencere inceleniyor": [
+  "gui/metinler.py:229"
  ],
  "Plasma (Wayland) oturumu aç": [
   "doktor.py:82"
  ],
  "Python modülü": [
-  "gui/metinler.py:184"
+  "gui/metinler.py:186"
  ],
  "Rahatsız Etme açık": [
   "mesgul.py:552"
@@ -1127,7 +1288,7 @@
   "mesgul.py:554"
  ],
  "Reddet": [
-  "gui/metinler.py:114"
+  "gui/metinler.py:116"
  ],
  "Riskli tuş: {kombinasyon}": [
   "guvenlik.py:1420"
@@ -1139,40 +1300,58 @@
   "guvenlik.py:1423"
  ],
  "Sanal masaüstü modülü yüklenemedi: {hata}": [
-  "gui/metinler.py:77"
+  "gui/metinler.py:79"
  ],
  "Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}": [
   "guvenlik.py:1325"
  ],
+ "Sayfa kaydırılıyor": [
+  "gui/metinler.py:227"
+ ],
  "Sağlık": [
-  "gui/metinler.py:53"
+  "gui/metinler.py:55"
+ ],
+ "Ses dinleniyor": [
+  "gui/metinler.py:242"
  ],
  "Sil": [
-  "gui/metinler.py:171"
+  "gui/metinler.py:173"
+ ],
+ "Simge/renk aranıyor": [
+  "gui/metinler.py:232"
  ],
  "Simgeler": [
-  "gui/metinler.py:52"
+  "gui/metinler.py:54"
  ],
  "Simgeyi sil": [
-  "gui/metinler.py:174"
+  "gui/metinler.py:176"
  ],
  "Sistem istemine girdi: {ad}": [
   "guvenlik.py:1634"
+ ],
+ "Sonnet (dengeli)": [
+  "gui/metinler.py:203"
  ],
  "Sonra": [
   "mesgul.py:48"
  ],
  "Sonraya bırak": [
-  "gui/metinler.py:127"
+  "gui/metinler.py:129"
+ ],
+ "Sonuç": [
+  "gui/metinler.py:206"
  ],
  "Sor (Arka planda / Ekranımda / Sonra)": [
-  "gui/metinler.py:122"
- ],
- "Soru süresi": [
   "gui/metinler.py:124"
  ],
+ "Soru süresi": [
+  "gui/metinler.py:126"
+ ],
+ "Süre doldu, durduruldu.": [
+  "gui/metinler.py:212"
+ ],
  "Süz: pencere, eylem, metin…": [
-  "gui/metinler.py:58"
+  "gui/metinler.py:60"
  ],
  "SİSTEM İSTEMİ ({ad} ← {baslik}): yetki/parola/izin istemine {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
   "guvenlik.py:1638"
@@ -1181,10 +1360,17 @@
   "guvenlik.py:1615"
  ],
  "Tam ekranda da sor": [
-  "gui/metinler.py:129"
+  "gui/metinler.py:131"
+ ],
+ "Terminalde `claude` çalıştırıp /login ile giriş yapın.": [
+  "gorev.py:246",
+  "gorev.py:519"
  ],
  "Tuş": [
-  "gui/metinler.py:161"
+  "gui/metinler.py:163"
+ ],
+ "Tuşa basılıyor: {keys}": [
+  "gui/metinler.py:226"
  ],
  "Türkçe OCR (tesseract-data-tur)": [
   "gui/saglik.py:21"
@@ -1193,7 +1379,7 @@
   "eylem.py:69"
  ],
  "UYARI: ayarlar.toml: {ileti}": [
-  "ayarlar.py:66"
+  "ayarlar.py:75"
  ],
  "UYARI: klavye etkinliği izlenemiyor ({neden}); yalnız fare izleniyor": [
   "insan.py:86"
@@ -1217,7 +1403,7 @@
   "uygulama.py:544"
  ],
  "Uygulama erişim seviyeleri": [
-  "gui/metinler.py:134"
+  "gui/metinler.py:136"
  ],
  "UÇBİRİM ENTER KAPISI ({baslik}): uçbirimde komut çalıştırmak (Enter) her zaman kullanıcının onayını ister ({onay_neden}){uyari}; kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
   "ucbirim.py:379"
@@ -1235,7 +1421,7 @@
   "guvenlik.py:1451"
  ],
  "Varsayılan kapalıdır. Açınca kısayol KDE'ye bu uygulama adına kaydedilir; kapatınca kaydı silinir. Çalışmazsa tepsi simgesindeki DUR yeterlidir.": [
-  "gui/metinler.py:162"
+  "gui/metinler.py:164"
  ],
  "Wayland soket adı kullanıcının gerçek oturumuyla aynı ({ad}); bağlanılmadı": [
   "kwin_oturum.py:163"
@@ -1297,33 +1483,45 @@
   "masaustu.py:1068"
  ],
  "Yalnız DUR": [
-  "gui/metinler.py:59"
+  "gui/metinler.py:61"
  ],
  "Yalnız kartla ödeme": [
-  "gui/metinler.py:146"
+  "gui/metinler.py:148"
  ],
  "Yanıt yoksa": [
-  "gui/metinler.py:126"
+  "gui/metinler.py:128"
+ ],
+ "Yarım kaldı.": [
+  "gui/metinler.py:212"
  ],
  "Yasak pencereler": [
-  "gui/metinler.py:131"
+  "gui/metinler.py:133"
  ],
  "Yasak pencerelere (~/.config/deskhand/yasak-pencereler.txt; varsayılan boş) hiç girdi gitmez. Ödeme/yetki/hesap\nsilme düğmelerine (Satın al, Öde, Authorize, İzin ver…) --approved olmadan tıklanmaz: --approved YALNIZ\nkullanıcı o adımı açıkça onayladıysa verilir. Her girdi ~/.local/state/deskhand/ günlüğüne yazılır.": [
   "cli.py:40"
  ],
  "Yeniden denetle": [
-  "gui/metinler.py:178"
+  "gui/metinler.py:180"
  ],
  "Yenile": [
-  "gui/metinler.py:172"
+  "gui/metinler.py:174"
  ],
  "Zaman": [
-  "gui/metinler.py:56",
-  "gui/metinler.py:96",
-  "gui/metinler.py:97"
+  "gui/metinler.py:58",
+  "gui/metinler.py:98",
+  "gui/metinler.py:99"
  ],
  "[ekran] '{anahtar}' → {sayi} adım": [
   "akis.py:235"
+ ],
+ "`claude` başlatılamadı: {hata}": [
+  "gorev.py:389"
+ ],
+ "`claude` komutu bulunamadı.": [
+  "gorev.py:362"
+ ],
+ "`claude` {kod} koduyla çıktı.": [
+  "gorev.py:520"
  ],
  "adı değişti": [
   "erisim.py:981"
@@ -1382,7 +1580,7 @@
   "gui/saglik.py:22"
  ],
  "araç": [
-  "gui/metinler.py:184"
+  "gui/metinler.py:186"
  ],
  "araç eksik": [
   "mcp_sunucu.py:136"
@@ -1391,7 +1589,7 @@
   "uygulama.py:313"
  ],
  "arka plan": [
-  "gui/metinler.py:57"
+  "gui/metinler.py:59"
  ],
  "arka plan girdi/görüntü (python-xlib)": [
   "gui/saglik.py:22"
@@ -1527,7 +1725,7 @@
   "arka_uc/sanal.py:347"
  ],
  "bekliyor": [
-  "gui/metinler.py:102"
+  "gui/metinler.py:104"
  ],
  "belgeler: {b}": [
   "uygulama.py:542"
@@ -1583,10 +1781,10 @@
   "masaustu.py:1080"
  ],
  "bilinmeyen ayar yok sayıldı: {ayar}": [
-  "ayarlar.py:121"
+  "ayarlar.py:130"
  ],
  "bilinmeyen ayar: {ayar}": [
-  "ayarlar.py:84"
+  "ayarlar.py:93"
  ],
  "bilinmeyen değiştirici tuş: {tus} (ctrl, shift, alt, meta)": [
   "eylem.py:175"
@@ -1867,7 +2065,7 @@
   "cli.py:372"
  ],
  "ekran": [
-  "gui/metinler.py:57"
+  "gui/metinler.py:59"
  ],
  "ekran boyutu okunamadı (kscreen-doctor)": [
   "arka_uc/kde.py:159"
@@ -2278,6 +2476,7 @@
   "erisim.py:137"
  ],
  "görüntü": [
+  "gorev.py:199",
   "mcp_sunucu.py:1569"
  ],
  "görüntü (python-pillow)": [
@@ -2300,7 +2499,7 @@
   "cli.py:344"
  ],
  "gözetimsiz kip: red": [
-  "gui/metinler.py:102"
+  "gui/metinler.py:104"
  ],
  "gözetimsiz çalışmada hassas eylem yapılmaz": [
   "onay.py:65"
@@ -2323,7 +2522,7 @@
  ],
  "hata": [
   "cli.py:302",
-  "gui/metinler.py:102"
+  "gui/metinler.py:104"
  ],
  "hayır": [
   "mesgul.py:639",
@@ -2379,13 +2578,13 @@
   "guvenlik.py:996"
  ],
  "istek geri çekildi": [
-  "gui/metinler.py:102"
+  "gui/metinler.py:104"
  ],
  "isteğe bağlı: yalnız listen aracı için": [
   "doktor.py:260"
  ],
  "izin verildi": [
-  "gui/metinler.py:100"
+  "gui/metinler.py:102"
  ],
  "kabuk/oturum başlangıç, otomatik başlatma ya da güvenlik dosyasına yazma ({hedef})": [
   "guvenlik.py:701",
@@ -2640,7 +2839,7 @@
   "doktor.py:244"
  ],
  "kurulum/oturum durumu": [
-  "gui/metinler.py:184"
+  "gui/metinler.py:186"
  ],
  "kwin_wayland yok": [
   "kwin_oturum.py:375"
@@ -2655,7 +2854,7 @@
   "guvenlik.py:813"
  ],
  "masaustu_baslat işlevi yok": [
-  "gui/metinler.py:78"
+  "gui/metinler.py:80"
  ],
  "masaüstü kabuğunu / pencere yöneticisini / Deskhand'i sonlandırma": [
   "guvenlik.py:788"
@@ -2756,10 +2955,10 @@
   "erisim.py:922"
  ],
  "okunamadı ({hata}); varsayılanlar kullanılıyor": [
-  "ayarlar.py:77"
+  "ayarlar.py:86"
  ],
  "onay ({karar}): {eylem}": [
-  "gui/metinler.py:72"
+  "gui/metinler.py:74"
  ],
  "onay bekleniyor: başka bir Deskhand sürecinin insan onayı sürerken girdi gönderilmez": [
   "eylem.py:97"
@@ -2883,10 +3082,10 @@
   "mcp_sunucu.py:1136"
  ],
  "panel kapalıydı": [
-  "gui/metinler.py:101"
+  "gui/metinler.py:103"
  ],
  "panel kapandı": [
-  "gui/metinler.py:101"
+  "gui/metinler.py:103"
  ],
  "panel soketi açılamadı ({dizin})": [
   "gui/__main__.py:42"
@@ -3080,7 +3279,7 @@
   "mcp_sunucu.py:2079"
  ],
  "reddedildi": [
-  "gui/metinler.py:100"
+  "gui/metinler.py:102"
  ],
  "ref bayat: {sid} anlık görüntüsü bilinmiyor (eskidi ya da başka bir sunucu oturumunun); eylem yapılmadı. observe çağırıp yeni ref kullan": [
   "mcp_sunucu.py:947"
@@ -3307,7 +3506,7 @@
   "gui/metinler.py:24"
  ],
  "sn": [
-  "gui/metinler.py:125"
+  "gui/metinler.py:127"
  ],
  "son açılış başarısız": [
   "doktor.py:243"
@@ -3329,7 +3528,7 @@
   "eylem.py:854"
  ],
  "süre doldu": [
-  "gui/metinler.py:100"
+  "gui/metinler.py:102"
  ],
  "süresi doldu": [
   "mcp_sunucu.py:1244"
@@ -3455,7 +3654,7 @@
   "eylem.py:230"
  ],
  "uyarı": [
-  "gui/metinler.py:183"
+  "gui/metinler.py:185"
  ],
  "uygulama adı boş": [
   "uygulama.py:84"
@@ -3502,7 +3701,7 @@
   "mcp_sunucu.py:2306"
  ],
  "var": [
-  "gui/metinler.py:180",
+  "gui/metinler.py:182",
   "masaustu.py:1078"
  ],
  "var (panel hazır girdi sunuyor)": [
@@ -3632,7 +3831,7 @@
   "guvenlik.py:744"
  ],
  "yok": [
-  "gui/metinler.py:181",
+  "gui/metinler.py:183",
   "masaustu.py:1074",
   "masaustu.py:1078",
   "mcp_sunucu.py:1136",
@@ -3676,7 +3875,7 @@
   "oturum/__init__.py:147"
  ],
  "{ad} · {g}×{y}": [
-  "gui/metinler.py:175"
+  "gui/metinler.py:177"
  ],
  "{ad} çalışmadı (bkz. {log})": [
   "ses.py:338"
@@ -3699,6 +3898,9 @@
  "{ad}: kullanıcının ekranında açık olup olmadığı bilinemiyor; tek örnek kilidi pencereyi kullanıcının ekranına devredebilir. Kapalı olduğu kesinleşince arka planda yapabilirim ya da Ekranımda yap.": [
   "oturum/__init__.py:113"
  ],
+ "{app} açılıyor": [
+  "gui/metinler.py:222"
+ ],
  "{arac} yok (Xvfb: xorg-server-xvfb paketi)": [
   "masaustu.py:681"
  ],
@@ -3715,20 +3917,20 @@
   "arka_uc/kwin.py:530"
  ],
  "{ayar} metin olmalı": [
-  "ayarlar.py:104"
+  "ayarlar.py:113"
  ],
  "{ayar} sayı olmalı": [
-  "ayarlar.py:94",
-  "ayarlar.py:98"
+  "ayarlar.py:103",
+  "ayarlar.py:107"
  ],
  "{ayar} true/false olmalı": [
-  "ayarlar.py:90"
+  "ayarlar.py:99"
  ],
  "{ayar} {alt}..{ust} arasında olmalı": [
-  "ayarlar.py:101"
+  "ayarlar.py:110"
  ],
  "{ayar} şunlardan biri olmalı: {secenekler}": [
-  "ayarlar.py:108"
+  "ayarlar.py:117"
  ],
  "{ayrinti}; tikla --foto eşler": [
   "gorsel.py:238"
@@ -3752,7 +3954,7 @@
   "eylem.py:1003"
  ],
  "{hata}; varsayılan ({deger}) kullanılıyor": [
-  "ayarlar.py:126"
+  "ayarlar.py:135"
  ],
  "{islem} tamam: {baslik} | konum {x},{y} boyut {g}x{h}": [
   "eylem.py:1151"
@@ -3830,19 +4032,19 @@
   "eylem.py:447"
  ],
  "{no}. satır geçerli bir desen değil: {hata}": [
-  "gui/metinler.py:143"
+  "gui/metinler.py:145"
  ],
  "{no}. satır geçerli değil: {hata}": [
-  "gui/metinler.py:139"
+  "gui/metinler.py:141"
  ],
  "{n} onay bekliyor": [
   "gui/metinler.py:25"
  ],
  "{n} satır": [
-  "gui/metinler.py:63"
+  "gui/metinler.py:65"
  ],
  "{ok}/{n} bileşen hazır": [
-  "gui/metinler.py:182"
+  "gui/metinler.py:184"
  ],
  "{sayi} kopya silindi": [
   "oturum/cli.py:129"
@@ -3864,7 +4066,7 @@
   "api.py:596"
  ],
  "{tus} boşta görünüyor.": [
-  "gui/metinler.py:165"
+  "gui/metinler.py:167"
  ],
  "{uygulama} arka planda açılamaz ({karar})": [
   "uygulama.py:701"
@@ -3908,17 +4110,23 @@
  "{yol}:{no}: girintili adım bir 'ekran' bloğunun altında olmalı": [
   "akis.py:56"
  ],
+ "{zaman} · {durum} · {metin}": [
+  "gui/metinler.py:220"
+ ],
  "«{ad}» simgesi silinsin mi? Bu simgeyi kullanan akışlar artık onu bulamaz.": [
-  "gui/metinler.py:173"
+  "gui/metinler.py:175"
  ],
  "Çakışma: {tus} şu an «{eylem}» ({bilesen}) için kullanılıyor.": [
-  "gui/metinler.py:164"
+  "gui/metinler.py:166"
  ],
  "Çalışma dizini": [
   "doktor.py:207"
  ],
+ "Çalışıyor… ({n} adım)": [
+  "gui/metinler.py:209"
+ ],
  "Çık": [
-  "gui/metinler.py:35"
+  "gui/metinler.py:36"
  ],
  "Çıkış kodları: 0 tamam, 1 kullanım, 2 nokta pencere/ekran dışında, 3 pencere aktif değil,\n4 başlık uymadı, 5 birden çok eşleşme (--nth ver), 6 metin bulunamadı, 7 zaman aşımı,\n8 pencere yok/taşındı, 9 dotool/tesseract çalışmadı, 10 yasak pencere / hassas düğme (onay gerekir),": [
   "cli.py:140"
@@ -3927,13 +4135,16 @@
   "guvenlik.py:1393"
  ],
  "Önizleme yok": [
-  "gui/metinler.py:88"
+  "gui/metinler.py:90"
  ],
  "Önizleme yok: {hata}": [
-  "gui/metinler.py:89"
+  "gui/metinler.py:91"
  ],
  "Özet: {tamam} tamam, {uyari} uyarı, {eksik} eksik zorunlu bağımlılık": [
   "doktor.py:300"
+ ],
+ "Öğe sürükleniyor": [
+  "gui/metinler.py:228"
  ],
  "çalışma dizini gevşek izinli ({izin}; 0700 olmalı): {yol} — `chmod 700 {yol}` ile düzeltin": [
   "arka_ortak.py:358"
@@ -4070,15 +4281,18 @@
   "gui/saglik.py:21"
  ],
  "İptal": [
-  "gui/metinler.py:128"
+  "gui/metinler.py:130"
  ],
  "İpucu: tarayıcı erişilebilirlik açıkken başlamamış olabilir; kapatıp arka planda yeniden aç (ac --arka / open_app desktop=background: erişilebilirlik kendiliğinden açılır) ya da Firefox'u GNOME_ACCESSIBILITY=1, Chromium'u --force-renderer-accessibility ile başlat": [
   "web.py:587"
  ],
  "İsteyen süreç": [
-  "gui/metinler.py:111"
+  "gui/metinler.py:113"
  ],
  "İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.": [
-  "gui/metinler.py:115"
+  "gui/metinler.py:117"
+ ],
+ "‘{hedef}’ tıklanıyor": [
+  "gui/metinler.py:223"
  ]
 }

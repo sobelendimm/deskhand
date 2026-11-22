@@ -1,4 +1,4 @@
-"""Panel penceresi: durum şeridi (DUR/Devam) + sekmeler (Etkinlik, Arka plan ekranı, Onaylar, Ayarlar, Simgeler,
+"""Panel penceresi: durum şeridi (DUR/Devam) + sekmeler (Görev, Etkinlik, Arka plan ekranı, Onaylar, Ayarlar, Simgeler,
 Sağlık). Görünüm sistem paletinden (Breeze açık/koyu); sabit renk yalnız durum renklerinde."""
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from . import metinler as T
 from .dil import Metinler, dil_secenekleri, gunluk_eylemi
 from . import saglik as S
 from .durum import RENK, Durum
+from .gorev import GorevSekmesi
 from .gunluk_okur import KUYRUK, onay_gecmisi
 from .kisayol import VARSAYILAN_TUS, cakismalar
 from .onizleme import Onizleme, pil_qimage
@@ -1198,7 +1199,8 @@ class AnaPencere(QMainWindow):
     devam_istendi = pyqtSignal()
 
     def __init__(self, ilk_satirlar: list[dict] | None = None, parent=None, arka_f=_varsayilan_arka,
-                 masaustu_m=None, karar=None, cakisma_f=cakismalar, simge_sor=None, saglik_f=S.tam_denetim):
+                 masaustu_m=None, karar=None, cakisma_f=cakismalar, simge_sor=None, saglik_f=S.tam_denetim,
+                 gorev_f=None):
         super().__init__(parent)
         self.setWindowTitle(onay.PANEL_BASLIK)
         self.setObjectName("deskhandPanel")
@@ -1218,6 +1220,7 @@ class AnaPencere(QMainWindow):
         self.sekmeler = QTabWidget()
         self.sekmeler.setDocumentMode(True)
         ilk = ilk_satirlar or []
+        self.gorev = GorevSekmesi(arka_f=arka_f, **({"gorev_f": gorev_f} if gorev_f else {}))
         self.etkinlik = EtkinlikSekmesi(ilk)
         self.arka = ArkaPlanSekmesi(arka_f=arka_f, masaustu_m=masaustu_m)
         self.onaylar = OnaylarSekmesi()
@@ -1225,7 +1228,8 @@ class AnaPencere(QMainWindow):
         self.ayarlar = AyarlarSekmesi(karar=karar, cakisma_f=cakisma_f)
         self.simgeler = SimgelerSekmesi(sor=simge_sor)
         self.saglik = SaglikSekmesi(denetle=saglik_f)
-        for w, ad, ikon in ((self.etkinlik, T.S_ETKINLIK, "view-list-details"),
+        for w, ad, ikon in ((self.gorev, T.S_GOREV, "system-run"),
+                            (self.etkinlik, T.S_ETKINLIK, "view-list-details"),
                             (self.arka, T.S_ARKA, "video-display"),
                             (self.onaylar, T.S_ONAY, "dialog-question"),
                             (self.ayarlar, T.S_AYAR, "configure"),
@@ -1237,12 +1241,15 @@ class AnaPencere(QMainWindow):
         self._onay_sekmesi_yaz()
         self.serit.onaylar_istendi.connect(lambda: self.sekmeler.setCurrentWidget(self.onaylar))
         self.ayarlar.dil_degisti.connect(self.tazele)
+        self.gorev.devral_istendi.connect(self._gorev_devral)
+        self.arka.devral_degisti.connect(self.gorev.devral_durumu)
         kok.addWidget(self.sekmeler, 1)
         self.setCentralWidget(merkez)
 
     def durum_guncelle(self, d: Durum):
         self._durum = d
         self.serit.guncelle(d)
+        self.gorev.durum_guncelle(d)
         self._onay_sekmesi_yaz()
 
     def _onay_sekmesi_yaz(self):
@@ -1254,7 +1261,7 @@ class AnaPencere(QMainWindow):
         """Dil değişti (i18n yeniden yüklendi): tüm görünen metinler yeni dilde; içerik ve durum korunur."""
         self.mt.tazele()
         self.serit.tazele()
-        for sekme in (self.etkinlik, self.arka, self.onaylar, self.ayarlar, self.simgeler, self.saglik):
+        for sekme in (self.gorev, self.etkinlik, self.arka, self.onaylar, self.ayarlar, self.simgeler, self.saglik):
             sekme.tazele()
         self._onay_sekmesi_yaz()
 
@@ -1264,6 +1271,16 @@ class AnaPencere(QMainWindow):
 
     def arka_goster(self):
         self.sekmeler.setCurrentWidget(self.arka)
+
+    def gorev_goster(self):
+        self.sekmeler.setCurrentWidget(self.gorev)
+        self.gorev.kutu.setFocus()
+
+    def _gorev_devral(self):
+        """Görev sekmesindeki Devral: mevcut Devral akışı (Arka plan ekranı sekmesi) açılır/kapanır."""
+        self.arka.b_devral.setChecked(not self.arka.b_devral.isChecked())
+        if self.arka.b_devral.isChecked():
+            self.arka_goster()
 
     def devam_sor(self) -> QMessageBox:
         """Tepsiden gelen Devam: BU pencerede (sınıfı yerleşik yasak listede: ajan tıklayamaz) onay sorar; yalnız

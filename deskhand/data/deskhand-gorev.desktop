@@ -1,0 +1,19 @@
+# TASLAK: kurulumda ~/.local/share/applications/deskhand-gorev.desktop ("Görev ver": paneli Görev sekmesinde açar).
+# Pencere sınıfı panelle aynı (StartupWMClass=deskhand): ayrı bir pencere değil, çalışan panel öne gelir.
+[Desktop Entry]
+Type=Application
+Name=Deskhand: Give a task
+Name[tr]=Deskhand: Görev ver
+GenericName=Hand a task to Claude
+GenericName[tr]=Claude'a görev ver
+Comment=Type a task; Claude does it on an invisible desktop while you watch
+Comment[tr]=Görevi yazın; Claude görünmez masaüstünde yapsın, siz izleyin
+Exec=python3 -m deskhand.gui --gorev
+Icon=deskhand
+Terminal=false
+Categories=Utility;System;
+Keywords=claude;agent;ai;task;automation;
+Keywords[tr]=claude;ajan;yapay zeka;görev;otomasyon;
+StartupNotify=false
+StartupWMClass=deskhand
+X-KDE-StartupNotify=false

@@ -30,6 +30,7 @@ DEVRAL_ACIK = N_("Arka plan masaüstünü siz kullanıyorsunuz (Devral)")
 # ---- tepsi menüsü
 M_DUR = N_("DUR — tüm girdileri durdur")
 M_DEVAM = N_("Devam et (DUR'u kaldır)")
+M_GOREV = N_("Görev ver…")
 M_PANEL = N_("Paneli aç")
 M_ARKA = N_("Arka plan ekranını göster")
 M_CIK = N_("Çık")
@@ -44,6 +45,7 @@ DEVAM_SORU = N_("DUR kaldırılsın mı? Ajan yeniden girdi gönderebilir.")
 DEVAM_VAZGEC = N_("DUR açık kalsın")
 
 # ---- sekmeler
+S_GOREV = N_("Görev")
 S_ETKINLIK = N_("Etkinlik")
 S_ARKA = N_("Arka plan ekranı")
 S_ONAY = N_("Onaylar")
@@ -187,3 +189,58 @@ H_TUR = {"ek": N_("kurulum/oturum durumu"), "arac": N_("araç"), "dil": N_("OCR 
 EVET = N_("Evet")
 HAYIR = N_("Hayır")
 KAPAT = N_("Kapat")
+
+# ---- görev sekmesi
+G_KUTU_IPUCU = N_("Ne yapılmasını istiyorsunuz? Örn: «Trendyol'da şu kasayı sepete ekle», «İndirilenler'i düzenle»")
+G_BASLAT = N_("Başlat")
+G_BASLAT_IPUCU = N_("Görevi Claude'a verir (Ctrl+Enter). Claude görünmez masaüstünde çalışır; ekranınıza dokunmaz.")
+G_DURDUR = N_("Durdur")
+G_DURDUR_IPUCU = N_("Görevi hemen durdurur. Görünmez masaüstü açık kalır.")
+G_DEVRAL = N_("Devral")
+G_BIRAK = N_("Bırak")
+G_DEVRAL_IPUCU = N_("Görünmez masaüstünü siz kullanın (Arka plan ekranı sekmesi): giriş, CAPTCHA, doğrulama kodu…")
+G_MODEL = N_("Model")
+G_MODEL_AD = {"sonnet": N_("Sonnet (dengeli)"), "opus": N_("Opus (güçlü, yavaş)"), "haiku": N_("Haiku (hızlı, basit)")}
+G_MODEL_IPUCU = N_("Görevi yapan Claude modeli (Claude Code aboneliğiniz kullanılır).")
+G_ADIMLAR = N_("Adımlar")
+G_SONUC = N_("Sonuç")
+G_GECMIS = N_("Geçmiş görevler (çift tıkla: metni kutuya al)")
+G_HAZIR = N_("Hazır. Görevi yazıp Başlat'a basın.")
+G_CALISIYOR = N_("Çalışıyor… ({n} adım)")
+G_ONAY = N_("Onay bekleniyor ({n}): onay penceresine bakın — Claude sizin kararınızı bekliyor.")
+G_BITTI = {"tamam": N_("Bitti."), "hata": N_("Görev tamamlanamadı."), "durduruldu": N_("Durduruldu."),
+           "zaman_asimi": N_("Süre doldu, durduruldu."), "devam": N_("Yarım kaldı.")}
+G_DURDURULUYOR = N_("Durduruluyor…")
+G_SANAL_YOK = N_("Görünmez masaüstü henüz açık değil. Claude açınca burada canlı görünür.")
+G_ONIZLEME_BOS = N_("Görev çalışırken görünmez masaüstü burada canlı görünür.")
+G_ONIZLEME_HATA = N_("Görüntü alınamadı: {hata}")
+G_BASLATMA_HATA = N_("Görev başlatılamadı: {hata}")
+G_DUSUNUYOR = N_("Düşünüyor…")
+G_HATA_SATIRI = N_("Hata: {ozet}")
+G_GECMIS_SATIRI = N_("{zaman} · {durum} · {metin}")
+G_ARAC = {
+    "open_app": N_("{app} açılıyor"),
+    "click": N_("‘{hedef}’ tıklanıyor"),
+    "click_genel": N_("Bir öğe tıklanıyor"),
+    "type_text": N_("Metin yazılıyor"),
+    "press_key": N_("Tuşa basılıyor: {keys}"),
+    "scroll": N_("Sayfa kaydırılıyor"),
+    "drag": N_("Öğe sürükleniyor"),
+    "observe": N_("Pencere inceleniyor"),
+    "screenshot": N_("Ekran görüntüsü alınıyor"),
+    "read_text": N_("Ekrandaki metin okunuyor"),
+    "find": N_("Simge/renk aranıyor"),
+    "wait_for": N_("Bekleniyor: {value}"),
+    "wait_for_genel": N_("Ekranın oturması bekleniyor"),
+    "get_status": N_("Durum kontrol ediliyor"),
+    "choose_desktop": N_("Masaüstü seçiliyor"),
+    "manage_desktop_start": N_("Görünmez masaüstü açılıyor"),
+    "manage_desktop_stop": N_("Görünmez masaüstü kapatılıyor"),
+    "manage_desktop_status": N_("Görünmez masaüstü inceleniyor"),
+    "manage_window": N_("Pencere düzenleniyor"),
+    "clipboard": N_("Pano kullanılıyor"),
+    "listen": N_("Ses dinleniyor"),
+    "run_flow": N_("Kayıtlı akış çalıştırılıyor"),
+    "batch": N_("Adım dizisi çalıştırılıyor"),
+}
+G_ARAC_BILINMEYEN = N_("Araç çalışıyor: {arac}")

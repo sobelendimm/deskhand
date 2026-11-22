@@ -66,7 +66,15 @@ deskhand/
   onay_hedef.py    onay verilen hedefin özeti (kimlik, başlık, geometri, bölge görüntüsü) + onay sonrası doğrulama (§8)
   liste_koruma.py  yasak/seviye listeleri: panel yetkili kaynak (bellek, geri yazma, işaret, kanaldan okuma; §4)
   girdi_merkezi.py panelin içinde hazır bekleyen tek dotool + RUNTIME_DIR/girdi.sock (Qt'siz; §2, §4)
-  gui/             panel, tepsi, onay diyaloğu
+  gui/             panel, tepsi, onay diyaloğu; gui/gorev.py = "Görev" sekmesi (görev kutusu, canlı adımlar, görünmez
+                   masaüstünün canlı görüntüsü, geçmiş)
+  gorev.py         görev yürütücü (Qt'siz): kullanıcının yazdığı görevi `claude -p --output-format stream-json` ile
+                   YALNIZ `deskhand mcp --desktop background` araçlarıyla yaptırır. Ayrıcalık sınırı argv'de:
+                   geçici --mcp-config (tek sunucu deskhand-gorev, env DESKHAND_GERCEK_EKRAN=kapali) + --strict-mcp-config +
+                   --allowedTools mcp__deskhand-gorev__* + yerleşik araçlar --disallowedTools + --permission-mode dontAsk +
+                   --setting-sources project; boş geçici çalışma dizini; istem stdin'den; olaylar {tur, zaman, ozet};
+                   geçmiş STATE_DIR/gorevler/*.jsonl (0600, son 50); aynı anda tek görev (flock RUNTIME_DIR/gorev.lock);
+                   ayarlar [gorev] model / azami_dakika
   fark.py          eylem öncesi/sonrası ekran farkı (changed, changed_region, changed_ratio; NumPy, imleç dayanıklı)
   dongu.py         döngü kesici: aynı eylem 3. sonuçsuzda uyarı, 5'ten sonra ret (MCP, oturum başına bellek)
   gozlem.py        MCP observe: ögeleri tek biçime getirme, sorgu/atalar, OCR ayıklama, anlık görüntü önbelleği
