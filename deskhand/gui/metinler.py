@@ -244,3 +244,13 @@ G_ARAC = {
     "batch": N_("Adım dizisi çalıştırılıyor"),
 }
 G_ARAC_BILINMEYEN = N_("Araç çalışıyor: {arac}")
+G_SITELER = N_("Oturumla girilebilecek siteler:")
+G_SITELER_IPUCU = N_("github.com, ornek.com — boşsa çerezsiz temiz profil")
+G_SITELER_ACIKLAMA = N_("Yalnız bu sitelerin çerezleri (girişleri) görev tarayıcısına kopyalanır; boşsa tarayıcı hiçbir "
+                        "oturum olmadan açılır. Kayıtlı parolalar HİÇ kopyalanmaz.")
+G_PAROLA_UYARI = N_("Görev metnine parola ya da kart numarası yazmayın.")
+G_ONAY_BASLIK = N_("Görevi başlat")
+G_ONAY_METIN = N_("Görev: {metin}\n\nOturumla girilebilecek siteler: {siteler}\n\nYalnız tarayıcı açılabilir; yerel "
+                  "dosyalar ve kayıtlı parolalar görev ajanına kapalı.")
+G_ONAY_SITE_YOK = N_("yok — çerezsiz")
+G_INDIRILENLER = N_("İndirilen dosyalar: {dosyalar} (klasör: {klasor})")

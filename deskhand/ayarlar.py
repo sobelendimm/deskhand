@@ -16,6 +16,7 @@ Dosya yoksa varsayılanlar kullanılır; OKUMA dosya oluşturmaz. Bilinmeyen/yan
   [gorev]
   model = "sonnet"         # sonnet | opus | haiku   (panelin "Görev" sekmesi: görevi yapan Claude modeli)
   azami_dakika = 20        # bir görev bu kadar dakikayı aşarsa durdurulur
+  azami_tur = 60           # claude --max-turns (ajan dönüşü sınırı)
 
   [dinleme]
   ozel_ses = false         # true: HER görünmez masaüstü açılışında özel (donanımsız) ses sunucusu kur (`listen` için);
@@ -48,6 +49,7 @@ VARSAYILAN = {
     "gorev": {
         "model": "sonnet",
         "azami_dakika": 20,
+        "azami_tur": 60,
     },
     "dinleme": {
         "ozel_ses": False,
@@ -60,7 +62,7 @@ TAKMA = {("karar", "mesgulken"): {"hep-arka": "arka"}}
 SECENEK = {("karar", "mesgulken"): {"sor", "arka", "bekle"}, ("karar", "cevapsiz"): {"arka", "sonra"},
            ("guvenlik", "onaylar"): {"hepsi", "kart"}, ("gorev", "model"): {"sonnet", "opus", "haiku"}}
 ARALIK = {("karar", "sor_sure"): (1, 3600), ("karar", "girdi_esik_sn"): (0, 3600),
-          ("gorev", "azami_dakika"): (1, 240)}
+          ("gorev", "azami_dakika"): (1, 240), ("gorev", "azami_tur"): (1, 500)}
 
 _uyarilan = set()
 

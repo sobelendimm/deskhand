@@ -192,7 +192,7 @@ kontrol("base64 olaya/günlüğe girmez", "QUJD" * 10 not in json.dumps(ol) and 
 kontrol("günlük: kullanıcının görev metni tutulur", "Trendyol'da şu kasayı sepete ekle" in gunluk_metni)
 d = gorev.ayristir({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "z",
                     "name": "mcp__deskhand-gorev__type_text", "input": {"text": "merhaba"}}]}}, {})
-kontrol("ayristir: tek nesne", d and d[0]["ozet"].startswith('type_text({"text": "merhaba"'), str(d))
+kontrol("ayristir: tek nesne; yazılan metin geçmişe girmez ([N karakter])", d and d[0]["ozet"].startswith('type_text({"text": "[7 karakter]"') and "merhaba" not in json.dumps(d), str(d))
 kontrol("ayristir: bilinmeyen/biçimsiz nesne → []", gorev.ayristir({"type": "rate_limit_event"}) == []
         and gorev.ayristir("çöp") == [] and gorev.ayristir(None) == [])
 

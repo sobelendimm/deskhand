@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette
-from PyQt6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton,
-                             QSplitter, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QApplication, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+                             QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QVBoxLayout, QWidget)
 
-from .. import ayarlar, gorev
+from .. import ayarlar, gorev, gorev_kipi
 from ..i18n import _
 from . import metinler as T
 from .dil import Metinler
@@ -97,6 +97,20 @@ class GorevSekmesi(QWidget):
         self.mt(self.kutu.setPlaceholderText, T.G_KUTU_IPUCU)
         kok.addWidget(self.kutu)
         self.kutu.gonder.connect(self.baslat)
+        self.l_parola = QLabel()  # görev metni geçmişe/Claude'a gider: sır yazılmasın
+        self.mt(self.l_parola.setText, T.G_PAROLA_UYARI)
+        kok.addWidget(self.l_parola)
+        site_sira = QHBoxLayout()
+        self.l_siteler = QLabel()
+        self.mt(self.l_siteler.setText, T.G_SITELER)
+        self.siteler = QLineEdit()
+        self.mt(self.siteler.setPlaceholderText, T.G_SITELER_IPUCU)
+        self.mt(self.siteler.setToolTip, T.G_SITELER_ACIKLAMA)
+        site_sira.addWidget(self.l_siteler)
+        site_sira.addWidget(self.siteler, 1)
+        kok.addLayout(site_sira)
+        # Başlat'tan önce kısa onay (görev metni + izinli siteler + "yalnız tarayıcı"); başsız (offscreen) testte kapalı
+        self.onay_iste = QApplication.platformName() != "offscreen"
 
         sira = QHBoxLayout()
         self.b_baslat = QPushButton()
@@ -201,6 +215,7 @@ class GorevSekmesi(QWidget):
         self.b_baslat.setEnabled(not c)
         self.b_durdur.setEnabled(c and not self.durduruluyor)
         self.kutu.setReadOnly(c)
+        self.siteler.setReadOnly(c)
         self.c_model.setEnabled(not c)
         self.gecmis_liste.setEnabled(not c)
         self.b_devral.setEnabled(self.sanal is not None)
@@ -256,6 +271,9 @@ class GorevSekmesi(QWidget):
         metin = self.kutu.toPlainText().strip()
         if not metin:
             return
+        siteler = ", ".join(gorev_kipi.site_ayristir(self.siteler.text()))
+        if self.onay_iste and not self._onayla(metin, siteler):
+            return
         self.liste.clear()
         self._adimlar.clear()
         self._dusunuyor = None
@@ -264,7 +282,10 @@ class GorevSekmesi(QWidget):
         self._bitis_durumu = ""
         try:
             self.g = self.gorev_f(olay_cb=self.olay_geldi.emit)
-            self.g.baslat(metin)
+            if siteler:
+                self.g.baslat(metin, siteler=siteler)
+            else:
+                self.g.baslat(metin)
         except gorev.GorevHatasi as e:
             self.g = None
             self._bitis_durumu = "hata"
@@ -276,6 +297,19 @@ class GorevSekmesi(QWidget):
         self._durum_yaz()
         self._dugmeler()
         self._zamanlayici()
+
+    def onay_metni(self, metin: str, siteler: str) -> str:
+        kisa = " ".join(metin.split())
+        kisa = kisa if len(kisa) <= 300 else kisa[:299] + "…"
+        return _(T.G_ONAY_METIN).format(metin=kisa, siteler=siteler or _(T.G_ONAY_SITE_YOK))
+
+    def _onayla(self, metin: str, siteler: str) -> bool:
+        k = QMessageBox(QMessageBox.Icon.Question, _(T.G_ONAY_BASLIK), self.onay_metni(metin, siteler),
+                        QMessageBox.StandardButton.Cancel, self)
+        b = k.addButton(_(T.G_BASLAT), QMessageBox.ButtonRole.AcceptRole)
+        k.setDefaultButton(b)
+        k.exec()
+        return k.clickedButton() is b
 
     def durdur(self) -> None:
         if not self.calisiyor or self.g is None:
@@ -341,6 +375,9 @@ class GorevSekmesi(QWidget):
             self._bitti(o)
 
     def _bitti(self, o: dict) -> None:
+        if o.get("indirilenler"):
+            self._ekle(_(T.G_INDIRILENLER).format(dosyalar=", ".join(map(str, o["indirilenler"][:20])),
+                                                  klasor=o.get("indirme_dizini", "")), YESIL)
         self.calisiyor = self.durduruluyor = False
         self._bitis_durumu = o.get("durum", "hata")
         self.zaman.stop()

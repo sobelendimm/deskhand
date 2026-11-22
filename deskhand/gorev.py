@@ -35,7 +35,7 @@ import threading
 import time
 import uuid
 
-from . import yollar
+from . import gorev_kipi, yollar
 from .i18n import _
 
 MCP_AD = "deskhand-gorev"
@@ -49,6 +49,14 @@ GECMIS_SAYISI = 50
 METIN_SINIRI = 4000
 BELLEK_SINIRI = "4G"
 OLDURME_BEKLEME = 3.0  # SIGTERM'den SIGKILL'e
+AZAMI_TUR = 60
+# claude alt sürecinin ortamına eklenenler (adlar claude 2.1.330 ikilisinde doğrulandı): claude.ai bağlayıcıları
+# (Gmail, Drive…) YÜKLENMEZ, CLAUDE.md'ler ve otomatik hafıza OKUNMAZ
+CLAUDE_ORTAM_EK = {"ENABLE_CLAUDEAI_MCP_SERVERS": "false", "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+                   "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
+# geçmişte değeri yazılmayan araç girdileri (yazılan metin: parola/kart olabilir) → "[N karakter]"
+GIZLI_GIRDILER = ("text", "value", "keys_text")
+GIZLI_ARACLAR = ("type_text", "set_value", "fill", "type")
 
 TALIMAT = """Sen Deskhand'in görev ajanısın. Kullanıcının verdiği görevi YALNIZ Deskhand araçlarıyla ve GÖRÜNMEZ arka plan \
 masaüstünde yaparsın: her araç çağrısında desktop="background" ver; masaüstü kapalıysa önce manage_desktop(action="start") \
@@ -92,6 +100,14 @@ def ayar_azami_dakika() -> int:
     return int(ayarlar.al("gorev", "azami_dakika"))
 
 
+def ayar_azami_tur() -> int:
+    from . import ayarlar
+    try:
+        return int(ayarlar.al("gorev", "azami_tur"))
+    except Exception:  # noqa: BLE001
+        return AZAMI_TUR
+
+
 def claude_bul() -> str | None:
     """`claude` ikilisi: PATH, sonra ~/.local/bin ve ~/.claude/local."""
     y = shutil.which("claude")
@@ -115,16 +131,31 @@ def deskhand_komutu() -> list[str]:
 
 
 def mcp_ortami() -> dict[str, str]:
-    """MCP sunucusuna giden ortam: bu sürecin ortamı (sırlar hariç) + gerçek ekran kilidi."""
-    o = {k: v for k, v in os.environ.items()
-         if not KIMLIK_ORTAM_DENEN.search(k) and not k.startswith(("ANTHROPIC_", "CLAUDE"))}
-    o["DESKHAND_GERCEK_EKRAN"] = "kapali"
-    return o
+    """mcp.json `env` alanı: YALNIZ gerçek ekran kilidi + GÖREV KİPİ (gorev_kipi). Geri kalan ortamı sunucu claude'dan
+    (süzülmüş _claude_ortami) devralır; sırlar mcp.json'a yazılmaz."""
+    return {"DESKHAND_GERCEK_EKRAN": "kapali", gorev_kipi.ORTAM: "1"}
 
 
 def mcp_yapilandirma(komut: list[str] | None = None) -> dict:
     komut = komut or deskhand_komutu()
     return {"mcpServers": {MCP_AD: {"type": "stdio", "command": komut[0], "args": komut[1:], "env": mcp_ortami()}}}
+
+
+def calisma_koku() -> str:
+    """Geçici çalışma dizininin kökü: XDG_RUNTIME_DIR (kullanıcıya özel, 0700); /tmp'deki başkasının CLAUDE.md'si
+    üst dizinden okunmasın. Yoksa Deskhand'in RUNTIME_DIR'i."""
+    x = os.environ.get("XDG_RUNTIME_DIR")
+    if x and os.path.isdir(x) and os.stat(x).st_uid == os.getuid():
+        return x
+    return yollar.runtime_dir()
+
+
+def _masaustu_acik() -> bool:
+    try:
+        from . import masaustu
+        return masaustu.durum_oku() is not None
+    except Exception:  # noqa: BLE001
+        return True  # bilinemiyorsa kapatma
 
 
 def bellek_kafesi_var() -> bool:
@@ -135,11 +166,14 @@ def bellek_kafesi_var() -> bool:
     return os.path.exists(os.path.join(xdg, "bus"))
 
 
-def komut_olustur(claude: str, mcp_dosya: str, model: str, kafes: bool = False) -> list[str]:
+def komut_olustur(claude: str, mcp_dosya: str, model: str, kafes: bool = False,
+                  azami_tur: int = AZAMI_TUR) -> list[str]:
     """claude'un TAM argv'si (istem stdin'den gider: `--allowedTools <araçlar...>` gibi çok değerli bayraklar
-    ardındaki konumsal bağımsız değişkeni yutar)."""
+    ardındaki konumsal bağımsız değişkeni yutar). `--tools ""`: hiçbir yerleşik araç YÜKLENMEZ (kara liste ikinci
+    katman); `--no-chrome`: Claude in Chrome kapalı; `--max-turns`: dönüş sınırı ([gorev] azami_tur)."""
     argv = [claude, "-p", "--output-format", "stream-json", "--verbose",
             "--model", model,
+            "--tools", "", "--no-chrome", "--max-turns", str(int(azami_tur)),
             "--mcp-config", mcp_dosya, "--strict-mcp-config",
             "--allowedTools", IZINLI_ARACLAR,
             "--disallowedTools", *YASAKLI_ARACLAR,
@@ -171,14 +205,24 @@ def kisalt(metin, sinir: int = 300, satirlar: bool = False) -> str:
     return s if len(s) <= sinir else s[:max(0, sinir - 1)].rstrip() + "…"
 
 
-def girdi_kisalt(g) -> dict:
-    """Araç girdisi: her değer kısa; çok uzun/ikili değerler atılır."""
+def girdi_kisalt(g, arac: str = "") -> dict:
+    """Araç girdisi: her değer kısa; çok uzun/ikili değerler atılır. Yazılan metin (type_text `text` vb.: parola/kart
+    olabilir) geçmişe/olaya YAZILMAZ: "[N karakter]"."""
     if not isinstance(g, dict):
         return {"girdi": kisalt(g, 120)}
     sonuc = {}
     for k, v in list(g.items())[:12]:
+        if isinstance(v, str) and (k in GIZLI_GIRDILER or (arac in GIZLI_ARACLAR and k not in (
+                "window", "ref", "desktop", "target", "key", "keys"))):
+            sonuc[str(k)[:40]] = f"[{len(v)} karakter]"
+            continue
         sonuc[str(k)[:40]] = v if isinstance(v, (bool, int, float)) or v is None else kisalt(v, 100)
     return sonuc
+
+
+def ozet_maskele(metin: str) -> str:
+    """Görev metni geçmişe/başlığa: kart numarası ve 'parola: X' kalıpları maskelenir."""
+    return gorev_kipi.maskele(metin)[0]
 
 
 def arac_adi(ad: str) -> str:
@@ -227,7 +271,7 @@ def ayristir(nesne, durum: dict | None = None) -> list[dict]:
                     sonuc.append(olay("metin", kisalt(b["text"], 1500, satirlar=True)))
             elif b.get("type") == "tool_use":
                 ad = arac_adi(str(b.get("name", "?")))
-                girdi = girdi_kisalt(b.get("input"))
+                girdi = girdi_kisalt(b.get("input"), ad)
                 durum[b.get("id")] = ad
                 sonuc.append(olay("arac", f"{ad}({kisalt(json.dumps(girdi, ensure_ascii=False), 160)})",
                                   arac=ad, girdi=girdi, kimlik=b.get("id")))
@@ -340,6 +384,8 @@ class Gorev:
         self._tmp: str | None = None
         self._bitti = threading.Event()
         self._yaz_kilit = threading.Lock()
+        self.siteler: tuple[str, ...] = ()
+        self._masaustu_onceden = True  # görev başlarken görünmez masaüstü açık mıydı (değilse bitince kapatılır)
 
     # -------- durum
     @property
@@ -348,8 +394,9 @@ class Gorev:
         return t is not None and t.is_alive()
 
     # -------- başlat
-    def baslat(self, metin: str) -> str:
-        """Görevi başlat → görev kimliği. Başlatılamazsa GorevHatasi (hiçbir süreç/dosya kalmaz)."""
+    def baslat(self, metin: str, siteler: str = "") -> str:
+        """Görevi başlat → görev kimliği. Başlatılamazsa GorevHatasi (hiçbir süreç/dosya kalmaz). siteler: görevde
+        oturumla girilebilecek alan adları (virgüllü; boş → çerezsiz temiz profil; gorev_kipi.site_ayristir)."""
         if self.calisiyor:
             raise GorevHatasi(_("Bir görev zaten çalışıyor."), _("Bitmesini bekleyin ya da Durdur'a basın."))
         metin = (metin or "").strip()
@@ -368,7 +415,7 @@ class Gorev:
         kilit = self._kilit_al()
         tmp = None
         try:
-            tmp = tempfile.mkdtemp(prefix="deskhand-gorev-")  # 0700
+            tmp = tempfile.mkdtemp(prefix="deskhand-gorev-", dir=calisma_koku())  # 0700; /tmp DEĞİL
             calisma = os.path.join(tmp, "calisma")
             os.mkdir(calisma, 0o700)
             mcp_dosya = os.path.join(tmp, "mcp.json")
@@ -376,14 +423,17 @@ class Gorev:
             with os.fdopen(fd, "w") as f:
                 json.dump(mcp_yapilandirma(self._komut), f)
             kafes = bellek_kafesi_var() if self._kafes is None else self._kafes
-            argv = komut_olustur(claude, mcp_dosya, model, kafes)
+            argv = komut_olustur(claude, mcp_dosya, model, kafes, ayar_azami_tur())
             self.id = uuid.uuid4().hex[:8]
             self.metin, self.neden, self.olaylar_ = metin, "", []
+            self.siteler = gorev_kipi.site_ayristir(siteler)
+            self._masaustu_onceden = _masaustu_acik()
             self._gecmis_ac(model)
             self._bitti.clear()
             try:
                 self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                             cwd=calisma, env=self._claude_ortami(), start_new_session=True)
+                                             cwd=calisma, env=self._claude_ortami(self.siteler),
+                                             start_new_session=True)
             except OSError as e:
                 self._gecmis_kapat()
                 raise GorevHatasi(_("`claude` başlatılamadı: {hata}").format(hata=e)) from None
@@ -403,11 +453,16 @@ class Gorev:
         return self.id
 
     @staticmethod
-    def _claude_ortami() -> dict[str, str]:
-        o = dict(os.environ)
+    def _claude_ortami(siteler=()) -> dict[str, str]:
+        """claude'un ortamı: ANTHROPIC_* (API anahtarı, temel adres, özel başlıklar) SİLİNİR, iç içe oturum işaretleri
+        atılır, CLAUDE_ORTAM_EK eklenir; GÖREV KİPİ + izinli siteler (MCP sunucusu devralır)."""
+        o = {k: v for k, v in os.environ.items() if not k.startswith("ANTHROPIC_")}
         o["DESKHAND_GERCEK_EKRAN"] = "kapali"  # claude'un tüm alt süreçleri (MCP dahil) gerçek ekrana kilitli
         for k in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):  # iç içe oturum işareti
             o.pop(k, None)
+        o.update(CLAUDE_ORTAM_EK)
+        o[gorev_kipi.ORTAM] = "1"
+        o[gorev_kipi.SITE_ORTAM] = ",".join(siteler)
         return o
 
     def _kilit_al(self):
@@ -441,8 +496,8 @@ class Gorev:
         self.dosya = os.path.join(d, f"{time.strftime('%Y%m%d-%H%M%S')}-{self.id}.jsonl")
         fd = os.open(self.dosya, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         self._log = os.fdopen(fd, "w", encoding="utf-8")
-        self._yaz({"tur": "gorev", "id": self.id, "tarih": time.strftime("%Y-%m-%d %H:%M:%S"), "metin": self.metin,
-                   "model": model})
+        self._yaz({"tur": "gorev", "id": self.id, "tarih": time.strftime("%Y-%m-%d %H:%M:%S"),
+                   "metin": ozet_maskele(self.metin), "model": model, "siteler": list(self.siteler)})
         _kirp()
 
     def _yaz(self, nesne: dict):
@@ -524,13 +579,30 @@ class Gorev:
             durum_ad = "tamam" if sonuc_var[0] and not hata_var[0] else "hata"
             if not sonuc_var[0] and not hata_var[0]:
                 self._yay(olay("hata", _("Görev sonuç vermeden bitti."), kod="sonucsuz"))
-        self._yay(olay("bitti", durum_ad, durum=durum_ad, dosya=self.dosya, kod=rc))
+        self._masaustu_kapat()
+        indirilen = gorev_kipi.indirilenler()
+        if indirilen:
+            self._yay(olay("metin", _("Görevin indirdiği dosyalar ({n}): {dosyalar} — klasör: {klasor}").format(
+                n=len(indirilen), dosyalar=", ".join(indirilen[:20]), klasor=gorev_kipi.indirme_dizini(False))))
+        self._yay(olay("bitti", durum_ad, durum=durum_ad, dosya=self.dosya, kod=rc, indirilenler=indirilen,
+                       indirme_dizini=gorev_kipi.indirme_dizini(False)))
         self._gecmis_kapat()
         if self._tmp:
             shutil.rmtree(self._tmp, ignore_errors=True)
         if self._kilit is not None:
             self._kilit_birak(self._kilit)
             self._kilit = None
+
+    def _masaustu_kapat(self):
+        """Görünmez masaüstünü bu görev açtıysa kapat (oturum kopyaları masaustu_durdur → oturum.kapanis ile silinir)."""
+        if self._masaustu_onceden or not _masaustu_acik():
+            return
+        try:
+            from . import masaustu
+            masaustu.masaustu_durdur()
+            self._yay(olay("metin", _("Görevin açtığı görünmez masaüstü kapatıldı (oturum kopyaları silindi).")))
+        except Exception as e:  # noqa: BLE001
+            self._yay(olay("hata", _("Görünmez masaüstü kapatılamadı: {hata}").format(hata=e), kod="masaustu"))
 
     def _azami_dakika_goster(self) -> int:
         sn = self._azami_sn if self._azami_sn is not None else ayar_azami_dakika() * 60

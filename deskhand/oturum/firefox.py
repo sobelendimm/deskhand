@@ -76,6 +76,50 @@ user_pref("permissions.default.xr", 2);
 """
 
 
+# GÖREV KİPİ (gorev_kipi): kopyaya HİÇ girmeyenler (parolalar, anahtar deposu, uzantılar ve verileri)
+GOREV_DISLA = ("logins.json", "logins-backup.json", "logins.db", "key4.db", "signedInUser.json",
+               "extensions", "browser-extension-data", "extensions.json", "extension-settings.json",
+               "extension-preferences.json", "addonStartup.json.lz4", "addons.json")
+_GOREV_USER_JS = """// Deskhand GÖREV KİPİ: parola yöneticisi kapalı, yerel dosya/iç sayfa ilkesi distribution/policies.json'da
+user_pref("signon.rememberSignons", false);
+user_pref("signon.autofillForms", false);
+user_pref("signon.generation.enabled", false);
+user_pref("signon.management.page.breach-alerts.enabled", false);
+user_pref("devtools.policy.disabled", true);
+user_pref("browser.download.useDownloadDir", true);
+user_pref("browser.download.folderList", 1);
+user_pref("extensions.enabledScopes", 0);
+"""
+
+
+def gorev_izinli(politika: Politika, alan: str, gorev_siteleri) -> bool:
+    """Görev kipi site izni: görev siteleri BOŞSA hiçbir site (çerezsiz profil); ret listesi her zaman kazanır."""
+    from .politika import _alan_eslesir
+    return bool(gorev_siteleri) and not politika.site_reddedildi(alan) and _alan_eslesir(alan, gorev_siteleri)
+
+
+def _cerez_say(cookies_db: str) -> int:
+    con = sqlite3.connect(cookies_db)
+    try:
+        return con.execute("SELECT COUNT(*) FROM moz_cookies").fetchone()[0]
+    finally:
+        con.close()
+
+
+def _gorev_cerez_suz(cookies_db: str, politika: Politika, gorev_siteleri) -> int:
+    """Görev kipi: izinli siteler dışındaki TÜM çerezleri sil. Döner: silinen satır."""
+    con = sqlite3.connect(cookies_db)
+    try:
+        silinen = 0
+        for (h,) in con.execute("SELECT DISTINCT host FROM moz_cookies").fetchall():
+            if not gorev_izinli(politika, _alan(h), gorev_siteleri):
+                silinen += con.execute("DELETE FROM moz_cookies WHERE host=?", (h,)).rowcount
+        con.commit()
+        return silinen
+    finally:
+        con.close()
+
+
 # ------------------------------------------------------------------ mozlz4
 
 def mozlz4_coz(yol: str) -> bytes | None:
@@ -110,6 +154,11 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
 
     hedef = kopya_mod.yeni_kopya_dizini("firefox")
     disla = set(politika.disla)
+    from .. import gorev_kipi
+    gorev = gorev_kipi.etkin()
+    if gorev:  # GÖREV KİPİ: kayıtlı parolalar + anahtar deposu + uzantılar (verileriyle) KOPYALANMAZ; site = görev izni
+        disla |= set(GOREV_DISLA)
+        gorev_siteleri = gorev_kipi.siteler()
     bilgi = {"kopya_yolu": hedef, "kaynak": kaynak, "durum": None,
              "cerez_sayisi": 0, "oturum_cerez_eklendi": 0, "ret_silindi": 0, "origin_sayisi": 0,
              "giris_silindi": 0, "izin_silindi": 0}
@@ -148,10 +197,14 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
         bilgi["cerez_sayisi"], bilgi["ret_silindi"], izinli_alanlar = _cookies_suz(
             kopya_cookies, politika, gorev_siteleri)
 
+    if gorev and os.path.isfile(kopya_cookies):  # görevde izin verilmeyen sitelerin çerezleri SİLİNİR (boş = hepsi)
+        bilgi["gorev_cerez_silindi"] = _gorev_cerez_suz(kopya_cookies, politika, gorev_siteleri)
+        izinli_alanlar = {a for a in izinli_alanlar if gorev_izinli(politika, a, gorev_siteleri)}
+        bilgi["cerez_sayisi"] = _cerez_say(kopya_cookies)
     # 5) oturum çerezleri (recovery.jsonlz4 → kopya cookies.sqlite)
     rec = os.path.join(kaynak, "sessionstore-backups", "recovery.jsonlz4")
-    if os.path.isfile(rec) and os.path.isfile(kopya_cookies):
-        eklendi, ek_alanlar = _oturum_cerezleri_ekle(rec, kopya_cookies, politika, gorev_siteleri)
+    if os.path.isfile(rec) and os.path.isfile(kopya_cookies) and (not gorev or gorev_siteleri):
+        eklendi, ek_alanlar = _oturum_cerezleri_ekle(rec, kopya_cookies, politika, gorev_siteleri, gorev)
         bilgi["oturum_cerez_eklendi"] = eklendi
         izinli_alanlar |= ek_alanlar
 
@@ -161,7 +214,8 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
     bilgi["origin_sayisi"] = (_storage_kopyala(kaynak, hedef, izinli_alanlar, politika) if gorev_siteleri else 0)
 
     # 7) user.js
-    _user_js_yaz(hedef, kaynak)
+    _user_js_yaz(hedef, kaynak, gorev)
+    bilgi["gorev"] = gorev
 
     bilgi["argv"] = ["firefox", "--profile", hedef, "--no-remote", "--new-instance"]
     # Kopya Firefox kullanıcının profil kökünü (~/.config/mozilla/firefox: profiles.ini, installs.ini, Profile Groups)
@@ -190,7 +244,7 @@ def _cookies_suz(cookies_db: str, politika: Politika, gorev_siteleri) -> tuple[i
         con.close()
 
 
-def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, gorev_siteleri):
+def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, gorev_siteleri, gorev: bool = False):
     """recovery.jsonlz4 kökündeki `cookies` dizisini kopya cookies.sqlite'ına ekle (ret hariç).
     Döner: (eklenen, eklenen_alanlar). Firefox oturum çerezi biçimi: {host,name,value,path,...}."""
     ham = mozlz4_coz(recovery)
@@ -211,6 +265,8 @@ def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, g
             host = c.get("host", "")
             alan = _alan(host)
             if not alan or politika.cerez_reddedildi(host) or not politika.site_izinli(alan, gorev_siteleri):
+                continue
+            if gorev and not gorev_izinli(politika, alan, gorev_siteleri):
                 continue
             oa = c.get("originAttributes", "")
             if isinstance(oa, dict):
@@ -393,7 +449,7 @@ def _origin_boyut_siniri() -> int | None:
 _PROFIL_GRUBU_PREF = re.compile(r'user_pref\("(toolkit\.profiles\.|browser\.profiles\.|browser\.backup\.)')
 
 
-def _user_js_yaz(hedef: str, kaynak: str) -> None:
+def _user_js_yaz(hedef: str, kaynak: str, gorev: bool = False) -> None:
     """Kopyaya user.js yaz. Kaynaktaki prefs.js'i de alırız (ayarlar korunur) — profil grubu satırları HARİÇ —, üstüne
     user.js gelir."""
     try:
@@ -404,4 +460,4 @@ def _user_js_yaz(hedef: str, kaynak: str) -> None:
     except OSError:
         pass
     with open(os.path.join(hedef, "user.js"), "w") as f:
-        f.write(_USER_JS)
+        f.write(_USER_JS + (_GOREV_USER_JS if gorev else ""))

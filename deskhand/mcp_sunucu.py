@@ -49,6 +49,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 
 from . import __version__, api, dinleme, dongu, fark, gonderim, gozlem, guvenlik, hata, masaustu, onay_hedef
+from . import gorev_kipi
 from .arka_uc import EKRAN
 from .i18n import N_, _
 
@@ -918,6 +919,17 @@ def kisalt_adres(a: str, n: int = 80) -> str:
     return a if len(a) <= n else a[:n - 1] + "…"
 
 
+def _gorev_adres_denetle(k) -> None:
+    """GÖREV KİPİ (savunma derinliği): tarayıcı belgesi yerel dosya / tarayıcı iç sayfası (file:, about:config…)
+    ise okuma ve görüntü REDDEDİLİR (tarayıcı ilkesi zaten engeller)."""
+    if not gorev_kipi.etkin() or not k or k == EKRAN:
+        return
+    a = _web_adresi(k)
+    if gorev_kipi.adres_yasak(a):
+        raise ToolError("[10] " + _("görev kipi: yerel dosya / tarayıcı iç sayfası okunmaz ({adres})").format(
+            adres=kisalt_adres(a or "", 60)))
+
+
 def _web_adresi(k: str) -> str | None:
     """Pencerenin şu anki web belgesi adresi (parça dahil); okunamazsa None (başlık denetimine düşülür)."""
     try:
@@ -1232,6 +1244,7 @@ def observe(
     never returned; forbidden windows are refused [10]. Read-only; refs expire after 120 s."""
     with baglam(desktop, _("gözlem: {pencere}").format(pencere=window or _("tüm ekran"))) as bilgi:
         k = api.pencere(window)
+        _gorev_adres_denetle(k)
         y_ = api.yasak_mi(k)
         if y_:
             raise AracHatasi("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_), 10)
@@ -1362,6 +1375,7 @@ def screenshot(
     Forbidden windows are blacked out. Read-only."""
     with baglam(desktop, _("ekran görüntüsü: {pencere}").format(pencere=window or _("tüm ekran"))) as bilgi:
         k = api.pencere(window)
+        _gorev_adres_denetle(k)
         bolge = None
         if region:
             if shot_id:
@@ -1421,6 +1435,7 @@ def read_text(
     windows are excluded. Read-only."""
     with baglam(desktop, _("metin okuma: {pencere}").format(pencere=window or _("tüm ekran"))) as bilgi:
         k = api.pencere(window)
+        _gorev_adres_denetle(k)
         with kilitli():
             if source == "web":
                 r = api.web_oku(k, query, role, hidden, max_items, offset, wait_s)
@@ -1939,6 +1954,11 @@ def open_app(
         # yalnız kurulu masaüstü girdisi + belge argümanları (ham yol/komut, yorumlayıcı, uçbirim → 10)
         argv, ad, yasak_metin, girdi = api.uygulama_komutu(app, args)
         belgeler = argv[3:]
+        if gorev_kipi.etkin():  # GÖREV KİPİ: yalnız tarayıcı, yalnız http(s) belge (yerel dosya sızdırma/silme yok)
+            neden = gorev_kipi.open_app_denetle(str(girdi.get("kimlik") or ad), list(args or ()))
+            if neden:
+                raise ToolError("[10] " + _("görev kipi: {uygulama} açılmadı: {neden}").format(uygulama=app,
+                                                                                               neden=_(neden)))
         ot = _oturum() if api.arka().ad == "sanal" else None
         if api.arka().ad == "sanal" and ot is None:
             # Politikasız başlatma kullanıcının GERÇEK uygulama verisini (profil, kasa, ayar) görünmez masaüstünden
