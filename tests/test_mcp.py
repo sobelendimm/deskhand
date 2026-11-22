@@ -402,11 +402,12 @@ async def stdio_testleri():
         r = await c.list_tools()
         adlar = sorted(t.name for t in r.tools)
         beklenen = sorted(["get_status", "choose_desktop", "manage_desktop", "screenshot", "read_text", "find", "click",
-                           "type_text", "press_key", "scroll", "drag", "clipboard", "open_app", "manage_window", "run_flow"])
-        kontrol("stdio: 15 araç, adlar doğru", adlar == beklenen, str(adlar))
+                           "type_text", "press_key", "scroll", "drag", "clipboard", "open_app", "manage_window", "run_flow",
+                           "observe", "batch", "wait_for"])
+        kontrol("stdio: 18 araç, adlar doğru", adlar == beklenen, str(adlar))
         masaustulu = [t.name for t in r.tools if "desktop" in (t.input_schema.get("properties") or {})]
-        kontrol("stdio: masaüstüne dokunan 13 araçta desktop parametresi (enum foreground/background/auto)",
-                len(masaustulu) == 13 and all(
+        kontrol("stdio: masaüstüne dokunan 16 araçta desktop parametresi (enum foreground/background/auto)",
+                len(masaustulu) == 16 and all(
                     set(t.input_schema["properties"]["desktop"].get("enum", [])) == {"foreground", "background", "auto"}
                     for t in r.tools if t.name in masaustulu), str(masaustulu))
         cl = next(t for t in r.tools if t.name == "click")

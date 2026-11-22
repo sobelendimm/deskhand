@@ -409,8 +409,9 @@ def _bicimle(o, ad_siniri, bus=None) -> dict:
         sonuc["cerceve"] = o["_derin"] - 1  # iç içe belge (iframe) derinliği
     if hassas_mi(ad):
         sonuc["hassas"] = True
-    if bus:  # erişilebilirlik eylemi için nesne adresi (iç alan; varsayılan çıktıda yok)
-        sonuc["_bus"], sonuc["_yol"] = bus, o["_yol"]
+    if bus:  # erişilebilirlik eylemi için nesne adresi (iç alan; varsayılan çıktıda yok) + belge içi çocuk-sıra
+        sonuc["_bus"], sonuc["_yol"] = bus, o["_yol"]  # anahtarı (MCP observe: sorgu eşleşmesinin ataları)
+        sonuc["_anahtar"] = list(o["_anahtar"])
     return sonuc
 
 
