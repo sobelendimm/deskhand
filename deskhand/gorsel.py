@@ -48,6 +48,16 @@ def pencere_goruntusu(k, bolge=None, kararli=False, tam=False):
     return im, geo, kok
 
 
+def korumali_goruntu(k, bolge=None, kararli=False, tam=False):
+    """CLI okuma komutları için pencere_goruntusu: yasak pencere listesine uyar (api.goruntu_al) — hedef yasaksa
+    Dur(10) (hiçbir şey okunmaz/kaydedilmez), görüntüye düşen diğer yasak pencereler siyah kutuyla örtülür.
+    0.9.0 öncesi `foto`, `metin`, `bekle`, `simge-bul`, `simge-kaydet`, `renk-bul` yasak pencereyi okuyabiliyordu
+    (MCP yolu zaten api.goruntu_al kullanıyordu). → (görüntü, geo, kök)."""
+    from . import api
+    im, geo, kok, _maskeler = api.goruntu_al(k, bolge, tam=tam, kararli=kararli)
+    return im, geo, kok
+
+
 def piksel_olcegi(im) -> float:
     """pencere_goruntusu(tam=True) görüntüsünde bir mantıksal pikselin kaç görüntü pikseli olduğu (ölçek 2 → 2.0)."""
     return float(im.info.get("deskhand_olcek", 1.0))
@@ -181,7 +191,7 @@ def simge_bul_ic(a):
     yol = simge_yolu(a.ad)
     if not os.path.exists(yol):
         raise Dur(1, _("simge yok: {ad} (önce: ekran simge-kaydet <kimlik> {ad} --bolge x,y,g,y)").format(ad=a.ad))
-    im, geo, kok = pencere_goruntusu(a.kimlik, bolge_coz(a.bolge))
+    im, geo, kok = korumali_goruntu(a.kimlik, bolge_coz(a.bolge))
     tum = simge_ara(im, Image.open(yol), a.esik - SIMGE_YAKIN)
     tum = [(sk, cx + kok[0], cy + kok[1]) for sk, cx, cy in tum]
     sira = lambda t: (round(t[2] / 8), t[1])  # okuma sırası (--sira için)
@@ -228,7 +238,7 @@ def renk_alanlari(im, renk, en_az=250):
 def k_foto(a):
     # tam çözünürlük: ölçek 2 masaüstünde dosya iki kat pikselli (ürün görseli / keskin ekran görüntüsü);
     # olcek = görüntü pikseli / pencere pikseli (--foto tıklama eşlemesi ve ızgara bununla)
-    im, geo, kok = pencere_goruntusu(a.kimlik, bolge_coz(a.bolge), tam=True)
+    im, geo, kok = korumali_goruntu(a.kimlik, bolge_coz(a.bolge), tam=True)
     olcek = piksel_olcegi(im)
     if a.genislik and im.width > a.genislik:
         k_ = a.genislik / im.width
@@ -261,7 +271,7 @@ def k_simge_kaydet(a):
     bolge = bolge_coz(a.bolge)
     if not bolge:
         raise Dur(1, _("--bolge x,y,genişlik,yükseklik zorunlu (simgenin çevresi; foto --izgara ile bul)"))
-    im, geo, kok = pencere_goruntusu(a.kimlik, bolge)
+    im, geo, kok = korumali_goruntu(a.kimlik, bolge)
     os.makedirs(yollar.simge_dizin(), exist_ok=True)
     im.save(simge_yolu(a.ad))
     print(_("simge kaydedildi: {ad} ({genislik}x{yukseklik}) → {yol}").format(
@@ -282,7 +292,7 @@ def k_simge_bul(a):
 
 
 def k_renk_bul(a):
-    im, geo, kok = pencere_goruntusu(a.kimlik, bolge_coz(a.bolge))
+    im, geo, kok = korumali_goruntu(a.kimlik, bolge_coz(a.bolge))
     alanlar = renk_alanlari(im, a.renk, a.en_az)
     print(_("# '{renk}': {sayi} alan (en az {en_az} piksel)").format(renk=a.renk, sayi=len(alanlar), en_az=a.en_az))
     for i, (alan, cx, cy, (x0, y0, x1, y1)) in enumerate(alanlar[:10], 1):  # koordinat satırları: çevrilmez

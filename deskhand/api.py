@@ -262,9 +262,11 @@ def _yasak_dikdortgenler(k: str, kok_ekran: tuple[int, int], boyut: tuple[int, i
     return sonuc
 
 
-def goruntu_al(k: str, bolge=None, tam: bool = False):
+def goruntu_al(k: str, bolge=None, tam: bool = False, kararli: bool = False):
     """→ (görüntü, geo, kök, maskeler). Görüntü pikseli + kök = pencere koordinatı. Hedef yasaksa Dur(10);
-    görüntüye düşen diğer yasak pencereler siyah kutuyla örtülür (maskeler: görüntü pikseli).
+    görüntüye düşen diğer yasak pencereler siyah kutuyla örtülür (maskeler: görüntü pikseli). CLI okuma komutları
+    (foto, metin, bekle, simge-bul, simge-kaydet, renk-bul) da bu yoldan okur (gorsel.korumali_goruntu).
+    kararli=True: içerik durana dek bekle (gorsel.pencere_goruntusu).
     tam=True: fiziksel çözünürlük (ölçek 2 masaüstü: iki kat piksel); görüntü pikseli = (pencere koordinatı − kök)
     × gorsel.piksel_olcegi(im), maskeler de görüntü pikselinde."""
     from .gorsel import pencere_goruntusu, piksel_olcegi
@@ -273,7 +275,7 @@ def goruntu_al(k: str, bolge=None, tam: bool = False):
         raise Dur(10, _("YASAK pencere: içeriği gösterilmez/okunmaz ({neden})").format(neden=y))
     bolge_s = ",".join(str(int(v)) for v in bolge) if bolge else None
     from .gorsel import bolge_coz
-    im, geo, kok = pencere_goruntusu(k, bolge_coz(bolge_s), tam=tam)
+    im, geo, kok = pencere_goruntusu(k, bolge_coz(bolge_s), kararli=kararli, tam=tam)
     f = piksel_olcegi(im)
     au = arka()
     sx0, sy0, *_x = au.ekran_alani()
