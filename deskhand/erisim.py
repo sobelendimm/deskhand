@@ -552,7 +552,7 @@ def oge_incele(oge):
     except Exception:
         aciklama = ""
     return {"ad": (oge.get_name() or "").strip(), "rol": oge.get_role_name(), "aciklama": aciklama,
-            "cocuklar": cocuklar, "eylemler": eylem_listesi(oge)[1],
+            "cocuklar": cocuklar, "eylemler": eylem_listesi(oge)[1], "nitelikler": _oge_nitelikleri(oge),
             "yazilabilir": oge.get_editable_text_iface() is not None or oge.get_value_iface() is not None}
 
 
@@ -575,6 +575,8 @@ def _atspi_is(istek):
         return _imlec_satirlari(Atspi, cerceve)
     if islem == "odak_parola":
         return _odakli_parola(Atspi, cerceve)
+    if islem == "odak_kart":
+        return _odakli_kart(Atspi, cerceve)
     if islem == "tara":
         r = _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"],
                   bool(istek.get("kimlik_ver")), bool(istek.get("ayrinti")))
@@ -660,6 +662,26 @@ def _odakli_parola(Atspi, cerceve):
         return False
 
 
+def _oge_nitelikleri(oge) -> str:
+    """Web ögesinin autocomplete/id/placeholder/xml-roles gibi nitelik DEĞERLERİ (boşlukla birleşik; yoksa "")."""
+    try:
+        n = oge.get_attributes() or {}
+        return " ".join(str(v) for k, v in dict(n).items() if k in ("autocomplete", "id", "placeholder", "name",
+                                                                    "class", "xml-roles"))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _odakli_kart(Atspi, cerceve):
+    """Çerçevede odaklı yazma alanı kart bilgisi alanı mı (ad, açıklama, autocomplete/id/placeholder)? Değeri OKUNMAZ."""
+    o = _uclar(Atspi, cerceve, lambda o, rol, ss, S: ss.contains(S.FOCUSED) and rol in ("password text", "text",
+                                                                                          "entry"))
+    try:
+        return bool(o is not None and guvenlik.kart_alani_mi(o.get_name(), o.get_description(), _oge_nitelikleri(o)))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def imlec_satirlari(k):
     """Uçbirim penceresinin giriş satırı (Enter kapısı; ucbirim.py). Erişilebilirliği AÇMAZ. → [satır] | None."""
     try:
@@ -677,6 +699,16 @@ def odakli_parola_mi(k):
         return bool(_atspi_calistir(_pencere_istegi(k, "odak_parola")))
     except Dur:
         return False
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def odakli_kart_mi(k):
+    """Pencerede odaklı öge kart bilgisi alanı mı? Erişilebilirlik kapalıysa AÇMAZ (bilinmez → False)."""
+    try:
+        if not erisim_acik():
+            return False
+        return bool(_atspi_calistir(_pencere_istegi(k, "odak_kart")))
     except Exception:  # noqa: BLE001
         return False
 
@@ -1292,6 +1324,12 @@ def k_ogeye_yaz(a):
     onayli = a.onayli
     if parola and guvenlik.parola_alani_engel(k, onayli, len(metin), _("değer yazma")):
         etiket += " --onayli"
+    if guvenlik.onay_kapsami() == "kart":  # kart bilgisi: alan adı/etiketi/autocomplete ya da Luhn'lu numara
+        alan_kart = guvenlik.kart_alani_mi(a.ad, bilgi.get("ad"), bilgi.get("aciklama"), bilgi.get("nitelikler"))
+        if alan_kart or guvenlik.kart_numarasi(metin):
+            gizli = True  # tam numara günlüğe/iletiye yazılmaz
+            if guvenlik.kart_bilgisi_engel(k, onayli, metin, alan_kart, _("değer yazma")):
+                etiket += " --onayli"
     if yazi_onay_ister_mi(metin):  # yazmadan ÖNCE (bir eylem = bir onay); Enter/Tab/boşluk = formu gönderme riski
         g = types.SimpleNamespace(gizli=gizli)
         if _yazi_hassas(g, k, onayli, metin, goruntu_al=False):

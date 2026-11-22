@@ -532,6 +532,10 @@ def mcp_uygulama(ad: str, args=None) -> tuple[dict, list[str]]:
     guvensiz = girdi_guvenilir(g)
     if guvensiz:
         from . import guvenlik
+        if guvenlik.onaysiz_serbest("open_app doğrulanmamış girdi", str(g.get("kimlik") or ad)):
+            g = _ozel_kopya(g)  # onay kapsamı kart: sorulmaz; kopya + YN5 içerik özeti denetimi aynen
+            _ONAYLI.ozetler = _program_ozetleri(g)
+            return g, belgeler
         guvenlik.eylem_basladi()  # bu başlatma kendi eylemi: önceki eylemin onayı taşınmaz
         ayrinti = (_("Doğrulanmamış uygulama girdisi ({neden})").format(neden=guvensiz) + "\n"
                    + _("girdi: {yol}").format(yol=g["yol"]) + "\n" + _("Exec: {exec_}").format(exec_=g.get("exec", ""))

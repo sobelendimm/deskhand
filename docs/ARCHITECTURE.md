@@ -558,6 +558,31 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   (ananicy: `kwin_wayland` → nice -12) karşı kafesin öncelik bekçisi (`oncelik_bekcisi.py`) her iş parçacığını ~0,5 sn
   içinde nice >= 10, gerçek zamanlı olmayan zamanlama ve idle G/Ç'ye geri düşürür. XWayland takma adla
   (`deskhand-xwayland`) çalışır.
+- **Onay kapsamı** (`ayarlar.toml` `[guvenlik] onaylar`; panel Ayarlar → "Onay soruları"; `guvenlik.onay_kapsami()` kipi
+  okuyan TEK yer, ~1 sn önbellek; okunamayan/geçersiz değer = `hepsi`). Varsayılan **`hepsi`**: yukarıdaki TÜM onaylar
+  aynen (bugünkü davranış). **`kart`** (kullanıcının kendi bilgisayarı için bilinçli tercih: "yalnız kartla ödeme")
+  yalnız şu iki sınıfta onay sorar: (1) para düğmeleri (`guvenlik.PARA_DUGMESI`: satın al, hemen al, öde, ödemeyi
+  tamamla, siparişi onayla/tamamla, buy now, pay, place order, complete purchase, confirm payment… — HASSAS'ın para alt
+  kümesi, tek sabit; ödeme sayfası dışında da) ve ödeme/sipariş sayfasında para düğmesi (ya da okunamayan hedef) tıklaması
+  ile Enter/boşluk (`hassas_engel`, `hassas_sayfa_engel`, `hassas_nokta`, AT-SPI/web hassas öge); (2) kart bilgisi yazma
+  (`guvenlik.kart_bilgisi_engel`: yazı, yapıştırarak yazma, AT-SPI değer yazma; hedef alan kart alanıysa — AT-SPI/web ad,
+  etiket, açıklama ya da autocomplete/id/placeholder: kart numarası, card number, cc-number, cvc/cvv, güvenlik kodu, son
+  kullanma, expiry — ya da metinde 13–19 haneli, Luhn'dan geçen numara varsa, ayırıcılı da). Onay isteğinde yalnız son 4
+  hane görünür; metin kendiliğinden gizli sayılır (günlüğe tam numara yazılmaz). Bu iki sınıfta CLI `--onayli`/`--approved`
+  YOK SAYILIR (`guvenlik.onayli_gecerli_kati`): onay her zaman panelden gelir (terminali serbest ajan CLI'yi `--onayli`
+  ile çağırıp atlatamasın); panel kapalıyken ya da gözetimsiz kipte ret (10). Onaysız serbest kalanlar
+  (`guvenlik.onaysiz_serbest`: tek koşul, tek satır günlük `onay kapsamı kart: onaysız geçti | …`): hesap silme ve OAuth
+  "Yetkilendir/İzin ver/Authorize" düğmeleri, sistem yetki/parola istemleri (`sistem_istemi_engel`/`_denetle`: polkit,
+  KWallet, askpass, portal), parola alanına yazma (`parola_alani_engel`), uçbirime/gömülü uçbirime Enter
+  (`ucbirim.enter_kapisi`; satır uyarısı yalnız günlüğe, OCR yapılmaz), uçbirime yıkıcı komut yazma, riskli tuş akorları,
+  yapıştırma tuşları/menü yapıştırma ve pano okuma (MCP `clipboard read`, CLI `pano oku`), MCP `open_app` doğrulanmamış
+  girdi onayı (`uygulama.mcp_uygulama`: özel kopya + YN5 içerik özeti denetimi aynen), CLI `ac --komut` yıkıcı komut
+  onayı. DEĞİŞMEYENLER (onay değil, ret/koruma): ajanın kendi istemcisi, `open_app` kara listesi, panel/onay penceresi
+  yasağı, liste koruma, yasak pencere listesi ve erişim seviyeleri, DUR, insan önceliği, oyun/film koruması (15), oturum
+  kilidi, parola alanı DEĞERİNİ okuma reddi, bekleyen onay kapısı, onay sonrası hedef doğrulaması, arka plan yalıtımı.
+  Sınır: ayar dosyasını kabuğu olan bir ajan değiştirebilir (liste koruması bu ayarı kapsamaz); tek tuşla/ayrı alanlara
+  parça parça yazılan ya da panodan yapıştırılan kart numarası ve kart alanı olarak işaretlenmemiş bir alan yakalanamaz;
+  `run_flow` önceden onaylı (`--onayli`) adım onayı bu ayardan etkilenmez.
 
 ## 5. Çıkış kodları
 0 tamam · 1 kullanım hatası · 2 nokta pencere/ekran dışında · 3 aktif değil/başka pencere · 4 başlık/sınıf kilidi

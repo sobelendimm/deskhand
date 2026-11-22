@@ -9,6 +9,9 @@ Dosya yoksa varsayılanlar kullanılır; OKUMA dosya oluşturmaz. Bilinmeyen/yan
   cevapsiz = "arka"        # süre dolunca: arka | sonra
   girdi_esik_sn = 20       # son bu kadar sn'de insan girdisi varsa meşgul (etkinlik kaydı varsa)
   tam_ekranda_sor = false  # tam ekran (film/oyun) varken bildirimle sor (kritik bildirim) ya da sormadan 'cevapsiz'
+
+  [guvenlik]
+  onaylar = "hepsi"        # hepsi | kart   (hangi eylemler panelden insan onayı ister; ARCHITECTURE §4 "Onay kapsamı")
 """
 from __future__ import annotations
 
@@ -28,9 +31,13 @@ VARSAYILAN = {
         "girdi_esik_sn": 20,
         "tam_ekranda_sor": False,
     },
+    "guvenlik": {
+        "onaylar": "hepsi",
+    },
 }
 TAKMA = {("karar", "mesgulken"): {"hep-arka": "arka"}}
-SECENEK = {("karar", "mesgulken"): {"sor", "arka", "bekle"}, ("karar", "cevapsiz"): {"arka", "sonra"}}
+SECENEK = {("karar", "mesgulken"): {"sor", "arka", "bekle"}, ("karar", "cevapsiz"): {"arka", "sonra"},
+           ("guvenlik", "onaylar"): {"hepsi", "kart"}}
 ARALIK = {("karar", "sor_sure"): (1, 3600), ("karar", "girdi_esik_sn"): (0, 3600)}
 
 _uyarilan = set()

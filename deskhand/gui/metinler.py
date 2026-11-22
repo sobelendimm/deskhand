@@ -141,6 +141,14 @@ Y_KAYDET = N_("Kaydet")
 Y_GERI_AL = N_("Geri al")
 Y_KAYDEDILDI = N_("Kaydedildi.")
 Y_DESEN_HATA = N_("{no}. satır geçerli bir desen değil: {hata}")
+Y_ONAY = N_("Onay soruları")
+Y_ONAY_SORULARI = N_("Onay soruları")
+Y_ONAY_SECENEK = {"hepsi": N_("Hepsi"), "kart": N_("Yalnız kartla ödeme")}
+Y_ONAY_NOT = N_("Hepsi: bugünkü davranış; tüm riskli eylemler (uçbirimde Enter, pano, riskli tuş, sistem istemleri…) "
+                "sorar. Yalnız kartla ödeme: yalnızca satın alma/ödeme düğmeleri (ve ödeme sayfasında Enter) ile "
+                "kart bilgisi yazma sorar; diğerleri sormadan yapılır (günlüğe yazılır). Yasaklar, erişim "
+                "seviyeleri ve DUR bundan etkilenmez.")
+Y_ONAY_HATA = N_("Onay ayarı kaydedilemedi: {hata}")
 Y_DIL = N_("Dil")
 Y_DIL_OTOMATIK = N_("Otomatik (sistem dili: {dil})")
 Y_DIL_NOT = N_("Arayüzün dili. Panel ve tepsi menüsü hemen değişir; komut satırı ve ajanın (MCP) iletileri yeni "
