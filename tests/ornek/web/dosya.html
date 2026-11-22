@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8"><title>Deskhand Dosya Testi</title>
+<style>body{margin:0} #f{position:absolute;left:0;top:0;width:100%;height:300px;font-size:40px}</style></head>
+<body><input type="file" id="f">
+<script>document.getElementById("f").addEventListener("change", e => {
+  document.title = "SECILDI " + (e.target.files[0] ? e.target.files[0].name : "-"); });</script>
+</body></html>

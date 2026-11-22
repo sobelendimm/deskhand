@@ -11,7 +11,7 @@ KOMUTLAR = (
     ("bul", "windows"), ("foto", "screenshot"), ("tikla", "click"), ("tus", "key"), ("yaz", "type"),
     ("kaydir", "scroll"), ("metin", "read"), ("metne-tikla", "click-text"), ("bekle", "wait"), ("kapat", "close"),
     ("bas", "hold"), ("surukle", "drag"), ("fare", "move"), ("dizi", "batch"), ("uyu", "sleep"),
-    ("pano", "clipboard"), ("git", "goto"),
+    ("pano", "clipboard"), ("git", "goto"), ("dosya-sec", "choose-file"),
     ("renk-bul", "find-color"), ("renge-tikla", "click-color"), ("simge-kaydet", "save-icon"),
     ("simge-bul", "find-icon"), ("simgeye-tikla", "click-icon"), ("ac", "open"), ("akis", "flow"),
     ("erisim", "a11y"), ("agac", "tree"), ("web", "web"), ("ogeye-tikla", "click-element"), ("dur", "stop"), ("devam", "resume"),

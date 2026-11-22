@@ -956,7 +956,8 @@ def klavye_engeli(k: str, odak_sorgu=None, dizi=None) -> dict | None:
     d, okundu = hazir_oku(k, baslik)
     if d is None:
         if not okundu and tarayici_mi(k):
-            return okunamayan_klavye_engeli(dizi, baslik)
+            from .erisim import yerel_diyalog_mu  # tarayıcının yerel diyaloğu (dosya seçici): sayfa yok, sınama olamaz
+            return None if yerel_diyalog_mu(k) else okunamayan_klavye_engeli(dizi, baslik)
         return None
     if d.get("page_wide"):
         return girdi_engeli(k, klavye=True, baslik=baslik, kayit=d)
