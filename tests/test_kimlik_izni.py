@@ -393,15 +393,18 @@ kontrol("panel kapandı (dosya + işaret 'microsoft') → CLI/MCP izin görmez",
 uyarilar.clear()
 onay.panel_kaydet()
 k = liste_koruma.panel_baslat(uyarilar.append)
-kontrol("panel yeniden açıldı: kendi işaretli 'microsoft'unu kabul eder (uyarı yok)",
-        k.metin(liste_koruma.KIMLIK) == "microsoft" and not uyarilar and MS <= istemci()[0], str(uyarilar))
+kontrol("panel yeniden açıldı: kendi işaretli 'microsoft'unu kabul eder (yalnız 'izin açık' hatırlatması)",
+        k.metin(liste_koruma.KIMLIK) == "microsoft" and len(uyarilar) == 1 and "izni açık: Microsoft" in uyarilar[0]
+        and "geçerli sayılmadı" not in uyarilar[0] and MS <= istemci()[0], str(uyarilar))
 liste_koruma.panel_durdur()
 onay.panel_sil()
 ajan_yazar("microsoft,google")  # işaret 'microsoft'; google elle eklendi
 onay.panel_kaydet()
+uyarilar.clear()
 k = liste_koruma.panel_baslat(uyarilar.append)
 kontrol("panel açılışı: dosyada işaretsiz 'google' eklenmiş → yalnız 'microsoft' kabul, dosya geri yazılır, uyarı",
-        k.metin(liste_koruma.KIMLIK) == "microsoft" and dosyada() == "microsoft" and len(uyarilar) == 1, str(uyarilar))
+        k.metin(liste_koruma.KIMLIK) == "microsoft" and dosyada() == "microsoft" and len(uyarilar) == 1
+        and "geçerli sayılmadı" in uyarilar[0], str(uyarilar))
 liste_koruma.panel_durdur()
 onay.panel_sil()
 

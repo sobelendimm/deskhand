@@ -185,6 +185,11 @@ class Koruyucu:
                              saglayici=", ".join(sorted(d - kabul))))
             return
         _isaret_yaz(KIMLIK, self.bellek[KIMLIK])
+        if kabul:  # görünür kılmak: sahte işaret+dosyayla geçirilmiş izin de en azından her açılışta fark edilir
+            from .oturum.politika import KIMLIK_ADLARI
+            self.uyari(_("Hesap oturumu izni açık: {saglayici}. Görünmez masaüstündeki tarayıcı bu hesaplara girişli "
+                         "açılır. Kapatmak için panelde Ayarlar → Hesap oturumları.").format(
+                             saglayici=", ".join(KIMLIK_ADLARI.get(x, x) for x in sorted(kabul))))
 
     def _kimlik_dosyaya(self) -> None:
         from . import ayarlar

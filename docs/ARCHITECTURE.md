@@ -709,7 +709,7 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   `accounts.google.com` / `securetoken.googleapis.com` (`.google.com` SID…), devlet girdileri. Kullanıcı bir sağlayıcıya
   izin verirse `firefox.hazirla` politikayı `Politika.kimlik_izni_uygula` ile kopyalar: YALNIZ o sağlayıcının tam
   girdileri (`politika.KIMLIK_ALANLARI`: microsoft → 2 giriş alanı; google → 2; edevlet → `*e-devlet*`, `*edevlet*`,
-  `turkiye.gov.tr`, `gib.gov.tr`, `sgk.gov.tr`, `*.gov.tr`, `*.gov`) ret listesinden çıkar → o alanların çerezi (oturum
+  `turkiye.gov.tr`, `gib.gov.tr`, `sgk.gov.tr`, `*.gov.tr`; ABD `*.gov` DEĞİL) ret listesinden çıkar → o alanların çerezi (oturum
   çerezleri dahil), kayıtlı girişleri (`logins.json`/`logins.db`; parolayı Firefox doldurur, ajan okumaz; `key4.db`
   zaten kopyalanır) ve `--site` verilmişse deposu kopyaya girer. Banka/ödeme desenleri (`*bank*`, `*odeme*`,
   `*payment*`, `*checkout*`, `*paypal*`, `*stripe*`, bankalar, iyzico, PayTR…) hiçbir sağlayıcıda yoktur: bir alan

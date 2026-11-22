@@ -330,7 +330,7 @@ def deskhand(*a):
 
 
 kod, out = deskhand()
-kontrol("cli: argümansız → komut listesi, 1", kod == 1 and "ekran windows (bul) <desen>" in out
+kontrol("cli: argümansız → komut listesi, 1", kod == 1 and "ekran windows (bul) [desen]" in out
         and "ekran stop | resume | status (dur | devam | durum)" in out)
 kod, out = deskhand("yardım")
 kontrol("cli: yardım → tam metin + yeni komutlar + --arka + 13/14, 0",

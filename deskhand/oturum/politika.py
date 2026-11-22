@@ -36,7 +36,7 @@ KIMLIK_ALANLARI = {
     "google": ("accounts.google.com", "securetoken.googleapis.com"),
     # e-Devlet / devlet siteleri: reddet'teki devlet girdilerinin TAMAMI (desenler dahil). Banka/ödeme desenleri
     # (`*bank*`, `*odeme*`, `*payment*`…) HİÇBİR sağlayıcıda yok: hiçbir izinle açılmaz.
-    "edevlet": ("*e-devlet*", "*edevlet*", "turkiye.gov.tr", "gib.gov.tr", "sgk.gov.tr", "*.gov.tr", "*.gov"),
+    "edevlet": ("*e-devlet*", "*edevlet*", "turkiye.gov.tr", "gib.gov.tr", "sgk.gov.tr", "*.gov.tr"),  # "*.gov" (ABD devlet: pay.gov…) DIŞARIDA
 }
 KIMLIK_ADLARI = {"microsoft": "Microsoft", "google": "Google", "edevlet": "e-Devlet"}  # özel ad: çevrilmez
 _VARSAYILAN_AD = "_varsayilan"

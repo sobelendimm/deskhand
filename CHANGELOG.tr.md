@@ -2,7 +2,9 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
-## Yayımlanmamış
+## 0.7.1 (22 Kasım 2026)
+
+- **Devral klavyesi düzeltildi.** Panelde Devral ile yazarken Türkçe Q klavyede "i" harfi "ı" çıkıyordu (parola girişini bozuyordu); yazılan karakterler artık karakter olarak gider, her klavye düzeninde doğru çıkar (i, ı, İ, ş, ğ, @, nokta).
 
 - **Hesap oturumları: görünmez masaüstünde girişli Microsoft / Google / e-Devlet (isteğe bağlı).** Firefox kopyası
   güvenlik için merkezi giriş (Microsoft, Google) ve devlet sitelerinin çerezlerini süzdüğünden Excel Online gibi

@@ -177,7 +177,9 @@ Y_HESAP_SECENEK = {
 Y_HESAP_AD = {"microsoft": N_("Microsoft hesabı"), "google": N_("Google hesabı"),
               "edevlet": N_("e-Devlet ve devlet siteleri"), "hepsi": N_("Microsoft, Google ve e-Devlet oturumları")}
 Y_HESAP_UYARI = N_("Açarsanız arka plandaki tarayıcı bu hesabın e-postalarına ve dosyalarına erişebilir; güvenilmeyen "
-                   "bir sayfa ajanı kandırabilir. Yalnız gerektiğinde açın.")
+                   "bir sayfa ajanı kandırabilir. Hesabın kendi ödeme sayfaları (Google Pay, Microsoft faturalama) da bu "
+                   "oturumla açılır; ödeme düğmeleri yine onayınıza gelir. İzni kapatınca o an açık arka plan "
+                   "tarayıcısı kapanana kadar oturum sürer.")
 Y_HESAP_NOT = N_("Kapalıyken (varsayılan) bu hesapların giriş çerezleri ve kayıtlı parolaları görünmez masaüstündeki "
                  "Firefox kopyasına alınmaz; her seferinde şifre gerekir. Açıkken kayıtlı parolayı Firefox kendisi "
                  "doldurur (ajan parolayı görmez). Görev kipinde (Görev sekmesi) bu izin hiç uygulanmaz. Banka ve "

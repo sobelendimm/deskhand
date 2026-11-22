@@ -73,11 +73,20 @@ def gercek_durum():
     return ((int(m.group(1)), int(m.group(2))) if m else None, a)
 
 
+# Gerçek Deskhand test sırasında KULLANILIYOR olabilir (panel, başka Claude oturumu): onun günlük/işaret dosyaları
+# değişir. Bu dosyalar özetten çıkarılır; testin oraya sızıp sızmadığı ayrıca İZİYLE denetlenir (test_izi_yok).
+CANLI_DOSYA = re.compile(r"^(gunluk-\d{8}\.log|liste-[a-z]+\.isaret|ocr-gpu\.log)$")
+TEST_IZLERI = ("ekran-test ANA", "ekran-test BAŞKA", "deskhand-test-")
+
+
 def agac_ozeti(yol):
     h = hashlib.sha1()
     yol = os.path.expanduser(yol)
     for d, _, dosyalar in sorted(os.walk(yol)):
         for f in sorted(dosyalar):
+            if CANLI_DOSYA.match(f):
+                h.update(f.encode())  # var/yok değişimi sayılır, içerik (canlı kullanım) sayılmaz
+                continue
             p = os.path.join(d, f)
             try:
                 with open(p, "rb") as fp:
@@ -848,8 +857,24 @@ if gercek0 is not None:
         print(f"NOT: gerçek etkin pencere {gercek0[1]} → {gercek1[1]} (kullanıcı değiştirmiş olabilir)")
     kontrol("GERÇEK oturum: etkin pencere bu testin bir penceresine geçmedi",
             not (degisti and gercek1[1] and _bizim_pencere(gercek1[1])), f"{gercek0[1]} → {gercek1[1]}")
+def test_izi_yok(yol):
+    """Gerçek günlük/işaret dosyalarında bu testin izi (test pencere başlıkları, test geçici dizini) yok mu."""
+    yol = os.path.expanduser(yol)
+    for d, _, dosyalar in os.walk(yol):
+        for f in dosyalar:
+            if CANLI_DOSYA.match(f):
+                try:
+                    metin = open(os.path.join(d, f), encoding="utf-8", errors="replace").read()
+                except OSError:
+                    continue
+                if any(iz in metin for iz in TEST_IZLERI):
+                    return False
+    return True
+
+
 for y in GERCEK_YOLLAR:
     kontrol(f"gerçek yol yazılmadı: {y}", agac_ozeti(y) == ozet0[y])
+    kontrol(f"gerçek günlüklerde bu testin izi yok: {y}", test_izi_yok(y))
 anahtarlik1 = {a: pidler(a) for a in ANAHTARLIK}
 kontrol("anahtarlık: ksecretd/kwalletd/gnome-keyring süreçleri aynı (yeni örnek yok)", anahtarlik0 == anahtarlik1,
         f"{anahtarlik0} → {anahtarlik1}")

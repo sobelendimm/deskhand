@@ -552,7 +552,7 @@ da kapsar. Kayıtlı parolalar (`logins.json` / `logins.db`) aynı listeyle süz
 - Türk bankaları ve ödeme kuruluşları (ör. İş Bankası, Garanti BBVA, Yapı Kredi, Akbank, Ziraat, Halkbank, Vakıfbank,
   QNB, DenizBank, ING, TEB, Kuveyt Türk, Enpara, Papara, ininal, Param, iyzico, PayTR);
 - uluslararası ödeme: PayPal, Stripe, Wise/TransferWise, Revolut;
-- devlet: `turkiye.gov.tr`, `gib.gov.tr`, `sgk.gov.tr`, `*.gov.tr`, `*.gov`;
+- devlet: `turkiye.gov.tr`, `gib.gov.tr`, `sgk.gov.tr`, `*.gov.tr`, `*.gov` (e-Devlet izni `*.gov`u AÇMAZ);
 - merkezi kimlik: `accounts.google.com`, `login.microsoftonline.com`, `login.live.com`, `securetoken.googleapis.com`.
 
 **Hesap oturumları (kullanıcı izni):** panel Ayarlar → "Hesap oturumları"ndan (YALNIZ oradan; ARCHITECTURE §4) Microsoft,
