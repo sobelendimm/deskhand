@@ -18,6 +18,8 @@ EIS kopması: yardımcı süreç ölürse (KWin yeniden başladı, çökme) bas�
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -44,6 +46,46 @@ PANO_YAZ_AZAMI = 64 * 1024 * 1024   # yazılabilecek metin en çok (Xvfb türüy
 GOZCU_ARALIK = 0.012  # yazı gözcüsü yoklama aralığı (her yoklama tek kdotool çağrısı)
 
 
+# KÖK NEDEN (ölçüldü, kdotool 0.3.0 + KWin 6.x): kdotool her çağrıda geçici bir KWin betiği yükler (loadScript → run →
+# unloadScript) ve KWin betik kimliğini SIRALI atar ("/Scripting/Script<N>", N = son betik + 1). Eşzamanlı iki çağrı aynı
+# kimliği alır ya da biri ötekinin betiğini kaldırır: "No such object path '/Scripting/Script7'" ya da "Timed out
+# waiting for KWin script completion", stdout BOŞ. Kısa yeniden denemeler de eşzamanlı çalıştığı için çakışmayı sürdürür.
+# Çözüm: bu oturuma giden TÜM kdotool çağrıları (okuma + eylem) süreç içinde tek iş parçacığı kilidiyle, süreçler arası
+# oturum dizinindeki flock ile sıraya sokulur; boş/hatalı yanıt gerçek hata olarak ayrılır (boş liste "pencere yok" DEĞİL).
+_KD_KILIT = threading.Lock()
+KD_KILIT_ZAMAN = 30.0
+
+
+@contextlib.contextmanager
+def kd_sirala(d: dict):
+    """Oturumun KWin betik yükleyicisine tek seferde bir kdotool çağrısı girsin (iş parçacığı + süreçler arası flock).
+    Kilit dosyası oturumun çalışma dizininde (yalnız bu oturum; başka oturumlar birbirini beklemez)."""
+    bitis = time.monotonic() + KD_KILIT_ZAMAN
+    if not _KD_KILIT.acquire(timeout=KD_KILIT_ZAMAN):
+        raise Dur(hata.ZAMAN_ASIMI, _("KWin betik kilidi {sn} sn içinde alınamadı").format(sn=f"{KD_KILIT_ZAMAN:.0f}"))
+    fd = None
+    try:
+        try:
+            fd = os.open(os.path.join(kwin_oturum.guvenli_kayit(d)["calisma"], "kdotool.kilit"),
+                         os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        except OSError:
+            fd = None   # kilit dosyası açılamazsa yalnız süreç içi kilit (oturum kapanıyor olabilir)
+        while fd is not None:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() > bitis:
+                    raise Dur(hata.ZAMAN_ASIMI, _("KWin betik kilidi {sn} sn içinde alınamadı").format(
+                        sn=f"{KD_KILIT_ZAMAN:.0f}"))
+                time.sleep(0.005)
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)   # flock kapanışta bırakılır
+        _KD_KILIT.release()
+
+
 def pencere_araci() -> str:
     """KWin türünün pencere aracı (kwin_oturum.kullanilabilir denetler; ham çağrılar yalnız arka_uc/ içinde)."""
     return "kdotool"
@@ -56,8 +98,9 @@ def oturum_pencereleri(d: dict) -> list[tuple[str, str, tuple[int, int, int, int
 
     def kd(*a):
         for _i in range(4):
-            r = subprocess.run([arka_ortak.arac("kdotool"), *a], capture_output=True, text=True, env=env,
-                               timeout=KD_ZAMAN, stdin=subprocess.DEVNULL)
+            with kd_sirala(d):
+                r = subprocess.run([arka_ortak.arac("kdotool"), *a], capture_output=True, text=True, env=env,
+                                   timeout=KD_ZAMAN, stdin=subprocess.DEVNULL)
             if r.stdout.strip() or a[0] not in _KD_OKUMA:
                 return r.stdout.strip()
             time.sleep(0.01)
@@ -119,24 +162,31 @@ class KwinArkaUc(ArkaUc):
     def ekran_adi(self) -> str:
         return self._d()["ekran"]
 
-    def _kd(self, *a, d: dict | None = None) -> str:
-        """kdotool, oturumun özel veri yolunda. Okuma sorguları boş dönerse 3 kez kısa yeniden dener (kdotool her
-        çağrıda KWin betiği yükler; eşzamanlı çağrılarda bazen boş döner). Eylemler yeniden denenmez."""
+    def _kd_ham(self, *a, d: dict | None = None, deneme: int = 4) -> tuple[str, int, str]:
+        """kdotool (stdout, çıkış kodu, stderr). Her çağrı oturumun KWin betik kilidi altında (kd_sirala; sıralı betik
+        kimliği çakışması: bkz. dosya başı notu). Okuma sorguları boş/hatalı dönerse kısa yeniden denenir; eylemler
+        yeniden denenmez."""
         d = d or self._d()
         env = kwin_oturum.kdotool_ortami(d)
-        for deneme in range(4):
-            try:
-                r = subprocess.run([arka_ortak.arac("kdotool"), *a], capture_output=True, text=True, env=env,
-                                   timeout=KD_ZAMAN, stdin=subprocess.DEVNULL)
-            except FileNotFoundError:
-                raise Dur(ARAC_EKSIK, _("kdotool yok"))
-            except subprocess.TimeoutExpired:
-                raise Dur(hata.ZAMAN_ASIMI, _("kdotool {sn} sn içinde yanıt vermedi").format(sn=f"{KD_ZAMAN:.0f}"))
-            out = r.stdout.strip()
-            if out or not a or a[0] not in _KD_OKUMA:
-                return out
-            time.sleep(0.005 * (deneme + 1))
-        return ""
+        okuma = bool(a) and a[0] in _KD_OKUMA
+        out, kod, hata_ = "", 0, ""
+        for i in range(deneme if okuma else 1):
+            with kd_sirala(d):
+                try:
+                    r = subprocess.run([arka_ortak.arac("kdotool"), *a], capture_output=True, text=True, env=env,
+                                       timeout=KD_ZAMAN, stdin=subprocess.DEVNULL)
+                except FileNotFoundError:
+                    raise Dur(ARAC_EKSIK, _("kdotool yok"))
+                except subprocess.TimeoutExpired:
+                    raise Dur(hata.ZAMAN_ASIMI, _("kdotool {sn} sn içinde yanıt vermedi").format(sn=f"{KD_ZAMAN:.0f}"))
+            out, kod, hata_ = r.stdout.strip(), r.returncode, r.stderr.strip()
+            if out or not okuma:
+                break
+            time.sleep(0.005 * (i + 1))
+        return out, kod, hata_
+
+    def _kd(self, *a, d: dict | None = None) -> str:
+        return self._kd_ham(*a, d=d)[0]
 
     # -------- pencere: KWin betikleri (kdotool kwinscript, özel veri yolu). Geometri İSTEMCİ ALANIDIR (Xvfb türüyle
     # aynı: başlık çubuğu/çerçeve hariç), böylece pencere pikseli = uygulamanın kendi koordinatı ve taşı/boyutlandır
@@ -152,14 +202,22 @@ class KwinArkaUc(ArkaUc):
         return self._kd("kwinscript", "--inline", kod, d=d)
 
     def _liste(self, d: dict | None = None) -> list[dict]:
-        """Oturumdaki pencereler: [{i, t, c, p, m, x, g, f}] (g istemci, f çerçeve geometrisi)."""
-        for _deneme in range(3):
-            out = self._betik(self._LISTE_BETIGI, d)
+        """Oturumdaki pencereler: [{i, t, c, p, m, x, g, f}] (g istemci, f çerçeve geometrisi). Liste betiği HER ZAMAN
+        JSON dizisi yazar (boş masaüstü "[]"): boş / ayrıştırılamayan / hata kodlu yanıt "pencere yok" DEĞİL, gerçek
+        hatadır → 4 kez denenir, hâlâ başarısızsa Dur(7) (yanlışlıkla 'pencere yok' denmez)."""
+        d = d or self._d()
+        son = ""
+        for deneme in range(4):
+            out, kod, hata_ = self._kd_ham("kwinscript", "--inline", self._LISTE_BETIGI, d=d, deneme=1)
             try:
-                return [w for w in json.loads(out or "null") or [] if UUID.fullmatch(str(w.get("i", "")))]
+                liste = json.loads(out) if out else None
             except ValueError:
-                time.sleep(0.01)
-        return []
+                liste = None
+            if isinstance(liste, list):
+                return [w for w in liste if isinstance(w, dict) and UUID.fullmatch(str(w.get("i", "")))]
+            son = hata_ or out[:200] or f"çıkış {kod}"
+            time.sleep(0.01 * (deneme + 1))
+        raise Dur(hata.ZAMAN_ASIMI, _("KWin pencere listesi alınamadı: {ayrinti}").format(ayrinti=son[:200]))
 
     def _pencere(self, k: str, d: dict | None = None) -> dict:
         u = kimlik_coz(k)

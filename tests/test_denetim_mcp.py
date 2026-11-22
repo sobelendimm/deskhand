@@ -358,6 +358,23 @@ def odeme_ac():
     return p
 
 
+def odeme_kapat(p):
+    """Pencereyi KAPAT (p yalnız bwrap sarmalayıcısı: --die-with-parent yok → terminate uygulamayı öldürmez, ikinci
+    odeme_ac() 'Ödeme' için iki pencere bulurdu)."""
+    from deskhand.arka_uc import sec
+    p.terminate()
+    p.wait(5)
+    au_ = sec(arka_bayragi=True)
+    for _i in range(3):
+        try:
+            for kimlik, _b, _g in au_.pencereler("Ödeme — Kasa"):
+                au_.kapat(kimlik)
+        except Dur:
+            pass
+        if bekle(lambda: not au_.pencereler("Ödeme — Kasa"), 3):
+            break
+
+
 gercek_iste_sonuc = onay.iste_sonuc
 araya = {}
 
@@ -424,8 +441,7 @@ kontrol("4a: eşzamanlı press_key sayfayı DEĞİŞTİREMEDİ", "sayfa:B" not i
 kontrol("4a: hedef değişmedi → onaylanan 'Ürün A' bir kez tıklandı", h4 is None and l4.count("tikla:Ürün A 1 TL") == 1
         and "tikla:Ürün B 999 TL" not in l4, f"{h4} {l4}")
 kontrol("4a: onay sonrası kayıt kapandı (girdi kapısı açık)", not mcp_sunucu.onay_bekliyor_mu("sanal"))
-p4.terminate()
-p4.wait(5)
+odeme_kapat(p4)
 time.sleep(0.5)
 
 p4 = odeme_ac()
@@ -442,8 +458,7 @@ kontrol("4b: sayfa onay beklerken dışarıdan değişti (senaryo kuruldu)", "sa
 kontrol("4b: onaydan sonra hedef değişti → [10] 'yeniden onay gerekir'", h4 is not None and "[10]" in h4 and
         "yeniden onay" in h4, str(h4))
 kontrol("4b: hiçbir ürün tıklanmadı (ne A ne 999 TL'lik B)", not [x for x in l4 if x.startswith("tikla:")], str(l4))
-p4.terminate()
-p4.wait(5)
+odeme_kapat(p4)
 
 # meşru: onay yokken ödeme dışı pencerede girdi araçları çalışır (kapı kapalı)
 kontrol("kapı: bekleyen onay yokken girdi serbest", not mcp_sunucu.onay_bekliyor_mu("sanal") and
@@ -458,8 +473,7 @@ with api.hedef("sanal"):
     sure_ = time.monotonic() - t0
 kontrol("küçük: ön ölçümsüz _sonra en çok ~0,2 sn bekler (0,35 değil) ve başlığı döner",
         r.get("title") == "Ödeme — Kasa" and 0.15 <= sure_ < 0.3, f"{r} {sure_:.3f}")
-p4.terminate()
-p4.wait(5)
+odeme_kapat(p4)
 
 masaustu.masaustu_durdur()
 print(f"\n{gecen}/{toplam} denetim (MCP) testi geçti")
