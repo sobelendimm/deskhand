@@ -12,6 +12,13 @@ Dosya yoksa varsayılanlar kullanılır; OKUMA dosya oluşturmaz. Bilinmeyen/yan
 
   [guvenlik]
   onaylar = "hepsi"        # hepsi | kart   (hangi eylemler panelden insan onayı ister; ARCHITECTURE §4 "Onay kapsamı")
+
+  [dinleme]
+  ozel_ses = false         # true: HER görünmez masaüstü açılışında özel (donanımsız) ses sunucusu kur (`listen` için);
+                           # false: yalnız manage_desktop(start, audio=true) ya da ilk `listen` çağrısında kurulur
+  motor = "whisper-cli"    # konuşma tanıma motoru (yol ya da güvenli dizinlerde ad)
+  model = ""               # ggml model yolu; boş = ~/.local/share/whisper-models/ggml-large-v3.bin
+  vad_modeli = ""          # silero VAD modeli; boş = ~/.local/share/whisper-models/ggml-silero-v5.1.2.bin
 """
 from __future__ import annotations
 
@@ -33,6 +40,12 @@ VARSAYILAN = {
     },
     "guvenlik": {
         "onaylar": "hepsi",
+    },
+    "dinleme": {
+        "ozel_ses": False,
+        "motor": "whisper-cli",
+        "model": "",
+        "vad_modeli": "",
     },
 }
 TAKMA = {("karar", "mesgulken"): {"hep-arka": "arka"}}

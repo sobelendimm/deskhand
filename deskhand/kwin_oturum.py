@@ -952,6 +952,9 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     uyari = ao.oncelik_bekcisi_baslat(d, cdir, izle=k.pid, xno=d.get("x_ana"))
     if uyari:
         d["uyarilar"].append(uyari)
+    from . import ses  # oturuma özel ses sunucusu (ayar dinleme.ozel_ses; kurulamazsa yalnız uyarı)
+    ses.ayara_gore_kur(d, cdir)
+    _durum_yaz(d)
     _hazir_denetle(d, k)
 
 
@@ -974,7 +977,7 @@ def _kapat_ic(d: dict, cdir_kesin: str | None = None) -> list[str]:
     if not (kimlik_ok and kafes and re.fullmatch(rf"deskhand-kwin-{kimlik}-\d+\.scope", kafes) and cg.endswith("/" + kafes)):
         cg = ""
     haric = ao._atalar()
-    sira = ("kwin", "ses_bekcisi", "bildirim", "a11y", "oncelik_bekcisi", "dbus")
+    sira = ("kwin", "ses_pulse", "ses_wp", "ses_pw", "ses_bekcisi", "bildirim", "a11y", "oncelik_bekcisi", "dbus")
     cekirdek = [p for ad in sira if (p := pid.get(ad)) and ao.pid_dogru(p, bas.get(ad), cg)]
 
     def surecler() -> list[int]:
@@ -1060,7 +1063,7 @@ def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
          ao.a11y_bagi(os.path.join(c, "at-spi"), ao.a11y_kimlik_temizle(g))]
     if g.get("x_ana") is not None:
         b += [(f"{X_DIZIN}/X{g['x_ana']}", False), (g["xauth"], True)]
-    return b  # oturum kopyası: yalnız politikanın verdiği (arka_ortak.korumali_baslat, kopya=)
+    return b + ao.ses_bagi(c)  # oturum kopyası: yalnız politikanın verdiği (arka_ortak.korumali_baslat, kopya=)
 
 
 def uygulama_baslat(d: dict, argv: list[str], env: dict | None = None, kopya: str | None = None,

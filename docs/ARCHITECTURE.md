@@ -55,7 +55,10 @@ deskhand/
                    (ortam_tabani), özel D-Bus yapılandırması, Xauthority, öncelik bekçisi başlatma
   oncelik_bekcisi.py  kafesteki her iş parçacığını nice >= 10 / gerçek zamanlı olmayan / idle G/Ç'de tutan bekçi;
                    ekran sunucusu (KWin/Xvfb) SIGKILL/OOM ile ölürse oturumu kapatır (kafes, X soket/kilit, dizin)
-  ses_bekcisi.py   (artık başlatılmıyor: arka plan uygulamaları ses sunucusuna hiç erişmez)
+  ses_bekcisi.py   (artık başlatılmıyor: arka plan uygulamaları kullanıcının ses sunucusuna hiç erişmez)
+  ses.py           oturuma ÖZEL ses sunucusu (pipewire + wireplumber `policy` + pipewire-pulse; donanımsız, yalnız
+                   `deskhand-sessiz` boş çıkışı + monitörü): kurma/kapatma/sağlık, istemci ortamı
+  dinleme.py       `listen` çekirdeği: özel çıkışın monitöründen bellekte kayıt (parec) → whisper-cli → metin
   pano_sahibi.py   sanal masaüstünün CLIPBOARD seçimini sunan yardımcı süreç (kafeste, ilk pano yazımında başlar)
   oturum/          oturum köprüsü (bkz. docs/SESSIONS.md)
   mesgul.py        kullanıcı meşgul mü (oyun / film) koruması
@@ -515,10 +518,36 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   - Açılıştan SONRA ev dizininde oluşan soket/FIFO'lar maskelenmez (katman üstünden bağlanılamıyor; veri klasörlerinde
     ise gerçek dizin olduğundan bağlanılabilir).
 - **Ses (iki tür).** Arka plan uygulamaları kullanıcının ses sunucusuna (pipewire/pulse) HİÇ erişmez: çalma da kayıt
-  (mikrofon) da yok, uygulamalar sessiz çalışır. Soketler ad alanında görünmez; ortam da var olmayan bir sokete
-  yönlendirilir (`ses_ortami_uygula`). Boş çıkış (null sink) ve ses bekçisi artık kurulmaz (eski kayıtların
-  `deskhand-sessiz-*` modülü kapanışta yine kaldırılır); ses yönlendiricilerinde (ör. Kulak Kesil) arka plan akışı
-  dışlaması gerekmez.
+  (mikrofon) da yok. Soketler ad alanında görünmez (`/run/user/UID` boş tmpfs). İki durum (`ses_ortami_uygula`):
+  (1) varsayılan: ortam var olmayan bir sokete yönlendirilir, uygulamalar sessiz çalışır; (2) DİNLEME (Tur 3): oturumun
+  özel ses sunucusu kurulmuşsa (`ses.kur`; `manage_desktop(start, audio=true)`, ilk `listen` çağrısı ya da ayar
+  `[dinleme] ozel_ses = true` ile) ortam YALNIZ onun PULSE soketini gösterir. Özel örnek: oturum dizininde `ses/` (0700;
+  PipeWire soketleri `pipewire-0`/`-manager`, yapılandırma, günlükler) ve `ses/pulse/` (0700; yalnız `native`), kendi
+  yapılandırması (ALSA/Bluetooth/kamera eklentisi ve aygıt fabrikaları YÜKLENMEZ, WirePlumber yalnız `policy` profili,
+  XDG/HOME oturum dizininde: kullanıcının ayarları/filtre zincirleri okunmaz). pipewire-pulse'ta modül yükleme KAPALI
+  (`pulse.allow-module-loading = false`, `pulse.cmd` boş): `load-module` (tünel, LADSPA, pipe, TCP…) reddedilir. İçinde
+  yalnız `deskhand-sessiz` çıkışı + monitörü vardır: mikrofon yok, ses kullanıcının hoparlörüne/kulaklığına ASLA gitmez,
+  kullanıcının varsayılan çıkışı/düzeyi/modülleri değişmez. Uygulamanın ad alanına YALNIZ `ses/pulse/` SALT OKUNUR
+  bağlanır (`ses_bagi`); PipeWire'ın tam yetkili soketleri, yapılandırma ve günlükler bağlanmaz, PIPEWIRE_REMOTE var
+  olmayan yoldur. Soket yolu kayıttan değil çalışma dizininden kurulur ve gerçek dosya sisteminden denetlenir
+  (`ses.soket_hazir`); Deskhand'in `parec`'i bağlanmadan önce `ses.soket_denetle` (dizin/soket türü, sahip, sert bağ, karşı
+  uç = kayıtlı `ses_pulse`). Derinlemesine savunma: üç ses süreci TEK bwrap ad alanında (`ses.sunucu_argv`: ayrı
+  kullanıcı/PID/ağ/IPC/UTS — ağ yok; kök salt okunur; /run, /tmp, /var/tmp, /home ve ev, /mnt, /media, /srv, RUNTIME_DIR
+  boş tmpfs; asgari /dev: snd/dri/video/hidraw yok; yazılabilir tek yol `ses/`; RLIMIT_NICE/RTPRIO 0), 1 numaralı süreç
+  küçük yönetici kabuk (`ses_pw`; ölünce çekirdek hepsini öldürür), masaüstünün bellek kafesinde nice 10 + ionice idle.
+  Üç süreç aynı PID ad alanındadır: ayrı PID ad alanlarında PipeWire veri akışı kurulamıyor (ölçüldü). Kurulamazsa (araç yok, açılmadı, beklenmeyen aygıt) özellik
+  kapalı kalır, uyarı döner. Flatpak uygulamaları `--nosocket=pulseaudio` ile kalır (kendi soketlerini ezerdi): sesleri
+  dinlenemez. Eski boş çıkış (null sink) düzeneği ve ses bekçisi artık kurulmaz.
+- **Dinleme (`listen`).** `dinleme.dinle`: özel çıkışın monitöründen `parec` ile 16 kHz mono s16 BELLEKTE kayıt (en çok 120 sn;
+  `until_silence`: ses duyulduktan sonra sessizlikte erken biter) → ses hiç duyulmadıysa motor çalışmaz → `whisper-cli`
+  (`-mc 0`, silero VAD varsa, model `[dinleme] model`; yoksa açık hata + kurulum ipucu, HİÇBİR ŞEY indirilmez) → `{text,
+  segments[{t0,t1,text}], language, duration}`. Geçici WAV/JSON yalnız `<oturum>/dinleme/` (0700, dosyalar 0600; uygulamalar
+  görmez) ve iş bitince silinir; çökmeden kalan eski kayıtlar sonraki tanımada silinir. whisper-cli masaüstünün bellek
+  kafesinde nice 10 + ionice idle ile çalışır; motor mutlak yolu yalnız root'a ait zincirden (`arka_ortak.arac`);
+  `HSA_OVERRIDE_GFX_VERSION` yalnız kullanıcı ortamında tanımlıysa aktarılır. Kullanıcı oyundaysa/tam ekrandaysa GPU
+  kullanılmaz (`-ng`, CPU, en çok 4 iş parçacığı). Tanınan metin günlüğe
+  YAZILMAZ (yalnız süre/dil/parça sayısı). Sonuç `warning` alanıyla "güvenilmeyen veri" etiketlidir (ses içinden komut
+  enjeksiyonu). Kullanıcının GERÇEK ekran sesi bu sürümde yoktur: `desktop="foreground"` reddedilir.
 - **Uygulama ortamı (iki tür).** `arka_ortak.ortam_tabani`: kullanıcının oturumuna ait değişkenler (gerçek veri yolu,
   WAYLAND_DISPLAY/DISPLAY/XAUTHORITY, AT_SPI_BUS_ADDRESS, SSH_AUTH_SOCK/SSH_AGENT_PID, GNOME_KEYRING_CONTROL,
   LIBEI_SOCKET/EIS_SOCKET, SESSION_MANAGER, KDE_FULL_SESSION, PULSE_*/PIPEWIRE_*/IBUS_*) birleştirmeden ÖNCE ve SONRA
