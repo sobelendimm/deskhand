@@ -47,8 +47,10 @@ GERCEK_EKRAN_DEGISKENI = "DESKHAND_GERCEK_EKRAN"
 
 def gercek_ekran_kipi() -> str:
     """"acik" | "salt-okuma" | "kapali" (ortam değişkeninden; tanınmayan değer = "kapali")."""
-    d = os.environ.get(GERCEK_EKRAN_DEGISKENI, "").strip().lower()
-    if d in ("", "acik"):
+    if GERCEK_EKRAN_DEGISKENI not in os.environ:
+        return "acik"
+    d = os.environ[GERCEK_EKRAN_DEGISKENI].strip().lower()
+    if d == "acik":  # ayarlı ama boş (VAR=$AYARSIZ) ya da tanınmayan değer → kapali
         return "acik"
     return "salt-okuma" if d == "salt-okuma" else "kapali"
 
