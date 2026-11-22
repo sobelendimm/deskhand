@@ -921,8 +921,8 @@ def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str]:
         if k != an.k:
             raise _ref_hatasi("window", _("ref başka pencereye ait; eylem yapılmadı. Bu pencere için observe çağır"))
     try:
-        geo = api.pencere_bilgi(an.k)["geometry"]
-        baslik_simdi = au.baslik(an.k)
+        pb = api.pencere_bilgi(an.k)  # başlık anlık görüntüyle AYNI kaynaktan (tüm ekranda "" — au.baslik değil)
+        geo, baslik_simdi = pb["geometry"], pb["title"]
     except hata.Dur:
         raise _ref_hatasi("window", _("ref'in penceresi kapandı ya da artık yok; eylem yapılmadı. get_status ve observe "
                                       "çağır")) from None
