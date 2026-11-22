@@ -35,6 +35,24 @@ TEST_PENCERE = os.path.join(KOK, "tests", "yardimci", "test_pencere.py")
 SUNUCU = os.path.join(KOK, "tests", "yardimci", "mcp_test_sunucu.py")
 gecen = toplam = 0
 
+# open_app yalnız kurulu .desktop girdisi başlatır (ham komut yok): test pencereleri geçici bir uygulama dizinindeki
+# girdilerle açılır (uygulama.UYGULAMA_DIZINLERI süreç içinde / stdio sunucusunda DESKHAND_TEST_UYGULAMA_DIZINI ile).
+UYG_DIZIN = os.path.join(GECICI, "uygulamalar")
+os.makedirs(os.path.join(GECICI, "bin"), exist_ok=True)
+os.makedirs(UYG_DIZIN, exist_ok=True)
+
+
+def test_uygulamasi(kimlik: str, ad: str, ortam: dict) -> str:
+    """Test penceresini açan çalıştırılabilir betik + .desktop girdisi (Exec = betiğin yolu). → kimlik"""
+    betik = os.path.join(GECICI, "bin", kimlik)
+    satir = " ".join(f"{k}='{v}'" for k, v in ortam.items())
+    with open(betik, "w") as f:
+        f.write(f"#!/bin/sh\n{satir} exec '{sys.executable}' '{TEST_PENCERE}' \"$@\"\n")
+    os.chmod(betik, 0o755)
+    with open(os.path.join(UYG_DIZIN, kimlik + ".desktop"), "w") as f:
+        f.write(f"[Desktop Entry]\nType=Application\nName={ad}\nExec={betik} %F\n")
+    return kimlik
+
 
 def kontrol(ad, kosul, ek=""):
     global gecen, toplam
@@ -256,10 +274,25 @@ async def on_plan_testleri():
         r = await c.call_tool("click", {"window": "Sahte", "text": "Kaydet", "x": 3, "desktop": "foreground"})
         kontrol("ön: iki hedef birden → hata, girdi yok", r.is_error and len(au.satirlar) == n0)
 
-        r = await c.call_tool("open_app", {"app": sys.executable, "args": ["-c", "pass"], "desktop": "foreground"})
-        kontrol("ön: open_app yeni pencereyi bekler", not r.is_error and yapi(r).get("status") == "opened" and
-                yapi(r)["window"]["id"] == "{sahte-2}" and au.baslatilan, metin(r)[:300])
-        au.pen.pop("{sahte-2}", None)
+        from deskhand import uygulama
+        eski_dizinler = uygulama.UYGULAMA_DIZINLERI
+        uygulama.UYGULAMA_DIZINLERI = (UYG_DIZIN,)
+        try:
+            test_uygulamasi("deskhand-on-pencere", "Deskhand Ön Pencere", {})
+            r = await c.call_tool("open_app", {"app": "deskhand-on-pencere", "args": ["https://example.com/?q=a=b"],
+                                               "desktop": "foreground"})
+            kontrol("ön: open_app (masaüstü girdisi + URL) yeni pencereyi bekler", not r.is_error and
+                    yapi(r).get("status") == "opened" and yapi(r)["window"]["id"] == "{sahte-2}" and
+                    au.baslatilan and au.baslatilan[-1][0][:2] == ["gio", "launch"] and
+                    au.baslatilan[-1][0][3:] == ["https://example.com/?q=a=b"] and au.baslatilan[-1][1] == {},
+                    metin(r)[:300] + str(au.baslatilan[-1:]))
+            au.pen.pop("{sahte-2}", None)
+            n0 = len(au.baslatilan)
+            r = await c.call_tool("open_app", {"app": sys.executable, "args": ["-c", "pass"], "desktop": "foreground"})
+            kontrol("ön: open_app ham yorumlayıcı yolu → [10], hiçbir şey başlatılmadı",
+                    r.is_error and "[10]" in metin(r) and len(au.baslatilan) == n0, metin(r)[:300])
+        finally:
+            uygulama.UYGULAMA_DIZINLERI = eski_dizinler
 
         r = await c.call_tool("click", {"window": "Sahte", "text": "Kaydet", "desktop": "auto"})
         kontrol("ön: auto + karar 'on' → foreground", not r.is_error and yapi(r).get("desktop") == "foreground",
@@ -357,7 +390,10 @@ def x_tasi(kimlik, dx):
 async def stdio_testleri():
     from mcp import Client, StdioServerParameters
     env = dict(os.environ)
-    env.update({"LOG": LOG, "BASLIK": "deskhand-mcp ANA", "HAZIR_MS": "300"})
+    env.update({"LOG": LOG, "BASLIK": "deskhand-mcp ANA", "HAZIR_MS": "300", "DESKHAND_TEST_UYGULAMA_DIZINI": UYG_DIZIN})
+    test_uygulamasi("deskhand-mcp-ana", "Deskhand MCP Ana", {"LOG": LOG, "BASLIK": "deskhand-mcp ANA", "HAZIR_MS": "300"})
+    # ad yasak desene uymaz (başlatılabilir); açılan pencerenin başlığı uyar (gizli-pencere → yasak)
+    test_uygulamasi("deskhand-ikinci", "Deskhand İkinci", {"LOG": LOG2, "BASLIK": "gizli-pencere", "HAZIR_MS": "100"})
     with open(yollar.yasak_dosya() if os.path.exists(os.path.dirname(yollar.yasak_dosya())) else
               (os.makedirs(os.path.dirname(yollar.yasak_dosya()), exist_ok=True) or yollar.yasak_dosya()), "w") as f:
         f.write(guvenlik.VARSAYILAN_YASAK + "gizli-pencere\n")
@@ -395,17 +431,23 @@ async def stdio_testleri():
         r = await c.call_tool("manage_desktop", {"action": "start"})
         kontrol("stdio: manage_desktop start", not r.is_error and yapi(r).get("running") is True, metin(r)[:300])
 
-        r = await c.call_tool("open_app", {"app": sys.executable, "args": [TEST_PENCERE], "title": "deskhand-mcp ANA",
+        # ham komut / yorumlayıcı: MCP'den hiçbir biçimde başlatılmaz (kabuksuz ajana kabuk yok)
+        for ad_, arg_ in ((sys.executable, [TEST_PENCERE]), ("/bin/sh", ["-c", "true"]),
+                          ("deskhand-mcp-ana", ["-c", "true"]), ("deskhand-mcp-ana", ["LOG=/tmp/x"])):
+            r = await c.call_tool("open_app", {"app": ad_, "args": arg_, "desktop": "background", "wait_s": 2})
+            kontrol(f"stdio: open_app({ad_!r}, {arg_!r}) → [10]", r.is_error and "[10]" in metin(r), metin(r)[:200])
+        sahte("sahte-oturum", "yok")
+        r2 = await c.call_tool("open_app", {"app": "deskhand-mcp-ana", "desktop": "background", "wait_s": 2})
+        kontrol("stdio: oturum köprüsü yok → görünmez masaüstünde hiçbir uygulama başlatılmaz",
+                r2.is_error and "oturum köprüsü yok" in metin(r2), metin(r2)[:200])
+        sahte("sahte-oturum", None)
+        r = await c.call_tool("open_app", {"app": "deskhand-mcp-ana", "title": "deskhand-mcp ANA",
                                            "desktop": "background", "wait_s": 20})
         w = (yapi(r).get("window") or {}).get("id", "")
-        kontrol("stdio: open_app → arka: kimlikli pencere", not r.is_error and yapi(r).get("status") == "opened" and
-                w.startswith("arka:"), metin(r)[:400])
-        kontrol("stdio: oturum köprüsü yokken uyarı notu", any("oturum" in n for n in yapi(r).get("notes", [])),
+        kontrol("stdio: open_app (masaüstü girdisi) → arka: kimlikli pencere", not r.is_error and
+                yapi(r).get("status") == "opened" and w.startswith("arka:"), metin(r)[:400])
+        kontrol("stdio: oturum politikası notu", any("oturum" in n for n in yapi(r).get("notes", [])),
                 str(yapi(r).get("notes")))
-        # oturum köprüsü yokken mutlak yolsuz ad başlatılmaz (var olmayan bir ad: hiçbir gerçek uygulama açılmaz)
-        r2 = await c.call_tool("open_app", {"app": "olmayan-uygulama-xyz", "desktop": "background"})
-        kontrol("stdio: oturum köprüsü yok + mutlak yolsuz ad → reddedildi", r2.is_error and "mutlak yol" in metin(r2),
-                metin(r2)[:200])
 
         r = await c.call_tool("read_text", {"window": w, "query": "Hazır", "wait_s": 8, "desktop": "background"})
         kontrol("stdio: read_text query+wait ('Hazır')", not r.is_error and yapi(r).get("items"), metin(r)[:300])
@@ -518,9 +560,8 @@ async def stdio_testleri():
                 metin(r)[:200])
 
         # yasak pencere: maske + OCR'dan çıkarma + girdi yok
-        r = await c.call_tool("open_app", {"app": "/bin/sh", "args": ["-c", f'LOG={LOG2} BASLIK="gizli-$(echo pencere)" '
-                                                                     f'HAZIR_MS=100 exec {sys.executable} {TEST_PENCERE}'],
-                                           "title": "gizli", "desktop": "background", "wait_s": 20})
+        r = await c.call_tool("open_app", {"app": "deskhand-ikinci", "title": "gizli", "desktop": "background",
+                                           "wait_s": 20})
         gw = (yapi(r).get("window") or {})
         kontrol("stdio: yasak pencere açıldı, başlığı gizli", not r.is_error and gw.get("forbidden") is True and
                 gw.get("title") == "(yasak pencere)", metin(r)[:300])

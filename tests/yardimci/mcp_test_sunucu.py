@@ -50,8 +50,22 @@ def sahte_iste_sonuc(eylem, hedef, ayrinti="", masaustu="ekran", sure=120, gorun
 
 
 onay.iste_sonuc = sahte_iste_sonuc
-# testte oturum köprüsü HİÇ kullanılmaz (gerçek uygulama verisine dokunmasın): politikasız yol sınanır
-mcp_sunucu._oturum = lambda: None
+
+
+# testte GERÇEK oturum köprüsü HİÇ kullanılmaz (gerçek uygulama verisine dokunmasın): sahte köprü her uygulamaya
+# "paylas" der (komut değişmez, ortam eklenmez). $DESKHAND_RUNTIME_DIR/sahte-oturum = "yok" → köprü yokmuş gibi.
+class _SahteOturum:
+    @staticmethod
+    def hazirla(uygulama, gorev_siteleri=None, ham_komut=False):
+        from types import SimpleNamespace
+        return SimpleNamespace(karar="paylas", argv=[], env_ek={}, aciklama="test: sahte oturum", kopya_yolu=None)
+
+
+mcp_sunucu._oturum = lambda: None if _oku("sahte-oturum") == "yok" else _SahteOturum
+# open_app yalnız .desktop girdisi başlatır: test girdileri geçici dizinde (gerçek uygulamalar listelenmez)
+if os.environ.get("DESKHAND_TEST_UYGULAMA_DIZINI"):
+    from deskhand import uygulama  # noqa: E402
+    uygulama.UYGULAMA_DIZINLERI = (os.environ["DESKHAND_TEST_UYGULAMA_DIZINI"],)
 _gercek_onay = mcp_sunucu._onay
 mcp_sunucu._onay = lambda: None if _oku("sahte-onay") == "modul-yok" else _gercek_onay()
 
