@@ -8,6 +8,8 @@ Kullanıcının GERÇEK ekranına hiçbir girdi gitmez; gerçek ~/.config yazıl
  C) GÖRÜNMEZ masaüstünde (Xvfb) gerçek Qt pencereleri: observe (ağaç, sorgu, since, OCR, numaralı görüntü),
     ref ile tık/eylem/yazı/kaydırma, durum değişimi = confirmed, bayat ref (pencere boyutu), wait_for (text, element,
     window, stable, gone, zaman aşımı); token/karakter ölçümü (tam ağaç / interactive_only / query).
+ C2) GÖRÜNMEZ masaüstünde YALITIK Firefox (geçici profil; kullanıcı profil kökü önce/sonra sha1): web ögesi ref'i (yazısız
+    düğme, via=action), ödeme sayfasında ref tıklaması onay ister, 1.000 bağlantılı sayfada sayfalama/sorgu/süre.
  D) Süreç içi sahte kde arka ucu + sahte AT-SPI (tests/yardimci/sahte_masaustu.py): ref yolunda her güvenlik kapısı
     (DUR, hassas öge, hassas sayfa, onay sonrası öge değişimi, bekleyen onay, kendi istemci, seviye, sistem istemi,
     parola alanı, uçbirim Enter kapısı, insan önceliği), bayatlığın üç nedeni (snapshot / window / element) ve
@@ -381,6 +383,145 @@ async def sanal_testleri():
     masaustu.masaustu_durdur()
 
 
+# ================================================================ C2) görünmez masaüstü, YALITIK Firefox (web ref)
+
+def web_mumkun():
+    try:
+        import jeepney  # noqa: F401
+    except ImportError:
+        return False
+    return bool(shutil.which("firefox") and shutil.which("Xvfb"))
+
+
+async def web_testleri():
+    """Firefox YALNIZ görünmez masaüstünde, yeni boş geçici profille (tests/yardimci/web_tarayici.py); kullanıcının
+    profil kökü önce/sonra karşılaştırılır (fark = HEMEN dur). Sayfalar yerel ve sentetik (tests/ornek/web/)."""
+    from mcp import Client
+    import web_tarayici as wt
+    from deskhand import onay
+    from deskhand.arka_uc import sec
+    bekci = wt.ProfilBekcisi()
+    masaustu.masaustu_baslat()
+    au = sec(arka_bayragi=True)
+    srv = wt.Sunucu()
+    acik = []
+    istekler = []
+    gercek_onay = onay.iste_sonuc
+
+    def red(eylem_, hedef, ayrinti="", masaustu="ekran", sure=120, goruntu=None, gunluge_yaz=True):
+        istekler.append(ayrinti)
+        return onay.OnaySonucu(False, "red")
+    onay.iste_sonuc = red
+
+    def profil():
+        f = bekci.fark()
+        if f:
+            print(f"!!! KULLANICI FIREFOX PROFİL KÖKÜ DEĞİŞTİ: {f}; test durduruldu", flush=True)
+            for x in acik:
+                x.kapat()
+            masaustu.masaustu_durdur()
+            os._exit(2)
+
+    def tik(k):
+        m = re.match(r"TIK (.+) #(\d+)", au.baslik(k) or "")
+        return (m.group(1), int(m.group(2))) if m else (None, 0)
+
+    B = {"desktop": "background"}
+    try:
+        async with Client(s.mcp) as c:
+            ff = wt.Firefox(au, GECICI, srv.url("form.html"), erisilebilirlik=False)
+            acik.append(ff)
+            profil()
+            k = ff.k
+            st = {}
+            for _ in range(60):
+                r = await c.call_tool("observe", {"window": k, **B})
+                st = yapi(r)
+                if any(e.get("name") == "Kaydet" for e in st.get("elements", [])) and st.get("page", {}).get("title"):
+                    break
+                await asyncio.sleep(0.25)
+            og = {e.get("name"): e for e in st.get("elements", [])}
+            kontrol("web observe: sayfa ögeleri (kaynak web, sayfa başlığı/adres, yazısız aria-label düğmesi)",
+                    st.get("sources", [None])[0] == "web" and "Kaydet" in og and "Ayarlar" in og and
+                    st.get("page", {}).get("title") == "Deskhand Form Testi" and "page " in metin(r), metin(r)[:500])
+            n0 = tik(k)[1]
+            r = await c.call_tool("click", {"ref": og["Ayarlar"]["ref"], **B})
+            await asyncio.sleep(0.3)
+            kontrol("web click(ref) yazısız düğme → sayfanın günlüğü 'TIK Ayarlar'", not r.is_error and
+                    tik(k)[0] == "Ayarlar" and tik(k)[1] == n0 + 1, metin(r)[:300] + str(tik(k)))
+            r = await c.call_tool("click", {"ref": og["Kaydet"]["ref"], "via": "action", **B})
+            await asyncio.sleep(0.3)
+            kontrol("web click(ref, via=action) → 'TIK Kaydet'", not r.is_error and tik(k)[0] == "Kaydet",
+                    metin(r)[:300] + str(tik(k)))
+            ff.kapat()
+            acik.remove(ff)
+            profil()
+
+            ff = wt.Firefox(au, GECICI, srv.url("odeme.html"), erisilebilirlik=False)
+            acik.append(ff)
+            profil()
+            k = ff.k
+            st = {}
+            for _ in range(60):
+                r = await c.call_tool("observe", {"window": k, **B})
+                st = yapi(r)
+                if st.get("sources", [None])[0] == "web" and st.get("elements") and st.get("page", {}).get("title"):
+                    break
+                await asyncio.sleep(0.25)
+            kontrol("web observe ödeme sayfası: page.sensitive_page + başlıkta uyarı",
+                    st.get("page", {}).get("sensitive_page") is True and "sensitive_page" in metin(r), metin(r)[:300])
+            hedef = next((e for e in st.get("elements", []) if e.get("role") in ("button", "push button")), None)
+            n0 = tik(k)[1]
+            istekler.clear()
+            r = await c.call_tool("click", {"ref": hedef["ref"] if hedef else "x", **B})
+            await asyncio.sleep(0.3)
+            kontrol("web click(ref) ödeme sayfasında sıradan düğme → onay istendi, red → [10], tık yok",
+                    r.is_error and "[10]" in metin(r) and istekler and tik(k)[1] == n0, metin(r)[:300])
+            ff.kapat()
+            acik.remove(ff)
+            profil()
+
+            ff = wt.Firefox(au, GECICI, srv.url("liste.html"), erisilebilirlik=False)
+            acik.append(ff)
+            profil()
+            k = ff.k
+            for _ in range(60):
+                r = await c.call_tool("observe", {"window": k, **B})
+                if (yapi(r).get("total") or 0) > 50 and yapi(r).get("sources", [None])[0] == "web":
+                    break
+                await asyncio.sleep(0.25)
+            t0 = time.monotonic()
+            r = await c.call_tool("observe", {"window": k, **B})
+            sure = time.monotonic() - t0
+            OLCUM["web_buyuk"] = (len(metin(r)), len(json.dumps(yapi(r), ensure_ascii=False)), yapi(r).get("total"),
+                                  round(sure, 2))
+            kontrol("web observe 1.000 bağlantılı sayfa: yalnız GÖRÜNEN ögeler (>100), ≤ 3 sn",
+                    100 < (yapi(r).get("total") or 0) < 1000 and sure <= 3.0, f"{yapi(r).get('total')} {sure:.2f}")
+            r = await c.call_tool("observe", {"window": k, "max_elements": 40, **B})
+            kontrol("web observe max_elements=40: 40 satır + next_offset 40", yapi(r).get("count") == 40 and
+                    yapi(r).get("next_offset") == 40 and "next_offset 40" in metin(r), metin(r)[-200:])
+            OLCUM["web_buyuk_40"] = (len(metin(r)), len(json.dumps(yapi(r), ensure_ascii=False)), yapi(r).get("count"))
+            t0 = time.monotonic()
+            r = await c.call_tool("read_text", {"window": k, "source": "web", "hidden": True, "max_items": 300, **B})
+            OLCUM["web_read_text_300"] = (len(metin(r)), len(json.dumps(yapi(r), ensure_ascii=False)),
+                                          len(yapi(r).get("items", [])), round(time.monotonic() - t0, 2))
+            r = await c.call_tool("observe", {"window": k, "query": "0012|yenile", **B})
+            OLCUM["web_buyuk_query"] = (len(metin(r)), len(json.dumps(yapi(r), ensure_ascii=False)), yapi(r).get("total"))
+            adlar = [e.get("name") for e in yapi(r).get("elements", [])]
+            kontrol("web observe query='0012|yenile': yalnız eşleşenler", "Listeyi yenile" in adlar and
+                    any("0012" in (a or "") for a in adlar) and len(adlar) <= 4, str(adlar))
+            ff.kapat()
+            acik.remove(ff)
+            profil()
+    finally:
+        onay.iste_sonuc = gercek_onay
+        for x in acik:
+            x.kapat()
+        srv.kapat()
+        masaustu.masaustu_durdur()
+        profil()
+
+
 # ================================================================ D) sahte kde + sahte AT-SPI: kapılar ref yolunda
 
 async def kapi_testleri():
@@ -647,12 +788,20 @@ def main():
         asyncio.run(sanal_testleri())
     else:
         print("ATLANDI (C): Xvfb / PyQt6 / at-spi2-core yok")
+    if web_mumkun():
+        asyncio.run(web_testleri())
+    else:
+        print("ATLANDI (C2): firefox / Xvfb / jeepney yok")
     asyncio.run(kapi_testleri())
     print("\n# ölçümler:")
     print(f"  tools/list: {OLCUM.get('tools_list')} karakter (~{(OLCUM.get('tools_list') or 0) // 4} token); "
           f"talimat {OLCUM.get('talimat')} karakter")
-    for ad, (m, j, n) in ((k, OLCUM[k]) for k in ("sanal_tam", "sanal_interactive", "sanal_query") if k in OLCUM):
-        print(f"  observe {ad}: {n} öge, metin {m} karakter (~{m // 4} token), yapılandırılmış JSON {j} karakter")
+    for ad in ("sanal_tam", "sanal_interactive", "sanal_query", "web_buyuk", "web_buyuk_40", "web_buyuk_query",
+               "web_read_text_300"):
+        if ad in OLCUM:
+            m, j, n = OLCUM[ad][:3]
+            print(f"  observe {ad}: {n} öge, metin {m} karakter (~{m // 4} token), yapılandırılmış JSON {j} karakter"
+                  + (f", {OLCUM[ad][3]} sn" if len(OLCUM[ad]) > 3 else ""))
     print(f"\n{gecen}/{toplam} gözlem testi geçti ({time.monotonic() - t0:.1f} sn)")
     sys.exit(0 if gecen == toplam else 1)
 

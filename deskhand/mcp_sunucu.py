@@ -1411,7 +1411,7 @@ def click(
     scroll_search: Annotated[bool, Field(description="With text: scroll down to find it")] = False,
     verify: Annotated[bool, Field(description="Measure the effect (after, effect)")] = True,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, TiklamaSonuc]:
+) -> dict[str, Any]:
     """Click exactly one target: ref (from observe; preferred), visible text, element name, saved icon, or x,y of a
     screenshot with its shot_id. A ref is re-checked against the live window first; if the element moved, changed or
     vanished nothing is sent ([8]: observe again). button="triple" selects a line. Not for typing (type_text) or
@@ -1421,7 +1421,7 @@ def click(
     warning = the same click keeps having no effect."""
     hedefler = [t for t in (ref, text, icon, element) if t] + (["xy"] if x is not None or y is not None else [])
     if len(hedefler) != 1:
-        raise ToolError("[1] " + _("tam olarak BİR hedef ver: ref, text, icon, element ya da x+y (+shot_id)"))
+        raise ToolError("[1] " + _("tam olarak BİR hedef ver: text, icon, element ya da x+y (+shot_id)") + " | ref")
     if via == "action" and (not (element or ref) or button != "left" or modifiers):
         raise ToolError("[1] " + _("via='action' yalnız ref/element hedefiyle, button='left' ile ve değiştirici "
                                    "tuşsuz kullanılır"))
@@ -1503,7 +1503,7 @@ def click(
         return s
 
 
-@arac(GirdiSonuc, title="Type text", annotations=EYLEM)
+@arac(dict[str, Any], title="Type text", annotations=EYLEM)
 def type_text(
     text: Annotated[str, Field(max_length=20000, description="Text to type (Turkish letters OK; \\n = Enter, \\t = Tab; "
                                                              "emoji and long text are pasted via the clipboard, "
@@ -1518,7 +1518,7 @@ def type_text(
     secret: Annotated[bool, Field(description="Keep the text out of the log and the result")] = False,
     verify: Annotated[bool, Field(description="Measure the effect (after, effect)")] = True,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, GirdiSonuc]:
+) -> dict[str, Any]:
     """Type text into a window: into the focused field, or into the field given by ref (clicked first). element= sets
     the named field's value through the accessibility tree instead (no keyboard; submit not available). Not for
     shortcuts (press_key). Stops if the window/title changes or the user starts typing. Enter on a payment page,
@@ -1576,13 +1576,13 @@ PANO_OKUMA_SINIRI = 20000  # clipboard(read) en çok bu kadar karakter döndür�
 # RUNTIME_DIR/pano-ozetleri; CLI `pano yaz`, MCP clipboard(write) ve yapıştırma onayı aynı listeyi görür).
 
 
-@arac(GirdiSonuc, title="Clipboard", annotations=EYLEM)
+@arac(dict[str, Any], title="Clipboard", annotations=EYLEM)
 def clipboard(
     action: Literal["read", "write"],
     text: Annotated[str | None, Field(max_length=20000, description="Text to put on the clipboard (action=write; "
                                                                      "empty string clears it)")] = None,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, GirdiSonuc]:
+) -> dict[str, Any]:
     """Read or replace the clipboard text of a desktop. Reading the user's real clipboard (foreground) needs their
     approval in the Deskhand panel unless you wrote that text in this session; the background desktop has its own
     clipboard. Writes skip the clipboard-manager history. Not while the user is gaming/watching [15]."""
@@ -1614,7 +1614,7 @@ def clipboard(
                 "truncated": kesik, "approved_by_user": onaylandi}
 
 
-@arac(GirdiSonuc, title="Press key", annotations=EYLEM)
+@arac(dict[str, Any], title="Press key", annotations=EYLEM)
 def press_key(
     window: PencereZorunlu,
     keys: Annotated[str, Field(description="Key or shortcut: enter, esc, ctrl+s, alt+F4, 'ctrl+l ctrl+c' (sequence)")],
@@ -1622,7 +1622,7 @@ def press_key(
     hold_s: Annotated[float, Field(ge=0, le=10, description="Hold the key(s) down this long (games)")] = 0,
     verify: Annotated[bool, Field(description="Measure the effect (after, effect)")] = True,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, GirdiSonuc]:
+) -> dict[str, Any]:
     """Send a key or shortcut to a window. For text use type_text. Held keys are always released (cancel, STOP,
     shutdown). Enter/Space on a payment page and session-ending shortcuts (ctrl+alt+delete, ctrl+alt+F1-F12, meta+l,
     alt+sysrq...) need the user's approval; in unattended mode every approval is refused. Returns effect and after
@@ -1654,7 +1654,7 @@ def press_key(
         return s
 
 
-@arac(GirdiSonuc, title="Scroll", annotations=YUMUSAK)
+@arac(dict[str, Any], title="Scroll", annotations=YUMUSAK)
 def scroll(
     window: Annotated[str | None, Field(description="Target window (title pattern or id); optional with ref")] = None,
     direction: Literal["up", "down", "left", "right"] = "down",
@@ -1664,7 +1664,7 @@ def scroll(
     y: float | None = None,
     shot_id: Annotated[str | None, Field(description="Needed with x,y (image pixels of that shot)")] = None,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, GirdiSonuc]:
+) -> dict[str, Any]:
     """Scroll with the mouse wheel at the window's centre, over a ref (from observe) or at x,y of a shot_id. Returns
     effect (confirmed = the view moved; no_change = end of the list/page or not scrollable there) and
     changed_region."""
@@ -1707,7 +1707,7 @@ def scroll(
         return s
 
 
-@arac(GirdiSonuc, title="Drag", annotations=EYLEM)
+@arac(dict[str, Any], title="Drag", annotations=EYLEM)
 def drag(
     window: Annotated[str | None, Field(description="Target window (title pattern or id); optional with refs")] = None,
     from_ref: Annotated[str | None, Field(description="Start element ref (from observe)")] = None,
@@ -1720,7 +1720,7 @@ def drag(
     hold_s: Annotated[float, Field(ge=0.1, le=10, description="Seconds the button stays down while moving")] = 0.4,
     button: Literal["left", "right", "middle"] = "left",
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, GirdiSonuc]:
+) -> dict[str, Any]:
     """Press, move and release a mouse button between two points: text/area selection, sliders, drag and drop. Each
     end is a ref (from_ref/to_ref) or x,y of shot_id. The button is always released; a drop over a forbidden window,
     another app or a system password dialog is cancelled. Sensitive start/end points need the user's approval. Returns effect
@@ -1776,7 +1776,7 @@ def drag(
         return s
 
 
-@arac(GirdiSonuc, title="Open app", annotations=YUMUSAK)
+@arac(dict[str, Any], title="Open app", annotations=YUMUSAK)
 def open_app(
     app: Annotated[str, Field(description="Installed application name or .desktop id (e.g. firefox, org.kde.kate); "
                                           "paths and commands are refused")],
@@ -1785,7 +1785,7 @@ def open_app(
     title: Annotated[str | None, Field(description="Wait for a window whose title matches this regex")] = None,
     wait_s: Annotated[float, Field(ge=1, le=120)] = 15,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, GirdiSonuc]:
+) -> dict[str, Any]:
     """Start an installed application (.desktop entry) on the chosen desktop and wait for its new window; args are
     documents/URLs for it to open. Forbidden apps, terminals, shells and interpreters are never started [10]. On the
     background desktop the app's session policy decides whether the user's logins are reused; single-instance apps
@@ -1854,7 +1854,7 @@ def open_app(
         return {**bilgi, **r}
 
 
-@arac(GirdiSonuc, title="Manage window", annotations=YUMUSAK)
+@arac(dict[str, Any], title="Manage window", annotations=YUMUSAK)
 def manage_window(
     window: PencereZorunlu,
     action: Literal["move", "resize", "minimize", "maximize", "restore", "close"],
@@ -1863,7 +1863,7 @@ def manage_window(
     width: Annotated[int | None, Field(ge=1, description="resize: width in pixels")] = None,
     height: Annotated[int | None, Field(ge=1, description="resize: height in pixels")] = None,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, GirdiSonuc]:
+) -> dict[str, Any]:
     """Move, resize, minimize, maximize, restore or close a window. Targets that would leave the screen are refused
     [2]; on the user's screen windows are not touched while they watch a video or play [15]. close asks the window to
     close politely (the app may ask to save first). Returns the new geometry and effect."""
@@ -1898,14 +1898,14 @@ def manage_window(
         return s
 
 
-@arac(GirdiSonuc, title="Run flow", annotations=EYLEM)
+@arac(dict[str, Any], title="Run flow", annotations=EYLEM)
 def run_flow(
     action: Literal["list", "run"] = "list",
     name: Annotated[str | None, Field(description="Flow name (from list)")] = None,
     window: Annotated[str | None, Field(description="Target window for run")] = None,
     timeout_s: Annotated[float | None, Field(ge=1, le=600)] = None,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, GirdiSonuc]:
+) -> dict[str, Any]:
     """List or run a saved flow (screen recognition, then steps until its success screen). Every step passes the same
     checks; a sensitive step stops the flow. Flows that contain pre-approved steps need the user's approval first."""
     if action == "list":
@@ -2111,7 +2111,7 @@ def wait_for(
     timeout_s: Annotated[float, Field(ge=0.5, le=60)] = 10,
     stable_ms: Annotated[int, Field(ge=100, le=10000, description="condition=stable: unchanged this long")] = 600,
     desktop: Masaustu = "auto",
-) -> Annotated[CallToolResult, BeklemeSonuc]:
+) -> dict[str, Any]:
     """Wait until something is on screen instead of polling with screenshots. text/gone check the accessibility tree
     and OCR, element checks the tree, window checks window titles, stable compares screenshots. A timeout is not an
     error: satisfied=false. Read-only, sends no input; other tools keep working while it waits."""
@@ -2181,6 +2181,24 @@ def wait_for(
         elif k is not None and k != EKRAN:
             s["window"] = k
         return s
+
+
+def _basliksiz(d) -> None:
+    """Şemadaki otomatik "title" metinlerini (pydantic: alan adının tekrarı) yerinde sil: tools/list küçülür, model
+    için bilgi kaybı yok. Yalnız DEĞERİ metin olan "title" anahtarı silinir ("title" adlı parametre korunur)."""
+    if isinstance(d, dict):
+        if isinstance(d.get("title"), str):
+            del d["title"]
+        for v in d.values():
+            _basliksiz(v)
+    elif isinstance(d, list):
+        for v in d:
+            _basliksiz(v)
+
+
+for _arac in mcp._tool_manager.list_tools():
+    _basliksiz(_arac.parameters)
+    _basliksiz(_arac.output_schema)
 
 
 # ================================================================ kapanış
