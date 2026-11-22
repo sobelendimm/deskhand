@@ -104,7 +104,8 @@ BURADA), `pano_yedekle()` → opak anlık görüntü (yapıştırarak yazmadan �
 yazar) ve `pano_geri_yukle(yedek) -> uyarı | None` (DENETİMSİZ: DUR/kesintide de eski pano geri gelmeli). kde:
 `wl-paste`/`wl-copy` (`--sensitive`; metin dışı pano birincil MIME türüyle geri yüklenir). sanal: X11 seçimi sahibinde
 yaşar → masaüstünün kafesinde ilk kullanımda başlatılan `deskhand/pano_sahibi.py` yardımcısı (python-xlib, ICCCM +
-INCR; çalışma klasöründe 0600 `pano.sock`); okuma süreç içinde. İki arka uç birbirinin panosuna dokunmaz.
+INCR; çalışma klasöründe 0600 `pano.sock`; bağlantı başına TOPLAM 5 sn süre, başlık ≤ 64 bayt, `YAZ n` n > AZAMI_VERI
+ise veri okunmadan "hata cok-buyuk"); okuma süreç içinde. İki arka uç birbirinin panosuna dokunmaz.
 
 `baslat(argv, env, cikti)`: `env`, her iki arka uçta da `os.environ`'a EKLENECEK/değişecek değişkenlerdir (tam ortam
 değil). Sanalda masaüstü değerleri (DISPLAY, özel D-Bus, ses...) her zaman üstün gelir.
@@ -243,12 +244,22 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   yorumlayıcı, kabuk, sarmalayıcı (`env setsid nohup systemd-run flatpak-spawn xargs`…), yetki yükseltici, başlatıcı
   (`xdg-open gio kioclient`…), `deskhand`/`ekran`, uçbirim öykünücüsü (`guvenlik.ucbirim_mi` + ek liste) varsa;
   `Terminal=true`, `Categories=…TerminalEmulator`; Flatpak'ta `run` dışı alt komut, uçbirim kimliği ya da yasak
-  `--command`. Argümanlar yalnız belge: http/https URL'si (sorgudaki `=` serbest), yerel `file://` URL'si ya da var
+  `--command`; alt komut/seçenekle başka program çalıştıranlar (`git -c`, `flock -c`, `tmux`, `screen`, `setpriv`,
+  `script`, `expect`…); Exec öğesinde kabuk metakarakteri (`; | & $ \` < >`), `!`/`=!` ile başlayan ya da boşluklu
+  komut metni (var olan yol değilse) ve `--` sonrasında bir program. **İzin listesi:** kara listeden geçen girdi
+  ONAYSIZ yalnız şu koşulda başlar: dosya `SISTEM_UYGULAMA_DIZINLERI`'nde (`/usr/share/applications`,
+  `/usr/local/share/applications`, `/var/lib/flatpak/exports/share/applications`) ve kendisi + tüm üst dizinleri
+  (sembolik bağlar çözülerek) root sahipli, grup/diğerleri yazamaz; Exec'teki her program (geçirgen sarmalayıcılar
+  dahil, PATH ile çözülüp `os.stat`) root sahipli, yazılamaz, çalıştırılabilir bir ELF ikilisi (`#!` betik kabul
+  edilmez). Aksi halde (kullanıcı dizini `~/.local/share/applications`, kullanıcı Flatpak'ı, kullanıcıya ait ya da
+  betik program, PATH'te önce gelen kullanıcı dosyası) panelden insan onayı istenir (`guvenlik._panelden_onay`; bir
+  eylem = bir onay; gözetimsiz kipte/panel kapalıyken/redde 10, tur "hassas"); onay isteği girdi yolunu ve Exec'i
+  gösterir; izinde girdi bir kez okunup onaylanan Exec ile aynı olduğu doğrulanır ve `RUNTIME_DIR/uygulama/` altındaki
+  0600 kopyasından başlatılır (onaydan sonra dosyayı değiştirmek işe yaramaz). Argümanlar yalnız belge: http/https URL'si (sorgudaki `=` serbest), yerel `file://` URL'si ya da var
   olan dosya/klasörün MUTLAK yolu; `-` ile başlayan, `=` içeren (URL dışı), başka şemalı, denetim karakterli,
   çalıştırılabilir dosya ya da `.desktop` gösteren argüman → 10 (en çok 16). Başlatılan sürecin ortamına ajan
   değişken veremez (yalnız oturum politikasının `env_ek`'i). Görünmez masaüstünde oturum köprüsü yoksa hiçbir
-  uygulama başlatılmaz (10). Shebang'li betik uygulamalar (Exec = betiğin yolu) meşru sayılır; GUI içinden kabuk
-  açan uygulamalar (dosya yöneticisinin gömülü uçbirimi, IDE konsolu) bu denetimin kapsamı dışındadır.
+  uygulama başlatılmaz (10). GUI içinden kabuk açan uygulamalar (dosya yöneticisinin gömülü uçbirimi, IDE konsolu) bu denetimin kapsamı dışındadır.
 - **Bekleyen onay = girdi yok (MCP).** Bir masaüstünde (kde/sanal) insan onayı beklenirken O masaüstüne giden her
   girdi aracı (click, type_text, press_key, scroll, drag, manage_window, clipboard write, run_flow, open_app) kilidi
   alır almaz beklemeden `[7] onay bekleniyor` ile reddedilir (`mcp_sunucu.kilitli(girdi=True)`); kayıt kilit
@@ -366,11 +377,12 @@ Arayüz sözleşmesine zamanla giren kararların özeti (ayrıntılar ilgili bö
 ## 8. Onay protokolü (arayüz + MCP + CLI ortak)
 Hassas eylem (hassas düğme, ödeme sayfası, yasak dışı ama riskli `ac`, oturum aktarımı) için onay YALNIZ insandan:
 - `deskhand/onay.py`: `iste(eylem, hedef, ayrinti, masaustu, sure=120) -> bool`.
-  Panel kaydı: `RUNTIME_DIR/panel.pid` {pid, baslangic (/proc/<pid>/stat 22. alan), exe (/proc/<pid>/exe), zaman}.
+  Panel kaydı: `RUNTIME_DIR/panel.pid` {pid, baslangic (/proc/<pid>/stat 22. alan), exe (/proc/<pid>/exe),
+  cmdline (/proc/<pid>/cmdline argv'si: exe Python yorumlayıcısı olduğundan panelin modül yolu/giriş noktası), zaman}.
   **Onay kanalı:** panel `RUNTIME_DIR/onay/kanal.sock` Unix soketini dinler (0600, dizin 0700; `panel_kaydet` açar,
   `panel_sil` kapatır; Qt'siz iş parçacıklı sunucu). İsteyen ÖNCE kanala bağlanır ve karşı tarafı doğrular: soket
   dosyası ve dizin kendisinin ve başkalarına kapalı; SO_PEERCRED uid = kendi uid, pid = panel.pid'deki pid, aynı
-  başlangıç zamanı ve aynı exe. Doğrulanamazsa red ("onay kanalı doğrulanamadı", günlüğe neden).
+  başlangıç zamanı, aynı exe ve kayıttakiyle BİREBİR aynı cmdline. Doğrulanamazsa red ("onay kanalı doğrulanamadı", günlüğe neden).
   İstek: `RUNTIME_DIR/onay/istek-<uuid>.json` {id, eylem, hedef, ayrinti, masaustu, zaman, son_zaman, pid, goruntu};
   ardından kanala `bekle <uuid>`. Panel bağlananın SO_PEERCRED pid'ini isteğin `pid` alanıyla karşılaştırır (başka
   süreç başkasının kararını alamaz). Panel (QFileSystemWatcher) diyalog açar: **Bir kez izin ver / Reddet** (+ hedefin

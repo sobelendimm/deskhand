@@ -152,11 +152,26 @@ class PanoSahibi:
             del self.aktarimlar[anahtar]  # istemci yanıt vermeyi bıraktı (öldü)
 
 
-def istek_oku(c: socket.socket) -> tuple[str, bytes]:
-    c.settimeout(BEKLEME)
+BASLIK_SINIRI = 64  # "YAZ <bayt>\n" başlığı en çok bu kadar bayt
+
+
+def istek_oku(c: socket.socket, sure: float = BEKLEME) -> tuple[str, bytes]:
+    """Tek istek. Bağlantı başına TOPLAM süre sınırı (`sure`; damla damla veri gönderen istemci tek iş parçacıklı
+    sunucuyu kilitleyemez: süre dolunca socket.timeout). `YAZ n`, n > AZAMI_VERI ise veri OKUNMADAN "BUYUK" döner."""
+    bitis = time.monotonic() + sure
+
+    def al(boyut: int) -> bytes:
+        kalan_sure = bitis - time.monotonic()
+        if kalan_sure <= 0:
+            raise socket.timeout("istek süresi doldu")
+        c.settimeout(kalan_sure)
+        return c.recv(boyut)
+
     tampon = b""
     while b"\n" not in tampon:
-        parca = c.recv(4096)
+        if len(tampon) > BASLIK_SINIRI:
+            return "", b""
+        parca = al(BASLIK_SINIRI + 1 - len(tampon))
         if not parca:
             break
         tampon += parca
@@ -166,12 +181,16 @@ def istek_oku(c: socket.socket) -> tuple[str, bytes]:
         return "", b""
     if komut[0] == "YAZ" and len(komut) == 2 and komut[1].isdigit():
         n = int(komut[1])
-        while len(kalan) < n:
-            parca = c.recv(min(65536, n - len(kalan)))
+        if n > AZAMI_VERI:
+            return "BUYUK", b""
+        parcalar, uzunluk = [kalan], len(kalan)
+        while uzunluk < n:
+            parca = al(min(65536, n - uzunluk))
             if not parca:
                 break
-            kalan += parca
-        return "YAZ", kalan[:n]
+            parcalar.append(parca)
+            uzunluk += len(parca)
+        return "YAZ", b"".join(parcalar)[:n]
     return komut[0], b""
 
 
@@ -207,7 +226,9 @@ def main(argv: list[str]) -> int:
                 with c:
                     try:
                         komut, veri = istek_oku(c)
-                        if komut == "YAZ":
+                        if komut == "BUYUK":
+                            c.sendall(b"hata cok-buyuk\n")
+                        elif komut == "YAZ":
                             if len(veri) > AZAMI_VERI:
                                 c.sendall(b"hata cok-buyuk\n")
                             elif ps.sahiplen(veri):
