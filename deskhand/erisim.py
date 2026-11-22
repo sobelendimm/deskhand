@@ -26,7 +26,7 @@ from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, 
 from .gunluk import gunluk
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, pencere_denetle, seviye_denetle,
                        yazi_onay_ister_mi)
-from .hata import Dur, dur_denetle
+from .hata import Dur, dur_denetle, gercek_ekran_denetle
 from .i18n import _
 from .ocr import katla, nokta_metni, norm
 
@@ -63,6 +63,8 @@ def erisim_acik():
 
 
 def _erisim_yaz(deger: bool):
+    if not sec().oturum_veri_yolu():  # kullanıcının OTURUM veri yolunda masaüstü ayarı yazılır: gerçek ekran kilidi
+        gercek_ekran_denetle(_("erişilebilirlik ayarı (org.a11y.Status)"))
     try:
         subprocess.run([*_busctl_taban(), "set-property", *A11Y_NESNE, "b", "true" if deger else "false"],
                        capture_output=True, timeout=10)
@@ -614,6 +616,8 @@ def oge_incele(oge):
 
 def _atspi_is(istek):
     """libatspi'nin bu süreçte bağlı olduğu yerde iş yürüt. istek: {a11y, pid, baslik, islem, ...}; JSON uyumlu."""
+    if istek["islem"] in ("eylem", "yaz") and not istek["a11y"]:  # kullanıcının uygulamasında eylem/değer yazma
+        gercek_ekran_denetle(_("erişilebilirlik eylemi"))
     Atspi = _atspi(istek["a11y"])
     cerceve, app_pid, app_ad = _cerceve_bul(Atspi, istek["pid"], istek["baslik"])
     islem = istek["islem"]

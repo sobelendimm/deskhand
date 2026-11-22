@@ -41,6 +41,9 @@ os.environ.update(PATH=SAHTE + os.pathsep + os.environ.get("PATH", ""), SAHTE_AY
 if shutil.which("dotool") != os.path.join(SAHTE, "dotool"):
     print("KALDI  sahte dotool PATH'te ilk değil: gerçek dotool çalışabilirdi, test durduruldu")
     sys.exit(2)
+# Gerçek ekran kilidi (_yalitim: kapali) burada açılır: PATH'teki dotool SAHTE (yukarıdaki sağlama gerçeğin çalışmayacağını
+# kanıtlar); bu test gerçek dotool yolunun (Girdi kurulumu, girdi merkezi) KENDİSİNİ sahte ikiliyle sınar.
+os.environ["DESKHAND_GERCEK_EKRAN"] = "acik"
 
 from deskhand import girdi_merkezi as GM, guvenlik, hata  # noqa: E402
 from deskhand import mesgul as _mesgul  # noqa: E402

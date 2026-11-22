@@ -424,10 +424,13 @@ try:
     gercek_dbus, gercek_cagir = mesgul._dbus_ac, mesgul._cagir
     mesgul._dbus_ac = lambda: SahteBag()
     mesgul._cagir = lambda *a, **k: gozlem.append(mesgul.karar_bekliyor()) or None
+    kilit0 = os.environ.get("DESKHAND_GERCEK_EKRAN")
+    os.environ["DESKHAND_GERCEK_EKRAN"] = "acik"  # D-Bus katmanı (_dbus_ac/_cagir) tümüyle SAHTE: gerçek bildirim gitmez
     try:
         sonuc = mesgul.sor("test", 1)
     finally:
         mesgul._dbus_ac, mesgul._cagir = gercek_dbus, gercek_cagir
+        os.environ["DESKHAND_GERCEK_EKRAN"] = kilit0
     kontrol("karar: sor() sırasında karar-bekliyor var, sonra yok",
             gozlem == [True] and not os.path.exists(mesgul.karar_bekliyor_yolu()), f"{gozlem} {sonuc}")
 finally:

@@ -17,7 +17,7 @@ from PIL import Image
 
 from .. import yollar
 from ..gunluk import gunluk
-from ..hata import INSAN, KULLANICI_DUR, KULLANICI_MESGUL, Dur, dur_denetle
+from ..hata import INSAN, KULLANICI_DUR, KULLANICI_MESGUL, Dur, dur_denetle, gercek_ekran_denetle
 from ..i18n import _
 from ..insan import INSAN_TAKLIDI, Etkinlik, girdi_suresi, insan_bekle, klavye_bekle
 from . import EKRAN, ArkaUc
@@ -32,12 +32,34 @@ DOTOOL_SON_UYKU = 0.25
 DOTOOL_AZAMI = 3.0  # aygıt bu sürede görünmezse güvenli varsayılan: t0 + 1 sn
 
 
-def calis(*a):
-    return subprocess.run(a, capture_output=True, text=True).stdout.strip()
-
-
 _KD_OKUMA = {"getactivewindow", "getwindowgeometry", "getwindowname", "getwindowclassname", "getmouselocation",
              "getwindowpid"}
+# Yan etkisiz kdotool sözleri (yeniden DENENMEYENLER dahil): search (boş sonuç meşru olabilir); kwinscript YALNIZ
+# mesgul.py'nin sabit, salt okuma KWin betiği (etkin pencerenin tam ekran bayrağı) için — ajan argümanı geçemez.
+_KD_SORGU = _KD_OKUMA | {"search", "kwinscript"}
+_KD_EYLEM = {"windowactivate", "windowraise", "windowfocus", "windowclose", "windowkill", "windowmove", "windowsize",
+             "windowminimize", "windowstate", "windowquit", "key", "type", "click", "mousemove"}
+
+
+def _yan_etkili_mi(a):
+    """Gerçek oturuma ETKİ EDEN araç çağrısı mı? kdotool: ilk söz okuma değilse ya da herhangi bir argüman bilinen
+    bir eylem sözüyse (zincirli çağrı: `getwindowname K windowactivate K`); dotool: yalnız --list-keys okumadır.
+    Okuma listesi kapalı-başarısız: bilinmeyen kdotool sözü eylem sayılır."""
+    if not a:
+        return False
+    if os.path.basename(a[0]) == "kdotool":
+        return not a[1:] or a[1] not in _KD_SORGU or any(x in _KD_EYLEM for x in a[2:])
+    if os.path.basename(a[0]) == "dotool":
+        return tuple(a[1:]) != ("--list-keys",)
+    return False
+
+
+def calis(*a):
+    """Kullanıcının oturumunda araç çalıştır (stdout). EN ALT katman: yan etkili kdotool/dotool çağrısı gerçek ekran
+    kilidinde (DESKHAND_GERCEK_EKRAN) çalıştırılmadan reddedilir; okuma çağrıları (search, getwindow*) serbesttir."""
+    if _yan_etkili_mi(a):
+        gercek_ekran_denetle(" ".join(a[:2]))  # araç + söz (çevrilmez: günlük/teşhis etiketi)
+    return subprocess.run(a, capture_output=True, text=True).stdout.strip()
 
 
 def kd(*a):
@@ -221,6 +243,7 @@ def ekran_goruntusu():
 
 
 def spectacle_goruntusu():
+    gercek_ekran_denetle(_("ekran görüntüsü (spectacle)"), okuma=True)
     d = yollar.cikti()
     os.makedirs(d, exist_ok=True)
     yol = os.path.join(d, f"tam-{os.getpid()}.png")
@@ -342,6 +365,7 @@ def _goreli_imlec_sayisi():
 
 def dotool_ac(env=None):
     """dotool süreci (stdin'den satır okur). Girdi merkezi de bunu kullanır: ham dotool çağrısı yalnız arka uçta (§4)."""
+    gercek_ekran_denetle(_("girdi (dotool)"))
     return subprocess.Popen(["dotool"], stdin=subprocess.PIPE, stderr=subprocess.PIPE,
                             env=env if env is not None else girdi_ortami(), text=True)
 
@@ -361,6 +385,7 @@ class Girdi:
     istemcide (burada) kalır; merkez DUR'u ayrıca denetler ve bağlantı koparsa basılı kalanları bırakır."""
 
     def __init__(self, au, etiket="", gizli=False, etk=None, denetle=None):
+        gercek_ekran_denetle(_("girdi"))  # gerçek ekran kilidi: panelin girdi merkezine bağlanmadan / dotool açmadan önce
         if denetle is None:  # güvenlik denetimi ASLA atlanmasın: verilmediyse üst katmanınki
             from ..guvenlik import denetle
         self.au = au
@@ -626,6 +651,8 @@ def _wl(argv, girdi=None, zaman=None):
     import tempfile
     zaman = zaman or PANO_ZAMAN
     env = pano_ortami()
+    # wl-copy kullanıcının panosunu DEĞİŞTİRİR (yan etki); wl-paste panonun içeriğini OKUR (salt-okuma kipinde serbest)
+    gercek_ekran_denetle(_("pano (wl-clipboard)"), okuma=os.path.basename(argv[0]) == "wl-paste")
     with tempfile.TemporaryFile() as cikti, tempfile.TemporaryFile() as hata_:
         try:
             p = subprocess.Popen(argv, stdin=subprocess.PIPE if girdi is not None else subprocess.DEVNULL,
@@ -909,6 +936,7 @@ class KdeArkaUc(ArkaUc):
         """Kullanıcının oturumunda, ayrı oturum grubunda (araç kapanınca uygulama yaşar). cikti: açık dosya
         (stdout+stderr), yoksa /dev/null. env: os.environ'a EKLENECEK/değişecek değişkenler (CHANGE 4)."""
         self._ekran_korumasi(_("uygulama açma"))
+        gercek_ekran_denetle(_("uygulama açma"))  # gerçek ekran kilidi: Popen'den HEMEN önce
         hedef = cikti if cikti is not None else subprocess.DEVNULL
         tam = dict(os.environ, **env) if env else None
         return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=hedef, stderr=hedef, env=tam,

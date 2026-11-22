@@ -2,6 +2,12 @@
 ~/.local/state, ~/.cache, ~/.local/share yazılmaz), arayüz dilini Türkçeye sabitler (DESKHAND_DIL=tr) ve depo kökünü
 sys.path'e ekler. Alt süreçler ortamı devralır.
 
+GERÇEK EKRAN KİLİDİ: içe aktarılınca DESKHAND_GERCEK_EKRAN=kapali ayarlanır (deskhand/hata.py gercek_ekran_denetle):
+hedef vermeyi unutan bir ölçüm/test çağrısı kullanıcının GERÇEK masaüstüne (dotool, kdotool eylemi, uygulama açma, pano,
+bildirim, ekran görüntüsü) EN ALT katmanda ulaşamaz → Dur 17. Görünmez masaüstü ve sahte arka uçlar etkilenmez. Gerçek
+aracı SAHTE bir ikili/subprocess ile değiştiren bir test (ör. sahte dotool) kilidi kendi başına açar:
+os.environ["DESKHAND_GERCEK_EKRAN"] = "acik"  (yalnız o testin içinde, gerekçesiyle). tests/ekranli/ kilidi kaldırır.
+
 Kullanım (her testin EN BAŞINDA):  import _yalitim  (ya da tests/ dışından: from tests import _yalitim)"""
 import atexit
 import os
@@ -20,6 +26,7 @@ PAYLASIM = os.path.join(GECICI, "paylasim")
 os.mkdir(PAYLASIM, 0o700)
 os.environ["DESKHAND_TEST_PAYLASIM"] = PAYLASIM
 os.environ.pop("DESKHAND_HEDEF", None)
+os.environ["DESKHAND_GERCEK_EKRAN"] = "kapali"  # alt süreçler devralır
 # ajanın kendi istemcisi ipuçları (deskhand/kendi.py): testleri çalıştıran uçbirimin türü sonuçları değiştirmesin
 for _ad in ("KONSOLE_DBUS_WINDOW", "WINDOWID", "TERM_PROGRAM", "GHOSTTY_RESOURCES_DIR", "KITTY_PID",
             "ALACRITTY_WINDOW_ID", "TMUX", "STY", "ZELLIJ"):

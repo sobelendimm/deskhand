@@ -33,7 +33,7 @@ import threading
 import time
 
 from . import ayarlar, yollar
-from .hata import calisma_dizini
+from .hata import calisma_dizini, gercek_ekran_denetle
 from .i18n import N_, _
 
 ANLIK_SN = 0.3  # girdi: insan etkinliği bu kadar izlenir (diğer sorgularla eşzamanlı)
@@ -472,6 +472,7 @@ def sor(ozet, sure=45, kritik=False):
     """Bildirim: Arka planda yap / Ekranımda yap / Sonra. → (cevap | None, açıklama).
     Kullanıcı bildirimi kapatırsa "sonra"; süre dolarsa bildirim geri çekilir, None.
     Bildirim açıkken RUNTIME_DIR/karar-bekliyor durur (kullanıcının ekranına girdi yok, kde.on_plan_korumasi)."""
+    gercek_ekran_denetle(_("bildirim gönderme"))  # kullanıcının bildirim alanına Notify: gerçek ekran kilidinde YOK
     from jeepney import MatchRule, message_bus
     from jeepney.low_level import HeaderFields
     conn = _dbus_ac()

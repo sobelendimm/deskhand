@@ -20,6 +20,7 @@ KULLANICI_DUR = 13
 SANAL_KAPALI = 14
 KULLANICI_MESGUL = 15  # kullanıcı oyunda / film izliyor: ekranına müdahale yok
 OTURUM_POLITIKASI = 16  # uygulama arka planda açılamaz (kullanıcının ekranında açık / yalnız ön plan)
+GERCEK_EKRAN_KAPALI = 17  # bu süreçte kullanıcının GERÇEK ekranı kilitli (DESKHAND_GERCEK_EKRAN): görünmez masaüstü kullan
 
 
 class Dur(Exception):
@@ -29,6 +30,40 @@ class Dur(Exception):
     def __init__(self, kod, mesaj, tur=None):
         super().__init__(mesaj)
         self.kod, self.mesaj, self.tur = kod, mesaj, tur
+
+
+# ---------------------------------------------------------------- gerçek ekran kilidi (yapısal, fail-closed)
+# Ölçüm/test betikleri hedef vermeyi unutunca çağrı varsayılan `kde` arka ucuna, yani kullanıcının GERÇEK masaüstüne
+# gider (dotool girdisi, pencere etkinleştirme, uygulama açma, pano, bildirim). DESKHAND_GERCEK_EKRAN bunu EN ALT
+# katmanda keser: gerçek oturuma dokunan her yol, gerçek aracı çalıştırmadan HEMEN önce gercek_ekran_denetle()'yi çağırır.
+#   (ayarsız) / acik  → davranış değişmez
+#   salt-okuma        → yan etkiler reddedilir; ekran görüntüsü / pano OKUMA serbest
+#   kapali            → yan etkiler VE kullanıcının ekran/pano içeriğini okuyan yollar reddedilir (tanınmayan her değer
+#                       de "kapali" sayılır: yazım hatası kilidi açmasın)
+# Pencere listesi/başlıkları/geometri, kilit/boşta durumu ve AT-SPI okuma kapatılmaz (içerik taşımaz ya da yan
+# etkisizdir). tests/_yalitim.py bunu "kapali" yapar; tests/ekranli/ (bilerek gerçek ekran) kaldırır.
+GERCEK_EKRAN_DEGISKENI = "DESKHAND_GERCEK_EKRAN"
+
+
+def gercek_ekran_kipi() -> str:
+    """"acik" | "salt-okuma" | "kapali" (ortam değişkeninden; tanınmayan değer = "kapali")."""
+    d = os.environ.get(GERCEK_EKRAN_DEGISKENI, "").strip().lower()
+    if d in ("", "acik"):
+        return "acik"
+    return "salt-okuma" if d == "salt-okuma" else "kapali"
+
+
+def gercek_ekran_denetle(ne: str, okuma: bool = False) -> None:
+    """Kullanıcının GERÇEK oturumuna dokunan bir aracı çalıştırmadan HEMEN önce çağrılır; kilit kapalıysa Dur(17).
+    okuma=True: yan etkisiz ama kullanıcının ekran/pano İÇERİĞİNİ okuyan yol (ekran görüntüsü, pano) — yalnız
+    "kapali"da reddedilir ("salt-okuma" serbest bırakır). ~1 µs."""
+    kip = gercek_ekran_kipi()
+    if kip == "acik" or (okuma and kip == "salt-okuma"):
+        return
+    raise Dur(GERCEK_EKRAN_KAPALI,
+              _("gerçek ekran bu süreçte kapalı (DESKHAND_GERCEK_EKRAN={deger}): hedefi görünmez masaüstü yap ({ne})"
+                ).format(deger=os.environ.get(GERCEK_EKRAN_DEGISKENI, "").strip() or "kapali", ne=ne),
+              tur="gercek-ekran-kapali")
 
 
 def calisma_dizini() -> str:

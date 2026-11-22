@@ -11,6 +11,10 @@ import sys
 import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; Deskhand'den ÖNCE)
 from PIL import Image
 
+# Gerçek ekran kilidi (_yalitim: kapali) burada açılır: bu test ekran görüntüsü yardımcısını SAHTE bir ikiliyle
+# (bin_yolu / yollar.goruntu_bin taklidi) ve spectacle'ı sahte işlevle değiştirir; gerçek ekran görüntüsü alınmaz.
+os.environ["DESKHAND_GERCEK_EKRAN"] = "acik"
+
 from deskhand import yollar
 from deskhand.arka_uc import kde, kde_goruntu
 from deskhand.arka_uc.kde_goruntu import GoruntuHatasi, ayristir

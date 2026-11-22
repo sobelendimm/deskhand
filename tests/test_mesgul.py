@@ -347,6 +347,9 @@ try:
 
     # ---------------------------------------------------------------- 8) bildirim yolu (özel veri yolu, sahte sunucu)
     kontrol("bildirim testi gerçek veri yoluna gitmiyor", os.environ["DBUS_SESSION_BUS_ADDRESS"] == ADRES)
+    # gerçek ekran kilidi (_yalitim: kapali) yalnız bu bölümde açılır: bildirimler ÖZEL veri yolundaki sahte sunucuya gider
+    # (yukarıdaki sağlama: DBUS_SESSION_BUS_ADDRESS özel adres); bölüm sonunda kilit geri konur.
+    os.environ["DESKHAND_GERCEK_EKRAN"] = "acik"
     for senaryo, beklenen in (("arka", "arka"), ("on", "on"), ("sonra", "sonra"), ("kapat", "sonra")):
         p, kayit = sahte_baslat(senaryo)
         cevap, aciklama = mesgul.sor("Raporu <indir> & kaydet", 5, kritik=(senaryo == "on"))
@@ -381,6 +384,7 @@ try:
     r = mesgul.karar_ayrintili("Arka plan deneme", sahte_d(), ayar())
     kontrol("karar + gerçek sor() yolu: sahte sunucu 'arka' → arka", r["karar"] == "arka" and r["soruldu"], str(r["neden"]))
     sahte_durdur(p)
+    os.environ["DESKHAND_GERCEK_EKRAN"] = "kapali"
     mesgul.plasma_rc_yolu = eski_rc
 
     # ---------------------------------------------------------------- 9) CLI (sahte kdotool/loginctl/etkinlik, özel veri yolu)
@@ -402,8 +406,10 @@ try:
                 "print('bosta', time.monotonic(), flush=True)\ntime.sleep(30)\n")
     os.chmod(etk, 0o755)
     xdg = os.path.join(GECICI, "xdg"); os.makedirs(xdg)
+    # alt süreçteki CLI'nin gerçek ekran kilidi YALNIZ bu ortamda açılır: bildirimler ÖZEL veri yolundaki sahte sunucuya
+    # (ADRES) gider, kdotool/loginctl/etkinlik sahte ikililer
     ortam = dict(os.environ, PATH=sbin + os.pathsep + os.environ["PATH"], DESKHAND_ETKINLIK_BIN=etk, XDG_CONFIG_HOME=xdg,
-                 DBUS_SESSION_BUS_ADDRESS=ADRES)
+                 DBUS_SESSION_BUS_ADDRESS=ADRES, DESKHAND_GERCEK_EKRAN="acik")
 
     def deskhand(*a):
         r = subprocess.run([sys.executable, "-m", "deskhand", *a], capture_output=True, text=True, cwd=_yalitim.KOK, env=ortam, timeout=30)
