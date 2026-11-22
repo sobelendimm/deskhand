@@ -8,7 +8,9 @@
  *   bosta: ZAMAN_ASIMI_MS boyunca hiç girdi yok;  aktif: bostadan sonraki İLK girdi.
  *   t = CLOCK_MONOTONIC saniye (Python time.monotonic() ile aynı saat).
  * Ebeveyn ölünce kendisi de ölür (PR_SET_PDEATHSIG). Not: Deskhand'in kendi gönderdiği girdiler de
- * 'aktif' üretir; kimin girdisi olduğunu deskhand zaman pencereleriyle ayırır. */
+ * 'aktif' üretir; kimin girdisi olduğunu deskhand zaman pencereleriyle ayırır.
+ * Sürüm 1'e düşülürse (get_idle_notification uyku engelleyicilerinden etkilenir) deskhand (insan.py) "hazir"
+ * satırındaki v<sürüm>'ü okur ve bu izleyiciyi yok sayar (yalnız fare izlenir). */
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>

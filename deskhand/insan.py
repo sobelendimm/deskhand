@@ -44,6 +44,14 @@ def girdi_suresi(satirlar):
     return s
 
 
+def hazir_surumu(t):
+    """Yardımcının "hazir <ms> v<sürüm> <t>" satırından protokol sürümü (yoksa None: eski yardımcı)."""
+    for x in t[1:-1]:
+        if x.startswith("v") and x[1:].isdigit():
+            return int(x[1:])
+    return None
+
+
 class Etkinlik:
     """KLAVYE + FARE etkinliği (insan önceliğinin klavye ayağı). Wayland ext-idle-notify-v1 v2 ile: yetki
     gerekmez (input grubu/sudo yok), video oynarken uyku engelleyicilerinden etkilenmez. Yardımcı süreç
@@ -86,6 +94,17 @@ class Etkinlik:
                 if len(self.olaylar) > 600:
                     del self.olaylar[:300]
             elif t[0] == "hazir":
+                surum = hazir_surumu(t)
+                if surum is not None and surum < 2:
+                    # v1 get_idle_notification uyku engelleyicilerinden (video, sunum) etkilenir: engelleyici açıkken
+                    # 'bosta' hiç gelmez → her şey insan sayılırdı (yanlış 12). Bu izleyici yok sayılır (yalnız fare).
+                    self.hata = _("ext-idle-notify v{surum}: uyku engelleyicilerinden etkilenir").format(surum=surum)
+                    self._hazir.set()
+                    try:
+                        self.p.terminate()
+                    except OSError:
+                        pass
+                    continue
                 self.hazir_an = float(t[-1])
                 self._hazir.set()
             elif t[0] == "hata":

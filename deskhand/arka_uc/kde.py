@@ -83,14 +83,26 @@ def kd(*a):
 
 # ---------------------------------------------------------------- klavye düzeni
 
-_duzen = None
+_duzen = None  # (kxkbrc imzası, (düzen, varyant))
+
+
+def _kxkbrc_imza():
+    """kxkbrc'nin değişiklik imzası (mtime_ns, boyut); dosya yoksa None. Uzun yaşayan süreç (MCP sunucusu, girdi
+    merkezi) kullanıcı düzeni değiştirince önbellekteki eski düzenle yanlış tuş kodu göndermesin (0.9.0)."""
+    try:
+        st = os.stat(os.path.expanduser("~/.config/kxkbrc"))
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
 
 
 def klavye_duzeni():
     """Etkin KDE klavye düzeni (layout, variant). Sabit "tr" yerine: kullanıcı düzen değiştirirse dotool
-    yanlış tuş kodu göndermesin. Tek düzen → kxkbrc; çok düzen → DBus getLayout (~2 ms)."""
+    yanlış tuş kodu göndermesin. Tek düzen → kxkbrc; çok düzen → DBus getLayout (~2 ms). Önbellek kxkbrc'nin
+    mtime'ı ile imzalı: dosya değişince yeniden okunur."""
     global _duzen
-    if _duzen is None:
+    imza = _kxkbrc_imza()
+    if _duzen is None or _duzen[0] != imza:
         duzenler, varyantlar = ["tr"], [""]
         try:
             with open(os.path.expanduser("~/.config/kxkbrc")) as f:
@@ -109,8 +121,11 @@ def klavye_duzeni():
             except ValueError:
                 i = 0
         i = min(i, len(duzenler) - 1)
-        _duzen = (duzenler[i], varyantlar[i] if i < len(varyantlar) else "")
-    return _duzen
+        yeni = (duzenler[i], varyantlar[i] if i < len(varyantlar) else "")
+        if _duzen is not None and _duzen[1] != yeni:
+            _yazilabilir.clear()  # yazılabilirlik düzene bağlı
+        _duzen = (imza, yeni)
+    return _duzen[1]
 
 
 def girdi_ortami():
@@ -155,10 +170,26 @@ def gecerli_tuslar():
 
 # ---------------------------------------------------------------- pencere
 
+def etkin_cikis_kutulari(out: str) -> list[tuple[int, int, int, int]]:
+    """kscreen-doctor -o çıktısından ETKİN çıkışların (x, y, g, y) kutuları. Kapalı (disabled) bir çıkışın eski
+    Geometry satırı da yazılır; onu katmak ekran alanını büyütüyor, görüntü kırpımını ve EKRAN koordinatlarını
+    kaydırıyordu (0.9.0). Çıktıda hiç enabled/disabled satırı yoksa (eski sürüm) tüm kutular alınır."""
+    out = re.sub(r"\x1b\[[0-9;]*m", "", out)
+    bloklar = re.split(r"^(?=Output:)", out, flags=re.M)
+    isaretli = any(re.search(r"^\s*(enabled|disabled)\s*$", b, re.M) for b in bloklar)
+    kutular = []
+    for b in bloklar:
+        if isaretli and not re.search(r"^\s*enabled\s*$", b, re.M):
+            continue
+        m = re.search(r"Geometry:\s*(-?\d+),(-?\d+)\s+(\d+)x(\d+)", b)
+        if m:
+            kutular.append(tuple(map(int, m.groups())))
+    return kutular
+
+
 def ekran_alani():
-    """Tüm çıkışları kapsayan dikdörtgen (x0, y0, x1, y1)."""
-    out = re.sub(r"\x1b\[[0-9;]*m", "", calis("kscreen-doctor", "-o"))
-    kutular = [tuple(map(int, m.groups())) for m in re.finditer(r"Geometry:\s*(-?\d+),(-?\d+)\s+(\d+)x(\d+)", out)]
+    """Tüm ETKİN çıkışları kapsayan dikdörtgen (x0, y0, x1, y1)."""
+    kutular = etkin_cikis_kutulari(calis("kscreen-doctor", "-o"))
     if not kutular:
         raise Dur(8, _("ekran boyutu okunamadı (kscreen-doctor)"))
     return (min(b[0] for b in kutular), min(b[1] for b in kutular),
