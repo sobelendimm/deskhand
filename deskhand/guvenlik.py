@@ -260,11 +260,11 @@ def ucbirim_penceresi_mi(k):
         return False
     import time as _t
     au = sec()
-    anahtar = (au.ad, k)
+    sinif = au.sinif(k)
+    anahtar = (au.ad, k, sinif)  # sınıf da anahtarda: kimlik yeniden kullanılırsa eski sonuç taşınmasın
     kayit = _UCBIRIM_ONBELLEK.get(anahtar)
     if kayit and _t.monotonic() - kayit[0] < 2.0:
         return kayit[1]
-    sinif = au.sinif(k)
     sonuc = ucbirim_mi(sinif)
     if not sonuc:
         from . import kendi
@@ -1412,11 +1412,12 @@ def sistem_istemi_mi(k):
         return None
     import time as _t
     au = sec()
-    anahtar = (au.ad, k)
+    sinif = au.sinif(k)
+    anahtar = (au.ad, k, sinif)
     kayit = _SISTEM_ONBELLEK.get(anahtar)
     if kayit and _t.monotonic() - kayit[0] < 2.0:
         return kayit[1]
-    adlar = [au.sinif(k)]
+    adlar = [sinif]
     pid = _pencere_pid(au, k)
     if pid:
         from . import kendi
