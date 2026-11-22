@@ -235,11 +235,18 @@ def parmak_kaydet(kopya_yolu: str) -> None:
         pass
 
 
-def kapanis() -> list[str]:
-    """Sanal masaüstü kapanırken: önce Deskhand'nin başlattığı Flatpak örneklerini `flatpak kill` ile kapat ve
-    bitmelerini bekle (en çok ~5 sn; kafes dışındaki scope'larında yaşarlar), sonra her kopyada çerezleri ilk
-    hâliyle karşılaştır (jeton döndürme uyarısı) ve kopyayı sil. Kapanmayan örneğin kopyası SİLİNMEZ.
-    → uyarı satırları."""
+def kapanis(ad: str | None = None) -> list[str]:
+    """Sanal masaüstü kapanırken: önce Deskhand'nin O MASAÜSTÜNDE başlattığı Flatpak örneklerini `flatpak kill` ile
+    kapat ve bitmelerini bekle (en çok ~5 sn; kafes dışındaki scope'larında yaşarlar), sonra her kopyada çerezleri ilk
+    hâliyle karşılaştır (jeton döndürme uyarısı) ve kopyayı sil. Kapanmayan örneğin kopyası SİLİNMEZ. ad: kapanan
+    masaüstü (None: bağlamdaki); BAŞKA masaüstlerinin kopyalarına ve Flatpak örneklerine dokunulmaz (kökler ayrı:
+    politika.kopya_dizini(ad)). → uyarı satırları."""
+    from .. import masalar
+    with masalar.masa_sabit(masalar.secili() if ad is None else ad):
+        return _kapanis_ic()
+
+
+def _kapanis_ic() -> list[str]:
     import json
     from ..gunluk import gunluk
     kok = politika.kopya_dizini()

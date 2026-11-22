@@ -528,14 +528,21 @@ def _kanala_baglan(kayit: dict) -> socket.socket:
         raise _KanalHatasi(f"kanala bağlanılamadı: {e}") from None
 
 
-def bekleyen_var(masaustu: str, haric_pid: int | None = None, simdi: float | None = None) -> bool:
+def bekleyen_var(masaustu: str, haric_pid: int | None = None, simdi: float | None = None,
+                 masa: str | None = None) -> bool:
     """Bu masaüstü ("ekran" | "arka") için canlı bir süreçten bekleyen onay isteği var mı? (MCP girdi kapısı.)
     haric_pid: bu sürecin kendi istekleri sayılmaz (süreç içi kayıt ayrıca tutulur). Ömrü olağandışı uzun
     (sahte/bozuk) istek sayılmaz: girdiyi süresiz kilitleyemez. Arka uç adı da kabul edilir ("sanal" → "arka",
-    "kde" → "ekran"; iste_sonuc ile aynı eşleme): eylem.girdi_al arka uç adıyla çağırır."""
+    "kde" → "ekran"; iste_sonuc ile aynı eşleme): eylem.girdi_al arka uç adıyla çağırır. masa: görünmez masaüstünün
+    adı (None: bu sürecinki, masalar.secili()); başka görünmez masaüstündeki bekleyen onay bunu kilitlemez."""
+    from . import masalar
     masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
+    if masaustu == "arka":
+        masa = masalar.secili() if masa is None else masa
     for d in bekleyenler(simdi):
         if d["masaustu"] != masaustu or d["pid"] <= 0 or d["pid"] == haric_pid:
+            continue
+        if masaustu == "arka" and d.get("masa", "") != masa:
             continue
         sinir = (DEVIR_EN_COK if d.get("tur") == TUR_DEVIR else VARSAYILAN_SURE) + ESKI_PAY
         if d["son_zaman"] - d["zaman"] > sinir:
@@ -611,9 +618,11 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
             g_yol = gy
         elif isinstance(goruntu, str) and os.path.isfile(goruntu):
             g_yol = os.path.abspath(goruntu)
+        from . import masalar
         istek = {"id": istek_id, "eylem": str(eylem), "hedef": str(hedef),
                  "ayrinti": str(ayrinti or "")[:AYRINTI_SINIR], "masaustu": masaustu, "zaman": simdi,
-                 "son_zaman": simdi + sure, "pid": os.getpid(), "goruntu": g_yol}
+                 "son_zaman": simdi + sure, "pid": os.getpid(), "goruntu": g_yol,
+                 "masa": masalar.secili() if masaustu == "arka" else ""}
         if tur == TUR_DEVIR:
             istek["tur"] = TUR_DEVIR
         _yaz_atomik(iy, istek)
@@ -693,6 +702,9 @@ def istek_oku(yol: str) -> dict | None:
         d[alan] = str(d.get(alan) or "")
     d["ayrinti"] = d["ayrinti"][:AYRINTI_SINIR]
     d["masaustu"] = "arka" if d.get("masaustu") == "arka" else "ekran"
+    from . import masalar
+    m = d.get("masa")
+    d["masa"] = m if d["masaustu"] == "arka" and isinstance(m, str) and masalar.AD_DESENI.fullmatch(m) else ""
     d["tur"] = TUR_DEVIR if d.get("tur") == TUR_DEVIR else ""
     g = d.get("goruntu")
     d["goruntu"] = g if isinstance(g, str) and os.path.isfile(g) else None

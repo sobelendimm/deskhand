@@ -2,6 +2,19 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
+## Yayımlanmamış
+
+- **Çoklu görünmez masaüstü (çekirdek).** Aynı anda birden çok görünmez masaüstü açılabilir (KWin türü; en çok
+  `[masaustu] azami = 3`, 1..6): her Claude/MCP oturumu kendi masaüstüne kendiliğinden bağlanır (ilk oturum
+  varsayılanı, sonrakiler `oturum-1`, `oturum-2`…; `deskhand mcp --desktop-name AD` ile sabitlenebilir) ve başka
+  oturumun masaüstüne erişemez (Dur 14; aynı oturumun komut satırı erişir). CLI: genel `--desktop-name AD`,
+  `deskhand desktop list`, `desktop start|stop|status --name AD`. Kendiliğinden açılan masaüstü oturum bitince
+  (~2 dk sonra) kapanır; varsayılan ve adlı masaüstleri açık kalır. Varsayılan masaüstünün dosyaları eskisiyle aynı
+  yerde (geçiş yok). Panel şimdilik yalnız varsayılan masaüstünü gösterir.
+- **Düzeltme: bir masaüstünü durdurmak başkasının tarayıcı kopyalarını silmez.** Oturum kopyaları ve Flatpak
+  örnek kaydı masaüstü başına ayrıldı; `dinle` (listen) yalnız bağlı olduğu masaüstünün sesini kaydeder.
+- **Bekleyen onay yalnız kendi masaüstünü kilitler** (bir masaüstündeki CAPTCHA devri ötekini durdurmaz).
+
 ## 0.7.1 (22 Kasım 2026)
 
 - **Devral klavyesi düzeltildi.** Panelde Devral ile yazarken Türkçe Q klavyede "i" harfi "ı" çıkıyordu (parola girişini bozuyordu); yazılan karakterler artık karakter olarak gider, her klavye düzeninde doğru çıkar (i, ı, İ, ş, ğ, @, nokta).

@@ -774,10 +774,13 @@ def odakli_kart_mi(k):
 
 
 def _yardimci_ana():
-    """Yardımcı süreç girişi (`-I -c`): stdin'den JSON istek, stdout'a tek satır JSON yanıt."""
+    """Yardımcı süreç girişi (`-I -c`): stdin'den JSON istek, stdout'a tek satır JSON yanıt. İstekteki `masa`
+    (çağıranın masaüstü adı, masalar.secili) bu süreçte bağlam olur: yardımcı başka masaüstünün kaydına bakmaz."""
     istek = json.load(sys.stdin)
+    from . import masalar
     try:
-        yanit = {"sonuc": _atspi_is(istek)}
+        with masalar.masa_sabit(istek.get("masa") or ""):
+            yanit = {"sonuc": _atspi_is(istek)}
     except Dur as e:
         yanit = {"dur": [e.kod, e.mesaj, e.tur]}
     except _BaskaVeriYolu:
@@ -788,6 +791,8 @@ def _yardimci_ana():
 
 
 def _yardimci_calistir(istek):
+    from . import masalar
+    istek = {**istek, "masa": masalar.secili()}
     kok = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     kod = "import sys; sys.path.insert(0, sys.argv[1]); from deskhand import erisim; erisim._yardimci_ana()"
     try:

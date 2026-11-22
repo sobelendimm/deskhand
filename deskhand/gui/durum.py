@@ -70,7 +70,8 @@ def devral_yolu() -> str:
         from .. import masaustu
         return masaustu.devral_yolu()
     except Exception:  # noqa: BLE001 - masaustu modülü yoksa aynı sözleşme
-        return os.path.join(yollar.runtime_dir(), "devral")
+        from .. import masalar
+        return masalar.devral_yolu("")
 
 
 def devral_var(yol: str | None = None) -> bool:
@@ -116,7 +117,8 @@ def sanal_durum(dogrula: bool = True) -> dict | None:
         except Exception:  # noqa: BLE001
             return None
     try:
-        with open(os.path.join(yollar.runtime_dir(), "sanal.json")) as f:
+        from .. import masalar
+        with open(masalar.durum_yolu("")) as f:
             d = json.load(f)
         return d if isinstance(d, dict) else None
     except (OSError, ValueError):

@@ -49,6 +49,7 @@ SECENEKLER = {
     "--tekrar": "--repeat", "--komut": "--command", "--gizli": "--secret", "--yok": "--gone",
     "--esik": "--threshold", "--dosya": "--file", "--kal": "--stay", "--nokta": "--point", "--rol": "--role",
     "--en-az": "--min-pixels", "--foto": "--shot", "--boyut": "--size", "--openbox-yok": "--no-openbox",
+    "--ad": "--name",
     "--degistirici": "--mod",
     "--eylem": "--action", "--sayfa": "--page",
 }
@@ -57,7 +58,7 @@ SECENEKLER = {
 DUGME = {"left": "sol", "right": "sag", "double": "cift", "triple": "uclu", "middle": "orta"}
 YON = {"down": "asagi", "up": "yukari", "left": "sol", "right": "sag"}
 RENK = {"green": "yesil", "red": "kirmizi", "blue": "mavi"}
-MASAUSTU = {"start": "baslat", "stop": "durdur", "status": "durum"}
+MASAUSTU = {"start": "baslat", "stop": "durdur", "status": "durum", "list": "liste"}
 OTURUM = {"status": "durum", "prepare": "hazirla", "policy": "politika", "clear": "sil"}
 ERISIM = {"on": "ac", "off": "kapat", "status": "durum"}
 PENCERE = {"move": "tasi", "resize": "boyut", "minimize": "kucult", "maximize": "buyut", "restore": "geri"}

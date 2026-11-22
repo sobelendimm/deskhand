@@ -112,7 +112,7 @@ YARDIM_KOMUTLAR = (
        "                                          ögenin değerini AT-SPI ile yaz (metin alanı, kaydırgaç; klavye/odak YOK)"),
     N_("  ekran stop | resume | status (dur | devam | durum)   DUR anahtarı: aç (hiçbir girdi gönderilmez) / kaldır / "
        "göster"),
-    N_("  ekran desktop (masaustu) start|stop|status [--json]   görünmez arka plan masaüstü (Xvfb); --background "
+    N_("  ekran desktop (masaustu) start|stop|status|list [--name AD] [--json]   görünmez arka plan masaüstü; --background "
        "komutları onu kullanır"),
     N_("  ekran mcp [--desktop auto|background]  MCP sunucusu (stdio) — Claude Code vb. için araçlar"),
     N_("  ekran sessions (oturum) status|policy|clear   arka plan oturum aktarımı (hangi uygulama girişli açılır)"),
@@ -136,6 +136,8 @@ YARDIM_ORTAK = (
        "pencereler için)."),
     N_("       --background (--arka)        görünmez ikinci masaüstünde çalış (sanal arka uç; ortam: "
        "DESKHAND_HEDEF=arka)."),
+    N_("       --desktop-name AD            (komuttan ÖNCE) adlı görünmez masaüstünü kullan (ortam: "
+       "DESKHAND_MASAUSTU; boş = varsayılan)."),
     N_("       --on-my-screen (--ekranimda) kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı "
        "açıkça izin verdiyse)."),
     N_("       --unattended (--gozetimsiz)  gözetimsiz kip (ortam: DESKHAND_GOZETIMSIZ=1): onay gerektiren her eylem "
@@ -325,7 +327,8 @@ def k_oturum(a):
 def k_mcp(a):
     """MCP sunucusu (stdio): yapay zekâ ajanları araçları doğrudan görür. Kayıt: README.md (MCP)."""
     from .mcp_sunucu import main as mcp_main
-    raise SystemExit(mcp_main(["--desktop", a.desktop]))
+    ek = ["--desktop-name", a.desktop_name] if getattr(a, "desktop_name", None) is not None else []
+    raise SystemExit(mcp_main(["--desktop", a.desktop, *ek]))
 
 
 def k_masaustu(a):
@@ -544,6 +547,8 @@ def ayristirici(prog=None, sessiz=False):
     s = komut("panel", k_panel, add_help=False); s.add_argument("arg", nargs=argparse.REMAINDER)
     s = komut("oturum", k_oturum, add_help=False); s.add_argument("arg", nargs=argparse.REMAINDER)
     s = komut("mcp", k_mcp); s.add_argument("--desktop", choices=["auto", "background"], default="auto")
+    s.add_argument("--desktop-name", dest="desktop_name", default=None, metavar="AD",
+                   help=h_("bu MCP oturumunu adlı görünmez masaüstüne sabitle (yoksa kendiliğinden seçilir)"))
     s = komut("masaustu", k_masaustu, add_help=False); s.add_argument("arg", nargs=argparse.REMAINDER)
     s = komut("karar", k_karar); s.add_argument("ozet", help=h_("görev özeti (bildirimde gösterilir)"))
     s.add_argument("--json", action="store_true")
@@ -567,8 +572,33 @@ def varsayilan_foto_hedefi(au):
     return ak
 
 
+def _masa_secenegi(argv: list) -> list:
+    """Komuttan ÖNCEKİ genel `--desktop-name AD` (ya da `--desktop-name=AD`) → ortam DESKHAND_MASAUSTU: bu süreç ve
+    başlattıkları o görünmez masaüstüne bağlanır (masalar.secili). Komuttan sonraki argümanlara dokunulmaz (metin)."""
+    from . import masalar
+    argv = list(argv)
+    while argv and (argv[0] == "--desktop-name" or argv[0].startswith("--desktop-name=")):
+        if "=" in argv[0]:
+            ad = argv.pop(0).split("=", 1)[1]
+        else:
+            if len(argv) < 2:
+                raise Dur(1, _("--desktop-name bir ad ister"))
+            ad = argv[1]
+            del argv[:2]
+        os.environ[masalar.ORTAM] = masalar.dogrula(ad)
+    return argv
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv:
+        print(komut_listesi())
+        sys.exit(1)
+    try:
+        argv = _masa_secenegi(argv)
+    except Dur as e:
+        print(_("DURDURULDU ({kod}): {mesaj}").format(kod=e.kod, mesaj=e.mesaj), file=sys.stderr)
+        sys.exit(e.kod)
     if not argv:
         print(komut_listesi())
         sys.exit(1)

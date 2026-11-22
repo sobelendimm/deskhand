@@ -121,7 +121,8 @@ def _devral_var() -> bool:
 
 
 def _girdi_kilidi_yolu() -> str:
-    return os.path.join(os.path.dirname(masaustu.durum_yolu()), "sanal-girdi.lock")
+    from .. import masalar
+    return masalar.girdi_kilidi_yolu()
 
 
 # ---------------------------------------------------------------- X bağlantısı

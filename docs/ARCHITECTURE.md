@@ -52,8 +52,14 @@ deskhand/
   arka_uc/sanal.py      arka plan masaüstünün Xvfb türü: Xvfb + python-xlib
   arka_uc/kwin.py       arka plan masaüstünün KWin türü: kdotool (+ KWin betikleri) + yardimci/deskhand-eis (EIS girdi)
                         + deskhand-goruntu + wl-copy/wl-paste, hepsi oturumun özel veri yolu / Wayland soketiyle
-  masaustu.py      arka plan masaüstü yaşam döngüsü (TEK giriş noktası, iki tür): tür seçimi, başlat/durdur/durum,
-                   uygulama başlatma; durum RUNTIME_DIR/sanal.json ("tur": "kwin" | "xvfb")
+  masaustu.py      arka plan masaüstü yaşam döngüsü (TEK giriş noktası, iki tür): tür seçimi, başlat/durdur/durum/
+                   liste, uygulama başlatma; durum masalar.durum_yolu() ("tur": "kwin" | "xvfb"; varsayılan masaüstü
+                   RUNTIME_DIR/sanal.json); `ad` parametresi (None = bağlam), oto masaüstü temizliği
+  masalar.py       çoklu görünmez masaüstü: ad doğrulama (`[a-z0-9][a-z0-9-]{0,15}`, "" = varsayılan, `gorev`
+                   ayrılmış), bağlam (`secili()`: masa_sabit > DESKHAND_MASAUSTU > ""), masaüstü başına yollar
+                   ("" → eski yollar AYNEN; adlı → RUNTIME_DIR/masa/<ad>/{sanal.json, sanal.lock, devral, girdi.lock,
+                   sahip, oturum/}), sahiplik + erişim kapısı, `[masaustu] azami`. Tekil yol sabitleri ("sanal.json",
+                   "sanal.lock", "devral") YALNIZ masaustu.py/masalar.py'de (tests/test_masalar.py denetler)
   kwin_oturum.py   KWin türünün yapı taşları: kwin_wayland --virtual + özel D-Bus + özel Wayland soketi + XWayland,
                    güvenlik kapıları (guvenlik_kapilari, baglanti_denetle), GPU seçimi, hazır olma denetimi, Eis sınıfı
   arka_ortak.py    iki türün ORTAK iç yapı taşları: bellek kafesi, öncelik, boş ses çıkışı, uygulama ortamı tabanı
@@ -196,8 +202,29 @@ sonra 12 ile durulur; sonraki çağrılar beklemeden 12. Bildirimler `STATE_DIR/
 **Tür seçimi (tek yol, seçenek sunulmaz).** `masaustu.secilen_tur()`: `kwin_oturum.kullanilabilir()` (KWin >= 6.8,
 erişilebilir render aygıtı, `deskhand-eis` + `deskhand-goruntu` derli, kdotool, dbus-daemon…) ise KWin; değilse Xvfb.
 Kendiliğinden seçilen KWin AÇILAMAZSA Xvfb'ye düşülür (uyarı + günlük). Yalnız test/tanılama için
-`DESKHAND_ARKA_TUR=kwin|xvfb` (zorlanan kwin kullanılamıyorsa Dur 9, sessiz düşme yok). Aynı anda TEK arka plan
-masaüstü (durum kaydı + kilit). GPU: birden çok render aygıtı varsa boot_vga=0 + tümleşik aygıt ("bağlı çıkış"
+`DESKHAND_ARKA_TUR=kwin|xvfb` (zorlanan kwin kullanılamıyorsa Dur 9, sessiz düşme yok).
+
+**Çoklu görünmez masaüstü (Aşama 1 çekirdeği).** İLKE: bir süreç (MCP oturumu ya da CLI çağrısı) TEK görünmez
+masaüstüne bağlıdır; aynı anda en çok `[masaustu] azami` (1..6, varsayılan 3) masaüstü, aşılırsa Dur 7. Her masaüstünün
+kendi durum kaydı + kilidi + girdi kilidi + Devral bayrağı + oturum kopyası kökü vardır (`masalar`); alt katman
+(KWin oturumu `RUNTIME_DIR/kwin-<kimlik>`, kafes, Wayland soketi, D-Bus, özel PipeWire) zaten masaüstü başınadır.
+Adlı masaüstü YALNIZ KWin türünde (Xvfb türü yalnız varsayılan adla; ortak null sink adı). `arka_uc.sec()` önbelleği
+`(masa, tür)` anahtarlıdır. Bağlam: CLI `--desktop-name AD` (komuttan önce) / `desktop … --name AD` / ortam
+`DESKHAND_MASAUSTU`; MCP OTOMATİK bağlanır (ilk `desktop=background` çözümünde): `--desktop-name`/ortam sabitse o;
+yoksa varsayılanın canlı sahibi yoksa varsayılan; yoksa en küçük boş `oturum-N` (oto). Bağlanınca
+`os.environ["DESKHAND_MASAUSTU"]` yazılır (alt süreçler devralır; `erisim` yardımcı süreci isteğinde `masa` taşır);
+`get_status`/`manage_desktop` yanıtında `name`. SAHİPLİK: `sahip` dosyası (varsayılan için `RUNTIME_DIR/sanal-sahip`)
+= `mcp <pid> <başlangıç> <ebeveyn_pid> <ebeveyn_başlangıç> <oto>`; KAPI `masalar.erisim_kapisi` (gorev_kipi
+kapılarından çağrılır, okuma dahil): sahibi ölü/bozuk/PID yeniden kullanılmış → serbest; çağıran sahip → izin; çağıranın
+ata zincirinde sahibin ebeveyni (başlangıç zamanıyla) → izin (aynı Claude oturumunun Bash'i); panel (GOZLEMCI) → izin;
+diğer → Dur 14. ÖMÜR: MCP kapanışında yalnız sahiplik bırakılır; `oto` masaüstü için ayrık temizleyici
+(start_new_session, `DESKHAND_OTO_BEKLE` ya da 120 sn) sahipsizse durdurur; her başlatma ve `desktop list` sahipsiz
+otoları durdurur. Varsayılan ve sabit adlılar kendiliğinden kapanmaz. Durdurma (`masaustu_durdur(ad)`) YALNIZ o
+masaüstünün süreçlerini, oturum kopyalarını ve Flatpak örneklerini kapatır (`oturum.kapanis(ad)`,
+`politika.kopya_dizini(ad)`). Onay isteği `masa` alanı taşır; `onay.bekleyen_var(..., masa)` ve MCP
+`_BEKLEYEN[(arka uç, masa)]`: bir masaüstündeki bekleyen onay başkasını kilitlemez. Görev kipi işareti
+(`gorev-masaustu`) yalnız varsayılan masaüstünü ayırır (Aşama 2'de `gorev` adına taşınacak). Panel yalnız varsayılan
+masaüstünü gösterir (Aşama 2). GPU: birden çok render aygıtı varsa boot_vga=0 + tümleşik aygıt ("bağlı çıkış"
 bilgisine güvenilmez) (`KWIN_RENDER_NODES`); o aygıtla açılamazsa bir kez varsayılanla. Oturum "hazır" sayılmadan önce: Wayland soketi,
 `org.kde.KWin` adı, ScreenShot2 arayüzü, oturum boyutunda (ölçek 1) bir kare, aynı boyutta EIS aygıtları; KWin
 beklerken ölürse hemen hata.

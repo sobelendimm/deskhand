@@ -250,11 +250,13 @@ def anahtar_politikasi(anahtar: str, yapilandirma: dict | None = None, ad: str |
     return pol
 
 
-def kopya_dizini() -> str:
-    """Kopyaların kök dizini (RUNTIME_DIR/oturum, 0700)."""
-    return os.path.join(yollar.runtime_dir(), "oturum")
+def kopya_dizini(ad: str | None = None) -> str:
+    """Kopyaların kök dizini (0700): masaüstü BAŞINA (ad None: bağlamdaki masaüstü, masalar.secili()). Varsayılan
+    masaüstü RUNTIME_DIR/oturum (eskisiyle aynı); adlı masaüstü RUNTIME_DIR/masa/<ad>/oturum."""
+    from .. import masalar
+    return masalar.oturum_koku(ad)
 
 
-def flatpak_kayit() -> str:
-    """Deskhand'nin başlattığı Flatpak örneklerinin kaydı (RUNTIME_DIR/oturum/flatpak.json)."""
-    return os.path.join(kopya_dizini(), "flatpak.json")
+def flatpak_kayit(ad: str | None = None) -> str:
+    """Deskhand'nin o masaüstünde başlattığı Flatpak örneklerinin kaydı (<kopya_dizini(ad)>/flatpak.json)."""
+    return os.path.join(kopya_dizini(ad), "flatpak.json")

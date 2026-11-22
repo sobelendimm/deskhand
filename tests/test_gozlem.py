@@ -680,7 +680,7 @@ async def kapi_testleri():
                    onay_beklenir=True)
 
         def bekleyen(a):
-            s._BEKLEYEN["kde"] = 1
+            s._BEKLEYEN[("kde", "")] = 1
         await kapi("bekleyen onay", "click", {"ref": "Kaydet"}, 7, bekleyen)
         s._BEKLEYEN.clear()
 

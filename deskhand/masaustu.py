@@ -16,8 +16,9 @@ Xvfb türünün bileşenleri (hepsi TEK bellek kafesinde: systemd-run --user --s
   ses              YOK: arka plan uygulamaları kullanıcının ses sunucusuna erişmez (bwrap + ortam; sessiz çalışır)
   uygulamalar      bwrap ad alanında (arka_ortak.korumali_baslat): gerçek runtime dizini görünmez
 
-Durum: RUNTIME_DIR/sanal.json. Uygulama başlatma: `baslat(argv, env)` (ortam + kafes).
-Tek seferde tek sanal masaüstü (aynı null sink adı, aynı durum dosyası).
+Durum: masalar.durum_yolu() (varsayılan masaüstü RUNTIME_DIR'deki eski kayıt; adlı masaüstü RUNTIME_DIR/masa/<ad>/).
+Uygulama başlatma: `baslat(argv, env)` (ortam + kafes). Süreç TEK masaüstüne bağlıdır (masalar.secili()); aynı anda
+en çok [masaustu] azami adlı/varsayılan masaüstü (yalnız KWin türü çoklu; Xvfb türü yalnız varsayılan adla).
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ import subprocess
 import sys
 import time
 
-from . import yollar
+from . import masalar, yollar
 # Ortak yapı taşları (kafes, ses, özel veri yolu, Xauthority): arka_ortak.py. Eski adlar burada da kalır (geriye uyum).
 from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYILAN_BELLEK,  # noqa: F401
                          VARSAYILAN_TAKAS, _atalar, _bekle, _bellek_siniri, _canli, _cgroup, _dbus_yapilandir,
@@ -74,13 +75,14 @@ def ozel_veri_yolu_kancasi(f):
 
 # ---------------------------------------------------------------- yollar
 
-def durum_yolu() -> str:
-    return os.path.join(yollar.runtime_dir(), "sanal.json")
+def durum_yolu(ad: str | None = None) -> str:
+    """Masaüstünün durum kaydı (ad None: bağlamdaki masaüstü, masalar.secili(); "" → RUNTIME_DIR/sanal.json)."""
+    return masalar.durum_yolu(ad)
 
 
-def devral_yolu() -> str:
+def devral_yolu(ad: str | None = None) -> str:
     """Arayüzün "Devral" bayrağı: varsa insan sanal masaüstünü kullanıyor (ajan bekler / 12)."""
-    return os.path.join(yollar.runtime_dir(), "devral")
+    return masalar.devral_yolu(ad)
 
 
 def _surec_baslangic(pid) -> str | None:
@@ -213,9 +215,9 @@ def x_ac(ekran):
     return display.Display(guvenli_ekran(ekran))
 
 
-def _kilit():
-    os.makedirs(yollar.runtime_dir(), mode=0o700, exist_ok=True)
-    f = open(os.path.join(yollar.runtime_dir(), "sanal.lock"), "w")
+def _kilit(ad: str | None = None):
+    masalar.kok_hazirla(ad)
+    f = open(masalar.kilit_yolu(ad), "w")
     fcntl.flock(f, fcntl.LOCK_EX)
     return f
 
@@ -283,20 +285,20 @@ def uygulama_ortami(d: dict, env: dict | None = None, izinli: tuple = ()) -> dic
 
 # ---------------------------------------------------------------- durum
 
-def durum_oku() -> dict | None:
+def durum_oku(ad: str | None = None) -> dict | None:
     try:
-        with open(durum_yolu()) as f:
+        with open(durum_yolu(ad)) as f:
             return json.load(f)
     except (OSError, ValueError):
         return None
 
 
-def _durum_yaz(d: dict) -> None:
-    os.makedirs(yollar.runtime_dir(), mode=0o700, exist_ok=True)
-    gecici = durum_yolu() + f".{os.getpid()}"
+def _durum_yaz(d: dict, ad: str | None = None) -> None:
+    masalar.kok_hazirla(ad)
+    gecici = durum_yolu(ad) + f".{os.getpid()}"
     with open(gecici, "w") as f:
         json.dump(d, f, ensure_ascii=False, indent=1)
-    os.replace(gecici, durum_yolu())
+    os.replace(gecici, durum_yolu(ad))
 
 
 def _xvfb_mi(d: dict) -> bool:
@@ -388,11 +390,11 @@ def a11y_denetle(adres: str, d: dict | None = None) -> str:
     return a11y_soket_denetle(adres, dizin, g.get("cgroup") or "", g.get("a11y_dizin_kimlik"))
 
 
-def durum(dogrula: bool = True, saglik: bool = True) -> dict | None:
+def durum(dogrula: bool = True, saglik: bool = True, ad: str | None = None) -> dict | None:
     """Çalışan arka plan masaüstünün durumu (TEK durum kaynağı; tür d["tur"]: kwin | xvfb); yoksa None. dogrula:
     ekran sunucusu canlı mı (canli_mi) ve kayıt geçerli mi (guvenli_kayit: yollar çalışma dizininden kurulur).
-    saglik: bileşen ayrıntısı d["saglik"] içinde (girdi yolunda saglik=False: <1 ms)."""
-    d = durum_oku()
+    saglik: bileşen ayrıntısı d["saglik"] içinde (girdi yolunda saglik=False: <1 ms). ad: masaüstü (None: bağlam)."""
+    d = durum_oku(ad)
     if d is None or not dogrula:
         if d is not None:
             d.setdefault("tur", "xvfb")
@@ -609,41 +611,125 @@ def secilen_tur() -> tuple[str, bool, str]:
     return z, True, ""
 
 
-def masaustu_baslat(boyut: str | None = None, openbox: bool = True) -> dict:
+def masaustu_baslat(boyut: str | None = None, openbox: bool = True, ad: str | None = None,
+                    oto: bool = False) -> dict:
     """Arka plan masaüstünü başlat (zaten açıksa durumunu döndürür): türü secilen_tur() belirler. KWin oturumu
-    kendiliğinden seçilip AÇILAMAZSA Xvfb'ye düşülür (uyarıyla). Hata olursa başlatılan her şeyi kapatır.
-    openbox: yalnız Xvfb türünde (KWin kendi pencere yöneticisidir)."""
+    kendiliğinden seçilip AÇILAMAZSA Xvfb'ye düşülür (uyarıyla; yalnız varsayılan masaüstünde). Hata olursa başlatılan
+    her şeyi kapatır. openbox: yalnız Xvfb türünde (KWin kendi pencere yöneticisidir). ad: masaüstü adı (None: bağlam,
+    masalar.secili()); adlı masaüstü YALNIZ KWin türünde. oto: MCP'nin kendiliğinden açtığı masaüstü (sahibi ölünce
+    kapanır). Aynı anda en çok [masaustu] azami masaüstü: aşılırsa Dur(7)."""
     from . import gorev_kipi
-    with _kilit():
-        d = durum()
-        gorev_kipi.baslatma_kapisi(d)  # görev sürerken kipsiz istemci açamaz; görev başkasının masaüstünü kullanamaz
-        if d is not None:
-            d["zaten"] = True
-            return d
-        eski = durum_oku()
-        if eski is not None:  # ölü masaüstünden kalanlar (çökme): temizle
-            _kapat_ic(eski)
-            try:
-                os.remove(durum_yolu())
-            except OSError:
-                pass
-        t, zorla, _neden = secilen_tur()
-        if t == "kwin":
-            try:
-                d = _kwin_baslat(boyut)
-            except Dur as e:
-                if zorla:
-                    raise
-                from .gunluk import gunluk
-                gunluk(f"masaustu | KWin oturumu açılamadı, Xvfb'ye düşüldü: {e.mesaj}")
+    ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
+    with masalar.masa_sabit(ad):
+        oto_temizle(haric=(ad,))
+        with _kilit(ad):
+            d = durum()
+            gorev_kipi.baslatma_kapisi(d)  # görev sürerken kipsiz istemci açamaz; görev başkasının masaüstünü kullanamaz
+            if d is not None:
+                d["zaten"] = True
+                d["ad"] = ad
+                return d
+            eski = durum_oku()
+            if eski is not None:  # ölü masaüstünden kalanlar (çökme): temizle
+                _kapat_ic(eski)
+                try:
+                    os.remove(durum_yolu())
+                except OSError:
+                    pass
+            acik = [a for a in masalar.adlar() if a != ad and durum(saglik=False, ad=a) is not None]
+            if len(acik) >= masalar.azami():
+                raise Dur(7, _("en çok {sayi} görünmez masaüstü açık olabilir ({adlar}); birini kapatın "
+                               "(deskhand desktop stop --name AD) ya da [masaustu] azami ayarını artırın").format(
+                    sayi=masalar.azami(), adlar=", ".join(a or "varsayılan" for a in acik)))
+            t, zorla, _neden = secilen_tur()
+            if ad != "" and t != "kwin":
+                raise Dur(ARAC_EKSIK, _("adlı görünmez masaüstü yalnız KWin türünde açılabilir ({neden})").format(
+                    neden=_neden or "DESKHAND_ARKA_TUR=xvfb"))
+            if t == "kwin":
+                try:
+                    d = _kwin_baslat(boyut)
+                except Dur as e:
+                    if zorla or ad != "":
+                        raise
+                    from .gunluk import gunluk
+                    gunluk(f"masaustu | KWin oturumu açılamadı, Xvfb'ye düşüldü: {e.mesaj}")
+                    d = _xvfb_baslat(boyut, openbox)
+                    d["uyarilar"].insert(0, _("KWin oturumu açılamadı ({hata}); Xvfb kullanılıyor").format(hata=e.mesaj))
+            else:
                 d = _xvfb_baslat(boyut, openbox)
-                d["uyarilar"].insert(0, _("KWin oturumu açılamadı ({hata}); Xvfb kullanılıyor").format(hata=e.mesaj))
-        else:
-            d = _xvfb_baslat(boyut, openbox)
-        if gorev_kipi.etkin():
-            d["gorev"] = True  # görev masaüstü: kipsiz istemciler bağlanamaz (gorev_kipi.masaustu_kapisi)
-        _durum_yaz(d)
-        return d
+            if gorev_kipi.etkin():
+                d["gorev"] = True  # görev masaüstü: kipsiz istemciler bağlanamaz (gorev_kipi.masaustu_kapisi)
+            d["ad"] = ad
+            if oto:
+                d["oto"] = True
+            _durum_yaz(d)
+            return d
+
+
+def liste(temizle: bool = True) -> list[dict]:
+    """Bilinen görünmez masaüstleri (kaydı ya da sahibi olan): [{ad, acik, tur, oto, sahip_pid, izinli}].
+    temizle: sahipsiz `oto` masaüstleri önce durdurulur."""
+    if temizle:
+        oto_temizle()
+    s = []
+    for ad in masalar.adlar():
+        d = durum(saglik=False, ad=ad)
+        sahip = masalar.sahip_oku(ad)
+        s.append({"ad": ad, "acik": d is not None, "tur": tur(d) if d else None,
+                  "oto": oto_mu(ad), "sahip_pid": sahip["pid"] if sahip else None,
+                  "izinli": masalar.izinli_mi(ad)})
+    return s
+
+
+def oto_mu(ad: str) -> bool:
+    """Kendiliğinden açılmış (oto) masaüstü mü: sahip dosyasındaki bayrak ya da durum kaydındaki "oto" (sahiplik
+    bırakılınca sahip dosyası silinir; bayrak kayıtta kalır)."""
+    return masalar.oto_mu(ad) or bool((durum_oku(ad) or {}).get("oto"))
+
+
+def oto_temizle(haric: tuple = ()) -> list[str]:
+    """Sahibi ölmüş `oto` masaüstlerini durdur ve dizinlerini sil. → durdurulan adlar."""
+    durdurulan = []
+    for ad in masalar.adlar():
+        if ad in haric or ad == "" or not oto_mu(ad) or masalar.sahip_oku(ad) is not None:
+            continue
+        try:
+            masaustu_durdur(ad)
+        except Dur:
+            continue
+        masalar.birak(ad)
+        masalar.kok_sil(ad)
+        durdurulan.append(ad)
+    return durdurulan
+
+
+def oto_temizleyici_baslat(ad: str, bekle: float | None = None) -> None:
+    """Ayrık temizleyici (start_new_session): `bekle` sn (varsayılan DESKHAND_OTO_BEKLE ya da 120) sonra `ad` oto
+    masaüstü hâlâ sahipsizse durdurur. MCP kapanışını bekletmez."""
+    if bekle is None:
+        try:
+            bekle = float(os.environ.get("DESKHAND_OTO_BEKLE", "120"))
+        except ValueError:
+            bekle = 120.0
+    ad = masalar.dogrula(ad, ayrilmis_serbest=True)
+    kok = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    kod = ("import sys, time; sys.path.insert(0, sys.argv[1]); time.sleep(float(sys.argv[3])); "
+           "from deskhand import masaustu; masaustu.oto_temizle_tek(sys.argv[2])")
+    env = {k: v for k, v in os.environ.items() if k != masalar.ORTAM}
+    subprocess.Popen([python_yolu(), "-I", "-c", kod, kok, ad, str(bekle)], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, env=env,
+                     cwd="/")
+
+
+def oto_temizle_tek(ad: str) -> bool:
+    """Ayrık temizleyicinin işi: `ad` oto ve sahipsizse durdur + dizini sil."""
+    ad = masalar.dogrula(ad, ayrilmis_serbest=True)
+    if ad == "" or not oto_mu(ad) or masalar.sahip_oku(ad) is not None:
+        return False
+    masaustu_durdur(ad)
+    masalar.birak(ad)
+    masalar.kok_sil(ad)
+    return True
 
 
 def _klavye_duzeni() -> tuple[str, str]:
@@ -981,23 +1067,27 @@ def _kapat_ic(d: dict) -> list[str]:
     return notlar
 
 
-def masaustu_durdur() -> tuple[bool, list[str]]:
-    """→ (bir şey kapatıldı mı, notlar)."""
-    with _kilit():
-        d = durum_oku()
-        if d is None:
-            return False, []
-        notlar = _kapat_ic(d)
-        try:  # oturum kopyaları: jeton döndürme uyarısı + silme (uygulamalar kapandıktan SONRA)
-            from .oturum import kapanis
-            notlar += kapanis()
-        except Exception as e:  # noqa: BLE001
-            notlar.append(_("oturum kopyaları temizlenemedi: {hata}").format(hata=e))
-        try:
-            os.remove(durum_yolu())
-        except OSError:
-            pass
-        return True, notlar
+def masaustu_durdur(ad: str | None = None) -> tuple[bool, list[str]]:
+    """→ (bir şey kapatıldı mı, notlar). ad: masaüstü (None: bağlam); YALNIZ o masaüstünün süreçleri, oturum
+    kopyaları ve Flatpak örnekleri kapanır (oturum.kapanis(ad)). Başka oturumun masaüstü → Dur(14)."""
+    ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
+    with masalar.masa_sabit(ad):
+        masalar.erisim_kapisi(ad)
+        with _kilit(ad):
+            d = durum_oku(ad)
+            if d is None:
+                return False, []
+            notlar = _kapat_ic(d)
+            try:  # oturum kopyaları: jeton döndürme uyarısı + silme (uygulamalar kapandıktan SONRA)
+                from .oturum import kapanis
+                notlar += kapanis(ad)
+            except Exception as e:  # noqa: BLE001
+                notlar.append(_("oturum kopyaları temizlenemedi: {hata}").format(hata=e))
+            try:
+                os.remove(durum_yolu(ad))
+            except OSError:
+                pass
+            return True, notlar
 
 
 # ---------------------------------------------------------------- uygulama başlatma
@@ -1092,34 +1182,61 @@ def _yazdir_durum(d: dict) -> None:
         print(_("UYARI: {uyari}").format(uyari=u))
 
 
+def _yazdir_liste(s: list[dict]) -> None:
+    if not s:
+        print(_("görünmez masaüstü yok"))
+        return
+    for m in s:
+        print(_("{ad}: {acik}{tur}{oto}{sahip}").format(
+            ad=m["ad"] or _("(varsayılan)"), acik=_("AÇIK") if m["acik"] else _("kapalı"),
+            tur=f" ({m['tur']})" if m["tur"] else "", oto=_(" | otomatik") if m["oto"] else "",
+            sahip=(_(" | sahip PID {pid}").format(pid=m["sahip_pid"]) + ("" if m["izinli"] else _(" (başka oturum)")))
+            if m["sahip_pid"] else ""))
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="deskhand desktop", description=h_("görünmez ikinci masaüstü (arka plan kipi)"))
-    ap.add_argument("islem", type=cevirici(MASAUSTU), choices=secimler(MASAUSTU, ["baslat", "durdur", "durum"]),
-                    metavar="{start,stop,status}")
+    ap.add_argument("islem", type=cevirici(MASAUSTU), choices=secimler(MASAUSTU, ["baslat", "durdur", "durum", "liste"]),
+                    metavar="{start,stop,status,list}")
     ap.add_argument(SECENEKLER["--boyut"], "--boyut", dest="boyut", metavar="SIZE",
                     help=h_("GENxYÜK[xDERİNLİK] (varsayılan $DESKHAND_SANAL_BOYUT ya da {boyut})").format(
                         boyut=VARSAYILAN_BOYUT))
     ap.add_argument(SECENEKLER["--openbox-yok"], "--openbox-yok", dest="openbox_yok", action="store_true",
                     help=h_("pencere yöneticisi başlatma"))
+    ap.add_argument(SECENEKLER["--ad"], "--ad", dest="ad", metavar="AD", default=None,
+                    help=h_("masaüstü adı (varsayılan: --desktop-name / $DESKHAND_MASAUSTU ya da varsayılan masaüstü)"))
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     try:
+        ad = masalar.secili() if a.ad is None else masalar.dogrula(a.ad)
+        if a.islem == "liste":
+            s = liste()
+            if a.json:
+                print(json.dumps(s, ensure_ascii=False))
+            else:
+                _yazdir_liste(s)
+            return 0
         if a.islem == "baslat":
-            d = masaustu_baslat(a.boyut, openbox=not a.openbox_yok)
+            d = masaustu_baslat(a.boyut, openbox=not a.openbox_yok, ad=ad)
             if a.json:
                 print(json.dumps(d, ensure_ascii=False))
             else:
                 if d.get("zaten"):
                     print(_("zaten açık"))
-                _yazdir_durum(durum() or d)
+                with masalar.masa_sabit(ad):
+                    _yazdir_durum(durum() or d)
             return 0
         if a.islem == "durdur":
-            ok, notlar = masaustu_durdur()
+            ok, notlar = masaustu_durdur(ad)
             for n in notlar:
                 print(_("UYARI: {uyari}").format(uyari=n))
             print(_("sanal masaüstü kapatıldı") if ok else _("sanal masaüstü zaten kapalı"))
             return 0
-        d = durum()
+        with masalar.masa_sabit(ad):
+            masalar.erisim_kapisi(ad)
+            d = durum()
+        if d is not None:
+            d["ad"] = ad
         if a.json:
             print(json.dumps(d, ensure_ascii=False))
         elif d is None:

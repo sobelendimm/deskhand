@@ -413,7 +413,11 @@ def masaustu_ayrildi() -> bool:
 def masaustu_kapisi(d: dict | None) -> None:
     """Görünmez masaüstüne bağlanma/uygulama açma kapısı (tüm arka uç bağlantıları ve masaustu.baslat çağırır).
     Görev kipinde: kayıt görevin kendi masaüstü değilse ("gorev" yok) Dur(14). Kipsiz istemcide: masaüstü görevin ya
-    da bir görev masaüstünü ayırmışsa Dur(14) (panel önizlemesi GOZLEMCI hariç)."""
+    da bir görev masaüstünü ayırmışsa Dur(14) (panel önizlemesi GOZLEMCI hariç). Çoklu masaüstü: önce sahiplik kapısı
+    (masalar.erisim_kapisi: başka oturumun masaüstü → Dur 14, okuma dahil); görev işareti yalnız varsayılan masaüstünü
+    ayırır (Aşama 2'de `gorev` adına taşınacak)."""
+    from . import masalar
+    masalar.erisim_kapisi()
     if d is None:
         return
     if etkin():
@@ -421,7 +425,7 @@ def masaustu_kapisi(d: dict | None) -> None:
             raise Dur(14, _("görev kipi: görünmez masaüstü başka bir iş için açık (görevin kendi masaüstü değil); "
                             "görev ona erişmez. Kullanıcı panelden kapatıp görevi yeniden başlatmalı."))
         return
-    if (d.get("gorev") or masaustu_ayrildi()) and not GOZLEMCI:
+    if (d.get("gorev") or (masaustu_ayrildi() and masalar.secili() == "")) and not GOZLEMCI:
         raise Dur(14, _("görünmez masaüstü şu an panelin görev ajanına ayrılmış; görev bitince yeniden deneyin "
                         "(ya da panelden görevi durdurun)"))
 
@@ -429,9 +433,12 @@ def masaustu_kapisi(d: dict | None) -> None:
 def baslatma_kapisi(acik: dict | None) -> None:
     """masaustu_baslat: kipsiz istemci görev sürerken masaüstü AÇAMAZ; görev kipi açık başka masaüstünü
     kullanamaz (acik: zaten çalışan masaüstünün kaydı ya da None)."""
+    from . import masalar
     if acik is not None:
         masaustu_kapisi(acik)
-    elif not etkin() and masaustu_ayrildi() and not GOZLEMCI:
+        return
+    masalar.erisim_kapisi()
+    if not etkin() and masaustu_ayrildi() and masalar.secili() == "" and not GOZLEMCI:
         raise Dur(14, _("görünmez masaüstü şu an panelin görev ajanına ayrılmış; görev bitince yeniden deneyin "
                         "(ya da panelden görevi durdurun)"))
 

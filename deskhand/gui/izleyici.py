@@ -109,7 +109,8 @@ class Izleyici(QObject):
 
     def _sanal_imzasi(self):
         try:
-            st = os.stat(os.path.join(yollar.runtime_dir(), "sanal.json"))
+            from .. import masalar
+            st = os.stat(masalar.durum_yolu(""))
             return (st.st_ino, st.st_mtime_ns)
         except OSError:
             return None

@@ -114,11 +114,12 @@ def rms(parca: bytes) -> float:
     return math.sqrt(sum(x * x for x in a) / len(a))
 
 
-def oturum_kaydi(cdir: str) -> dict:
+def oturum_kaydi(cdir: str, ad: str | None = None) -> dict:
     """Çalışan masaüstünün GÜVENLİ kaydı (masaustu.baglanti_denetle: kafes/cgroup ve PID'ler doğrulanmış); çalışma
-    dizini `cdir` değilse Dur(14)."""
+    dizini `cdir` değilse Dur(14). ad: dinlenen masaüstü (None: bu sürecin bağlı olduğu, masalar.secili()); kayıt
+    O masaüstününkidir (başka masaüstünün sesi yazıya dökülmez) ve kapıdan (sahiplik) geçer."""
     from . import masaustu
-    d = masaustu.durum_oku()
+    d = masaustu.durum_oku(ad)
     if d is None:
         raise Dur(14, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
     d.setdefault("tur", "xvfb")

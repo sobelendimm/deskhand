@@ -205,7 +205,8 @@ def hedef_ad(kimlik: str | None = None, arka_bayragi: bool = False) -> str:
 
 
 _ORNEKLER: dict[str, ArkaUc] = {}
-_TUR_ORNEKLERI: dict[str, ArkaUc] = {}  # arka plan masaüstü türü → örnek (KWin örneği kalıcı EIS bağlantısını tutar)
+# (masaüstü adı, tür) → örnek (KWin örneği kalıcı EIS bağlantısını tutar: masaüstü BAŞINA ayrı örnek)
+_TUR_ORNEKLERI: dict[tuple[str, str], ArkaUc] = {}
 
 
 def arka_tur() -> str:
@@ -215,24 +216,36 @@ def arka_tur() -> str:
     return masaustu.tur(masaustu.durum_oku())
 
 
+def _yeni_sanal(tur: str) -> ArkaUc:
+    if tur == "kwin":
+        from .kwin import KwinArkaUc
+        return KwinArkaUc()
+    from .sanal import SanalArkaUc
+    return SanalArkaUc()
+
+
 def sec(kimlik: str | None = None, arka_bayragi: bool = False) -> ArkaUc:
     """Hedefin arka ucu. "sanal" hedefi (görünmez masaüstü) türüne göre: KWin oturumu → KwinArkaUc, Xvfb →
     SanalArkaUc. İkisinin de `ad`ı "sanal"dır (üst katman kuralları, kimlik öneki, çıkış kodları aynı)."""
     ad = hedef_ad(kimlik, arka_bayragi)
     if ad == "sanal":
+        from .. import masalar
+        masa = masalar.secili()
         tur = arka_tur()
+        if masa != "":  # adlı masaüstü: önbellek (ad, tür) anahtarlı; _ORNEKLER["sanal"] varsayılanındır
+            anahtar = (masa, tur)
+            au = _TUR_ORNEKLERI.get(anahtar)
+            if au is None:
+                au = _yeni_sanal(tur)
+                _TUR_ORNEKLERI[anahtar] = au
+            return au
         au = _ORNEKLER.get("sanal")
         # _ORNEKLER["sanal"] = geçerli türün örneği (testlerin koyduğu `tur`suz sahte arka uç olduğu gibi kalır)
         if au is None or getattr(au, "tur", tur) != tur:
-            au = _TUR_ORNEKLERI.get(tur)
+            au = _TUR_ORNEKLERI.get(("", tur))
             if au is None:
-                if tur == "kwin":
-                    from .kwin import KwinArkaUc
-                    au = KwinArkaUc()
-                else:
-                    from .sanal import SanalArkaUc
-                    au = SanalArkaUc()
-                _TUR_ORNEKLERI[tur] = au
+                au = _yeni_sanal(tur)
+                _TUR_ORNEKLERI[("", tur)] = au
             _ORNEKLER["sanal"] = au
         return au
     if ad not in _ORNEKLER:

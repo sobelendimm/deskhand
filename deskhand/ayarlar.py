@@ -28,6 +28,9 @@ Dosya yoksa varsayılanlar kullanılır; OKUMA dosya oluşturmaz. Bilinmeyen/yan
   motor = "whisper-cli"    # konuşma tanıma motoru (yol ya da güvenli dizinlerde ad)
   model = ""               # ggml model yolu; boş = ~/.local/share/whisper-models/ggml-large-v3.bin
   vad_modeli = ""          # silero VAD modeli; boş = ~/.local/share/whisper-models/ggml-silero-v5.1.2.bin
+
+  [masaustu]
+  azami = 3                # aynı anda en çok kaç görünmez masaüstü (1..6; her MCP oturumu kendi masaüstünü açar)
 """
 from __future__ import annotations
 
@@ -62,6 +65,9 @@ VARSAYILAN = {
         "model": "",
         "vad_modeli": "",
     },
+    "masaustu": {
+        "azami": 3,
+    },
 }
 TAKMA = {("karar", "mesgulken"): {"hep-arka": "arka"}}
 SECENEK = {("karar", "mesgulken"): {"sor", "arka", "bekle"}, ("karar", "cevapsiz"): {"arka", "sonra"},
@@ -69,7 +75,8 @@ SECENEK = {("karar", "mesgulken"): {"sor", "arka", "bekle"}, ("karar", "cevapsiz
 # virgülle ayrılmış alt küme (sıra bu demettedir; tekrar/boşluk atılır): ("guvenlik", "hesap_oturumlari")
 KUME = {("guvenlik", "hesap_oturumlari"): ("microsoft", "google", "edevlet")}
 ARALIK = {("karar", "sor_sure"): (1, 3600), ("karar", "girdi_esik_sn"): (0, 3600),
-          ("gorev", "azami_dakika"): (1, 240), ("gorev", "azami_tur"): (1, 500)}
+          ("gorev", "azami_dakika"): (1, 240), ("gorev", "azami_tur"): (1, 500),
+          ("masaustu", "azami"): (1, 6)}
 
 _uyarilan = set()
 

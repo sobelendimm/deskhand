@@ -141,7 +141,7 @@ async def sahte_testler():
                     f"{metin(r)[:300]} {sat}")
             return time.monotonic() - t0
         await arada("DUR", lambda: guvenlik.dur_ac("kullanici"), 13, lambda: guvenlik.dur_kapat("kullanici"))
-        await arada("bekleyen onay", lambda: s._BEKLEYEN.__setitem__("kde", 1), 7, s._BEKLEYEN.clear)
+        await arada("bekleyen onay", lambda: s._BEKLEYEN.__setitem__(("kde", ""), 1), 7, s._BEKLEYEN.clear)
         sure = await arada("insan önceliği (8 sn bekler)", lambda: setattr(au, "insan", True), 12,
                            lambda: setattr(au, "insan", False))
         kontrol("batch: insan önceliğinde en çok ~8 sn beklendi", 7.5 <= sure <= 20, f"{sure:.1f}")

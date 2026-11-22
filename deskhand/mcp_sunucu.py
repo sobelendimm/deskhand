@@ -50,7 +50,7 @@ from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 
 from . import (__version__, api, desen as desen_denetimi, dinleme, dogrulama_sinamasi, dongu, fark, gonderim,
                gozlem, guvenlik, hata, masaustu, onay_hedef)
-from . import gorev_kipi
+from . import gorev_kipi, masalar
 from .arka_uc import EKRAN
 from .i18n import N_, _
 
@@ -393,10 +393,77 @@ def masaustu_coz(desktop: str, ozet: str) -> tuple[str, str]:
     return s["secim"], s.get("neden", "")
 
 
+# ---------------------------------------------------------------- görünmez masaüstü bağlama (çoklu masaüstü)
+
+# Bu MCP oturumu TEK görünmez masaüstüne bağlıdır (masalar). İlk desktop=background çözümünde: (a) --desktop-name /
+# DESKHAND_MASAUSTU sabitse o; (b) yoksa varsayılanın canlı sahibi yoksa varsayılan (sahiplenilir); (c) yoksa en küçük
+# boş `oturum-N` (oto: oturum bitince ayrık temizleyici kapatır). Varsayılanın sahibi bu sunucunun atasıysa (sunucuyu
+# o başlattı) varsayılan paylaşılır. Aynı Claude oturumunun Bash'i (CLI) sahibin masaüstüne erişebilir
+# (masalar.erisim_kapisi: ata zinciri).
+_MASA: dict = {"bagli": False, "ad": "", "oto": False, "sahip": False, "sabit": None}
+_MASA_KILIT = threading.Lock()
+
+
+def masa_bagla() -> str:
+    """Bu oturumun görünmez masaüstü adı (gerekirse şimdi bağlanır; os.environ'a yazılır: alt süreçler devralır)."""
+    import fcntl
+    with _MASA_KILIT:
+        if _MASA["bagli"]:
+            return _MASA["ad"]
+        masalar.kok_hazirla("")
+        os.makedirs(masalar.masa_koku(), mode=0o700, exist_ok=True)
+        with open(os.path.join(masalar.masa_koku(), ".secim.lock"), "w") as kf:
+            fcntl.flock(kf, fcntl.LOCK_EX)
+            sabit = _MASA["sabit"]
+            oto = sahip = False
+            if sabit is not None:
+                ad = masalar.dogrula(sabit, ayrilmis_serbest=gorev_kipi.etkin())
+                sahip = masalar.sahiplen(ad)
+                if not sahip:
+                    masalar.erisim_kapisi(ad)  # başka oturumun → Dur(14); aynı Claude oturumu → paylaşır
+            elif (vs := masalar.sahip_oku("")) is None:
+                ad, sahip = "", masalar.sahiplen("")
+            elif any(p == vs["pid"] and b == vs["bas"] for p, b in masalar._atalar()):
+                ad = ""  # varsayılanın sahibi bu sunucunun ATASI (onu başlatan süreç): onun işinin parçası, paylaşır
+            else:
+                dolu = {a for a in masalar.adlar() if masalar.sahip_oku(a) is not None
+                        or masaustu.durum_oku(a) is not None}
+                ad, oto = masalar.oto_ad(dolu), True
+                sahip = masalar.sahiplen(ad, oto=True)
+        os.environ[masalar.ORTAM] = ad
+        _MASA.update(bagli=True, ad=ad, oto=oto, sahip=sahip)
+        log.info("görünmez masaüstü: %r (%s)", ad, "oto" if oto else ("sahip" if sahip else "paylaşılan"))
+        return ad
+
+
+def masa_birak() -> None:
+    """Kapanışta (hızlı): sahipliği bırak; oto masaüstü için ayrık temizleyiciyi başlat."""
+    if not (_MASA["bagli"] and _MASA["sahip"]):
+        return
+    try:
+        masalar.birak(_MASA["ad"])
+        if _MASA["oto"]:
+            if masaustu.durum_oku(_MASA["ad"]) is None:
+                masalar.kok_sil(_MASA["ad"])  # hiç açılmamış: yalnız dizin
+            else:
+                masaustu.oto_temizleyici_baslat(_MASA["ad"])
+    except Exception as e:  # noqa: BLE001 - kapanış asla takılmasın
+        log.warning("masaüstü sahipliği bırakılamadı: %s", e)
+
+
+def _masa_bagla_arac() -> str:
+    try:
+        return masa_bagla()
+    except hata.Dur as e:
+        raise ToolError(hata_metni(e)) from None
+
+
 @contextmanager
 def baglam(desktop: str, ozet: str):
     """Masaüstünü çöz, bu iş parçacığında o arka ucu sabitle, Dur → ToolError. → bilgi sözlüğü."""
     hedef, not_ = masaustu_coz(desktop, ozet)
+    if hedef == "sanal":
+        _masa_bagla_arac()
     bilgi = {"desktop": DIS_AD[hedef]}
     if not_:
         bilgi["note"] = not_
@@ -457,7 +524,12 @@ def kilit_birakilmis():
 
 # ---------------------------------------------------------------- bekleyen onay kapısı (eşzamanlı girdi yok)
 
-_BEKLEYEN: dict[str, int] = {}  # arka uç adı ("kde" | "sanal") → bu süreçte onayı beklenen eylem sayısı
+# (arka uç adı "kde" | "sanal", görünmez masaüstü adı) → bu süreçte onayı beklenen eylem sayısı
+_BEKLEYEN: dict[tuple[str, str], int] = {}
+
+
+def _bekleyen_anahtar(masaustu_ad: str) -> tuple[str, str]:
+    return (masaustu_ad, masalar.secili() if masaustu_ad == "sanal" else "")
 _BEKLEYEN_KILIT = threading.Lock()
 
 
@@ -466,7 +538,7 @@ class _OnayKaydi:
     kilit yeniden alındıktan SONRA kapanır: aradaki her girdi aracı _onay_kapisi'nde reddedilir. kapat() tekrarlanabilir."""
 
     def __init__(self, masaustu_ad: str):
-        self.ad = masaustu_ad
+        self.ad = _bekleyen_anahtar(masaustu_ad)
         with _BEKLEYEN_KILIT:
             _BEKLEYEN[self.ad] = _BEKLEYEN.get(self.ad, 0) + 1
         self.acik = True
@@ -492,7 +564,7 @@ class _OnayKaydi:
 def onay_bekliyor_mu(masaustu_ad: str) -> bool:
     """Bu masaüstü için bu süreçte ya da başka (canlı) bir Deskhand sürecinde bekleyen insan onayı var mı?"""
     with _BEKLEYEN_KILIT:
-        if _BEKLEYEN.get(masaustu_ad):
+        if _BEKLEYEN.get(_bekleyen_anahtar(masaustu_ad)):
             return True
     o = _onay()
     f = getattr(o, "bekleyen_var", None) if o is not None else None
@@ -1245,8 +1317,11 @@ def get_status(
         s["policy"] = None
     sec = _secim_oku()
     s["session_choice"] = None if sec is None else ("later" if sec["secim"] == "sonra" else DIS_AD[sec["secim"]])
-    d = masaustu.durum()
-    s["background"] = {"running": d is not None, "size": list(d["boyut"][:2]) if d else None}
+    if desktop == "background" or sadece_arka() or (sec is not None and sec["secim"] == "sanal"):
+        _masa_bagla_arac()
+    d = masaustu.durum() if _MASA["bagli"] or masalar.izinli_mi() else None
+    s["background"] = {"running": d is not None, "size": list(d["boyut"][:2]) if d else None,
+                       "name": _MASA["ad"] if _MASA["bagli"] else None}
     try:
         if windows and d is not None and desktop in ("background", "auto"):
             with api.hedef("sanal"):
@@ -1302,32 +1377,34 @@ def manage_desktop(
     """Start, stop or inspect the invisible background desktop (Xvfb). Start it before desktop="background" work if it
     is not running ([14]). stop closes every window on it. Returns running, size and (status) its windows. Use
     audio=true when you will need `listen` (video, voice messages): open the apps AFTER this."""
+    ad = _masa_bagla_arac()
     try:
         if action == "start":
             hata.dur_denetle()
-            d = masaustu.masaustu_baslat(size)
+            d = masaustu.masaustu_baslat(size, ad=ad, oto=_MASA["oto"])
             uyarilar = list(d.get("uyarilar") or [])
             if audio:
                 with kilitli():
                     _cdir, uyari = masaustu.ses_hazirla()
                 if uyari:
                     uyarilar.append(uyari)
-            return {"status": "already_running" if d.get("zaten") else "started", "running": True,
+            return {"status": "already_running" if d.get("zaten") else "started", "running": True, "name": ad,
                     "size": list(d["boyut"][:2]), "warnings": uyarilar, "audio": bool(audio and not uyari)}
         if action == "stop":
             with kilitli():
-                ok, notlar = masaustu.masaustu_durdur()
+                ok, notlar = masaustu.masaustu_durdur(ad)
             with _CEKIM_KILIT:
                 for sid in [s for s, c in _CEKIMLER.items() if c["hedef"] == "sanal"]:
                     del _CEKIMLER[sid]
             GOZLEM.temizle("sanal")
-            return {"status": "stopped" if ok else "not_running", "running": False, "warnings": notlar}
+            return {"status": "stopped" if ok else "not_running", "running": False, "name": ad, "warnings": notlar}
+        masalar.erisim_kapisi(ad)
         d = masaustu.durum()
         if d is None:
-            return {"status": "not_running", "running": False}
+            return {"status": "not_running", "running": False, "name": ad}
         with api.hedef("sanal"):
             pen = api.pencereler()
-        return {"status": "running", "running": True, "size": list(d["boyut"][:2]), "windows": pen,
+        return {"status": "running", "running": True, "name": ad, "size": list(d["boyut"][:2]), "windows": pen,
                 "health": d.get("saglik") or {}}
     except hata.Dur as e:
         raise ToolError(hata_metni(e)) from None
@@ -2813,6 +2890,7 @@ def kapan(neden: str = "") -> None:
     try:
         n = api.hepsini_birak(0.4)
         log.info("kapanış (%s): %d girdi bırakıldı", neden, n)
+        masa_birak()
     finally:
         try:
             sys.stderr.flush()
@@ -2834,6 +2912,11 @@ def _ebeveyn_izle(ppid: int) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if "--desktop-name" in argv:  # bu oturumu adlı görünmez masaüstüne sabitle
+        i = argv.index("--desktop-name")
+        if i + 1 < len(argv):
+            os.environ[masalar.ORTAM] = masalar.dogrula(argv[i + 1])
+    _MASA["sabit"] = os.environ.get(masalar.ORTAM) or None
     if "--desktop" in argv:  # `deskhand mcp --desktop background` = deskhand-bg
         i = argv.index("--desktop")
         if i + 1 < len(argv) and argv[i + 1] == "background":
