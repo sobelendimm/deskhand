@@ -1723,7 +1723,7 @@ def drag(
 ) -> Annotated[CallToolResult, GirdiSonuc]:
     """Press, move and release a mouse button between two points: text/area selection, sliders, drag and drop. Each
     end is a ref (from_ref/to_ref) or x,y of shot_id. The button is always released; a drop over a forbidden window,
-    another app or a system prompt is cancelled. Sensitive start/end points need the user's approval. Returns effect
+    another app or a system password dialog is cancelled. Sensitive start/end points need the user's approval. Returns effect
     and after."""
     bas_xy, son_xy = from_x is not None or from_y is not None, to_x is not None or to_y is not None
     if bool(from_ref) == bas_xy or bool(to_ref) == son_xy:
