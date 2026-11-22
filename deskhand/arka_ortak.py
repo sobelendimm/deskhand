@@ -244,6 +244,27 @@ def kafeste_baslat(d: dict, argv: list[str], env: dict, pass_fds=(), **popen) ->
     return p
 
 
+def oncelik_bekcisi_baslat(d: dict, cdir: str) -> str | None:
+    """Kafesin öncelik bekçisi (oncelik_bekcisi.py; iki türde de): kafesteki her iş parçacığını nice >= 10, gerçek
+    zamanlı olmayan zamanlama ve idle G/Ç'de tutar (ad tabanlı sistem kuralları yükseltse bile). Kafes yoksa
+    başlatılmaz. → uyarı metni | None. PID d["pid"]["oncelik_bekcisi"]."""
+    if not d.get("cgroup"):
+        return _("bellek kafesi yok: öncelik bekçisi çalışmıyor (ad tabanlı sistem kuralları önceliği yükseltebilir)")
+    import sys
+    from . import oncelik_bekcisi
+    with _gunluk_dosyasi(cdir, "oncelik-bekcisi") as log:
+        p = kafeste_baslat(d, [sys.executable, "-I", oncelik_bekcisi.__file__, d["cgroup"]],
+                           {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": os.environ.get("LANG") or "C.UTF-8"},
+                           stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=log)
+    d.setdefault("pid", {})["oncelik_bekcisi"] = p.pid
+    satir = _satir_bekle(p, 5)
+    if p.stdout:
+        p.stdout.close()
+    if satir != "hazir":
+        return _("öncelik bekçisi hazır olmadı ({yanit})").format(yanit=satir or _("yanıt yok"))
+    return None
+
+
 # ---------------------------------------------------------------- ses (boş çıkış)
 
 def _pactl(*a, timeout=5) -> subprocess.CompletedProcess | None:

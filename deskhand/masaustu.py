@@ -34,7 +34,7 @@ from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYIL
                          VARSAYILAN_TAKAS, _atalar, _bekle, _bellek_siniri, _canli, _cgroup, _dbus_yapilandir,
                          _gunluk_dosyasi, _isaretli_surecler, _kafes_surecleri, _kafese_al, _komut_satiri,
                          _kullanici_bus_ortami, _oncelik, _ortam_oku, _pactl, _satir_bekle, _sink_modulu, _sinyal,
-                         _takas_siniri, _xauth_yaz, kafeste_baslat, ortam_tabani, ses_kaldir, ses_kur,
+                         _takas_siniri, _xauth_yaz, kafeste_baslat, oncelik_bekcisi_baslat, ortam_tabani, ses_kaldir, ses_kur,
                          ses_ortami_uygula, uygulama_runtime)
 from .hata import ARAC_EKSIK, SANAL_KAPALI, Dur
 from .i18n import _, h_
@@ -619,6 +619,9 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
     if not bagli:
         raise Dur(ARAC_EKSIK, _("Xvfb {ekran} ekranına bağlanılamadı").format(ekran=d["ekran"]))
 
+    uyari = oncelik_bekcisi_baslat(d, cdir)  # kafesteki her şey düşük öncelikte kalsın (ad tabanlı kurallara karşı)
+    if uyari:
+        d["uyarilar"].append(uyari)
     try:  # Türkçe harfler + sık noktalama boş tuş kodlarına (yazarken eşleme yarışı olmasın)
         from .arka_uc.sanal import kalici_klavye
         kalici_klavye(d["ekran"])
@@ -796,7 +799,7 @@ def _kapat_ic(d: dict) -> list[str]:
         cg = ""  # beklenmeyen kafes yolu: içindekilere dokunma
     haric = _atalar()
     cekirdek = []
-    for ad in ("bildirim", "ses_bekcisi", "openbox", "dbus", "xvfb"):
+    for ad in ("bildirim", "ses_bekcisi", "oncelik_bekcisi", "openbox", "dbus", "xvfb"):
         p = pid.get(ad)
         if p and _canli(p) and (ad != "xvfb" or _xvfb_mi(d)):
             cekirdek.append(p)

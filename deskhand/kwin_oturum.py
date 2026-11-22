@@ -282,7 +282,8 @@ def _kwin_ortami(d: dict) -> dict:
     gpu = {"KWIN_RENDER_NODES": d["render_dugumu"]} if d.get("render_dugumu") else {}
     return {
         **gpu,
-        "PATH": ASGARI_PATH,
+        # özel bin dizini önce: KWin Xwayland'i PATH'ten bulur → takma adlı sarmalayıcı (_ozel_adlar)
+        "PATH": f"{os.path.join(d['calisma'], 'bin')}:{ASGARI_PATH}",
         "HOME": ev,
         "LANG": os.environ.get("LANG") or "C.UTF-8",
         "XDG_RUNTIME_DIR": d["calisma"],
@@ -568,6 +569,9 @@ def _oncelik_dusur(d: dict, pid: int) -> None:
                 os.setpriority(os.PRIO_PROCESS, tid, 10)
         except OSError:
             pass
+    tidler = [str(t) for t, _n, _p in oncelik_durumu(pid)]
+    if tidler and shutil.which("ionice"):  # KWin disk iş parçacıklarını best-effort'a çekiyor: hepsi idle
+        subprocess.run(["ionice", "-c", "3", "-p", *tidler], capture_output=True, timeout=5)
     kalan = [(t, n, p) for t, n, p in oncelik_durumu(pid) if n < 10 or p in (1, 2, 6)]
     if kalan:
         raise Dur(ARAC_EKSIK, _("KWin düşük önceliğe alınamadı (iş parçacığı, nice, politika): {kalan}").format(
@@ -602,10 +606,34 @@ def _durum_oku(cdir: str) -> dict | None:
         return None
 
 
+XWAYLAND_AD = "deskhand-xwayland"  # oturumun XWayland'i bu adla çalışır (ad tabanlı öncelik kuralları eşleşmesin)
+
+
 def _kwin_mi(d: dict) -> bool:
     pid = (d.get("pid") or {}).get("kwin")
     kom = ao._komut_satiri(pid)
-    return ao._canli(pid) and any(os.path.basename(k) == "kwin_wayland" for k in kom) and d["wayland"] in kom
+    return ao._canli(pid) and any(os.path.basename(k) == "kwin_wayland" for k in kom[:1]) and \
+        d["wayland"] in kom
+
+
+def _ozel_adlar(cdir: str) -> str:
+    """<çalışma>/bin + süreç adları. Neden (ölçüldü): sistemdeki ananicy-cpp kuralları süreç ADINA göre `kwin_wayland`
+    ve `Xwayland`'i LowLatency_RT'ye (nice -12, best-effort G/Ç) çekiyor; arka plan oturumu oyun oynayan kullanıcıdan
+    işlemci çalardı. Xwayland: KWin onu PATH'ten bulur → bu dizindeki küçük `Xwayland` betiği takma adlı bağa
+    (deskhand-xwayland) exec eder (betik anlık yaşar). KWin'in dosya adı `kwin_wayland` olmak ZORUNDA (ölçüldü: başka
+    adla abort) ve başka sürecin adı değiştirilemiyor: KWin'i kafesin öncelik bekçisi (oncelik_bekcisi.py) geri düşürür.
+    → KWin'in çalıştırılacak yolu."""
+    b = os.path.join(cdir, "bin")
+    os.makedirs(b, mode=0o700, exist_ok=True)
+    kwin = shutil.which("kwin_wayland", path=ASGARI_PATH) or "/usr/bin/kwin_wayland"
+    xw = shutil.which("Xwayland", path=ASGARI_PATH)
+    if xw:
+        os.symlink(os.path.realpath(xw), os.path.join(b, XWAYLAND_AD))
+        betik = os.path.join(b, "Xwayland")
+        with open(betik, "w") as f:
+            f.write(f'#!/bin/sh\nexec "{os.path.join(b, XWAYLAND_AD)}" "$@"\n')
+        os.chmod(betik, 0o700)
+    return kwin
 
 
 def _oturum_dizinleri() -> list[str]:
@@ -744,7 +772,7 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     # veriyorsa SCHED_RR alıp nice -12ye inebiliyordu (ölçüldü)
     kwin = [*(["prlimit", "--rtprio=0", "--nice=10"] if shutil.which("prlimit") else []),
             *(["setpriv", "--no-new-privs"] if shutil.which("setpriv") else []),
-            "kwin_wayland", "--virtual", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
+            _ozel_adlar(cdir), "--virtual", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
             "--socket", d["wayland"], "--width", str(d["boyut"][0]), "--height", str(d["boyut"][1])]
     xs = None
     fdler: list[int] = []
@@ -791,6 +819,9 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     if not _kwin_mi(d):
         raise Dur(ARAC_EKSIK, _("KWin süreci doğrulanamadı (pid {pid})").format(pid=k.pid))
     _oncelik_dusur(d, k.pid)
+    uyari = ao.oncelik_bekcisi_baslat(d, cdir)  # ad tabanlı sistem kuralları (ananicy) yükseltirse geri düşürür
+    if uyari:
+        d["uyarilar"].append(uyari)
     _hazir_denetle(d, k)
 
     # 4) ses bekçisi (masaustu ile aynı ikinci savunma hattı)
@@ -821,7 +852,7 @@ def _kapat_ic(d: dict) -> list[str]:
     if cg and not (d.get("kafes") and cg.endswith("/" + d["kafes"])):
         cg = ""
     haric = ao._atalar()
-    sira = ("kwin", "ses_bekcisi", "bildirim", "a11y", "dbus")
+    sira = ("kwin", "ses_bekcisi", "bildirim", "a11y", "oncelik_bekcisi", "dbus")
     cekirdek = [p for ad in sira if (p := pid.get(ad)) and ao._canli(p)]
 
     def surecler() -> list[int]:

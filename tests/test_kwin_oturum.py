@@ -182,7 +182,9 @@ kontrol("KWin ortamı: asgari, os.environ'dan HİÇBİR ŞEY yok (DISPLAY/WAYLAN
         and kw["HOME"].startswith(sahte["calisma"]) and kw["XDG_CONFIG_HOME"].startswith(sahte["calisma"])
         and kw["XDG_RUNTIME_DIR"] == sahte["calisma"] and set(kw) <= {
             "PATH", "HOME", "LANG", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
-            "XDG_STATE_HOME", "DBUS_SESSION_BUS_ADDRESS", "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "KDE_SESSION_VERSION"})
+            "XDG_STATE_HOME", "DBUS_SESSION_BUS_ADDRESS", "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP",
+            "ATSPI_DBUS_IMPLEMENTATION", "KWIN_RENDER_NODES"} and "KDE_SESSION_VERSION" not in kw
+        and "KDE_FULL_SESSION" not in kw)
 
 # ---------------------------------------------------------------- 2) oturum açılışı
 print("\n2) oturum açılışı")

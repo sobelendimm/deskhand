@@ -195,8 +195,11 @@ kontrol("sec(arka:{…} kimliği) → aynı arka uç", sec("arka:{00000000-0000-
 kontrol("kafes: KWin + dbus + bildirim + kayıt defteri + ses bekçisi aynı bellek kafesinde",
         all(masaustu._cgroup(d["pid"][a]) == d["cgroup"] for a in ("kwin", "dbus", "bildirim", "a11y", "ses_bekcisi")),
         str({a: masaustu._cgroup(d["pid"].get(a)) for a in d["pid"]}))
-kontrol("öncelik: KWin nice 10 + ionice idle", os.getpriority(os.PRIO_PROCESS, d["pid"]["kwin"]) >= 10 and
-        "idle" in subprocess.run(["ionice", "-p", str(d["pid"]["kwin"])], capture_output=True, text=True).stdout)
+onc = ko.oncelik_durumu(d["pid"]["kwin"])
+io_ = subprocess.run(["ionice", "-p", str(d["pid"]["kwin"])], capture_output=True, text=True).stdout.strip()
+kontrol("öncelik: KWin'in TÜM iş parçacıkları nice >= 10, gerçek zamanlı zamanlama yok (cap_sys_nice verilmedi), "
+        "ionice idle", onc and all(n >= 10 and p not in (1, 2, 6) for _t, n, p in onc) and "idle" in io_,
+        f"{[x for x in onc if x[1] < 10 or x[2] in (1, 2, 6)][:5]} {io_}")
 kontrol("ses: kendi boş çıkışı yüklü", masaustu._sink_modulu(d["ses"]["sink"]) == d["ses"]["modul"])
 kontrol("hazırlık: oturumun erişilebilirlik veri yolu, kullanıcınınkinden FARKLI ve oturum dizininde",
         d.get("a11y_adres") and d["calisma"] in d["a11y_adres"] and d["a11y_adres"] not in subprocess.run(
@@ -244,7 +247,11 @@ kontrol("ortam: WAYLAND_DISPLAY oturumun MUTLAK soketi, DISPLAY oturumun XWaylan
 kontrol("ortam: SSH ajanı, kullanıcının erişilebilirlik adresi, EIS soketi, ses sunucusu GEÇMEDİ",
         not any(a in oe for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS", "LIBEI_SOCKET", "KDE_FULL_SESSION",
                                    "SESSION_MANAGER")) and oe.get("PULSE_SINK") == d["ses"]["sink"] and
-        "PULSE_SERVER" not in oe, str([a for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS", "LIBEI_SOCKET") if a in oe]))
+        oe.get("PULSE_SERVER") == f"unix:/run/user/{os.getuid()}/pulse/native",
+        str([a for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS", "LIBEI_SOCKET") if a in oe]) + str(oe.get("PULSE_SERVER")))
+kontrol("ortam: XDG_RUNTIME_DIR masaüstünün KENDİ klasörü (kullanıcınınki değil), HOME kullanıcının",
+        oe.get("XDG_RUNTIME_DIR", "").startswith(d["calisma"]) and oe.get("HOME") == os.path.expanduser("~"),
+        str(oe.get("XDG_RUNTIME_DIR")))
 kontrol("ortam: GSETTINGS_BACKEND=memory, ATSPI_DBUS_IMPLEMENTATION=dbus-daemon, Wayland araç takımları, ek değişken",
         oe.get("GSETTINGS_BACKEND") == "memory" and oe.get("ATSPI_DBUS_IMPLEMENTATION") == "dbus-daemon" and
         oe.get("QT_QPA_PLATFORM") == "wayland" and oe.get("MOZ_ENABLE_WAYLAND") == "1" and oe.get("BENIM") == "1")
@@ -317,9 +324,14 @@ for _ in range(7):
     sure.append((time.perf_counter() - t) * 1000)
 olcum["görüntü (1600x900)"] = f"{sorted(sure)[3]:.1f} ms (medyan)"
 kontrol("görüntü: RGB, oturum boyutu (ölçek 1)", im.mode == "RGB" and im.size == (1600, 900), str(im.size))
-r_ = bekle(lambda: (lambda im_: (im_, kutu_bul(im_, (0, 255, 255)), kutu_bul(im_, (255, 0, 255)),
-                                   kutu_bul(im_, (255, 255, 0))))(au.goruntu()), 5)
-im, KUTU, DUGME, TEKER = r_
+def kutular():
+    """Pencerenin renkli ögeleri ekranda (pencere taşınınca yeniden bulunur)."""
+    return bekle(lambda: (lambda t_: t_ if all(t_[1:]) else None)((lambda im_: (
+        im_, kutu_bul(im_, (0, 255, 255)), kutu_bul(im_, (255, 0, 255)), kutu_bul(im_, (255, 255, 0))))(au.goruntu())),
+        8, 0.1) or (au.goruntu(), None, None, None)
+
+
+im, KUTU, DUGME, TEKER = kutular()
 kontrol("görüntü: pencere ögeleri (renkli kutular) pencere geometrisi içinde", KUTU and DUGME and TEKER and
         geo[0] <= DUGME[0] and DUGME[2] <= geo[0] + geo[2] and geo[1] <= DUGME[1] and DUGME[3] <= geo[1] + geo[3],
         f"{geo} {DUGME}")
@@ -361,8 +373,9 @@ kontrol("tekerlek: wheel 2 → +240, wheel -1 → -120 (ayrık 120'lik birim)",
 # pencere yönetimi (istemci alanı ölçüsü)
 au.tasi(k, 100, 80)
 kontrol("taşı: istemci alanı (100,80)", bekle(lambda: au.geometri(k)[:2] == (100, 80), 3), str(au.geometri(k)))
-au.buyut(k)
-kontrol("büyüt: maximized (fixed-size pencere boyutu değişmese de durum)", "maximized" in au.pencere_durumu(k) or True)
+kod_b = dur_kodu(au.buyut, k)
+kontrol("büyüt: sabit boyutlu pencere → büyütülemez, Dur 9 (doğrulamalı; sessiz başarı yok)",
+        kod_b == 9 and "maximized" not in au.pencere_durumu(k), f"{kod_b} {au.pencere_durumu(k)}")
 au.geri_yukle(k)
 au.kucult(k)
 kontrol("küçült: hidden", "hidden" in au.pencere_durumu(k), str(au.pencere_durumu(k)))
@@ -370,6 +383,7 @@ au.geri_yukle(k)
 kontrol("geri yükle: hidden kalktı", not ({"hidden"} & au.pencere_durumu(k)), str(au.pencere_durumu(k)))
 au.one_getir(k)
 kontrol("one_getir: aktif", au.aktif() == k)
+im, KUTU, DUGME, TEKER = kutular()  # pencere taşındı
 kontrol("oturum_veri_yolu / atspi_adresi: oturumun", au.oturum_veri_yolu() == d["dbus_adres"] and
         au.atspi_adresi() == d["a11y_adres"])
 
@@ -437,10 +451,13 @@ k2 = bekle(lambda: next((w for w, b, _ in au.pencereler("kwin-arka IKI")), None)
 au.tasi(k, 20, 40)
 au.tasi(k2, 860, 40)
 bekle(lambda: au.geometri(k)[:2] == (20, 40) and au.geometri(k2)[:2] == (860, 40), 3)
-im = au.goruntu()
-d1 = kutu_bul(im.crop((0, 0, 800, 900)), (255, 0, 255))
-d2 = kutu_bul(im.crop((800, 0, 1600, 900)), (255, 0, 255))
-d2 = (d2[0] + 800, d2[1], d2[2] + 800, d2[3]) if d2 else None
+def iki_dugme():
+    im_ = au.goruntu()
+    a_, b_ = kutu_bul(im_.crop((0, 0, 800, 900)), (255, 0, 255)), kutu_bul(im_.crop((800, 0, 1600, 900)), (255, 0, 255))
+    return (a_, (b_[0] + 800, b_[1], b_[2] + 800, b_[3])) if a_ and b_ else None
+
+
+d1, d2 = bekle(iki_dugme, 8, 0.1)
 n1, n2 = loglar().count("tik: Kaydet"), loglar(LOG2).count("tik: Kaydet")
 gh = au.girdi("hizli")  # denetimsiz (masaüstü kipi): iki pencere arasında aynı gönderimde
 t = time.perf_counter()
