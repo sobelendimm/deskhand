@@ -156,6 +156,21 @@ class Sunucu:
 
 # ---------------------------------------------------------------- Firefox (arka plan masaüstünde, geçici profil)
 
+def ata_pidler(pid) -> list[int]:
+    """pid ve ataları. Arka plan uygulaması bwrap ad alanında başlar: Popen'in döndürdüğü PID bwrap'in kendisidir,
+    pencerenin sahibi (X-Resource / getwindowpid) onun TORUNUdur; bu yüzden `au.pid(k) == p.pid` yerine
+    `p.pid in ata_pidler(au.pid(k))` denetlenir."""
+    sonuc = []
+    while pid and pid > 1 and len(sonuc) < 16:
+        sonuc.append(pid)
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return sonuc
+
+
 def _pref(ad, deger) -> str:
     return f"user_pref({json.dumps(ad)}, {json.dumps(deger)});\n"
 
@@ -188,7 +203,7 @@ class Firefox:
         bitis = time.monotonic() + sure
         while time.monotonic() < bitis and self.k is None:
             for w, b, _ in au.pencereler("Mozilla Firefox"):
-                if au.pid(w) == self.p.pid:
+                if self.p.pid in ata_pidler(au.pid(w)):
                     self.k = w
             if self.p.poll() is not None:
                 break

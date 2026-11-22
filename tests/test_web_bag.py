@@ -114,10 +114,15 @@ def kapat_hepsi():
 atexit.register(kapat_hepsi)
 
 
-def tik(k):
-    """Sayfanın kendi günlüğü: (son tıklanan öge adı, sıra no)."""
-    m = re.match(r"TIK (.+) #(\d+)", s_au.baslik(k) or "")
-    return (m.group(1), int(m.group(2))) if m else (None, 0)
+def tik(k, bekle_sn=1.5):
+    """Sayfanın kendi günlüğü: (son tıklanan öge adı, sıra no). Başlık güncellemesi pencere yöneticisine tıklamadan
+    biraz sonra (nice 10 + ionice idle altındaki Firefox) ulaşır: henüz günlük yoksa kısa süre beklenir."""
+    bitis = time.monotonic() + bekle_sn
+    while True:
+        m = re.match(r"TIK (.+) #(\d+)", s_au.baslik(k) or "")
+        if m or time.monotonic() >= bitis:
+            return (m.group(1), int(m.group(2))) if m else (None, 0)
+        time.sleep(0.05)
 
 
 def seviye_yaz(*satirlar):
@@ -161,7 +166,7 @@ srv = wt.Sunucu()
 
 
 def ac(sayfa, **kw):
-    ff = wt.Firefox(s_au, _yalitim.GECICI, srv.url(sayfa), erisilebilirlik=False, **kw)  # GNOME_ACCESSIBILITY YOK
+    ff = wt.Firefox(s_au, _yalitim.PAYLASIM, srv.url(sayfa), erisilebilirlik=False, **kw)  # GNOME_ACCESSIBILITY YOK
     acik_firefoxlar.append(ff)
     profil_denetle(f"{sayfa} açıldı")
     return ff
@@ -191,7 +196,7 @@ async def senaryo():
         ff = ac("form.html")
         k = ff.k
         kontrol("firefox: GNOME_ACCESSIBILITY olmadan da pencere arka plan masaüstünde, kendi süreci",
-                k and k.startswith("arka:") and s_au.pid(k) == ff.p.pid)
+                k and k.startswith("arka:") and ff.p.pid in wt.ata_pidler(s_au.pid(k)))
         bekle(lambda: web.sayfa_bilgisi(k)["baslik"] == "Deskhand Form Testi", 15)
         agac = bekle(lambda: (lambda o: o if o["toplam"] > 10 else None)(web.oku(k, en_cok=0, gorunur=False)), 10)
         kontrol("arka plan Firefox: erişilebilirlik ağacını (GNOME_ACCESSIBILITY olmadan) sunuyor",
@@ -443,7 +448,8 @@ async def senaryo():
         kontrol("B2 (web): PID bilinmiyorsa → [6]", r3.is_error and "[6]" in metin(r3), metin(r3)[:200])
         from deskhand import kendi
         asil_panel = onay.panel_pid
-        onay.panel_pid = lambda: ff.p.pid  # çerçeve Deskhand panelinin sürecine ait görünüyor
+        pencere_pid = s_au.pid(k)  # bwrap ad alanında pencere sahibi, başlatılan PID'in (bwrap) torunu
+        onay.panel_pid = lambda: pencere_pid  # çerçeve Deskhand panelinin sürecine ait görünüyor
         try:
             r = await arac(c, "read_text", window=k, source="web")
             r2 = await arac(c, "click", window=k, element="İade koşulları", via="action", verify=False)
@@ -453,7 +459,7 @@ async def senaryo():
                 r.is_error and "[10]" in metin(r) and r2.is_error and "[10]" in metin(r2) and tik(k)[1] == n0,
                 metin(r)[:200] + metin(r2)[:200])
         asil_kendi = kendi.kendi_mi
-        kendi.kendi_mi = lambda pid, *a_, **k_: str(pid) == str(ff.p.pid)  # yalnız çerçeve düzeyi (PID kuralı)
+        kendi.kendi_mi = lambda pid, *a_, **k_: str(pid) == str(pencere_pid)  # yalnız çerçeve düzeyi (PID kuralı)
         try:
             with api.hedef("sanal"):
                 e_tara = e_eylem = None
@@ -578,8 +584,8 @@ try:
 
     # ------------------------------------------------------------ `ac --arka` ile açılan Firefox (CLI yolu)
     print("ac --arka (ham komut, yalıtık profil) ile açılan Firefox")
-    prof = os.path.join(_yalitim.GECICI, "ac-profil")
-    xdg = os.path.join(_yalitim.GECICI, "ac-xdg")
+    prof = os.path.join(_yalitim.PAYLASIM, "ac-profil")
+    xdg = os.path.join(_yalitim.PAYLASIM, "ac-xdg")
     os.makedirs(prof, mode=0o700)
     os.makedirs(xdg, mode=0o700)
     with open(os.path.join(prof, "user.js"), "w") as f:
