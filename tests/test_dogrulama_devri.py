@@ -646,6 +646,8 @@ try:
         ("['enter'] onay kutusunda", ["enter"], lambda: KUTU, True),
         ("['enter'] belgenin kendisinde", ["enter"], lambda: BELGE, True),
         ("['enter'] adres çubuğunda (belge dışı)", ["enter"], lambda: ADRES, False),
+        ("['enter'] tarayıcının GTK dosya seçicisinde (belge dışı, K4a)", ["enter"],
+         lambda: {"rol": "table cell", "belge_ici": False, "duzenlenebilir": False}, False),
         ("'metin:https://x.org\\n' adres çubuğunda", ["metin:https://x.org\n"], lambda: ADRES, False),
         ("'metin:merhaba dünya\\n' sayfadaki yazı alanında", ["metin:merhaba dünya\n"], lambda: ALAN, False),
         ("['tab','metin:a'] adres çubuğunda bile (Tab odağı sayfaya taşır)", ["tab", "metin:a"], lambda: ADRES, True),

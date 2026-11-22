@@ -783,6 +783,34 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   sahteleyen bir süreç panelin bir sonraki açılışında izni geçirebilir. İzin açıkken arka plandaki tarayıcı o hesabın
   e-postasına/dosyalarına erişebilir; güvenilmeyen sayfa ajanı kandırabilir (panel uyarı metni bunu söyler).
 
+### 4.z Girdi ve gizlilik ayrıntıları (0.9.0)
+
+- **deskhand-eis karakter eşlemi**: önce X11'de var olan tuş (evdev ≤ 247; xkb kodu ≤ 255), sonra en az değiştirici;
+  yazdırılabilir karakter yalnız X11 dışı tuştaysa `yazilamaz` (pano yolu). Tanılama: `plan METİN`, `--harita-sina`.
+- **Güç/kilit tuşları** (`guvenlik._GUC_TUSLARI`): power, sleep, wakeup, screenlock (coffee/XF86ScreenSaver), suspend,
+  hibernate, logoff — kanonik adlar `_TUS_ESANLAM`/`_EVDEV_AD`/`_KEYSYM_AD`'dan; değiştiricisiz tek tuş da `riskli_tus`
+  (onay). `ctrl+alt+shift+delete/pageup/pagedown` da.
+- **Denetim karakterleri**: `eylem.denetim_karakteri_denetle` (k_yaz, yaz_ic, yazima_hazirla, erisim.k_ogeye_yaz);
+  arka uçların `yazilabilir_mi`'si Cc için False.
+- **Gizli yazı**: `yazima_hazirla(gizli=True)` karakter değiştirmez; dizi/akış adımı `eylem.adim_metni` ile maskelenir;
+  `girdi_merkezi.uyari_maskele` dotool karakter uyarılarını merkez günlüğünde her zaman, istemcide gizli gönderimde
+  maskeler; günlükte gizli parça uzunluğu yok (`gizli_satir` → `type ***`); `_gizli_pano_temizle` geri yüklenemeyen
+  panoda gizli parçayı siler.
+- **Okunamayan tarayıcı sayfası (R1)**: `dogrulama_sinamasi.okunamayan_klavye_engeli(k=…)`: Tab sonrası girdi her zaman
+  ret; dizide Enter/Boşluk varsa `erisim.odak_bilgisi(k)` (tek sınırlı DFS, değer okunmaz: `rol`, `belge_ici`,
+  `duzenlenebilir`) → belge dışı ya da düzenlenebilir: izin; aksi/bilinmiyor: ret.
+- **Gerçek ekran kilidi ve onay**: `onay.iste_sonuc` kilidi yalnız hedef kullanıcının ekranıyken uygular;
+  `guvenlik.sayfadan_cikis` (yalnız `gezin.adrese_git`): adres + Enter, odak belge dışındaysa ödeme sayfası onayından muaf.
+- **Web değer maskesi** (§9): `web._ayrinti_ekle` giriş değerini `erisim._deger_temizle` ile süzer; Firefox ilk sorguda
+  boş nitelik verebildiği için bir kez daha sorulur. `web.tarayici_mi` sınıfı `. - _` ve boşlukla parçalar.
+- **CLI okuma komutları** `gorsel.korumali_goruntu` → `api.goruntu_al` (yasak hedef 10, diğer yasaklar siyah).
+- **CLI otomatik başlık kilidi**: `cli.otomatik_baslik_kilidi` (kimlikle verilen yaz/tus/tikla/dizi/kaydir, `-b` yok →
+  `^…$`; `--no-title-lock`).
+- **MCP sonuç sözleşmesi** (§10): `arac` ve `okuma_araci` sarmalayıcıları beklenmeyen istisnayı da `hata_sonucu`'na
+  çevirir (`[9]`); `mcp_adlari` CLI seçeneklerini MCP parametre adlarına çevirir.
+- **İnsan önceliği**: pencere sonrası tek kısa 'aktif' (`YANSIMA_PAY` 0,5 sn, `YANSIMA_SURE` 0,04 sn) için yerleşme
+  beklenir; etkinlik yardımcısı v1 bildirirse izleyici yok sayılır.
+
 ## 5. Çıkış kodları
 0 tamam · 1 kullanım hatası · 2 nokta pencere/ekran dışında · 3 aktif değil/başka pencere · 4 başlık/sınıf kilidi
 uymadı · 5 belirsiz (birden çok eşleşme) · 6 bulunamadı · 7 zaman aşımı · 8 pencere yok/taşındı ·

@@ -2,6 +2,53 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
+## 0.9.0 (22 Kasım 2026)
+
+- **Düzeltme (kritik): görünmez masaüstünde (KWin) Firefox'a yazılan `#`, `$`, `€` sessizce kayboluyordu** ("a#b" →
+  "ab", araç yine "yazıldı" diyordu). tr düzeninde bu karakterler X11'e iletilemeyen "inet" tuşlarında da durduğu için o
+  tuşlar seçiliyordu; artık XWayland'in iletebildiği tuş (AltGr+3/4/E) seçilir, yalnız böyle bir tuştaki karakter
+  panodan yapıştırılır. Yardımcı yeniden derlenmeli: `make -C deskhand/yardimci deskhand-eis`.
+- **Güvenlik: güç/uyku/kilit tuşları onaysız gidiyordu.** Değiştiricisiz tek başına `power`, `sleep`, `wakeup`,
+  `coffee`/ekran koruyucu, `suspend`, hazırda bekletme, oturum kapatma tuşları (dotool adları, `x:XF86PowerOff` gibi
+  XF86 adları/kodları, `k:116/142/143/152/205`) ve KDE'nin onaysız kapatma kısayolları `ctrl+alt+shift+delete/pageup/
+  pagedown` artık `tus`/`bas`/`press_key`'de insan onayı ister.
+- **Güvenlik: yazıdaki denetim karakterleri tuş olarak gidiyordu.** `\n` ve `\t` dışındaki C0/C1 ve DEL karakterleri
+  (`\x08` geri silme, `\x1b` Esc, `\x7f`…) yazıda (iki arka uç, yapıştırma yolu, erişilebilirlik değer yazma) hiçbir
+  şey gönderilmeden 1 ile reddedilir; ileti `press_key`'e yönlendirir.
+- **Güvenlik: `--secret` yazı sızıntıları kapatıldı.** Dizi/akış adımının gizli satırı stdout'a, günlüğe ve hata
+  iletisine yazılmaz (yalnız komut adı + `***`); gizli yazıda düzende olmayan karakter değiştirilmez (Café → Cafe yok),
+  yazmadan 1 ile durur ve ileti yalnız konum/uzunluk verir; dotool'un "impossible character" uyarısı merkez günlüğünde
+  ve gizli gönderimin iletisinde maskelenir; günlükte parça uzunlukları (6, 6, 4) yerine yalnız toplam uzunluk kalır;
+  gizli yapıştırmadan sonra eski pano geri yüklenemezse (ör. çok büyük) pano temizlenir.
+- **Güvenlik: okunamayan tarayıcı sayfasında Enter kuralı yeniden tasarlandı.** Eskiden yalnız tek başına Boşluk/Enter
+  ya da Tab'dan sonra gelen girdi reddediliyordu; `['a','enter']` ya da `abc\n` bilinmeyen odağa gidiyordu. Artık
+  dizinin herhangi yerinde Enter/Boşluk varsa ucuz bir odak sorgusu yapılır: odak belge dışındaysa (adres çubuğu, dosya
+  seçici gibi tarayıcı iletişim kutuları) ya da bir yazı alanındaysa izin, sayfadaki başka bir ögedeyse ya da
+  bilinmiyorsa ret; ileti ne yapılacağını söyler (alana tıkla, `goto`, `ac --arka`). MCP `type_text` kapısı
+  `submit=True`'nun Enter'ını da görür; `goto` adresi ve Enter'ı tek yazı eylemi olarak gönderir.
+- **Güvenlik: gerçek ekran kilidi görünmez masaüstündeki ödeme sayfasını kilitliyordu.** `DESKHAND_GERCEK_EKRAN=kapali`
+  iken başlığında "Ödeme" geçen sayfada her tıklama/Enter/`goto` reddediliyordu. Onayı panelde göstermek gerçek ekrana
+  girdi değil: görünmez masaüstü hedefinde onay istenir, kullanıcının ekranında 17 aynen; ileti tetikleyen kalıbı söyler.
+  `goto` ile çıkış, odak adres çubuğunda doğrulanırsa onaysız.
+- **Güvenlik: web yolunda alan değerleri maskelenmiyordu.** Tarayıcı sayfası okunurken tek kullanımlık kod, kart
+  numarası, CVC, PIN ve parola alanlarının değeri dönüyordu; artık masaüstü yoluyla aynı kural (ad, açıklama, `id`/
+  `placeholder`/`text-input-type`) → `***`. Sınır: Firefox `autocomplete` belirtecini erişilebilirlik ağacına vermez.
+- **Güvenlik: CLI okuma komutları yasak pencere listesine uyuyor.** `foto`, `metin`, `bekle`, `simge-bul`,
+  `simge-kaydet`, `renk-bul`: hedef yasaksa 10, görüntüye düşen diğer yasak pencereler siyah (MCP ile aynı).
+- **Yeni: CLI otomatik başlık kilidi.** `yaz`, `tus`, `tikla`, `dizi`, `kaydir` pencere KİMLİĞİYLE ve `-b` olmadan
+  verilirse şimdiki tam başlığa kilitlenir; komut sürerken sekme/sayfa değişirse 4 ile durur (ileti: `-b` ile esnek desen
+  ya da `--no-title-lock`).
+- **MCP: sonuç sözleşmesi.** Beklenmeyen istisna da yapılandırılmış hata döner (`[9]`, `sent`, `next`; girdi gitmişse
+  `maybe_partial`); `get_status`, `choose_desktop`, `manage_desktop`, `screenshot`, `read_text`, `listen`, `find` da
+  yapılandırılmış hata döndürür; iletilerde CLI seçenekleri (`--region`) yerine MCP parametre adları (`region`).
+- **Düzeltme: bazı uygulamalar tarayıcı sanılıyordu** (zenity, hedgewars, knowledge-base, citizen, operator,
+  chromatic): tarayıcı adı artık sınıfın tam bir parçası olmalı.
+- **Düzeltme: insan önceliği.** Kendi girdimizin pencere bitiminden sonraki 0,5 sn'de gelen tek ve kısa yansıması
+  kullanıcı sayılmaz (gerçek tuş basışı iki olay üretir, yine keser); etkinlik yardımcısı kapanışta beklenir (zombi/fd
+  sızıntısı yok); öncelik bekçisi kafesin geçici okunamamasını "boş" sanmaz.
+- **Düzeltme: KDE.** Kapalı monitör ekran alanını büyütmez; klavye düzeni önbelleği kxkbrc değişince yenilenir;
+  ext-idle-notify v1'e düşülürse klavye izleyicisi yok sayılır (yalnız fare izlenir).
+
 ## 0.8.2 (22 Kasım 2026)
 
 - **Yeni: 2× (HiDPI) görünmez masaüstü — keskin ekran görüntüsü.** Görünmez masaüstünden alınan görüntüler ürün
