@@ -498,7 +498,7 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
 
 
 def _sayfa_ozeti(belge, pencere_basligi, belge_sayisi) -> dict:
-    from .guvenlik import HASSAS_SAYFA
+    from .guvenlik import hassas_sayfa_kalibi
     from .ocr import katla
     if belge is None:
         return {"baslik": "", "adres": "", "yukleniyor": None, "pencere": pencere_basligi, "belge": 0}
@@ -506,7 +506,7 @@ def _sayfa_ozeti(belge, pencere_basligi, belge_sayisi) -> dict:
          "pencere": pencere_basligi, "belge": belge_sayisi}
     if belge.get("kutu"):
         s["gorus"] = list(belge["kutu"])  # üst belgenin görüş alanı (pencere pikseli): kaydırma yönü için
-    if HASSAS_SAYFA.search(katla(belge["ad"] or "")):
+    if hassas_sayfa_kalibi().search(katla(belge["ad"] or "")):
         s["hassas_sayfa"] = True
     return s
 

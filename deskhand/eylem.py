@@ -710,9 +710,11 @@ def _tus_onaylari(g, k, onayli, kombinasyon, birlikte=False):
             and guvenlik.yapistirma_engel(k, onayli):
         _onayli_etiket(g)
     if guvenlik.onay_kapsami() == "kart":  # tek tuşla kart numarası: rakam tuşları pencere başına tamponda birleştirilir
-        son4 = guvenlik.kart_tampon_denetle(k, guvenlik.tus_metni(kombinasyon))
-        if son4:
+        tus_yazisi = guvenlik.tus_metni(kombinasyon)
+        son4 = guvenlik.kart_tampon_denetle(k, tus_yazisi)
+        if son4 or any(c.isdigit() for c in tus_yazisi):  # tampona rakam giren her tuş girdisi günlüğe gizli gider
             g.gizli = True
+        if son4:
             guvenlik.kart_bilgisi_engel(k, onayli, "", False, _("tuş"), son4=son4)
     # Enter/boşluk ÇÖZÜLMÜŞ tuşa göre (x:Return, k:28, kpenter… dahil); onay öne getirmeden önce sorulur
     if onay_tusu_mu(kombinasyon) and hassas_sayfa_engel(
@@ -820,8 +822,9 @@ def k_yaz(a):
         if guvenlik.onay_kapsami() == "kart":  # kart bilgisi: hedef alan kart alanı ya da metinde Luhn'lu numara
             alan_kart = _kart_alani_mi(a.kimlik)  # tek sorgu (AT-SPI)
             son4 = guvenlik.kart_tampon_denetle(a.kimlik, metin)  # metin + aynı pencereye son 60 sn'de yazılan parçalar
+            if alan_kart or son4 or guvenlik.kart_tampon_dolu(a.kimlik) or guvenlik.gizli_rakamli_mi(metin):
+                g.gizli = True  # tam numara (ve henüz tamamlanmamış parçası) günlüğe/iletiye hiç yazılmaz
             if alan_kart or son4:
-                g.gizli = True  # tam numara günlüğe/iletiye hiç yazılmaz
                 guvenlik.kart_bilgisi_engel(a.kimlik, onayli, metin, alan_kart, _("yazı"), son4=son4)
         _au().one_getir(a.kimlik)
         yaz_ic(g, a.kimlik, a.baslik, metin, onayli)

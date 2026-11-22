@@ -501,7 +501,9 @@ class Girdi:
             t = time.monotonic()
             self._yaz([satir])
             self._kaydet(t, [satir])
-            gunluk(f"{self.etiket} | bırak | {satir}")
+            from ..guvenlik import gizli_etiket, gizli_satir
+            gunluk(f"{gizli_etiket(self.etiket) if self.gizli else self.etiket} | bırak | "
+                  f"{gizli_satir(satir) if self.gizli else satir}")
         except (BrokenPipeError, OSError, Dur, _gm.Mesgul):
             pass
 
@@ -565,8 +567,10 @@ class Girdi:
                 self._mesgul_bekle(m, bitis)
             except (BrokenPipeError, OSError):
                 raise getattr(self, "kesildi", None) or Dur(9, _("dotool beklenmedik şekilde kapandı"))
-        kayit = [f"type ***({len(s) - 5})" if self.gizli and s.startswith("type ") else s for s in satirlar]
-        gunluk(f"{self.etiket} | [{self.au.baslik(k)}] | {' ; '.join(kayit)}")
+        from ..guvenlik import gizli_etiket, gizli_satir
+        kayit = [gizli_satir(s) if self.gizli else s for s in satirlar]
+        etiket = gizli_etiket(self.etiket) if self.gizli else self.etiket
+        gunluk(f"{etiket} | [{self.au.baslik(k)}] | {' ; '.join(kayit)}")
 
     def kapat(self):
         if self.etk_sahibi and self.etk is not None:

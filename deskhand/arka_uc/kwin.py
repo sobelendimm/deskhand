@@ -772,12 +772,14 @@ class KwinGirdi:
     # -------- gönderim
     def _kayit(self, k: str, satirlar) -> None:
         from ..gunluk import gunluk
-        kayit = [f"type ***({len(s) - 5})" if self.gizli and s.startswith("type ") else s for s in satirlar]
+        from ..guvenlik import gizli_etiket, gizli_satir
+        kayit = [gizli_satir(s) if self.gizli else s for s in satirlar]
+        etiket = gizli_etiket(self.etiket) if self.gizli else self.etiket
         try:
             b = self.arka.baslik(k)
         except Dur:
             b = "?"
-        gunluk(f"{self.etiket} | arka {self.ekran} [{b}] | {' ; '.join(kayit)}")
+        gunluk(f"{etiket} | arka {self.ekran} [{b}] | {' ; '.join(kayit)}")
 
     def gonder(self, k: str, desen: str | None, *satirlar: str) -> None:
         """Sanal (Xvfb) Girdi.gonder ile aynı sıra: hazırla → DUR → güvenlik denetimi (denetle + erişim seviyesi) →
@@ -838,7 +840,9 @@ class KwinGirdi:
         except Exception:  # noqa: BLE001
             pass
         from ..gunluk import gunluk
-        gunluk(f"{self.etiket} | arka bırak | {satir}")
+        from ..guvenlik import gizli_etiket, gizli_satir
+        gunluk(f"{gizli_etiket(self.etiket) if self.gizli else self.etiket} | arka bırak | "
+              f"{gizli_satir(satir) if self.gizli else satir}")
 
     def kapat(self) -> None:
         self.izle_bitir()

@@ -103,7 +103,13 @@ class SahteAU(arka_uc.ArkaUc):
     def gecerli_tuslar(self): return None
     def pano_oku(self): return self.pano
     def fare(self): return (5, 5, "{masaustu}")
-    def girdi(self, etiket="", gizli=False, etk=None, denetle=None): return SahteGirdi(self, etiket, gizli, etk, denetle)
+    def girdi(self, etiket="", gizli=False, etk=None, denetle=None):
+        g = SahteGirdi(self, etiket, gizli, etk, denetle)
+        GIRDILER.append(g)
+        return g
+
+
+GIRDILER = []  # k_yaz/k_tus'ın açtığı girdiler (gizli/etiket denetimi için)
 
 
 def ns(**k):
@@ -369,6 +375,126 @@ with arka_uc.hedef_sabit("kde"):
     os.environ.pop("DESKHAND_GOZETIMSIZ")
     onay.iste_sonuc = sahte_iste_sonuc
 
+    # ================================================================ KART İNCELTME (yanlış alarm yok, sızıntı yok)
+    import random
+    rnd = random.Random(7)
+
+    def rd(n):
+        return "".join(rnd.choice("0123456789") for _ in range(n))
+
+    def iban(ul="TR", n=22):
+        bban = rd(n)
+        sayi = bban + "".join(str(ord(c) - 55) for c in ul) + "00"
+        return f"{ul}{98 - int(sayi) % 97:02d}{bban}"
+
+    # K1: olumsuz örnekler (kullanıcı yalnız kart kullanırken sorsun): ölçülen oran ≤ %1
+    for m_ in ("TR330006100519786457841326", "TR33 0006 1005 1978 6457 8413 26", "DE89 3704 0044 0532 0130 00",
+               "22.11.2026 23.11.2026", "22.11.2026\n23.11.2026", "3/4/26 5/6/26", "\n".join(rd(12) for _ in range(20)),
+               "\t".join(rd(15) for _ in range(5)), "12345678901 0 532 123 45 67", "12345678901\n05321234567",
+               "Takip no: 1234567890123", "Sipariş 987654321012", "5 12 3456 78 9 1234 56 7 89 10 11 12 13"):
+        kontrol(f"[kart] olumsuz: {m_[:34]!r} → kart numarası DEĞİL", guvenlik.kart_numarasi(m_) is None, m_)
+    for ad_, uret in (("rastgele 30 hane", lambda: rd(30)), ("rastgele 50 hane", lambda: rd(50)),
+                      ("TR IBAN", lambda: iban()),
+                      ("TR IBAN gruplu", lambda: " ".join(iban()[i:i + 4] for i in range(0, 26, 4))),
+                      ("iki tarih", lambda: f"{rnd.randint(1, 28)}.{rnd.randint(1, 12)}.2026 {rnd.randint(1, 28)}.11.2026"),
+                      ("20 sayılık tablo", lambda: "\n".join(rd(rnd.randint(4, 12)) for _ in range(20))),
+                      ("TC + telefon", lambda: f"{rd(11)} 0 5{rd(2)} {rd(3)} {rd(2)} {rd(2)}"),
+                      ("sipariş/takip 10-14", lambda: rd(rnd.randint(10, 14))),
+                      ("boşluklu küçük sayılar", lambda: " ".join(rd(rnd.randint(1, 4)) for _ in range(8)))):
+        isabet = sum(1 for _ in range(1000) if guvenlik.kart_numarasi(uret()))
+        kontrol(f"[kart] yanlış alarm oranı {ad_}: {isabet / 10:.1f}% ≤ 1%", isabet <= 10, str(isabet))
+    # K1: olumlu örnekler korunur
+    for m_ in ("4111 1111 1111 1111", "5500-0000-0000-0004", "6011.1111.1111.1117", "3782 822463 10005", "9792 0000 0000 0003",
+               "4111111111111111 12/26 123", "4111 1111 1111 1111 12", "4111 1111 1111 1111 1226", "411111111111111112/26 123",
+               "5500000000000004123", "kart 4111 1111 1111 1111 son kullanma 12/26 cvv 123"):
+        kontrol(f"[kart] olumlu: {m_[:34]!r} → kart numarası", guvenlik.kart_numarasi(m_) is not None, m_)
+    # K2: uzun metnin başındaki numara kaçmaz (5000 karakter kesmesi kalktı)
+    kontrol("[kart] 8000 karakterlik metnin başındaki numara yakalanır",
+            guvenlik.kart_tampon_denetle("{n}", "4111 1111 1111 1111 " + "x" * 8000) == "1111")
+    guvenlik._KART_TAMPON.clear()
+
+    # K3: günlük maskesi (tam numara ve kart rakamları günlüğe gitmez)
+    kontrol("gizli_satir: type → uzunluk", guvenlik.gizli_satir("type 4") == "type ***(1)")
+    kontrol("gizli_satir: key 4 → ***", guvenlik.gizli_satir("key 4") == "key ***" and guvenlik.gizli_satir(
+        "keydown 4") == "keydown ***" and guvenlik.gizli_satir("mouseto 1 2") == "mouseto 1 2")
+    kontrol("gizli_etiket: tus 4 1 1 1 → tus ***", guvenlik.gizli_etiket("tus 4 1 1 1") == "tus ***" and
+            guvenlik.gizli_etiket("dizi: tus 4 1 1 --onayli") == "dizi: tus *** --onayli" and
+            guvenlik.gizli_etiket("yaz 5 karakter") == "yaz 5 karakter" and guvenlik.gizli_etiket(
+                "bas 4 2 sn") == "bas ***")
+    assert kapsam("kart")
+    for tk in ("4", "4 1 1 1"):
+        del GIRDILER[:]
+        sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon=tk))
+        kontrol(f"[kart] tus {tk!r}: rakam girdisi → günlük gizli", bool(GIRDILER) and GIRDILER[-1].gizli)
+    del GIRDILER[:]
+    sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon="a"))
+    kontrol("[kart] tus 'a': rakam yok → gizli değil", bool(GIRDILER) and not GIRDILER[-1].gizli)
+    for parca in ("4111 1111 ", "4111", "kart 4111 1111 1111\t", "1234 5678 9"):
+        del GIRDILER[:]
+        guvenlik._KART_TAMPON.clear()
+        sorar(eylem.k_yaz, ns(kimlik="{n}", metin=parca))
+        kontrol(f"[kart] yaz {parca!r}: kart rakamı → günlük gizli", bool(GIRDILER) and GIRDILER[-1].gizli)
+    del GIRDILER[:]
+    sorar(eylem.k_yaz, ns(kimlik="{n}", metin="merhaba dünya"))
+    kontrol("[kart] yaz 'merhaba dünya' → gizli değil", bool(GIRDILER) and not GIRDILER[-1].gizli)
+    assert kapsam("hepsi")
+    del GIRDILER[:]
+    sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon="4 1"))
+    kontrol("[hepsi] tus rakam → günlük gizli DEĞİL (eskisi gibi)", bool(GIRDILER) and not GIRDILER[-1].gizli)
+    assert kapsam("kart")
+    # gerçek günlük satırı üretimi (sanal + kwin Girdi._kayit): gizli girdide tam numara / 12+ ardışık rakam YOK
+    import re as _re
+    import types as _types
+    from deskhand import gunluk as _gunluk
+    from deskhand.arka_uc import kwin as _kwin, sanal as _sanal
+    kayitlar = []
+    eski_gunluk = _gunluk.gunluk
+    _gunluk.gunluk = kayitlar.append
+    try:
+        for sinif_, ek_ in ((_sanal.SanalGirdi, {"x": _types.SimpleNamespace(ekran=":9")}),
+                            (_kwin.KwinGirdi, {"ekran": ":9"})):
+            gz = sinif_.__new__(sinif_)
+            gz.etiket, gz.gizli, gz.arka = "tus 4 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1", True, au
+            for ka_, de_ in ek_.items():
+                setattr(gz, ka_, de_)
+            gz._kayit("{n}", ["key 4", "key 1", "type 4111111111111111", "keydown 4"])
+    except Exception as e:  # noqa: BLE001
+        kayitlar.append(f"HATA {e!r}")
+    finally:
+        _gunluk.gunluk = eski_gunluk
+    kayit_ = " ".join(kayitlar)
+    kontrol("arka uç günlüğü (sanal+kwin): gizli girdide tuş rakamı/tam numara YOK, etiket maskeli",
+            len(kayitlar) == 2 and "HATA" not in kayit_ and not _re.search(r"\d(\D*\d){11}", kayit_) and
+            "4111" not in kayit_ and kayit_.count("tus ***") == 2, kayit_[:200])
+    # K4: ödeme SAYFASI kalıbı (kart kipinde DAR; hepsi kipinde aynen)
+    DAR_EVET = ("Ödeme — Kasa", "Ödeme - Mağaza", "Checkout - Trendyol", "Secure Checkout", "Ödeme Sayfası", "Sipariş Özeti",
+                "Siparişi Onayla", "Order Review", "Order Summary", "Place Order", "3D Secure doğrulama", "3D Doğrulama",
+                "Payment details", "Fatura Ödeme")
+    DAR_HAYIR = ("PC Kasa Modelleri – Trendyol", "Kasa fanı seçimi", "Payment Request API – MDN", "Google Cloud Billing",
+                 "Ödeme Geçmişi", "Ödeme Geçmişim - Hesabım", "Payment history", "Ödeme yöntemlerim", "Kasa", "Billing",
+                 "Payment")
+    assert kapsam("kart")
+    for b_ in DAR_EVET:
+        kontrol(f"[kart] sayfa başlığı {b_!r} → hassas",
+                guvenlik.hassas_sayfa_kalibi().search(guvenlik.katla(b_)) is not None)
+    for b_ in DAR_HAYIR:
+        kontrol(f"[kart] sayfa başlığı {b_!r} → hassas DEĞİL",
+                guvenlik.hassas_sayfa_kalibi().search(guvenlik.katla(b_)) is None)
+    assert kapsam("hepsi")
+    for b_ in ("PC Kasa Modelleri", "Google Cloud Billing", "Payment Request API", "Ödeme Geçmişi", "Kasa fanı"):
+        kontrol(f"[hepsi] sayfa başlığı {b_!r} → hassas (geniş kalıp aynen)",
+                guvenlik.hassas_sayfa_kalibi().search(guvenlik.katla(b_)) is not None)
+    assert kapsam("kart")
+    # K6: tıklama o pencerenin tamponunu boşaltır; süresi dolan kayıt okunurken silinir
+    guvenlik._KART_TAMPON.clear()
+    sorar(eylem.k_yaz, ns(kimlik="{n}", metin="4111 1111 1111"))
+    guvenlik.hassas_engel(False, "Tamam", k="{n}")
+    kontrol("[kart] tıklama → pencerenin kart tamponu boşalır", "{n}" not in guvenlik._KART_TAMPON)
+    guvenlik._KART_TAMPON["{n}"] = (time.monotonic() - 3600, "4111 1111 1111")
+    guvenlik.kart_tampon_denetle("{n}", "abc")
+    kontrol("[kart] süresi dolmuş tampon kaydı silinir", "{n}" not in guvenlik._KART_TAMPON)
+    guvenlik._KART_TAMPON.clear()
+
     # ================================================================ DEĞİŞMEYEN korumalar (kart kipinde de)
     assert kapsam("kart")
     au.pid = lambda k: os.getppid()  # ajanın kendi istemcisi: bu sürecin atası
@@ -402,10 +528,12 @@ with arka_uc.hedef_sabit("kde"):
                 f"{kod} {n}")
     # B2(b): ödeme sayfası DIŞINDA yeni para düğmeleri (yalnız kart kipinde onay; hepsi değişmedi)
     YENI_PARA = ("Place your order", "Submit order", "Complete your order", "Confirm and pay", "Confirm & Pay",
-                 "Siparişinizi verin", "Siparişi Gönder", "Siparişi onayla", "Siparişi tamamla", "Onayla ve Bitir",
-                 "Onayla ve öde", "Subscribe", "Subscribe now", "Abone ol", "Abonelik başlat", "Bağış yap", "Donate",
+                 "Siparişinizi verin", "Siparişi Gönder", "Siparişi onayla", "Siparişi tamamla", "Hemen öde",
+                 "Onayla ve öde", "Abonelik başlat", "Bağış yap", "Donate",
                  "Satın al", "Buy", "Purchase", "Ödeme yap", "Ödemeyi tamamla", "Pay now")
-    DEGIL = ("Devam Et", "Continue", "Confirm", "Next", "Kuponu uygula", "İleri")
+    # para OLMAYAN düğmeler/durum yazıları (kullanıcı: yalnız kart kullanırken sor): YouTube Abone ol vb.
+    DEGIL = ("Devam Et", "Continue", "Confirm", "Next", "Kuponu uygula", "İleri", "Abone ol", "Abone olundu", "Abone olunuyor",
+             "Subscribe", "Subscriptions", "Subscribed", "Onayla ve Bitir", "Siparişiniz onaylandı", "Siparişiniz gönderildi")
     assert kapsam("kart")
     for yazi in YENI_PARA:
         kod, n, _g = sorar(guvenlik.hassas_engel, False, yazi, k=None)
