@@ -31,11 +31,25 @@ class Dur(Exception):
         self.kod, self.mesaj, self.tur = kod, mesaj, tur
 
 
+_HAZIR_DIZINLER: set[str] = set()
+
+
 def calisma_dizini() -> str:
     """DESKHAND_RUNTIME_DIR ya da $XDG_RUNTIME_DIR/deskhand (DUR anahtarı, sanal masaüstü durumu)."""
     d = os.environ.get("DESKHAND_RUNTIME_DIR")
     if not d:
         d = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", "deskhand")
+    if d not in _HAZIR_DIZINLER:
+        # Dizini HER ZAMAN 0700 ile kendimiz kurarız: yoksa bir alt yolun os.makedirs'i onu varsayılan izinle (0755)
+        # ara dizin olarak yaratır ve arka_ortak.runtime_denetle "gevşek izinli" diye her işi durdurur (yeniden
+        # başlatmadan sonra /run/user boşken ilk çağrıda olurdu). Var olan dizine dokunulmaz (izin denetimi orada).
+        try:
+            os.mkdir(d, 0o700)
+        except FileExistsError:
+            pass
+        except OSError:
+            return d
+        _HAZIR_DIZINLER.add(d)
     return d
 
 

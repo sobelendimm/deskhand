@@ -190,6 +190,9 @@ command -v openbox >/dev/null 2>&1 || dep_miss req openbox pac \
     "openbox: arka plan masaüstünün pencere yöneticisi" "openbox: window manager of the background desktop"
 command -v xdotool >/dev/null 2>&1 || dep_miss rec xdotool pac \
     "xdotool: arka planda yedek araç" "xdotool: fallback tool in the background"
+command -v bwrap >/dev/null 2>&1 || dep_miss req bubblewrap pac \
+    "bubblewrap (bwrap): arka plan uygulamalarının yalıtımı (yoksa arka planda uygulama açılmaz)" \
+    "bubblewrap (bwrap): sandbox for background apps (without it no app starts in the background)"
 command -v pactl >/dev/null 2>&1 || dep_miss rec libpulse pac \
     "pactl (libpulse): arka plan uygulamaları için sessiz ses çıkışı (yoksa ses tamamen kapalı olur)" \
     "pactl (libpulse): a silent audio sink for background apps (without it their audio is cut off entirely)"
@@ -310,6 +313,15 @@ if (( SHOT_OK )); then
     if run make -s -C "$PKG_DIR/yardimci" deskhand-goruntu; then SHOT_BUILT=1
     else warn "$(L 'ekran görüntüsü yardımcısı derlenemedi; görüntüler yavaş spectacle ile alınacak' \
                    'the screenshot helper could not be built; screenshots will fall back to slow spectacle')"; fi
+fi
+# input helper of the isolated KWin background desktop (libei); without it the background desktop uses Xvfb
+if command -v cc >/dev/null 2>&1 && quiet pkg-config --exists libei-1.0 xkbcommon libsystemd; then
+    say "$(L 'Arka plan girdi yardımcısı derleniyor (KWin EIS)' 'Building the background input helper (KWin EIS)')"
+    run make -s -C "$PKG_DIR/yardimci" deskhand-eis || warn "$(L 'arka plan girdi yardımcısı derlenemedi; arka plan masaüstü Xvfb ile açılır' \
+        'the background input helper could not be built; the background desktop will use Xvfb')"
+else
+    warn "$(L 'libei/xkbcommon yok: arka plan masaüstü GPU'"'"'lu KWin yerine Xvfb ile açılır (paketler: libei libxkbcommon)' \
+              'no libei/xkbcommon: the background desktop uses Xvfb instead of the GPU-accelerated KWin (packages: libei libxkbcommon)')"
 fi
 # KWin before 6.8 serves ScreenShot2 only to a program whose desktop entry (matched by the Exec= path)
 # lists it in X-KDE-DBUS-Restricted-Interfaces; newer KWin ignores the entry.

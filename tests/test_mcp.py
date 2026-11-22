@@ -347,7 +347,8 @@ def log_bekle(desen, sure=5.0, bas=0, yol=LOG):
 
 def sahte(ad, deger):
     yol = os.path.join(yollar.runtime_dir(), ad)
-    os.makedirs(os.path.dirname(yol), exist_ok=True)
+    os.makedirs(os.path.dirname(yol), mode=0o700, exist_ok=True)
+    os.chmod(os.path.dirname(yol), 0o700)
     if deger is None:
         try:
             os.remove(yol)
