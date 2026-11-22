@@ -433,7 +433,8 @@ def ses_var() -> bool:
         return False
     d.setdefault("tur", "xvfb")
     try:
-        return ses.soket_hazir(baglanti_denetle(d)["calisma"])
+        g = baglanti_denetle(d)
+        return ses.hazir(g, g["calisma"])  # soket + doğrulanmış süreçler + bağlanılabilir (ölü sunucu "yok" sayılır)
     except Dur:
         return False
 
@@ -451,7 +452,7 @@ def ses_hazirla() -> tuple[str, str | None]:
         raw.setdefault("tur", "xvfb")
         g = baglanti_denetle(raw)
         cdir = g["calisma"]
-        if ses.soket_hazir(cdir) and (raw.get("pid") or {}).get("ses_pw"):
+        if ses.hazir(g, cdir):  # ölü/yarım sunucu (yönetici kabuk öldü, bayat soket) burada yeniden kurulur
             return cdir, None
         uyari = ses.kur(g, cdir)
         for k in ("pid", "pid_bas", "ses"):

@@ -5,9 +5,10 @@ s16, bellekte) → `whisper-cli` (yerel; model ayarlanabilir; silero VAD) → {t
 Kullanıcının gerçek ses sunucusuna/mikrofonuna/hoparlörüne hiçbir adımda dokunulmaz.
 
   - parec bağlanmadan önce soket denetlenir (ses.soket_denetle: dizin/soket kimliği, sahip, karşı uç = kayıtlı
-    `ses_pulse` süreci).
+    `ses_pulse` süreci) ve DENETLENEN soketin Deskhand dizinindeki sert bağı üzerinden bağlanır (TOCTOU yok); parec
+    ortamı (HOME, yapılandırma, cookie) sunucunun yazabildiği hiçbir dizinden gelmez (ses.istemci_ortami).
   - Kayıt BELLEKTE tutulur. whisper-cli dosya ister: geçici WAV, oturum dizininde `dinleme/` (0700; uygulamaların
-    ad alanında görünmez: bağlanan tek ses yolu `ses/pulse/`), dosya 0600, iş bitince (hata dahil) silinir; çökmeden
+    ad alanında görünmez: bağlanan tek ses yolu `ses-pulse/`), dosya 0600, iş bitince (hata dahil) silinir; çökmeden
     kalan eski kayıtlar bir sonraki tanımada silinir.
   - whisper-cli masaüstünün bellek kafesinde, nice 10 + ionice idle ile çalışır (arka_ortak.kafeste_baslat).
   - Tanınan metin günlüğe YAZILMAZ (yalnız süre/dil/segment sayısı).
@@ -131,15 +132,17 @@ def kayit(cdir: str, sure: float, sessizlik: float | None = None, bekle=time.sle
     """Özel sunucunun boş çıkışının monitöründen `sure` sn (en çok) kayıt → (PCM s16le 16 kHz mono, ses duyuldu mu).
     sessizlik verilirse: ses duyulduktan sonra bu kadar sn sessizlik olunca erken biter. Bağlanmadan önce soket
     denetlenir (ses.soket_denetle; Dur 14)."""
-    dz = ses.dizin(cdir)
     parec = ao.arac("parec", zorunlu=False)
     if not parec or not ses.soket_hazir(cdir):
         raise Dur(ARAC_EKSIK, _("özel ses sunucusu hazır değil: dinleme kapalı"))
-    ses.soket_denetle(cdir, oturum_kaydi(cdir))
+    kayit_d = oturum_kaydi(cdir)
+    # parec soket_denetle'nin DENETLENMİŞ bağı (Deskhand'in kendi dizininde sert bağ) üzerinden bağlanır: denetle-bağlan
+    # arasında sunucu `native`'i değiştirse de bağlantı denetlenen soketedir; ortam sunucuya bağlanmayan `ses-istemci`.
+    soket = ses.soket_denetle(cdir, kayit_d)
     p = subprocess.Popen([parec, "-d", f"{ses.SINK}.monitor", f"--rate={ORNEK_HIZI}", f"--channels={KANAL}",
                           "--format=s16le", "--latency-msec=50", "--raw"],
                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                         env=ses.istemci_ortami(dz))
+                         env=ses.istemci_ortami(cdir, soket))
     veri = bytearray()
     duyuldu, sessiz_sn, bitis = False, 0.0, time.monotonic() + sure
     pencere = int(BAYT_SN * PENCERE_SN)
