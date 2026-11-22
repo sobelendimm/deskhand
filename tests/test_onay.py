@@ -287,7 +287,11 @@ kontrol("kanalı panel olmayan süreç dinliyor (PID uymuyor) → hemen red (kan
 kontrol("kanal reddi günlükte", any("onay kanalı reddedildi" in l for l in gunluk_satirlari()))
 d = json.load(open(onay.panel_pid_yolu()))
 d2 = dict(d, pid=sahte_p.pid, baslangic=onay._baslangic(sahte_p.pid), exe=os.readlink(f"/proc/{sahte_p.pid}/exe"))
-json.dump(d2, open(onay.panel_pid_yolu(), "w"))
+json.dump(d2, open(onay.panel_pid_yolu(), "w"))  # cmdline bu sürecinki (python3 tests/test_onay.py) kalır
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("aynı exe (python) ama komut satırı kayıttakinden farklı → red (kanal): exe tek başına yetmez",
+        not s.izin and s.neden == "kanal", str(s))
+json.dump(dict(d2, cmdline=onay._komut_satiri(sahte_p.pid)), open(onay.panel_pid_yolu(), "w"))
 s = onay.iste_sonuc("x", "y", sure=5)
 kontrol("(sınır) panel.pid'i de ezebilen + soket açabilen süreç = kabuklu saldırgan: kapsam dışı, belgelendi",
         s.izin, str(s))  # tehdit modeli: aynı kullanıcıyla keyfi kod çalıştıran sürece karşı sandbox değil
@@ -302,6 +306,12 @@ kontrol("panel kaydındaki exe uymuyor → red (kanal)", not s.izin and s.neden 
 json.dump(dict(d, exe=None), open(onay.panel_pid_yolu(), "w"))
 s = onay.iste_sonuc("x", "y", sure=5)
 kontrol("panel kaydında exe yok (eski panel) → red (kanal)", not s.izin and s.neden == "kanal", str(s))
+json.dump(dict(d, cmdline=None), open(onay.panel_pid_yolu(), "w"))
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("panel kaydında cmdline yok (eski panel) → red (kanal)", not s.izin and s.neden == "kanal", str(s))
+json.dump(dict(d, cmdline=[*d["cmdline"], "-m", "deskhand", "panel"]), open(onay.panel_pid_yolu(), "w"))
+s = onay.iste_sonuc("x", "y", sure=5)
+kontrol("kayıttaki cmdline birebir değil (ek öğe) → red (kanal)", not s.izin and s.neden == "kanal", str(s))
 onay.panel_kaydet()
 os.chmod(onay.kanal_yolu(), 0o666)
 s = onay.iste_sonuc("x", "y", sure=5)

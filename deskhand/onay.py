@@ -5,7 +5,8 @@
   1. Panel canlı değilse (RUNTIME_DIR/panel.pid {pid, baslangic, exe} + /proc doğrulaması) HEMEN red.
   2. Panelin onay kanalına bağlanılır: RUNTIME_DIR/onay/kanal.sock (Unix soketi, 0600, dizin 0700). Karşı taraf
      SO_PEERCRED ile doğrulanır: aynı kullanıcı + PID = panel.pid'deki PID + aynı süreç başlangıç zamanı + aynı
-     /proc/<pid>/exe. Doğrulanamazsa → red ("kanal").
+     /proc/<pid>/exe + birebir aynı /proc/<pid>/cmdline (exe yorumlayıcı olduğundan panelin modül yolu/giriş
+     noktası). Doğrulanamazsa → red ("kanal").
   3. RUNTIME_DIR/onay/istek-<uuid>.json yazılır (diyalog ve bekleyen listesi için; dosya 0600), kanala
      `bekle <uuid>` gönderilir ve karar AYNI bağlantıdan beklenir (`karar izin|red <uuid>`). Süre dolarsa, panel
      kapanırsa (bağlantı kopar) ya da DUR açılırsa → red.
@@ -177,15 +178,27 @@ def _exe(pid: int) -> str | None:
         return None
 
 
+def _komut_satiri(pid: int) -> list[str] | None:
+    """/proc/<pid>/cmdline → argv (exe = python yorumlayıcısı olduğundan panelin modül yolu/giriş noktası buradan
+    ayırt edilir: `python3 -m deskhand panel`, `…/bin/deskhand panel`, `python3 -m deskhand.gui`…)."""
+    try:
+        with open(f"/proc/{int(pid)}/cmdline", "rb") as f:
+            ham = f.read()
+    except (OSError, ValueError):
+        return None
+    return [p.decode("utf-8", "surrogateescape") for p in ham.split(b"\0") if p] or None
+
+
 def panel_kaydet(pid: int | None = None) -> str:
-    """Panel açılışında: onay kanalını aç (yalnız kendi PID'i için) + RUNTIME_DIR/panel.pid {pid, baslangic, exe}.
-    → yol."""
+    """Panel açılışında: onay kanalını aç (yalnız kendi PID'i için) + RUNTIME_DIR/panel.pid
+    {pid, baslangic, exe, cmdline}. → yol."""
     pid = os.getpid() if pid is None else pid
     os.makedirs(yollar.runtime_dir(), mode=0o700, exist_ok=True)
     _dizin_hazirla()
     if pid == os.getpid():
         kanal_ac()
-    _yaz_atomik(panel_pid_yolu(), {"pid": pid, "baslangic": _baslangic(pid), "exe": _exe(pid), "zaman": time.time()})
+    _yaz_atomik(panel_pid_yolu(), {"pid": pid, "baslangic": _baslangic(pid), "exe": _exe(pid),
+                                   "cmdline": _komut_satiri(pid), "zaman": time.time()})
     return panel_pid_yolu()
 
 
@@ -416,6 +429,8 @@ def _kanala_baglan(kayit: dict) -> socket.socket:
             raise _KanalHatasi(f"kanalı dinleyen süreç ({pid}) panel değil ({kayit.get('pid')})")
         if _baslangic(pid) != kayit.get("baslangic") or not kayit.get("exe") or _exe(pid) != kayit.get("exe"):
             raise _KanalHatasi("panel sürecinin kimliği (başlangıç zamanı / exe) uymuyor")
+        if not kayit.get("cmdline") or _komut_satiri(pid) != kayit.get("cmdline"):
+            raise _KanalHatasi("panel sürecinin komut satırı (modül yolu / giriş noktası) kayıttakiyle aynı değil")
         s.settimeout(None)
         return s
     except (OSError, _KanalHatasi) as e:
