@@ -112,11 +112,20 @@ _TUS_ESANLAM = {
     "super_l": "super", "super_r": "super", "meta_l": "super", "meta_r": "super",
     "del": "delete", "bksp": "backspace", "sys_req": "sysrq", "sysreq": "sysrq",
 }
+_TUS_ESANLAM.update({"return": "enter", "kp_enter": "kpenter", "iso_enter": "enter", "3270_enter": "enter",
+                     "leftshift": "shift", "rightshift": "shift", "shift_l": "shift", "shift_r": "shift",
+                     "escape": "esc", "ins": "insert", "kp_insert": "insert"})
 _EVDEV_AD = {29: "ctrl", 97: "ctrl", 56: "alt", 100: "alt", 125: "super", 126: "super", 111: "delete", 14: "backspace",
-             99: "sysrq", 38: "l", **{59 + i: f"f{i + 1}" for i in range(10)}, 87: "f11", 88: "f12"}
+             99: "sysrq", 38: "l", **{59 + i: f"f{i + 1}" for i in range(10)}, 87: "f11", 88: "f12",
+             28: "enter", 96: "kpenter", 101: "linefeed", 47: "v", 110: "insert", 36: "j", 50: "m", 24: "o",
+             42: "shift", 54: "shift", 1: "esc", 46: "c", 22: "u", 15: "tab"}
 _KEYSYM_AD = {0xffe3: "ctrl", 0xffe4: "ctrl", 0xffe9: "alt", 0xffea: "alt", 0xfe03: "alt", 0xffe7: "super",
               0xffe8: "super", 0xffeb: "super", 0xffec: "super", 0xffff: "delete", 0xff08: "backspace",
-              0xff15: "sysrq", 0x6c: "l", 0x4c: "l", **{0xffbe + i: f"f{i + 1}" for i in range(12)}}
+              0xff15: "sysrq", 0x6c: "l", 0x4c: "l", **{0xffbe + i: f"f{i + 1}" for i in range(12)},
+              0xff0d: "enter", 0xff8d: "kpenter", 0xfe34: "enter", 0xfd1e: "enter", 0xff0a: "linefeed",
+              0x76: "v", 0x56: "v", 0xff63: "insert", 0xff9e: "insert", 0x6a: "j", 0x4a: "j", 0x6d: "m", 0x4d: "m",
+              0x6f: "o", 0x4f: "o", 0xffe1: "shift", 0xffe2: "shift", 0xff1b: "esc", 0x63: "c", 0x43: "c",
+              0x75: "u", 0x55: "u", 0xff09: "tab"}
 _FTUS = re.compile(r"f([1-9]|1[0-2])")
 
 
@@ -156,6 +165,41 @@ def _akor_riski(tuslar):
     if alt and "sysrq" in tuslar and any(t not in ("alt", "sysrq", "ctrl", "shift", "super") for t in tuslar):
         return _("Alt+SysRq+tuş: çekirdek müdahale (SysRq) kısayolu; sistemi yeniden başlatabilir/kapatabilir")
     return None
+
+
+def _akor_kumeleri(kombinasyon):
+    """Çözülmüş tuş dizisi → [(kanonik tuş kümesi, çözülemeyen x:/k: var mı)] (akor başına)."""
+    sonuc = []
+    for akor in (kombinasyon or "").split():
+        kume, bilinmeyen = set(), False
+        for t in akor.split("+"):
+            if not t:
+                continue
+            if t.startswith("x:") and _keysym(t[2:]) is None and t[2:].lower() not in _TUS_ESANLAM:
+                bilinmeyen = True
+            if t.startswith("k:") and not t[2:].isdigit():
+                bilinmeyen = True
+            kume.add(_tus_kanonik(t))
+        sonuc.append((kume, bilinmeyen))
+    return sonuc
+
+
+ENTER_ADLARI = {"enter", "kpenter", "linefeed"}
+
+
+def enter_tusu_mu(kombinasyon):
+    """Kabukta satırı ÇALIŞTIRAN tuş var mı (Enter kapısı): enter, kpenter, linefeed (x:Return, k:28 dahil) ya da
+    ctrl+j / ctrl+m / ctrl+o (bash: satırı çalıştır). Çözülemeyen x:/k: tuşu güvenli tarafta True."""
+    for kume, bilinmeyen in _akor_kumeleri(kombinasyon):
+        if bilinmeyen or kume & ENTER_ADLARI or ("ctrl" in kume and kume & {"j", "m", "o"}):
+            return True
+    return False
+
+
+def yapistir_tusu_mu(kombinasyon):
+    """Panodan yapıştıran kısayol var mı: ctrl+v, ctrl+shift+v, shift+insert (x:/k: biçimleri dahil)."""
+    return any(("ctrl" in kume and "v" in kume) or ("shift" in kume and "insert" in kume)
+               for kume, _b in _akor_kumeleri(kombinasyon))
 
 
 def riskli_tus(kombinasyon, birlikte=False):
@@ -805,10 +849,17 @@ def girdi_turu(satirlar):
 
 def girdi_seviye_denetle(k, satirlar):
     """Arka uçların Girdi.gonder'i, denetle(k, desen)'ten hemen sonra çağırır (iki arka uçta aynı): gönderilecek
-    satırların türüne göre uygulama erişim seviyesi. Ayar satırları (typedelay/typehold) denetlenmez."""
+    satırların türüne göre uygulama erişim seviyesi. Ayar satırları (typedelay/typehold) denetlenmez. Masaüstü
+    kipinde klavye girdisi etkin pencereye gider: o pencere ajanın kendi istemcisiyse ya da onaysız bir sistem
+    istemiyse (polkit, KWallet, parola sorucusu…) burada durulur (fare girdisini imlec_alti_denetle denetler)."""
     tur = girdi_turu(satirlar)
     if tur:
         seviye_denetle(k, tur)
+    if tur == "klavye" and (k == EKRAN or not k):
+        a = sec().aktif()
+        if a:
+            kendi_istemci_denetle(a)
+            sistem_istemi_denetle(a)
 
 
 # ---------------------------------------------------------------- pencere / başlık / sınıf kilidi
@@ -821,8 +872,17 @@ def sinif_denetle(k):
                 sinif=repr(sinif), desen=SINIF_DESEN))
 
 
+def hedef_pencere_denetle(k):
+    """Bir pencereye girdi gitmeden önceki pencere kuralları (başlık/sınıf kilidi hariç): yasak (10), ajanın kendi
+    istemcisi (10), onaysız sistem istemi (10). Tıklamanın düştüğü pencere (imleç altı) için de kullanılır."""
+    yasak_denetle(k)
+    kendi_istemci_denetle(k)
+    sistem_istemi_denetle(k)
+
+
 def denetle(k, desen):
-    """Girdi göndermeden HEMEN önce: pencere hâlâ aktif mi, yasak değil mi, başlık (sekme) doğru mu."""
+    """Girdi göndermeden HEMEN önce: pencere hâlâ aktif mi, yasak değil mi, ajanın kendi istemcisi ya da onaysız
+    sistem istemi değil mi, başlık (sekme) doğru mu."""
     au = sec()
     if k == EKRAN:  # masaüstü kipi: etkin pencere yasak olmasın; -b verildiyse etkin pencerenin başlığı uysun
         a = au.aktif()
@@ -841,10 +901,11 @@ def denetle(k, desen):
 
 
 def pencere_denetle(k, desen):
-    """denetle'nin pencere kilitleri, ETKİN pencere şartı OLMADAN: yasak pencere (10), başlık (4) ve sınıf (4) kilidi.
-    Odağı almayan yollar (erişilebilirlik eylemi: erisim.py) için; fare/klavye yolunun denetle()'siyle aynı sonuç."""
+    """denetle'nin pencere kilitleri, ETKİN pencere şartı OLMADAN: yasak pencere (10), ajanın kendi istemcisi (10),
+    onaysız sistem istemi (10), başlık (4) ve sınıf (4) kilidi. Odağı almayan yollar (erişilebilirlik eylemi:
+    erisim.py) için; fare/klavye yolunun denetle()'siyle aynı sonuç."""
     au = sec()
-    yasak_denetle(k)
+    hedef_pencere_denetle(k)
     if desen:
         b = au.baslik(k)
         if not re.search(desen, b, re.I):
@@ -855,8 +916,9 @@ def pencere_denetle(k, desen):
 
 def imlec_alti_denetle(k, px=None, py=None):
     """mouseto'dan sonra, tıklamadan ÖNCE (tek sorgu): (1) imleç gerçekten hedef noktada mı — kullanıcı
-    arada fareyi oynattıysa tıklama başka yere düşerdi → 12; (2) altındaki pencere hedef mi? Yasak → 10; başka
-    uygulamanın penceresi (bildirim, üstte duran pencere) → 3. Aynı uygulamanın açılır menüsü serbest."""
+    arada fareyi oynattıysa tıklama başka yere düşerdi → 12; (2) altındaki pencere hedef mi? Yasak / ajanın kendi
+    istemcisi / onaysız sistem istemi → 10; başka uygulamanın penceresi (bildirim, üstte duran pencere) → 3. Aynı
+    uygulamanın açılır menüsü serbest."""
     au = sec()
     fx, fy, w = au.fare()
     if px is not None and fx is not None and (abs(fx - px) > 2 or abs(fy - py) > 2):
@@ -866,7 +928,7 @@ def imlec_alti_denetle(k, px=None, py=None):
         raise Dur(3, _("imlecin altındaki pencere doğrulanamadı; tıklanmadı"))
     if w == k:
         return
-    yasak_denetle(w)
+    hedef_pencere_denetle(w)
     seviye_denetle(w, "fare")  # imlecin altındaki başka pencere 'goruntule' seviyesinde olabilir
     if k == EKRAN:
         return
@@ -882,6 +944,7 @@ _EYLEM = threading.local()  # iş parçacığı başına: bu eylem için insan o
 def eylem_basladi():
     """Her eylemin başında (eylem.girdi_al) çağrılır: önceki eylemin onayı yeni eyleme TAŞINMAZ."""
     _EYLEM.onaylandi = False
+    _EYLEM.sistem_onay = set()  # bu eylemde onaylanan sistem istemi pencereleri
 
 
 def _panelden_onay(eylem, hedef, ayrinti, goruntu=None):
@@ -1060,6 +1123,231 @@ def onayli_gecerli(onayli):
     """--onayli (kullanıcı sohbette açıkça onayladı) geçerli mi? Gözetimsiz kipte sohbet/insan yoktur: --onayli
     sayılmaz, onay gerektiren her eylem reddedilir (onay.iste_sonuc 'gozetimsiz')."""
     return bool(onayli) and not gozetimsiz()
+
+
+# ---------------------------------------------------------------- ajanın kendi istemcisi (deskhand/kendi.py)
+
+def _pencere_pid(au, k):
+    f = getattr(au, "pid", None)
+    if f is None:
+        return None
+    try:
+        return f(k) or None
+    except Dur:
+        return None
+
+
+def kendi_istemci_denetle(k):
+    """Pencere, Deskhand'i çalıştıran ajanın KENDİ istemcisi mi (sahibi ata süreç: Claude Code'un uçbirimi…)? → Dur 10.
+    Ajan kendi izin istemine tuş/yazı/tık gönderip kendini onaylayamasın. Okuma/ekran görüntüsü serbesttir."""
+    if not k or k == EKRAN:
+        return
+    from . import kendi
+    au = sec()
+    pid = _pencere_pid(au, k)
+    sinif = au.sinif(k)
+    r = kendi.kendi_mi(pid, sinif, au.ad, ucbirim_mi)
+    if not r:
+        return
+    tur, ayr = r
+    neden = {"pid": _("pencerenin sahibi süreç ({pid}) bu ajanı çalıştıran süreç zincirinde").format(pid=ayr),
+             "coklayici": _("uçbirim çoklayıcısı (tmux/screen/zellij) çözülemedi: tüm uçbirim pencereleri korunur"),
+             "sinif": _("PID'i bilinmeyen uçbirim penceresi, ajanın uçbirimiyle aynı türde")}[tur]
+    raise Dur(10, _("AJANIN KENDİ İSTEMCİSİ: {baslik} (sınıf {sinif}): {neden}; ajan kendi izin istemini "
+                    "onaylayamasın diye bu pencereye hiçbir girdi gönderilmez (okuma serbest)").format(
+        baslik=repr(au.baslik(k)), sinif=repr(sinif), neden=neden))
+
+
+# ---------------------------------------------------------------- sistem yetki/parola istemleri
+
+# Sistem yetki / parola / izin istemleri: YASAK değil, her girdi insan onayı ister (onaysız 10, gözetimsiz kipte ret).
+# Tek sabit liste; pencere SINIFINDA ve sahibi sürecin adında (comm 15 karakterle kısalır: polkit-kde-auth,
+# xdg-desktop-por) sözcük olarak aranır.
+SISTEM_ISTEMLERI = (
+    r"polkit[\w-]*", r"lxpolkit", r"lxqt-policykit[\w-]*", r"hyprpolkitagent", r"kwalletd\d*", r"ksecretd",
+    r"kwallet-query", r"ksshaskpass\d*", r"(?:x11-)?ssh-askpass[\w-]*", r"pinentry[\w-]*", r"xdg-desktop-por[\w-]*",
+    r"org\.freedesktop\.impl\.portal[\w.-]*", r"kdesu(?:do)?", r"gcr-prompter", r"sudo", r"pkexec", r"run0",
+)
+_SISTEM_ISTEMI = re.compile(r"(?<![a-z0-9])(?:" + "|".join(SISTEM_ISTEMLERI) + r")(?![a-z0-9])", re.I)
+_SISTEM_ONBELLEK = {}  # (arka uç, kimlik) → (zaman, ad | None)
+
+
+def sistem_istemi_mi(k):
+    """Pencere bir sistem yetki/parola/izin istemi mi (polkit aracısı, KWallet, ksshaskpass/pinentry, xdg-desktop-portal
+    izin diyaloğu, kdesu)? → tanınan ad | None. Sınıf + sahibi sürecin adı (comm/exe); 2 sn önbellek."""
+    if not k or k == EKRAN:
+        return None
+    import time as _t
+    au = sec()
+    anahtar = (au.ad, k)
+    kayit = _SISTEM_ONBELLEK.get(anahtar)
+    if kayit and _t.monotonic() - kayit[0] < 2.0:
+        return kayit[1]
+    adlar = [au.sinif(k)]
+    pid = _pencere_pid(au, k)
+    if pid:
+        from . import kendi
+        adlar += list(kendi.surec_adi(pid))
+    ad = next((m.group(0) for m in (_SISTEM_ISTEMI.search(a or "") for a in adlar) if m), None)
+    if len(_SISTEM_ONBELLEK) > 256:
+        _SISTEM_ONBELLEK.clear()
+    _SISTEM_ONBELLEK[anahtar] = (_t.monotonic(), ad)
+    return ad
+
+
+def sistem_istemi_denetle(k):
+    """Girdiden HEMEN önce: sistem istemine bu eylemde onay alınmadıysa Dur 10 (onay eylem başında
+    sistem_istemi_engel ile sorulur; sorulmamış her yol burada güvenli tarafta durur)."""
+    ad = sistem_istemi_mi(k)
+    if ad and k not in getattr(_EYLEM, "sistem_onay", set()):
+        raise Dur(10, _("SİSTEM İSTEMİ: {baslik} ({ad}) bir yetki/parola/izin istemi; girdi kullanıcının onayını ister "
+                        "(bu eylem için onay alınmadı)").format(baslik=repr(sec().baslik(k)), ad=ad), tur="hassas")
+
+
+def sistem_istemi_engel(k, onayli, ne, goruntu_al=True):
+    """Hedef pencere sistem istemiyse insan onayı (--onayli yoksa panelden; gözetimsiz kipte ret) → Dur 10. Onay bu
+    eylem boyunca o pencere için geçerlidir. → sistem istemi mi (onaylandı)."""
+    ad = sistem_istemi_mi(k)
+    if not ad:
+        return False
+    if not hasattr(_EYLEM, "sistem_onay"):
+        _EYLEM.sistem_onay = set()
+    if k in _EYLEM.sistem_onay:
+        return True
+    if not onayli_gecerli(onayli):
+        b = sec().baslik(k)
+        goruntu = None if getattr(_EYLEM, "onaylandi", False) or not goruntu_al else hedef_goruntusu(k)
+        izin, neden = _panelden_onay(_("Sistem istemine girdi: {ad}").format(ad=ad), b,
+                                     _("Bu pencere bir sistem yetki/parola/izin istemi ({ad}). Ajan ona {ne} göndermek "
+                                       "istiyor.").format(ad=ad, ne=ne), goruntu)
+        if not izin:
+            raise Dur(10, _("SİSTEM İSTEMİ ({ad} ← {baslik}): yetki/parola/izin istemine {ne} kullanıcının onayını "
+                            "ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
+                ad=ad, baslik=repr(b), ne=ne, neden=neden), tur="hassas")
+    _EYLEM.sistem_onay.add(k)
+    return True
+
+
+# ---------------------------------------------------------------- pano: Deskhand'in yazdığı metinler, yapıştırma
+
+PANO_OZET_SAYI = 32
+_KENDI_PANO_BELLEK = []
+
+
+def _pano_ozeti(metin):
+    import hashlib
+    return hashlib.sha256(metin.encode()).hexdigest()
+
+
+def _pano_ozet_yolu():
+    return os.path.join(yollar.runtime_dir(), "pano-ozetleri")
+
+
+def kendi_pano_ekle(metin):
+    """Deskhand'in (bu oturumda: MCP sunucusu ya da CLI `pano yaz`) panoya yazdığı metnin ÖZETİ (içerik tutulmaz):
+    süreç belleğinde + RUNTIME_DIR/pano-ozetleri (0600, son PANO_OZET_SAYI). Bu metni okumak/yapıştırmak onay istemez."""
+    if not metin:
+        return
+    oz = _pano_ozeti(metin)
+    _KENDI_PANO_BELLEK.append(oz)
+    del _KENDI_PANO_BELLEK[:-PANO_OZET_SAYI]
+    try:
+        import fcntl
+        yol = _pano_ozet_yolu()
+        os.makedirs(os.path.dirname(yol), mode=0o700, exist_ok=True)
+        fd = os.open(yol, os.O_RDWR | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "r+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            satirlar = [l.strip() for l in f.read().split() if l.strip()]
+            satirlar = (satirlar + [oz])[-PANO_OZET_SAYI:]
+            f.seek(0)
+            f.truncate()
+            f.write("\n".join(satirlar) + "\n")
+    except OSError:
+        pass
+
+
+def kendi_pano_mu(metin):
+    """Metin Deskhand'in bu oturumda panoya yazdığı metinlerden biri mi?"""
+    if metin is None:
+        return False
+    oz = _pano_ozeti(metin)
+    if oz in _KENDI_PANO_BELLEK:
+        return True
+    try:
+        with open(_pano_ozet_yolu()) as f:
+            return oz in f.read().split()
+    except OSError:
+        return False
+
+
+_OKUNAMADI = object()
+
+
+def yapistirma_engel(k, onayli, kaynak="pano"):
+    """kde (kullanıcının gerçek panosu): yapıştırma kısayolu (ctrl+v, ctrl+shift+v, shift+insert) ya da orta tık
+    (kaynak="secim": birincil seçim) panodaki metni hedefe yazar → pano okuma onayının arka kapısı olmasın: pano boş
+    değilse ve Deskhand'in yazdığı metin değilse insan onayı (okunamıyorsa da). Deskhand'in kendi yapıştırarak yazma
+    yolu (eylem._yapistirarak_yaz) bu denetimden geçmez. → onay gerekti mi (onaylandı)."""
+    au = sec()
+    if au.ad != "kde":
+        return False
+    try:
+        metin = au.pano_oku() if kaynak == "pano" else getattr(au, "secim_oku", lambda: _OKUNAMADI)()
+    except Dur:
+        metin = _OKUNAMADI
+    if metin is None or (metin is not _OKUNAMADI and kendi_pano_mu(metin)):
+        return False
+    if onayli_gecerli(onayli):
+        return True
+    b = au.baslik(k) if k and k != EKRAN else ""
+    uzunluk = "?" if metin is _OKUNAMADI else len(metin)
+    ne = _("panodan yapıştırma") if kaynak == "pano" else _("orta tıkla seçimi yapıştırma")
+    izin, neden = _panelden_onay(_("Panoyu yapıştır"), b, _("Ajan kullanıcının panosundaki metni ({n} karakter) bu "
+                                                          "pencereye yapıştırmak istiyor ({ne}).").format(n=uzunluk, ne=ne))
+    if not izin:
+        raise Dur(10, _("HASSAS pano: {ne} kullanıcının panosunu ajanın görebileceği yere taşır; kullanıcının onayını "
+                        "ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
+            ne=ne, neden=neden), tur="hassas")
+    return True
+
+
+def parola_alani_engel(k, onayli, uzunluk, ne):
+    """Hedef/odaklı öge bir PAROLA alanı (AT-SPI rolü 'password text'): yazı / yapıştırma / değer yazma insan onayı
+    ister (--onayli yoksa panelden; red/gözetimsiz → 10). Metin hiçbir iletiye/günlüğe/onay isteğine yazılmaz: yalnız
+    uzunluğu. → True (onaylandı)."""
+    if onayli_gecerli(onayli):
+        return True
+    b = sec().baslik(k) if k and k != EKRAN else ""
+    izin, neden = _panelden_onay(_("Parola alanına yaz"), b, _("Ajan bir parola alanına {n} karakter yazmak istiyor "
+                                                              "({ne}).").format(n=uzunluk, ne=ne))
+    if not izin:
+        raise Dur(10, _("HASSAS: parola alanına {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça "
+                        "onayladıysa --onayli ile tekrarla").format(ne=ne, neden=neden), tur="hassas")
+    return True
+
+
+# ---------------------------------------------------------------- insan önceliği (girdi nesnesi dışındaki yollar)
+
+def insan_onceligi(ne, azami=8.0):
+    """Girdi nesnesi kullanmayan yollar (pencere yönetimi, pencere kapatma, pano yazma, erişilebilirlik eylemi):
+    kullanıcı klavye/fare kullanıyorsa (kde) ya da Devral açıksa (sanal) durgunluğu bekle (en çok `azami` sn), sonra
+    Dur 12. `ne`: yapılmayan eylemin adı (çevrilmiş)."""
+    import sys as _sys
+    import time as _t
+    from .hata import dur_denetle
+    au = sec()
+    bitis = _t.monotonic() + azami
+    uyarildi = False
+    while au.insan_var_mi():
+        if not uyarildi:
+            print(_("bekleniyor: kullanıcı bilgisayarı kullanıyor…"), file=_sys.stderr)
+            uyarildi = True
+        if _t.monotonic() >= bitis:
+            raise Dur(12, _("kullanıcı {sn} sn boyunca bilgisayarı kullandı (insan önceliği); {ne} yapılmadı").format(
+                sn=f"{azami:.0f}", ne=ne))
+        dur_denetle()
+        _t.sleep(0.3)
 
 
 # ---------------------------------------------------------------- DUR anahtarı

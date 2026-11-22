@@ -257,7 +257,7 @@ with arka_uc.hedef_sabit("kde"):
     kontrol("yaz: yazılamayan öge (düğme) → 6", kod_al(yaz_yolu, ad="Kaydet") == 6 and len(eylemler()) == n_ + 1)
     g0 = len(gunluk_satirlari())
     yaz_yolu(ad="Ad", metin="açık metin")
-    yaz_yolu(ad="Parola", metin="cok-gizli-123")
+    yaz_yolu(ad="Parola", metin="cok-gizli-123", onayli=True)  # parola alanı onay ister (CLI: --onayli)
     yaz_yolu(ad="Ad", metin="öteki-gizli-456", gizli=True)
     yeni = "\n".join(gunluk_satirlari()[g0:])
     kontrol("yaz günlüğü: düz metin görünür; password text ve --gizli günlüğe DÜŞMEZ",
@@ -851,7 +851,8 @@ else:
         olay("onay kutusu kapat", ["click-element", BASLIK, "Onayla", "--action"], "isaret:Onayla:0")
         olay("radyo düğmesi", ["click-element", BASLIK, "Seçenek A", "--action"], "radyo:Seçenek A:1")
         olay("metin alanı (Türkçe harf)", ["set-element", BASLIK, "Ad", "Çağrı İşlem ğüş"], "metin:Ad:Çağrı İşlem ğüş")
-        olay("parola alanı", ["set-element", BASLIK, "Parola", "sir-123-xyz", "--secret"], "metin:Parola:sir-123-xyz")
+        olay("parola alanı (--onayli: parola alanı onay ister)", ["set-element", BASLIK, "Parola", "sir-123-xyz", "--secret",
+                                    "--approved"], "metin:Parola:sir-123-xyz")
         olay("sayı kutusu", ["set-element", BASLIK, "Adet", "7"], "deger:Adet:7")
         olay("kaydırgaç", ["set-element", BASLIK, "Ses", "4"], "deger:Ses:4")
         olay("sekme", ["click-element", BASLIK, "Gelişmiş", "--action"], "sekme:Gelişmiş")

@@ -15,6 +15,10 @@ DIZINLER = {ad: os.path.join(GECICI, ad.split("_")[1].lower())
             for ad in ("DESKHAND_CONFIG_DIR", "DESKHAND_STATE_DIR", "DESKHAND_CACHE_DIR", "DESKHAND_DATA_DIR", "DESKHAND_RUNTIME_DIR")}
 os.environ.update(DIZINLER)
 os.environ.pop("DESKHAND_HEDEF", None)
+# ajanın kendi istemcisi ipuçları (deskhand/kendi.py): testleri çalıştıran uçbirimin türü sonuçları değiştirmesin
+for _ad in ("KONSOLE_DBUS_WINDOW", "WINDOWID", "TERM_PROGRAM", "GHOSTTY_RESOURCES_DIR", "KITTY_PID",
+            "ALACRITTY_WINDOW_ID", "TMUX", "STY", "ZELLIJ"):
+    os.environ.pop(_ad, None)
 os.environ["DESKHAND_DIL"] = "tr"  # testler Türkçe metin bekler (kaynak dil); sistem dili ne olursa olsun
 os.environ["PYTHONPATH"] = KOK + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
 if KOK not in sys.path:

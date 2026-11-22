@@ -199,19 +199,24 @@ def k_pano(a):
             if sys.stdin.isatty():
                 raise Dur(1, _("yazılacak metin yok: pano yaz <metin> ya da metni stdin'den ver"))
             metin = sys.stdin.read()
+        if au.ad == "kde":  # kullanıcının panosu: kullanıcı klavye/fare kullanıyorsa bekle, sonra 12
+            guvenlik.insan_onceligi(_("pano yazma"))
         au.pano_yaz(metin, hassas=True)
+        guvenlik.kendi_pano_ekle(metin)  # bu metni okumak/yapıştırmak onay istemez (özet; içerik tutulmaz)
         gunluk(f"pano yaz | {au.ad} | {len(metin)} karakter")  # içerik günlüğe yazılmaz
         print(_("panoya yazıldı: {karakter} karakter").format(karakter=len(metin)))
         return
     if a.metin is not None:
         raise Dur(1, _("pano oku metin almaz"))
-    if au.ad == "kde" and not a.onayli:
+    metin = au.pano_oku()
+    # gözetimsiz kipte --onayli geçmez (onayli_gecerli); Deskhand'in bu oturumda yazdığı metin onay istemez
+    if au.ad == "kde" and metin is not None and not guvenlik.onayli_gecerli(a.onayli) and \
+            not guvenlik.kendi_pano_mu(metin):
         izin, neden = guvenlik._panelden_onay(
             _("Panoyu oku"), _("pano"), _("Bir yapay zekâ ajanı kullanıcının panosunun metnini okumak istiyor"))
         if not izin:
             raise Dur(10, _("HASSAS pano okuma: panonun içeriği kullanıcının onayını ister ({neden}); kullanıcı "
                             "sohbette açıkça onayladıysa --onayli ile tekrarla").format(neden=neden), tur="hassas")
-    metin = au.pano_oku()
     gunluk(f"pano oku | {au.ad} | {len(metin) if metin is not None else 'boş'}" + (" --onayli" if a.onayli else ""))
     if metin is None:
         raise Dur(6, _("pano boş ya da metin içermiyor"))
