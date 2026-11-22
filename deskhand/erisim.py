@@ -397,7 +397,9 @@ def _ayrinti(Atspi, o, rol, ss, S):
 # Alan adı/açıklaması/niteliği (autocomplete, id, placeholder) gizli bir alanı gösteriyorsa değer ASLA döndürülmez
 # (observe ve read_text(tree) ortak; yalnız `password text` rolüne güvenilmez: web/Electron parola alanları `entry` olabilir).
 # Metin ocr.katla ile katlanır (Türkçe harf/büyük-küçük duyarsız); kısa kısaltmalar kelime sınırlı (spin, shipping, otp≠hotpot).
-_GIZLI_ALAN = re.compile(r"parola|sifre|pass|\b(?:pin|otp|cvv\d?|cvc\d?)\b|guvenlik kodu")
+_GIZLI_ALAN = re.compile(r"parola|sifre|pass|\b(?:pin|otp|cvv\d?|cvc\d?)\b|guvenlik kodu|"
+                         r"one ?time ?code|tek kullanimlik|dogrulama kodu|onay kodu|sms kodu|verification code|"
+                         r"security code|auth(?:entication)? code|\botp\w*|\bpin ?code|2fa|mfa|totp")
 _DEGER_NITELIKLERI = ("autocomplete", "id", "placeholder", "placeholder-text")
 _DENETIM = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u2028-\u202e\u2060-\u2064\ufeff]")
 _MASKE_KARAKTERI = frozenset("•●*·∗⁎")  # parola maskesi: yalnız bunlardan oluşan değer anlamsız (atlanır)
@@ -859,7 +861,8 @@ def erisim_ara(ogeler, ad, rol=None, rol_tam=False):
     rol süzgeci varsayılan olarak ALT DİZGE (`role="text"` → "password text" da); rol_tam=True: yalnız TAM eşleşme
     (değer yazma yolu: `text` parola alanını kapsamasın)."""
     q = norm(ad)
-    aday = [o for o in ogeler if o["ad"] and (not rol or (rol.lower() == o["rol"] if rol_tam else rol.lower() in o["rol"]))]
+    r_ = {"password": "password text"}.get((rol or "").lower(), (rol or "").lower())  # yaygın kısa ad
+    aday = [o for o in ogeler if o["ad"] and (not rol or (r_ == o["rol"] if rol_tam else rol.lower() in o["rol"]))]
     tam = [o for o in aday if norm(o["ad"]) == q]
     if tam:
         return tam, "tam"

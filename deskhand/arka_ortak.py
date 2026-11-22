@@ -600,11 +600,15 @@ def _sir_ham(ev: str) -> tuple[list[str], list[str]]:
         for y in sorted(glob.glob(os.path.join(glob.escape(ev), d))):
             if os.path.islink(y):
                 y = os.path.realpath(y)
-                if not os.path.exists(y) or y in ("/", ev):
+                if y in ("/", ev):
                     continue
+                # hedef ad alanında zaten boş olan yerdeyse (psd tmpfs'i): hedef ŞU AN yoksa da (psd durmuş) bağ
+                # boşta asılı kalmasın → ad alanına özel boş dizin (bkz. ev_baglari)
                 if any(_ic_ice(y, g) for g in gizli) and not _ic_ice(y, ev):
                     if not any(y == g for g in gizli) and y not in bos:
                         bos.append(y)
+                    continue
+                if not os.path.exists(y):
                     continue
             elif not os.path.lexists(y) or not _ic_ice(y, ev) or y == ev:
                 continue
@@ -690,7 +694,8 @@ def ev_baglari(ev: str | None = None) -> tuple[list[str], dict]:
         bilgi["sir"].append(y)
     bilgi["bos_dizin"] = []
     for y in sir_bos_hedefler(ev):  # boşta asılı bağ olmasın (korumali_argv: /run/user/UID ve /tmp bu noktada boş tmpfs)
-        a += ["--perms", "0700", "--dir", y] if os.path.isdir(y) else ["--ro-bind", "/dev/null", y]
+        # dosya olan hedef → /dev/null; dizin ya da (psd durmuşken) hiç olmayan hedef → boş dizin (yapılandırma kökü)
+        a += ["--ro-bind", "/dev/null", y] if os.path.lexists(y) and not os.path.isdir(y) else ["--perms", "0700", "--dir", y]
         bilgi["bos_dizin"].append(y)
     return a, bilgi
 

@@ -103,6 +103,10 @@ def _deger(deger, rol="entry", **kw):
 
 
 kontrol("maske: sıradan alan değeri aynen", _deger("merhaba", ad="Ad") == "merhaba")
+kontrol("maske: tek kullanımlık kod alanları (one-time-code, otpInput, pinCode, Doğrulama/SMS kodu) → ***; Spinner/Optional aynen",
+        all(_deger("123456", ad=a) == "***" for a in ("one-time-code", "otpInput", "pinCode", "Doğrulama kodu",
+                                                       "Verification code", "SMS kodu")) and
+        _deger("x", ad="Spinner") == "x" and _deger("y", ad="Optional") == "y")
 kontrol("maske: ad 'Parola'/'Şifre'/'Sifre'/'PIN'/'OTP'/'CVV'/'CVC'/'Güvenlik kodu' → ***",
         all(_deger("abc123", ad=a) == "***" for a in ("Parola", "Şifre", "SİFRE", "Password", "PIN", "Pin kodu", "OTP",
                                                        "CVV", "CVC2", "Güvenlik Kodu", "Passcode")))

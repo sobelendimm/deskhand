@@ -83,6 +83,16 @@ kontrol("birim: ev_baglari her hedef için `--perms 0700 --dir <gerçek yol>` ek
         any(a_[i:i + 4] == ["--perms", "0700", "--dir", RT_HEDEF] for i in range(len(a_))) and
         any(a_[i:i + 4] == ["--perms", "0700", "--dir", TMP_HEDEF] for i in range(len(a_))) and
         sorted(bilgi["bos_dizin"]) == sorted([RT_HEDEF, TMP_HEDEF]), str(a_))
+_yok = os.path.join(f"/run/user/{UID}", "deskhand-test-psd-YOK-" + str(os.getpid()))
+_bag = os.path.join(EV, ".config", "vivaldi-psd-yok")
+os.symlink(_yok, _bag)
+try:
+    kontrol("birim: psd hedefi YOKKEN de (psd durmuş) bağ boşta kalmaz → boş dizin olarak eklenir",
+            _yok in arka_ortak.sir_bos_hedefler(EV) and
+            any(a_[i:i + 4] == ["--perms", "0700", "--dir", _yok]
+                for a_ in [arka_ortak.ev_baglari(EV)[0]] for i in range(len(a_))))
+finally:
+    os.unlink(_bag)
 argv = arka_ortak.korumali_argv(["/usr/bin/true"], RT, [], ev=EV)
 i_tmp, i_run, i_dir = argv.index("/tmp"), argv.index(f"/run/user/{UID}"), argv.index(RT_HEDEF)
 kontrol("birim: --dir, /tmp ve /run/user/UID tmpfs'lerinden SONRA gelir (bwrap sırası)", i_dir > i_run and i_dir > i_tmp)
