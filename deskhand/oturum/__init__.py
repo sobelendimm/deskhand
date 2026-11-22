@@ -32,6 +32,7 @@ class Hazirlik:
     aciklama: str = ""
     gerekli_keyring: bool = False
     ayrinti: dict = field(default_factory=dict)
+    ev: tuple = ()                   # politikanın ev dizini beyaz liste girdileri (uygulama başına; varsayılan boş)
 
 
 # İnsan okunur açıklamalar
@@ -126,7 +127,7 @@ def hazirla(uygulama: str, gorev_siteleri=None, ham_komut: bool = False) -> Hazi
             komut = c.exec_argv if cozum._flatpak_kimligi(c.exec_argv)[0] == fk else ["flatpak", "run", fk]
             argv = _flatpak_sarmala(komut, fk, None)
         return Hazirlik(karar="paylas", argv=argv, aciklama=_aciklama("paylas", ad), gerekli_keyring=pol.keyring,
-                        ayrinti=ayrinti)
+                        ayrinti=ayrinti, ev=pol.ev)
 
     # karar == "kopya"
     if ad == "firefox":
@@ -144,7 +145,7 @@ def hazirla(uygulama: str, gorev_siteleri=None, ham_komut: bool = False) -> Hazi
     ayrinti.update({k: v for k, v in b.items() if k not in ("argv", "env_ek", "kopya_yolu", "durum")})
     return Hazirlik(karar="kopya", argv=b.get("argv", []), env_ek=b.get("env_ek", {}),
                     kopya_yolu=b.get("kopya_yolu"), gerekli_keyring=pol.keyring,
-                    aciklama=_("{ad} kopyası hazır").format(ad=ad), ayrinti=ayrinti)
+                    aciklama=_("{ad} kopyası hazır").format(ad=ad), ayrinti=ayrinti, ev=pol.ev)
 
 
 def temizle(kopya_yolu: str) -> None:

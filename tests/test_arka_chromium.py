@@ -105,14 +105,17 @@ if arka_ortak.bwrap_size_var():
             r.stdout + r.stderr)
 
 # ad alanında: bağ boşta asılı DEĞİL, hedef BOŞ ve yazılabilir; gerçek içerik görünmez; yazılanlar ana makineye sızmaz
-bet = ('for d in .config/chromium .config/vivaldi-snapshot; do p="$HOME/$d"; [ -d "$p/" ] && echo dizin:$d; '
+# ev dizini boş tmpfs + beyaz liste: sembolik bağ ad alanında YOK (asılı bağ yok); Chromium dizini kendisi açar
+bet = ('for d in .config/chromium .config/vivaldi-snapshot; do p="$HOME/$d"; [ -L "$p" ] && echo asili:$d; '
+       'mkdir -p "$p" && [ -d "$p/" ] && echo dizin:$d; '
        'ls -A "$p/" | sed "s|^|ic:$d:|"; echo YAZILDI > "$p/Yeni" && echo yazildi:$d; done; '
        f"cat {RT_HEDEF}/Cookies {TMP_HEDEF}/Cookies 2>&1; ls -A {RT_HEDEF} | sed 's/^/rt:/'")
 r = ad_alani(bet)
 cikti = r.stdout
 kontrol("birim: ad alanında ~/.config/chromium ve ~/.config/vivaldi-snapshot çözülüyor (dizin) ve yazılabilir",
         "dizin:.config/chromium" in cikti and "dizin:.config/vivaldi-snapshot" in cikti and
-        "yazildi:.config/chromium" in cikti and "yazildi:.config/vivaldi-snapshot" in cikti, cikti + r.stderr)
+        "yazildi:.config/chromium" in cikti and "yazildi:.config/vivaldi-snapshot" in cikti and "asili:" not in cikti,
+        cikti + r.stderr)
 kontrol("birim: ad alanından GERÇEK psd dizini GÖRÜNMEZ (Cookies yok, sır okunmuyor)",
         "ic:.config/chromium:Cookies" not in cikti and "GIZLI-PSD" not in cikti and "rt:Cookies" not in cikti, cikti)
 kontrol("birim: ad alanında yazılanlar ana makinedeki hedefe SIZMAZ; gerçek içerik değişmedi",

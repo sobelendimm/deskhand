@@ -172,9 +172,10 @@ vk = ao.veri_klasorleri()
 kontrol("veri klasörleri: yalnız ev İÇİNDEKİ, gizli olmayan klasörler (ev kökü, .gizli, /, ../ dışarı reddedilir)",
         vk == [os.path.join(EV, "Indirilenler"), os.path.join(EV, "Belgeler"), os.path.join(EV, "Resimler")], str(vk))
 a_, bilgi = ao.ev_baglari()
-kontrol("ev katmanı (overlayfs, kullanıcı ad alanında) kuruluyor", bilgi["katman"], str(bilgi))
-kontrol("veri klasörü içindeki gizli girdiler (.git, .vscode) salt okunur örtülür; steam.pipe maskeli",
-        bilgi["nokta"] == 2 and bilgi["maske"] >= 1, str(bilgi))
+kontrol("ev dizini boş tmpfs + beyaz liste (katman yok; test_ev_beyaz_liste)", bilgi["kip"] == "beyaz" and
+        "--overlay-src" not in a_, str(bilgi))
+kontrol("veri klasörü içindeki gizli girdiler (.git, .vscode) salt okunur örtülür; steam.pipe görünmez (beyaz listede yok)",
+        bilgi["nokta"] == 2 and not any(".steam" in x for x in a_), str(bilgi))
 # veri klasöründe dinleyen soket (ana makinede): ad alanından bağlanılamamalı
 gelen = []
 srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -269,7 +270,7 @@ try:
             ic["veri_soketi"] != "BAĞLANDI" and not gelen, f"{ic['veri_soketi']} {gelen}")
     # HOME
     y_ = ic["yaz"]
-    kontrol(f"HOME ({TUR}): ad alanında yazma başarılı görünür (katman) — autostart/.local/bin/systemd/.bashrc/ev kökü",
+    kontrol(f"HOME ({TUR}): ad alanında yazma başarılı görünür (boş tmpfs ev) — autostart/.local/bin/systemd/.bashrc/ev kökü",
             all(y_[k] == "YAZILDI" for k in ("autostart", "local_bin", "systemd", "bashrc", "ev_kok")), str(y_))
     kontrol(f"HOME ({TUR}): ...ama GERÇEK ev dizininde YOK (kalıcılık kaçışı kapalı)",
             not os.path.exists(os.path.join(EV, ".config/autostart", f"dh12c-{ad}.desktop")) and
@@ -351,8 +352,8 @@ try:
         argv_f = flatpak_ornek.sarmala(["/usr/bin/flatpak", "run", "--system", "--command=sleep",
                                         "org.freedesktop.Platform//25.08", "120"], "org.freedesktop.Platform", kayit,
                                        "4G", None, sure=15)
-        # flatpak run ev dizinine (~/.var, ~/.local/share/flatpak) yazar: sahte ev (salt okunur gerçek ev) değil,
-        # gerçek ev dizini + geçici katman (yazılanlar atılır)
+        # flatpak run ev dizinine (~/.var) yazar: sahte ev (salt okunur gerçek ev) değil, gerçek ev dizini yolu (boş
+        # tmpfs + beyaz liste: ~/.local/share/flatpak salt okunur; yazılanlar atılır)
         ao._EV_ZORLA = None
         pf = masaustu.baslat(argv_f, stderr=subprocess.PIPE)
         ao._EV_ZORLA = EV

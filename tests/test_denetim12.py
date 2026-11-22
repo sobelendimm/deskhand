@@ -279,7 +279,7 @@ else:
         kontrol("B3: oturumun çalışma dizininden yalnız gerekenler (oturum.json görünmez)", not ic["oturum_json"])
         kontrol("B3: oturumun kendi Wayland soketi, veri yolu ve XWayland soketi görünür",
                 ic["wayland"] and ic["bus"] and ic["x"] == [f"X{A['x_ana']}"], str(ic))
-        kontrol("B3: ev dizini geçici katman (yazılabilir görünür; yazılanlar atılır — test_denetim12c)",
+        kontrol("B3: ev dizini boş tmpfs + beyaz liste (yazılabilir görünür; yazılanlar atılır — test_ev_beyaz_liste)",
                 ic["home_config"])
         # XWayland: anahtarsız bağlantı reddedilir (soyut soket ad alanı paylaşılır, anahtar dosyası görünmez)
         if subprocess.run(["which", "xdpyinfo"], capture_output=True).returncode == 0:

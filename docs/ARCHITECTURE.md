@@ -445,11 +445,28 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     soketleri, başka X soketleri görünmez), `/run/user/<UID>` (Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh,
     xauth, at-spi, portal, systemd soketleri) ve (başka yerdeyse) Deskhand'in RUNTIME_DIR'i (girdi.sock, sanal.json,
     diğer oturumlar).
-  - **Ev dizini GEÇİCİ katman** (`arka_ortak.ev_baglari`: `--overlay-src ~ --tmp-overlay ~`, kullanıcı ad alanında
-    overlayfs; ölçüldü ~15 ms): uygulama gerçek dosyaları OKUR, yazdıkları (`~/.config/autostart`, `~/.bashrc`,
-    `~/.config/systemd/user`, `~/.local/share/applications`, `~/.local/bin`, `~/.config/kwinrc`…) oturumla birlikte
-    ATILIR → bir sonraki girişte yalıtım dışında kod çalıştırma (kalıcılık kaçışı) yok. Katman kurulamayan sistemde ev
-    dizini salt okunur (+ `~/.cache` tmpfs). Yazılabilir GERÇEK bağlar yalnız: kullanıcının XDG veri klasörleri
+  - **Ev dizini BOŞ tmpfs + BEYAZ LİSTE** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` 2 GiB): gerçek
+    ev dizininden YALNIZ masaüstü/araç takımı görünümü SALT OKUNUR görünür — `~/.config/kdeglobals`, `kdedefaults/`,
+    `kcminputrc`, `kcmfonts`, `Trolltech.conf`, `plasma-localerc`, `breezerc`, `Kvantum`, `qt5ct`/`qt6ct`, `gtk-3.0`,
+    `gtk-4.0`, `gtkrc`, `gtkrc-2.0`, `~/.gtkrc-2.0`, `xsettingsd`, `fontconfig`, `~/.local/share/fonts`, `~/.fonts`,
+    `~/.cache/fontconfig`, `~/.icons`, `~/.local/share/icons`, `~/.themes`, `~/.local/share/themes`,
+    `~/.local/share/color-schemes`, `user-dirs.dirs`, `user-dirs.locale`, `mimeapps.list`, `~/.local/share/mime`,
+    `~/.local/share/applications` ve `~/.local/share/flatpak` (kullanıcı .desktop girdileri ve Flatpak kurulumu). Hiçbir
+    uygulamanın KENDİ ayarı/verisi (jeton, oturum, geçmiş) görünmez: listede olmayan HER gizli dosya ve ev kökündeki
+    veri klasörü olmayan her dizin/dosya ad alanında YOKTUR (ölçüldü: `.config/<rastgele>/token`, `.netrc`,
+    `.git-credentials`, `gh/hosts.yml`, `.docker`, `.kube`, `.pypirc`, `.local/share/<bilinmeyen>`, `.cache/<uyg>`,
+    `~/projeler/.env`, `~/notlar.txt` okunamıyor; `tests/test_ev_beyaz_liste.py`). Sembolik bağ olan beyaz liste
+    girdisi HEDEFİNDEN bağlanır; hedefi ev dizininin kendisi/üstü ya da bir SIR_YOLLARI yolu olan girdi reddedilir.
+    Uygulamanın yazdıkları (`~/.config/autostart`, `~/.bashrc`, `~/.config/systemd/user`, `~/.local/bin`, kendi
+    ayarı, önbelleği…) oturumla ATILIR → kalıcılık kaçışı yok. Bir uygulamanın kendi ayarı gerekiyorsa oturum
+    politikasında uygulama başına `ev = [...]` (ev dizinine göreli; salt okunur; VARSAYILAN hiçbir uygulamada YOK;
+    `_varsayilan`daki `ev` bilinmeyen uygulamalara verilmez; `..`/mutlak yol atılır; SIR_YOLLARI'nı açamaz):
+    `Hazirlik.ev` → `baslat(..., ev=)` → `korumali_argv(ev_ek=)`. Seçim ölçümü (0.6.1 sonrası; sahte ev, KWin
+    türü; 0 = boş ev, A = beyaz liste, B = katman + genişletilmiş kara liste, C = katman + bilinmeyen gizli dizinleri
+    örtme): KWrite, Dolphin, Konsole, Gwenview, Firefox, Chromium, zenity, Meld, Electron A'da açılıyor; KDE
+    uygulamaları kullanıcının teması/yazı tipiyle (koyu temada ortalama parlaklık A = B = C, beyaz listesiz 0'da açık
+    tema), OCR doğruluğu B/C ile aynı; B ve C listelenmemiş sırları sızdırdı, A sızdırmadı. Yazılabilir GERÇEK bağlar
+    yalnız: kullanıcının XDG veri klasörleri
     (`~/.config/user-dirs.dirs`; yalnız ev dizininin İÇİNDE, ev kökü değil, yolunda nokta ile başlayan bileşen yok — ev
     kökünü, gizli dizini, `/`'ı ya da dışarıyı gösteren girdi yok sayılır) ve uygulamanın kendi oturum kopyası. Veri
     klasörlerinin İÇİNDEKİ var olan gizli dizin/dosyalar (`.git` — hooks/config, `.vscode`, `.envrc`, `.venv`…;
@@ -492,16 +509,18 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     yöneticisine giden veri yolu olmadığından kendi scope'una GEÇEMEZ: örnek masaüstünün bellek kafesinde ve PID ad
     alanında kalır, masaüstü kapanınca kapanır (ölçüldü). Sarmalayıcı (`oturum/flatpak_ornek.py`) ad alanında bunu
     doğrular ve ana makine kaydını yazmaz (`DESKHAND_AD_ALANI=1`); örnek kafesten çıkmışsa kapatır. Flatpak'in yazdıkları
-    (`~/.var/app`) ev katmanında kalır (atılır).
+    (`~/.var/app`) boş ev tmpfs'inde kalır (atılır); kullanıcı kurulumu (`~/.local/share/flatpak`) salt okunur.
   - **Ölçüldü:** Firefox (boş geçici profil + oturum kopyası benzeri kopya) iki türde açılıyor, sayfa yüklüyor, WebGL
     KWin türünde donanımda (tümleşik GPU), erişilebilirlik ağacı sunuyor, indirdiği dosya gerçekten `~/İndirilenler`'e
     yazılıyor; Qt test penceresi; tık/yazı süreleri değişmedi. Ayrıntı `tests/test_denetim12c.py`.
 
   **Neyi korumaz (bilerek / kalan riskler):**
-  - **Okuma:** uygulama kullanıcının dosyalarını OKUYABİLİR (belgeler, veri klasörleri, SIR_YOLLARI dışındaki her
-    şey: listede olmayan uygulamaların ayar/oturum dosyaları ve `~/.config` altındaki diğer jetonlar). Sır listesi bilinen yerleri örter; tam liste değildir. Ad alanı yazmayı ve oturumlara/süreçlere/
-    aygıtlara erişimi keser; hangi uygulamanın arka planda açılacağı oturum politikasının (kopya/bekle/kapali/on)
-    işidir.
+  - **Okuma:** uygulama XDG veri klasörlerini (belgeler, indirilenler, masaüstü…) ve beyaz listedeki görünüm
+    ayarlarını OKUYABİLİR; veri klasörlerine konmuş sırlar (ör. `~/Masaüstü/parolalar.txt`) açıktır. Ev dizininin geri
+    kalanı (her uygulamanın ayar/oturum dosyası, ev kökündeki diğer dizinler) görünmez. Bedeli: ev dizinindeki
+    programlar (`~/.local/bin` betikleri, `~/Games`, `~/Applications` AppImage'ları) ve uygulamanın kendi ayarları
+    (Dolphin yer imleri, Kate oturumları, Konsole profilleri) arka planda YOK — gerekiyorsa politikada uygulama başına
+    `ev`. Hangi uygulamanın arka planda açılacağı oturum politikasının (kopya/bekle/kapali/on) işidir.
   - **Veri klasörleri yazılabilir:** uygulama `~/İndirilenler`, `~/Belgeler`, `~/Projeler`… içindeki NORMAL dosyaları
     değiştirebilir/silebilir; YENİ gizli girdi oluşturabilir (ör. `.git`'i olmayan bir alt dizinde yeni `.git/` ya da
     `.envrc`: kullanıcı o dizinde git/direnv çalıştırırsa yalıtım dışında kod çalışabilir) ve `Makefile`, `*.desktop`
@@ -515,8 +534,8 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   - **IPC ad alanı paylaşılır** (X MIT-SHM için): SysV paylaşımlı bellek/semafor/ileti kuyrukları aynı kullanıcının
     diğer süreçleriyle ortak.
   - `/dev/dri` (GPU) açık: GPU sürücüsü saldırı yüzeyi.
-  - Açılıştan SONRA ev dizininde oluşan soket/FIFO'lar maskelenmez (katman üstünden bağlanılamıyor; veri klasörlerinde
-    ise gerçek dizin olduğundan bağlanılabilir).
+  - Açılıştan SONRA veri klasörlerinde ya da beyaz listedeki dizinlerde oluşan soket/FIFO'lar maskelenmez (gerçek dizin
+    olduğundan bağlanılabilir); ev dizininin geri kalanı ad alanında hiç yoktur.
 - **Ses (iki tür).** Arka plan uygulamaları kullanıcının ses sunucusuna (pipewire/pulse) HİÇ erişmez: çalma da kayıt
   (mikrofon) da yok. Soketler ad alanında görünmez (`/run/user/UID` boş tmpfs). İki durum (`ses_ortami_uygula`):
   (1) varsayılan: ortam var olmayan bir sokete yönlendirilir, uygulamalar sessiz çalışır; (2) DİNLEME (Tur 3): oturumun
@@ -554,7 +573,7 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   silinir; `GSETTINGS_BACKEND=memory` (gerçek dconf'a yazılmaz), `ATSPI_DBUS_IMPLEMENTATION=dbus-daemon` (erişilebilirlik
   başlatıcısı `dbus-broker --scope user` ile kullanıcının gerçek a11y veri yolunu yeniden kullanamasın).
   `XDG_RUNTIME_DIR` masaüstünün kendi klasörüdür (`<çalışma>/run`, 0700). HOME değişkeni kullanıcınındır; dizinin
-  kendisi ad alanında geçici katmandır (yukarıda).
+  kendisi ad alanında boş tmpfs + beyaz listedir (yukarıda).
 - **Güvenli yardımcı ikililer (iki tür).** Deskhand'in çalıştırdığı her yardımcı (bwrap, nice, ionice, sh,
   systemd-run, busctl, env, dbus-daemon, Xvfb, openbox, kwin_wayland, Xwayland, prlimit, setpriv, kdotool, wl-copy/
   wl-paste, find, pactl, at-spi2-registryd, bekçileri/pano sahibini/bildirim yakalayıcıyı çalıştıran python3)

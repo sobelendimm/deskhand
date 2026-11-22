@@ -2,6 +2,17 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
+## Yayımlanmamış
+
+- **Güvenlik: arka plan uygulamaları ev dizininde yalnız beyaz listeyi görür.** Görünmez masaüstünde açılan
+  uygulamanın ev dizini artık boştur; gerçek evden yalnız görünüm ayarları (KDE/GTK/Qt teması, renkler, yazı tipleri,
+  simgeler, imleç, XDG klasör adları, dosya ilişkilendirmeleri, kullanıcı `.desktop` ve Flatpak kurulumu) salt okunur
+  görünür. Eskiden ev dizini geçici katmanla okunur durumdaydı ve yalnız bilinen sır yolları (kara liste) örtülüyordu:
+  listede olmayan bir uygulamanın jetonu (ör. `~/.config/<uygulama>/token`) okunabiliyordu. Belgeler, İndirilenler gibi
+  veri klasörleri eskisi gibi yazılabilir ve kalıcıdır; ev köküne yazılanlar oturumla atılır. Bir uygulamanın kendi
+  ayarı gerekiyorsa `oturum.toml`'da uygulama başına `ev = [...]` (varsayılan yok). Ölçüm: KWrite, Dolphin, Konsole,
+  Gwenview, Firefox, Chromium, zenity, Meld ve Electron açılıyor; tema ve OCR doğruluğu değişmedi.
+
 ## 0.6.1 (22 Kasım 2026)
 
 - **Chromium ailesi görünmez masaüstünde açılıyor.** profile-sync-daemon kullanan sistemlerde Chromium/Vivaldi/Electron

@@ -1067,7 +1067,7 @@ def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
 
 
 def uygulama_baslat(d: dict, argv: list[str], env: dict | None = None, kopya: str | None = None,
-                    **popen) -> subprocess.Popen:
+                    ev: tuple | list = (), **popen) -> subprocess.Popen:
     """Uygulamayı bu oturumda başlat: kapı (baglanti_denetle), bwrap ad alanı (arka_ortak.korumali_argv; yalnız
     uygulama_baglari + kopya), bellek kafesi; ortam uygulama_ortami(güvenli kayıt, env)."""
     if not argv or not (shutil.which(argv[0]) or os.path.isfile(argv[0])):
@@ -1080,7 +1080,8 @@ def uygulama_baslat(d: dict, argv: list[str], env: dict | None = None, kopya: st
         popen.setdefault("stdout", log)
         popen.setdefault("stderr", log)
     try:
-        return ao.korumali_baslat(g, list(argv), uygulama_ortami(g, env), uygulama_baglari(g), kopya=kopya, **popen)
+        return ao.korumali_baslat(g, list(argv), uygulama_ortami(g, env), uygulama_baglari(g), kopya=kopya, ev=ev,
+                                  **popen)
     finally:
         if log is not None:
             log.close()
