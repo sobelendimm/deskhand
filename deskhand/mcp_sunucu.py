@@ -269,6 +269,7 @@ class HataAyrinti(TypedDict, total=False):
     message: str
     reason: str
     next: str
+    human_verification: dict[str, Any]
 
 
 class GirdiSonuc(TypedDict, total=False):
@@ -893,20 +894,27 @@ def _baslik_simdi(k: str) -> str | None:
 
 
 def _sinama_kapisi(k: str | None, *, oge: dict | None = None, ad: str | None = None, noktalar=(),
-                   klavye: bool = False) -> None:
+                   klavye: bool = False, rol: str | None = None, dizi=None) -> None:
     """Girdi bir insan-doğrulaması (CAPTCHA) sınamasına gidiyor mu → [18] ile REDDEDER (hiçbir şey gönderilmez; çözülmez,
     atlatılmaz). Sayfanın geri kalanına girdi serbesttir. Asıl kapı ÇEKİRDEKTE (eylem.hassas_nokta / klavye: CLI ve akış
     da geçer); burası ref bayrağı / metin hedefi gibi MCP'ye özgü bilgiyi ekler ve girdiden ÖNCE bir kez tarar (gözlemsiz
-    çağrılarda da durum olsun; 'yok' sonucu ~10 sn önbellekte)."""
+    çağrılarda da durum olsun; 'yok' sonucu ~3 sn önbellekte). Masaüstü kipinde (EKRAN) pencere noktadan önce bilinmez:
+    çekirdek imleci koyduktan sonra imlecin altındaki pencereyle (eylem.insan_dogrulama_ekran) aynı kapıyı çalıştırır.
+    rol: ref/öge rolü (sınama YOKKEN yalnız kutu rolündeki ögenin adı reddedilir); dizi: tuş akorları / metin parçaları
+    (sınama varken Tab'dan sonra başka girdi gelirse ret)."""
     if not k or k == EKRAN:
         return
     baslik = _baslik_simdi(k)
-    dogrulama_sinamasi.hazir(k, baslik)
+    d, okundu = dogrulama_sinamasi.hazir_oku(k, baslik)
     if klavye:
-        r = dogrulama_sinamasi.klavye_engeli(k)
+        r = dogrulama_sinamasi.klavye_engeli(k, dizi=dizi)
     else:
         r = dogrulama_sinamasi.girdi_engeli(k, oge=oge, ad=ad, noktalar=[p for p in noktalar if p is not None],
-                                            baslik=baslik)
+                                            baslik=baslik, rol=rol, metin_kati=not okundu)
+        if r is None and dizi and d is not None and dogrulama_sinamasi.tab_sonrasi_girdi(dizi):
+            r = dogrulama_sinamasi.acik_sonuc({"kind": d.get("kind") or "captcha", "window": d.get("window") or baslik or "",
+                                               "hint": dogrulama_sinamasi.IPUCU.format(kind=d.get("kind") or "captcha"),
+                                               "confidence": d.get("confidence") or "high"})
     if r is not None:
         log.info("insan doğrulaması: girdi reddedildi (%s)", r.get("kind"))
         raise AracHatasi("[18] " + dogrulama_sinamasi.red_metni(r), 18, ek={"human_verification": r})
@@ -1635,7 +1643,8 @@ def click(
         y_ = api.yasak_mi(k)
         if y_:
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
-        _sinama_kapisi(k, oge=ref_o, ad=text or element, noktalar=[(wx, wy)] if (x is not None and not ref) else ())
+        _sinama_kapisi(k, oge=ref_o, ad=text or element, noktalar=[(wx, wy)] if (x is not None and not ref) else (),
+                       rol=(ref_o or {}).get("rol") or role)
         desen = baslik_kilidi(window if not ref else None, k, ref_b)
         once = {}
         mod = list(dict.fromkeys(modifiers or ()))
@@ -1725,7 +1734,8 @@ def type_text(
         else:
             k = _pencere_zorunlu(window)
         _SON.k = k
-        _sinama_kapisi(k, oge=ref_o, ad=element, klavye=not ref and not element)
+        _sinama_kapisi(k, oge=ref_o, ad=element, klavye=not ref and not element,
+                       rol=(ref_o or {}).get("rol"), dizi=dogrulama_sinamasi.metin_dizisi(text))
         desen = baslik_kilidi(window if not ref else None, k, ref_b)
         if element and submit:
             raise ToolError("[1] " + _("submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)"))
@@ -1823,7 +1833,7 @@ def press_key(
         hata.dur_denetle()
         k = _pencere_zorunlu(window)
         _SON.k = k
-        _sinama_kapisi(k, klavye=True)
+        _sinama_kapisi(k, klavye=True, dizi=keys.split())
         desen = baslik_kilidi(window, k)
         once = {}
         dhedef = ("keys", dongu.metin_norm(keys), repeat, hold_s)
@@ -2244,12 +2254,14 @@ def batch(
         except ToolError as e:
             sent = gonderim.durum()
             kod = _hata_kodu(e)
+            hv = (getattr(e, "ek", None) or {}).get("human_verification")  # [18]: adım hata nesnesine makinece okunur sonuç
             sonuclar.append({"i": i, "tool": ad, "ok": False, "effect": "refused" if sent == "nothing_sent" else
-                             "unverifiable", "sent": sent, "error": str(e)})
+                             "unverifiable", "sent": sent, "error": str(e), **({"human_verification": hv} if hv else {})})
             hic = sent == "nothing_sent" and not any(x["ok"] and x["tool"] != "wait" for x in sonuclar)
             s.update(status="stopped", failed_step=i, not_sent=list(range(i + 1, len(hazir) + 1)),
                      sent="nothing_sent" if hic else "maybe_partial", effect="refused" if hic else "unverifiable",
-                     error={"code": kod, "message": str(e), **({"next": IPUCU[kod]} if kod in IPUCU else {})})
+                     error={"code": kod, "message": str(e), **({"next": IPUCU[kod]} if kod in IPUCU else {}),
+                            **({"human_verification": hv} if hv else {})})
             break
         oz = {"i": i, "tool": ad, "ok": True, "effect": r.get("effect")}
         after = r.get("after") or r

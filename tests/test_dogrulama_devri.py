@@ -114,8 +114,9 @@ print("== A) girdi kapısı (saf)")
 ds.temizle()
 K = "arka:1"
 kontrol("durum yokken sıradan hedef serbest", ds.girdi_engeli(K, ad="Giriş yap", klavye=True, baslik="Giriş") is None)
-kontrol("durum yokken 'I'm not a robot' metin hedefi YİNE reddedilir",
-        ds.girdi_engeli(K, ad="I'm not a robot", baslik="x") is not None)
+kontrol("durum yokken KUTU ROLÜNDEKİ 'I'm not a robot' öge adı reddedilir (rol yoksa serbest: KÜÇÜK-7)",
+        ds.girdi_engeli(K, ad="I'm not a robot", baslik="x", rol="check box") is not None and
+        ds.girdi_engeli(K, ad="I'm not a robot", baslik="x") is None)
 kontrol("sinama bayraklı ref reddedilir", ds.girdi_engeli(K, oge={"sinama": True}, baslik="x") is not None)
 snc = ds.incele([oge("check box", "I'm not a robot", 1)], "x", {})
 og = [oge("check box", "I'm not a robot", 1)]
@@ -204,6 +205,246 @@ kontrol("B1: 600 sn'lik DEVİR isteği girdiyi kapatır (bekleyen_var)", onay.be
 _d["tur"] = ""
 kontrol("B1: 600 sn'lik sıradan istek 'sahte' sayılır", onay.bekleyen_var("arka") is False)
 onay.bekleyenler = _once_b
+
+
+# ================================================================ A) ikinci inceleme düzeltmeleri (saf birim)
+print("== A) ikinci inceleme: kısa metin kuralı (KÜÇÜK-7)")
+ds.temizle()
+K7 = "arka:70"
+kontrol("K7: sınama YOKKEN 'I'm Not a Robot (2017)' dizi adı serbest",
+        ds.girdi_engeli(K7, ad="I'm Not a Robot (2017)", baslik="x") is None and
+        ds.girdi_engeli(K7, ad="I'm Not a Robot (2017)", baslik="x", rol="link") is None)
+kontrol("K7: sınama yokken 'Ben Robot Değilim' / 'Are you human?' metin hedefi serbest (rol yok)",
+        ds.girdi_engeli(K7, ad="Ben Robot Değilim", baslik="x") is None and
+        ds.girdi_engeli(K7, ad="Are you human?", baslik="x") is None)
+kontrol("K7: 'Slide right to unlock' artık sürükle-bulmaca kalıbı DEĞİL", ds.ad_kalibi_mi("Slide right to unlock") is None and
+        ds.incele([oge("button", "Slide right to unlock")], "Ekran kilidi", {}) is None)
+kontrol("K7: sınama yokken KUTU ROLÜNDEKİ öge adı hâlâ reddedilir",
+        ds.girdi_engeli(K7, ad="I'm not a robot", baslik="x", rol="check box") is not None)
+kontrol("K7: sayfa OKUNAMADIYSA (metin_kati) kısa cümle doğrulanamadığı için reddedilir",
+        ds.girdi_engeli(K7, ad="I'm not a robot", baslik="x", metin_kati=True) is not None)
+
+print("== A) ikinci inceleme: durum dosyası doğrulama (ORTA-5), önbellek TTL (ORTA-4), eski durum (KÜÇÜK-8)")
+import json  # noqa: E402
+
+
+def dosya_yaz(d_):
+    with open(ds._yol(), "w", encoding="utf-8") as f_:
+        json.dump(d_, f_)
+
+
+simdi0 = time.monotonic()
+boot = ds._boot_id()
+gecerli = {"kind": "recaptcha", "window": "w", "hint": "h", "confidence": "high", "page_wide": False, "imza": "i", "site": "",
+           "kutular": [[10, 10, 100, 20]], "zaman": simdi0, "baslik": "", "adres": ""}
+dosya_yaz({"boot": boot, "sinama": {"arka:81": dict(gecerli)}, "yok": {}, "bastir": {}})
+kontrol("O5: geçerli kayıt okunur", ds.durum("arka:81") is not None)
+dosya_yaz({"boot": boot, "sinama": {}, "yok": {"arka:82": {"baslik": "", "zaman": 1e12}}, "bastir": {}})
+kontrol("O5: ajanın yazdığı yok[k].zaman=1e12 (gelecek) kapıyı kalıcı AÇMAZ", ds.yok_mu("arka:82", "") is False)
+dosya_yaz({"boot": boot, "sinama": {}, "yok": {"arka:83": {"baslik": "", "zaman": simdi0 - ds.YOK_TTL - 5}}, "bastir": {}})
+kontrol("O5: süresi geçmiş yok kaydı geçersiz (TTL üst sınırı kesin)", ds.yok_mu("arka:83", "") is False)
+dosya_yaz({"boot": boot, "sinama": {"arka:84": {**gecerli, "kutular": "bozuk"}, "arka:85": {"zaman": simdi0},
+                                     "arka:86": {**gecerli, "zaman": 1e12}, "arka:87": {**gecerli, "zaman": "x"},
+                                     "arka:88": "yok", "arka:89": {**gecerli, "zaman": simdi0 - ds.TTL - 5}},
+           "yok": {"arka:90": {"zaman": None}}, "bastir": {"arka:91": {"zaman": simdi0}}})
+try:
+    sonuclar_ = [ds.durum(f"arka:{n}") for n in (84, 85, 86, 87, 88, 89)] + [ds.yok_mu("arka:90", ""),
+                                                                              ds.bastirilmis_mi("arka:91", "x")]
+    hata_ = None
+except Exception as e_:  # noqa: BLE001
+    sonuclar_, hata_ = None, e_
+kontrol("O5: bozuk kayıt (tip, eksik alan, gelecek/eski zaman) KeyError atmaz, atılır",
+        hata_ is None and sonuclar_ is not None and not any(sonuclar_), f"{sonuclar_} {hata_!r}")
+dosya_yaz({"boot": "baska-boot-kimligi", "sinama": {"arka:81": dict(gecerli)}, "yok": {}, "bastir": {}})
+kontrol("O5: önyükleme kimliği farklıysa (monotonic sıfırlandı) tüm kayıtlar atılır", ds.durum("arka:81") is None)
+dosya_yaz(["liste", "bozuk"])
+kontrol("O5: kök sözlük değilse sıfırlanır", ds.durum("arka:81") is None and ds.yok_mu("arka:81", "") is False)
+ds.temizle()
+kontrol("O4: YOK_TTL en çok 3 sn", ds.YOK_TTL <= 3.0)
+ds.yok_kaydet("arka:60", "b")
+kontrol("O4: yok önbelleği yazıldı", ds.yok_mu("arka:60", "b") is True)
+ds.girdi_oldu()
+kontrol("O4: girdi gönderilince (girdi_oldu) yok önbelleği silinir", ds.yok_mu("arka:60", "b") is False)
+ds.yok_kaydet("arka:60", "b", simdi=time.monotonic() - 100)
+kontrol("O4: eski zamanlı yok kaydı geçersiz", ds.yok_mu("arka:60", "b") is False)
+
+# K8: durum eskiyse hazir yeniden tarar; yeniyse taramaz; okunamazsa eski durum korunur (kapı açılmaz)
+ds.temizle()
+sayac = {"tara": 0}
+_tara_once, _tm_once = ds.tara, ds.tarayici_mi
+
+
+def _sahte_tara(k_, baslik=None, kapi=False):
+    sayac["tara"] += 1
+    return None, False
+
+
+ds.tara, ds.tarayici_mi = _sahte_tara, lambda k_: True
+og_ = [oge("check box", "I'm not a robot", 1)]
+ds.kaydet("arka:61", ds.incele(og_, "x", {}), og_, baslik="x")
+d_ = ds.hazir("arka:61", "x")
+kontrol("K8: yeni durum için yeniden tarama YOK", d_ is not None and sayac["tara"] == 0, str(sayac))
+ds.kaydet("arka:61", ds.incele(og_, "x", {}), og_, baslik="x", simdi=time.monotonic() - ds.YENI_TTL - 5)
+d_ = ds.hazir("arka:61", "x")
+kontrol("K8: YENI_TTL'den eski durum yeniden taranır; okunamayınca eski durum KORUNUR (kapı açılmaz)",
+        sayac["tara"] == 1 and d_ is not None, str(sayac))
+ds.tara, ds.tarayici_mi = _tara_once, _tm_once
+ds.temizle()
+
+print("== A) ikinci inceleme: tarama hatası/belge yok önbelleği, erişilebilirlik kapalıyken fail-open (ORTA-3)")
+from deskhand import api as _api, erisim as _erisim, web as _web  # noqa: E402
+
+_once = (ds.tarayici_mi, ds.baslik_simdi, _web.oku, _web.hazirla, _erisim.erisim_acik, _api.yasak_mi)
+acik_ = {"v": True}
+cagri = {"oku": 0, "hazirla": 0}
+mod_ = {"c": "hata"}
+
+
+def _oku(k_, *a_, **kw_):
+    cagri["oku"] += 1
+    if mod_["c"] == "hata":
+        raise hata.Dur(hata.ARAC_EKSIK, "yanıt yok")
+    return {"ogeler": [], "sayfa": {"belge": 0, "adres": ""}}
+
+
+def _hazirla(k_):
+    cagri["hazirla"] += 1
+
+
+ds.tarayici_mi, ds.baslik_simdi = (lambda k_: True), (lambda k_: "T")
+_web.oku, _web.hazirla, _erisim.erisim_acik, _api.yasak_mi = _oku, _hazirla, (lambda: acik_["v"]), (lambda k_: None)
+try:
+    ds.temizle()
+    r1 = [ds.hazir_oku("arka:62", "T") for _i in range(5)]
+    kontrol("O3: okunamayan pencere 5 girdide YALNIZ BİR kez taranır (okunamadı önbelleği)", cagri["oku"] == 1 and
+            all(r_ == (None, False) for r_ in r1), f"{cagri} {r1}")
+    mod_["c"] = "belge0"
+    cagri["oku"] = 0
+    ds.temizle()
+    r2 = [ds.hazir_oku("arka:63", "T") for _i in range(5)]
+    kontrol("O3: web belgesi olmayan (Electron arayüzü, belge=0) pencere her girdide DEĞİL, bir kez taranır",
+            cagri["oku"] == 1 and all(r_ == (None, False) for r_ in r2), f"{cagri} {r2}")
+    acik_["v"] = False
+    cagri.update(oku=0, hazirla=0)
+    ds.temizle()
+    r3 = ds.hazir_oku("arka:64", "T")
+    kontrol("O3: erişilebilirlik KAPALIYSA kapı için açılmaz (web.hazirla/oku çağrılmaz), fail-open",
+            r3 == (None, False) and cagri == {"oku": 0, "hazirla": 0}, f"{cagri} {r3}")
+    kontrol("O3: kapı taraması toplam süre sınırı <= 2 sn", ds.TARAMA_SURESI <= 2.0)
+    with _web.tarama_siniri(1.0):
+        ic_ = getattr(_web._SINIR, "bitis", None)
+    kontrol("O3: tarama_siniri bitiş koyar ve çıkışta geri alır", ic_ is not None and getattr(_web._SINIR, "bitis", None) is None)
+finally:
+    ds.tarayici_mi, ds.baslik_simdi, _web.oku, _web.hazirla, _erisim.erisim_acik, _api.yasak_mi = _once
+    ds.temizle()
+
+print("== A) ikinci inceleme: klavye Tab dizisi (BÜYÜK-2), odak önbelleği (KÜÇÜK-9)")
+kontrol("B2: dizi kuralı: tab,space → ret; space,tab / tab,tab / tab → serbest; shift+tab,x → ret",
+        ds.tab_sonrasi_girdi(["tab", "space"]) and ds.tab_sonrasi_girdi(["shift+tab", "x"]) and
+        not ds.tab_sonrasi_girdi(["space", "tab"]) and not ds.tab_sonrasi_girdi(["tab", "tab"]) and
+        not ds.tab_sonrasi_girdi(["tab"]) and not ds.tab_sonrasi_girdi([]) and not ds.tab_sonrasi_girdi(None))
+kontrol("B2: yazı TAB+boşluk / TAB+AB12C ret, AB+TAB / abc serbest",
+        ds.tab_sonrasi_girdi(ds.metin_dizisi("\t ")) and ds.tab_sonrasi_girdi(ds.metin_dizisi("\tAB12C")) and
+        not ds.tab_sonrasi_girdi(ds.metin_dizisi("AB\t")) and not ds.tab_sonrasi_girdi(ds.metin_dizisi("abc")))
+ds.temizle()
+og_ = [oge("check box", "I'm not a robot", 1)]
+ds.kaydet("arka:65", ds.incele(og_, "x", {}), og_, baslik="x")
+_bs = ds.baslik_simdi
+ds.baslik_simdi = lambda k_: "x"
+odak_sayaci = {"n": 0}
+
+
+def _odak_yok():
+    odak_sayaci["n"] += 1
+    return None
+
+
+r_tab = ds.klavye_engeli("arka:65", odak_sorgu=_odak_yok, dizi=["tab", "space"])
+kontrol("B2: sınama varken odak dışındayken 'tab space' → ret (odağa bakmadan)", r_tab is not None and odak_sayaci["n"] == 0,
+        str(r_tab))
+kontrol("B2: 'tab' tek başına / 'space' (odak dışında) serbest",
+        ds.klavye_engeli("arka:65", odak_sorgu=_odak_yok, dizi=["tab"]) is None and
+        ds.klavye_engeli("arka:65", odak_sorgu=_odak_yok, dizi=["space"]) is None)
+ds.temizle()
+ds.baslik_simdi = _bs
+# K9: odak sorgusu kısa önbellekli; girdi_oldu siler
+_o2 = (ds.tarayici_mi, _web.oku, _web.hazirla)
+oc = {"n": 0}
+
+
+def _oku2(k_, *a_, **kw_):
+    oc["n"] += 1
+    return {"ogeler": [{"durum": ["odakli"], "kutu": [0, 0, 5, 5], "rol": "entry", "ad": "x"}], "sayfa": {"belge": 1}}
+
+
+ds.tarayici_mi, _web.oku, _web.hazirla = (lambda k_: True), _oku2, (lambda k_: None)
+try:
+    ds._ODAK.clear()
+    a1, a2 = ds.odakli_oge("arka:66"), ds.odakli_oge("arka:66")
+    kontrol("K9: odak sorgusu önbellekli: iki klavye komutu tek tarama", oc["n"] == 1 and a1 == a2 and a1["kutu"] == [0, 0, 5, 5],
+            str(oc))
+    ds.girdi_oldu()
+    ds.odakli_oge("arka:66")
+    kontrol("K9: girdi gönderilince odak önbelleği silinir (odak değişmiş olabilir)", oc["n"] == 2, str(oc))
+finally:
+    ds.tarayici_mi, _web.oku, _web.hazirla = _o2
+    ds._ODAK.clear()
+
+print("== A) ikinci inceleme: tüm ekran kipi (BÜYÜK-1), sınama çerçevesi ögesi (ORTA-6)")
+
+
+class SahteAu:
+    """Masaüstü kipi arka ucu: imleç altındaki pencere + geometrisi."""
+    def __init__(self, w, geo):
+        self.w, self.geo = w, geo
+
+    def fare(self):
+        return (0, 0, self.w)
+
+    def geometri(self, k_):
+        return self.geo
+
+
+ds.temizle()
+og_ = [{**oge("check box", "I'm not a robot", 1), "kutu": [100, 100, 50, 20]}]
+ds.kaydet("arka:67", ds.incele(og_, "x", {}), og_, baslik="x")
+_tm = ds.tarayici_mi
+ds.tarayici_mi = lambda k_: True
+_bs = ds.baslik_simdi
+ds.baslik_simdi = lambda k_: "x"
+au_ = SahteAu("arka:67", (200, 300, 800, 600))
+r_ = ds.ekran_nokta_engeli(au_, 200 + 110, 300 + 110)
+kontrol("B1: EKRAN: imleç altındaki pencere + pencereye göre nokta sınama kutusundaysa → ret", r_ is not None, str(r_))
+kontrol("B1: EKRAN: aynı pencerede sınama dışı nokta serbest", ds.ekran_nokta_engeli(au_, 200 + 500, 300 + 400) is None)
+kontrol("B1: EKRAN: pencereye göreli nokta (ekran pikseli ile KARIŞTIRILMAZ): ekran (110,110) kutu dışı",
+        ds.ekran_nokta_engeli(au_, 110, 110) is None)
+kontrol("B1: EKRAN: pencere çözülemezse kısa insan-doğrulama cümlesi reddedilir (doğrulanamadı)",
+        ds.ekran_nokta_engeli(SahteAu("", None), 5, 5, ["I'm not a robot"]) is not None and
+        ds.ekran_nokta_engeli(SahteAu("", None), 5, 5, ["Kaydet"]) is None)
+ds.tarayici_mi, ds.baslik_simdi = _tm, _bs
+ds.temizle()
+RC2 = "https://www.google.com/recaptcha/api2/anchor?ar=1&k=abc&size=normal"
+from deskhand import erisim, eylem  # noqa: E402
+
+try:
+    eylem.insan_dogrulama_oge("arka:1", {"ad": "Gizlilik", "rol": "link", "_belge_adres": RC2, "gorunur": False})
+    kod_oge = 0
+except hata.Dur as e_:
+    kod_oge = e_.kod
+kontrol("O6: görünmeyen web ögesi sınama çerçevesinin içindeyse (_belge_adres) → 18", kod_oge == 18, str(kod_oge))
+try:
+    erisim._hassas_oge("arka:1", False, "x", {"ad": "Gizlilik", "cx": None, "cy": None, "_belge_adres": RC2}, {})
+    kod_oge2 = 0
+except hata.Dur as e_:
+    kod_oge2 = e_.kod
+kontrol("O6: via=action yolu (_hassas_oge) aynı kapıdan geçer → 18", kod_oge2 == 18, str(kod_oge2))
+try:
+    eylem.insan_dogrulama_oge("arka:1", {"ad": "Oynat", "rol": "button", "_belge_adres": "https://www.youtube.com/embed/abc"})
+    kod_oge3 = 0
+except hata.Dur as e_:
+    kod_oge3 = e_.kod
+kontrol("O6: sıradan iframe (video) ögesi 18 DEĞİL", kod_oge3 == 0, str(kod_oge3))
+ds.temizle()
 
 # ================================================================ güvenlik: görünmez masaüstü
 from deskhand import api, masaustu  # noqa: E402
@@ -329,6 +570,77 @@ try:
         kontrol(f"{ad_}: sınama ögesine REDDEDİLDİ [18], hiçbir şey gönderilmedi",
                 r is None and e is not None and hata_kodu(e) == 18 and "request_human" in str(e) and
                 getattr(e, "ek", None) and e.ek["human_verification"]["detected"], f"{r!r:.200} {e}")
+    # ===== İKİNCİ İNCELEME B1: TÜM EKRAN KİPİ (EKRAN) kapıyı atlamasın (imlecin altındaki pencere + nokta)
+    from deskhand.arka_uc import EKRAN as _EKRAN  # noqa: E402
+    geo_ = au.geometri(pencere)
+    sx_, sy_ = geo_[0] + cx_, geo_[1] + cy_
+    ds.temizle()
+    sonuc_e = {}
+    with api.hedef("sanal"):
+        assert sec(arka_bayragi=True).ad == "sanal"
+        for ad_, f_ in (("tikla", lambda: api.tikla(_EKRAN, sx_, sy_)),
+                        ("surukle", lambda: api.surukle(_EKRAN, sx_, sy_, sx_ + 40, sy_)),
+                        ("metne_tikla", lambda: api.metne_tikla(_EKRAN, "I'm not a robot"))):
+            try:
+                f_()
+                sonuc_e[ad_] = 0
+            except hata.Dur as e_:
+                sonuc_e[ad_] = e_.kod
+        t_ek = time.monotonic()
+        try:
+            api.tikla(_EKRAN, sx_ + 400, sy_ + 300)  # sınama dışı boş nokta: 18 DEĞİL
+            sonuc_e["disi"] = 0
+        except hata.Dur as e_:
+            sonuc_e["disi"] = e_.kod
+        print(f"   ÖLÇÜM: EKRAN tık (pencere çözümü + önbellekli tarama) {time.monotonic() - t_ek:.2f} sn")
+    kontrol("B1: EKRAN: tikla X Y sınama kutusunda → 18", sonuc_e.get("tikla") == 18, str(sonuc_e))
+    kontrol("B1: EKRAN: surukle başlangıcı sınama kutusunda → 18", sonuc_e.get("surukle") == 18, str(sonuc_e))
+    kontrol("B1: EKRAN: metne-tikla 'I'm not a robot' → 18", sonuc_e.get("metne_tikla") == 18, str(sonuc_e))
+    kontrol("B1: EKRAN: sınama dışı nokta 18 DEĞİL", sonuc_e.get("disi") != 18, str(sonuc_e))
+    ds.temizle()
+    ss2, hh2 = arac(mcp_sunucu.screenshot, desktop="background")  # PENCERE VERMEDEN tüm ekran
+    sc_ = (ss2.structured_content or {}) if ss2 is not None else {}
+    ea_ = au.ekran_alani()
+    olcek_ = min(1.0, 1280 / max(ea_[2] - ea_[0], ea_[3] - ea_[1]))
+    r, e = arac(mcp_sunucu.click, x=sx_ * olcek_, y=sy_ * olcek_, shot_id=sc_.get("shot_id"), desktop="background",
+                verify=False) if sc_.get("shot_id") else (None, f"shot yok {sc_!r:.200} {hh2}")
+    kontrol("B1: EKRAN: screenshot() pencere vermeden + click(x,y,shot_id) → 18", r is None and hata_kodu(e) == 18,
+            f"{r!r:.200} {e}")
+    ds.temizle()
+
+    # ===== BÜYÜK-2: Tab odağı kutuya taşıyıp devam eden diziler tek çağrıda reddedilir (odak başta sınama dışı)
+    arac(mcp_sunucu.observe, window=pencere, desktop="background")
+    for ad_, cagri in (("press_key 'tab space'", dict(f=mcp_sunucu.press_key, window=pencere, keys="tab space", desktop="background")),
+                       ("press_key 'tab tab tab space'", dict(f=mcp_sunucu.press_key, window=pencere, keys="tab tab tab space",
+                                                              desktop="background")),
+                       ("type_text TAB+boşluk", dict(f=mcp_sunucu.type_text, window=pencere, text="\t ", desktop="background")),
+                       ("type_text TAB+AB12C", dict(f=mcp_sunucu.type_text, window=pencere, text="\tAB12C",
+                                                    desktop="background"))):
+        r, e = arac(**cagri)
+        kontrol(f"B2: {ad_} → [18] (Tab sonrası girdi), hiçbir şey gönderilmedi",
+                r is None and hata_kodu(e) == 18, f"{r!r:.200} {e}")
+    with api.hedef("sanal"):
+        assert sec(arka_bayragi=True).ad == "sanal"
+        kodlar_ = {}
+        for ad_, f_ in (("tus", lambda: api.tus(pencere, "tab space")), ("yaz", lambda: api.yaz(pencere, "\tAB12C")),
+                        ("bas", lambda: api.bas(pencere, "tab space", 0.2))):
+            try:
+                f_()
+                kodlar_[ad_] = 0
+            except hata.Dur as e_:
+                kodlar_[ad_] = e_.kod
+    kontrol("B2: CLI tus/yaz/bas çekirdek kapıdan geçer → 18", all(v_ == 18 for v_ in kodlar_.values()), str(kodlar_))
+
+    # ===== batch: [18] adım hata nesnesinde human_verification
+    ds.temizle()
+    arac(mcp_sunucu.observe, window=pencere, desktop="background")
+    rb, eb = arac(mcp_sunucu.batch, steps=[mcp_sunucu.Adim(tool="click", args={"ref": sinama_ref})], desktop="background")
+    sb = (rb.structured_content or {}) if rb is not None else {}
+    kontrol("batch: [18] adımı → adım ve error nesnesinde human_verification",
+            sb.get("steps") and (sb["steps"][0].get("human_verification") or {}).get("detected") and
+            (sb.get("error", {}).get("human_verification") or {}).get("detected") and sb["error"]["code"] == 18,
+            f"{sb!r:.500} {eb}")
+
     # A4: Tab + Space ile sınama kutusunu işaretleme kapalı: odak sınama kutusuna gelince tuş reddedilir
     rr = []
     for _i in range(4):

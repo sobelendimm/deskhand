@@ -109,8 +109,11 @@ def girdi_al(etiket="", gizli=False):
 
 
 def girdi_birak(g):
-    if g is not _paylasilan():
-        g.kapat()
+    try:
+        if g is not _paylasilan():
+            g.kapat()
+    finally:
+        dogrulama_sinamasi.girdi_oldu()  # girdi gitti: sayfa değişmiş olabilir ("sınama yok" önbelleği + odak önbelleği silinir)
 
 
 def basili_bekle(g, k, desen, sure, beklenen_fare=None):
@@ -194,6 +197,7 @@ def tikla_ic(g, k, desen, x, y, dugme="sol", geo=None, basili=0.0, tekrar=1, mod
     time.sleep(0.04)  # imleç üzerine gelme (hover) olayı işlensin
     if k == EKRAN:  # masaüstü kipi: noktadaki pencere bir sistem istemiyse (polkit, KWallet…) önce insan onayı
         w = _au().fare()[2]
+        insan_dogrulama_ekran(px, py, w, getattr(g, "ekran_metinler", ()))  # CAPTCHA: imlecin altındaki pencere + nokta
         if w and guvenlik.sistem_istemi_mi(w):
             guvenlik.sistem_istemi_engel(w, getattr(g, "onayli", False), _("tıklama"))
     imlec_alti_denetle(k, px, py)
@@ -584,10 +588,27 @@ def insan_dogrulama_nokta(k, x, y, metinler=()):
         raise dogrulama_sinamasi.dur(r)
 
 
-def insan_dogrulama_klavye(k):
+def insan_dogrulama_oge(k, oge):
+    """İnsan doğrulaması kapısı, ÖGE: web ögesi bir sınama çerçevesinin (iframe) içindeyse (belge adresi reCAPTCHA/hCaptcha/
+    Turnstile…) Dur(18); görünür olmasına, ögenin ref/erişilebilirlik eylemi ya da fare yoluyla hedeflenmesine bakılmaz."""
+    r = dogrulama_sinamasi.oge_engeli(k, oge)
+    if r is not None:
+        raise dogrulama_sinamasi.dur(r)
+
+
+def insan_dogrulama_ekran(px, py, pencere=None, metinler=()):
+    """İnsan doğrulaması kapısı, FARE, MASAÜSTÜ kipi (EKRAN): imleç (px, py) ekran pikselinde duruyor (mouseto sonrası, tıklamadan
+    ÖNCE); imlecin altındaki pencere çözülür ve kapı o pencere + pencereye göre nokta ile çağrılır. Dur(18)."""
+    r = dogrulama_sinamasi.ekran_nokta_engeli(_au(), px, py, metinler, pencere)
+    if r is not None:
+        raise dogrulama_sinamasi.dur(r)
+
+
+def insan_dogrulama_klavye(k, dizi=None):
     """İnsan doğrulaması (CAPTCHA) kapısı, KLAVYE: sayfanın tamamı sınamaysa ya da odak sınama kutusundaysa (onay kutusu,
-    kaydırıcı, çerçeve içi, resimli güvenlik kodu alanı) Dur(18). Sınama durumu yoksa ek maliyet yok."""
-    r = dogrulama_sinamasi.klavye_engeli(k)
+    kaydırıcı, çerçeve içi, resimli güvenlik kodu alanı) Dur(18). Sınama durumu yoksa ek maliyet yok. dizi: gönderilecek
+    tuş akorları / metin parçaları (sınama varken Tab'dan sonra başka girdi gelirse ret)."""
+    r = dogrulama_sinamasi.klavye_engeli(k, dizi=dizi)
     if r is not None:
         raise dogrulama_sinamasi.dur(r)
 
@@ -598,6 +619,8 @@ def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=(), ek_basliklar=())
     ek_basliklar: pencere başlığına ek denetlenen sayfa başlıkları (web belge başlığı)."""
     guvenlik.seviye_denetle(k, "fare")  # erişim seviyesi: onay diyaloğundan ÖNCE
     insan_dogrulama_nokta(k, x, y, [*ek_metinler, *yakin])  # CAPTCHA: tıklanan NOKTA sınama kutusundaysa 18 (çözülmez)
+    if k == EKRAN:  # masaüstü kipi: pencere imleç konunca bilinir (tikla_ic / sürükleme insan_dogrulama_ekran çağırır)
+        g.ekran_metinler = [*ek_metinler, *yakin]
     g.onayli = onayli
     if k != EKRAN and guvenlik.sistem_istemi_engel(k, onayli, ne):  # polkit/KWallet/parola sorucusu: onay
         _onayli_etiket(g)
@@ -779,7 +802,7 @@ def k_tus(a):
     g = girdi_al(f"tus {kombinasyon}")
     try:
         guvenlik.seviye_denetle(a.kimlik, "klavye")  # erişim seviyesi: onay diyaloğundan ÖNCE
-        insan_dogrulama_klavye(a.kimlik)
+        insan_dogrulama_klavye(a.kimlik, kombinasyon.split())
         onaylar = _tus_onaylari(g, a.kimlik, getattr(a, "onayli", False), kombinasyon)
         _au().one_getir(a.kimlik)
         try:
@@ -830,7 +853,7 @@ def k_yaz(a):
     g = girdi_al(f"yaz {len(metin)} karakter", gizli=a.gizli)
     try:
         onayli = getattr(a, "onayli", False)
-        insan_dogrulama_klavye(a.kimlik)
+        insan_dogrulama_klavye(a.kimlik, dogrulama_sinamasi.metin_dizisi(metin))
         if guvenlik.sistem_istemi_engel(a.kimlik, onayli, _("yazı")):
             _onayli_etiket(g)
         if _parola_alani_mi(a.kimlik):  # odaklı öge parola alanı: metin kendiliğinden gizli + insan onayı
@@ -874,7 +897,7 @@ def k_bas(a):
     g = girdi_al(f"bas {kombinasyon} {a.sure} sn")
     try:
         guvenlik.seviye_denetle(a.kimlik, "klavye")
-        insan_dogrulama_klavye(a.kimlik)
+        insan_dogrulama_klavye(a.kimlik, sorted(kombinasyon.split(), key=lambda t: not dogrulama_sinamasi._tab_mu(t)))
         _tus_onaylari(g, a.kimlik, getattr(a, "onayli", False), kombinasyon, birlikte=True)
         ucbirim.tampon_isle(_au(), a.kimlik, kirli=True)  # basılı tuş tekrarlar: satırın içeriği bilinmez
         _au().one_getir(a.kimlik)
@@ -932,6 +955,8 @@ def k_surukle(a):
         g.gonder(a.kimlik, a.baslik, f"mouseto {f1x:.6f} {f1y:.6f}")
         time.sleep(0.04)
         imlec_alti_denetle(a.kimlik, p1x, p1y)
+        if a.kimlik == EKRAN:  # masaüstü kipi: başlangıç noktasındaki pencere (tarayıcıdaki sınama kutusu) basmadan ÖNCE
+            insan_dogrulama_ekran(p1x, p1y, None, yakin1)
         g.gonder(a.kimlik, a.baslik, f"buttondown {tus}")
         birakildi = False
         try:
@@ -964,6 +989,8 @@ def k_surukle(a):
             imlec_alti_denetle(a.kimlik, p2x, p2y)
             if a.kimlik != EKRAN:
                 hedef_pencere_denetle(a.kimlik)
+            else:  # masaüstü kipi: bırakılacak noktadaki pencere sınama kutusuysa bırakılmaz (iptal yoluna düşer)
+                insan_dogrulama_ekran(p2x, p2y)
             g.zorla(f"buttonup {tus}")
             birakildi = True
         finally:

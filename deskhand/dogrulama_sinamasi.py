@@ -21,6 +21,7 @@ import contextlib
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 import threading
@@ -47,7 +48,7 @@ ROBOT_DEGIL = re.compile(
     r"insan oldugunuzu onaylay[a-z]*|insan oldugunuzu kanitlay[a-z]*|insan oldugunuzdan emin|"
     r"ich bin kein roboter|je ne suis pas un robot|no soy un robot)\b")
 SURUKLE = re.compile(
-    r"\b(slide to verify|slide to complete|slide right to|slide the (puzzle|slider)|drag the puzzle|"
+    r"\b(slide to verify|slide to complete|slide the (puzzle|slider)|drag the puzzle|"
     r"drag the piece|drag to complete|complete the puzzle to|(move|drag) the slider (to|until) (the )?(verify|complete|"
     r"fit|match|solve|unlock|puzzle|right)|kaydirarak dogrula|surukleyerek dogrula|"
     r"bulmacayi tamamla|parcayi surukle|slide to unlock to verify)\b")
@@ -329,8 +330,14 @@ def ogeleri_isaretle(ogeler: list[dict], s: dict | None) -> None:
 # (CLI süreci ve MCP süreci aynı kutuları görür; 0600, flock ile atomik; pencere kimliği + başlık/adres anahtarı)
 
 TTL = 300.0  # algının en uzun ömrü (sn); ayrıca başlık/adres değişince durum SİLİNİR
-YOK_TTL = 10.0  # "bu pencerede sınama yok" sonucu önbelleği (sn): her tıkta ağaç taraması yapılmasın
+YENI_TTL = 15.0  # sınama durumu bundan eskiyse girdiden önce YENİDEN taranır (sayfa değişmiş olabilir; kalıcı kapı kalmaz)
+YOK_TTL = 3.0  # "bu pencerede sınama yok" sonucu önbelleği (sn): yalnız TARAMA maliyetini düşürür; üst sınır KESİN
+OKUNAMADI_TTL = 10.0  # "bu pencere okunamadı" (erişilebilirlik kapalı/yanıtsız, belge yok) önbelleği: her tıkta 10 sn beklenmesin
+TARAMA_SURESI = 2.0  # girdi kapısı taramasının TOPLAM süre sınırı (sn)
 BASTIR_TTL = 1800.0  # kullanıcı Bitti dedikten sonra aynı sınama imzası için uyarı bastırma süresi (sn)
+ODAK_TTL = 1.0  # odaktaki öge sorgusu önbelleği (sn); her girdiden sonra silinir
+BOLUM_TAVAN = {"sinama": TTL, "yok": YOK_TTL, "okunamadi": OKUNAMADI_TTL, "bastir": BASTIR_TTL}
+EN_COK_KAYIT = 64  # bölüm başına (bozuk/kötü niyetli dosya şişmesin)
 _KILIT = threading.Lock()
 _DEVIR: dict[str, float] = {}
 DOSYA_AD = "insan-dogrulama.json"
@@ -341,9 +348,59 @@ def _yol() -> str:
     return os.path.join(calisma_dizini(), DOSYA_AD)
 
 
+def _boot_id() -> str:
+    try:
+        with open("/proc/sys/kernel/random/boot_id", encoding="ascii") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _sayi(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _kayit_gecerli(bolum: str, k, v, simdi: float) -> bool:
+    """Durum dosyasındaki bir kaydı DOĞRULA (dosya ajan tarafından değiştirilebilir): tipler + 0 ≤ yaş ≤ TTL. Bozuk kayıt atılır
+    (KeyError/sonsuz ömür yok)."""
+    if not isinstance(k, str) or not isinstance(v, dict) or not _sayi(v.get("zaman")):
+        return False
+    yas = simdi - v["zaman"]
+    if yas < 0 or yas > BOLUM_TAVAN[bolum] + 1.0:
+        return False
+    if bolum == "sinama":
+        ku = v.get("kutular")
+        if not isinstance(ku, list) or not all(isinstance(b, list) and len(b) == 4 and all(_sayi(c) for c in b) for b in ku):
+            return False
+        if not all(isinstance(v.get(a), str) for a in ("kind", "window", "hint", "baslik", "adres")):
+            return False
+        return v.get("imza") is None or isinstance(v.get("imza"), str)
+    if bolum in ("yok", "okunamadi"):
+        return isinstance(v.get("baslik", ""), str)
+    return isinstance(v.get("imza"), str)  # bastir
+
+
+def _temizle_dosya(d: dict) -> dict:
+    """Okunan sözlüğü doğrula: önyükleme kimliği farklıysa (monotonic sıfırlandı) hepsi atılır; bozuk kayıtlar atılır."""
+    boot = _boot_id()
+    if not isinstance(d, dict) or d.get("boot") != boot:
+        d = {"boot": boot}
+    simdi = time.monotonic()
+    for ad in BOLUM_TAVAN:
+        b = d.get(ad)
+        if not isinstance(b, dict):
+            d[ad] = {}
+            continue
+        for k in [k for k, v in b.items() if not _kayit_gecerli(ad, k, v, simdi)]:
+            del b[k]
+        for k in sorted(b, key=lambda x: b[x]["zaman"])[:max(0, len(b) - EN_COK_KAYIT)]:
+            del b[k]
+    return d
+
+
 @contextlib.contextmanager
 def _depo():
-    """Durum dosyasını kilitleyip oku → sözlük; çıkışta (değiştiyse) atomik yaz. İş parçacığı + süreç kilidi."""
+    """Durum dosyasını kilitleyip oku (DOĞRULANARAK) → sözlük; çıkışta (değiştiyse) atomik yaz. İş parçacığı + süreç kilidi."""
     yol = _yol()
     with _KILIT:
         fd = os.open(yol + ".kilit", os.O_RDWR | os.O_CREAT, 0o600)
@@ -352,16 +409,13 @@ def _depo():
             try:
                 with open(yol, encoding="utf-8") as f:
                     d = json.load(f)
-                if not isinstance(d, dict):
-                    d = {}
             except (OSError, ValueError):
                 d = {}
-            for ad in ("sinama", "yok", "bastir"):
-                if not isinstance(d.get(ad), dict):
-                    d[ad] = {}
+            ham = json.dumps(d, sort_keys=True) if isinstance(d, dict) else None
+            d = _temizle_dosya(d)
             once = json.dumps(d, sort_keys=True)
             yield d
-            if json.dumps(d, sort_keys=True) != once:
+            if json.dumps(d, sort_keys=True) != once or once != ham:
                 gecici = f"{yol}.{os.getpid()}.tmp"
                 g = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
                 with os.fdopen(g, "w", encoding="utf-8") as f:
@@ -388,12 +442,15 @@ def kaydet(k: str, s: dict | None, ogeler: list[dict] | None = None, simdi: floa
         d["sinama"][k] = {**{a: s.get(a) for a in ("kind", "window", "hint", "confidence", "page_wide", "imza", "site")},
                           "kutular": kutular, "zaman": _zaman(simdi), "baslik": baslik or "", "adres": adres or ""}
         d["yok"].pop(k, None)
+        d["okunamadi"].pop(k, None)
 
 
 def yok_kaydet(k: str, baslik: str | None, simdi: float | None = None) -> None:
-    """Taramada sınama çıkmadı: bu pencere+başlık için YOK_TTL sn tekrar taranmasın."""
+    """Taramada sınama çıkmadı: bu pencere+başlık için YOK_TTL sn tekrar taranmasın (yalnız tarama maliyeti; kapıyı kalıcı
+    açmaz: TTL üst sınırı okurken doğrulanır)."""
     with _depo() as d:
         d["sinama"].pop(k, None)
+        d["okunamadi"].pop(k, None)
         d["yok"][k] = {"baslik": baslik or "", "zaman": _zaman(simdi)}
 
 
@@ -402,15 +459,45 @@ def yok_mu(k: str, baslik: str | None, simdi: float | None = None) -> bool:
         y = d["yok"].get(k)
         if not y:
             return False
-        if _zaman(simdi) - y["zaman"] > YOK_TTL or (baslik or "") != y.get("baslik", ""):
+        yas = _zaman(simdi) - y["zaman"]
+        if yas < 0 or yas > YOK_TTL or (baslik or "") != y.get("baslik", ""):
             d["yok"].pop(k, None)
             return False
         return True
 
 
+def okunamadi_kaydet(k: str, baslik: str | None, simdi: float | None = None) -> None:
+    """Pencere taranamadı (erişilebilirlik kapalı/yanıtsız, web belgesi yok): OKUNAMADI_TTL sn tekrar denenmesin. Mevcut
+    sınama durumu KORUNUR."""
+    with _depo() as d:
+        d["okunamadi"][k] = {"baslik": baslik or "", "zaman": _zaman(simdi)}
+
+
+def okunamadi_mu(k: str, baslik: str | None, simdi: float | None = None) -> bool:
+    with _depo() as d:
+        y = d["okunamadi"].get(k)
+        if not y:
+            return False
+        yas = _zaman(simdi) - y["zaman"]
+        if yas < 0 or yas > OKUNAMADI_TTL or (baslik or "") != y.get("baslik", ""):
+            d["okunamadi"].pop(k, None)
+            return False
+        return True
+
+
+def girdi_oldu() -> None:
+    """Bir pencereye girdi GÖNDERİLDİ (tık/tuş/yazı/eylem): sayfa değişmiş olabilir → "sınama yok" önbelleği ve odak önbelleği
+    silinir (tık sınamayı açmış olabilir: sonraki girdi yeniden bakar)."""
+    _ODAK.clear()
+    if not os.path.exists(_yol()):
+        return
+    with _depo() as d:
+        d["yok"].clear()
+
+
 def temizle(k: str | None = None) -> None:
     with _depo() as d:
-        for ad in ("sinama", "yok", "bastir"):
+        for ad in BOLUM_TAVAN:
             if k is None:
                 d[ad].clear()
             else:
@@ -424,7 +511,8 @@ def durum(k: str, simdi: float | None = None, baslik: str | None = None, adres: 
         v = d["sinama"].get(k)
         if v is None:
             return None
-        eski = (_zaman(simdi) - v["zaman"]) > TTL
+        yas = _zaman(simdi) - v["zaman"]
+        eski = yas > TTL or yas < 0
         degisti = (baslik is not None and v.get("baslik") and baslik != v["baslik"]) or (
             adres and v.get("adres") and adres != v["adres"])
         if eski or degisti:
@@ -448,7 +536,7 @@ def bastirilmis_mi(k: str, imza: str | None, simdi: float | None = None) -> bool
         b = d["bastir"].get(k)
         if not b:
             return False
-        if _zaman(simdi) - b["zaman"] > BASTIR_TTL:
+        if not 0 <= _zaman(simdi) - b["zaman"] <= BASTIR_TTL:
             d["bastir"].pop(k, None)
             return False
         return b["imza"] == imza
@@ -466,6 +554,8 @@ def baslik_simdi(k: str) -> str | None:
 
 
 _SON_OKUMA: dict[str, str] = {}  # pencere → son OKUNAN sayfanın adresi (bu süreçte; sayfa değişti mi karşılaştırması)
+_TARAYICI: dict[str, tuple[float, bool]] = {}  # pencere → (zaman, tarayıcı mı): sınıf değişmez; her tıkta sorulmasın
+_ODAK: dict[str, tuple[float, dict | None]] = {}  # pencere → (zaman, odaktaki öge): ODAK_TTL; girdi_oldu siler
 
 
 def son_adres(k: str) -> str:
@@ -473,29 +563,68 @@ def son_adres(k: str) -> str:
     return _SON_OKUMA.get(k, "")
 
 
-def tara(k: str, baslik: str | None = None) -> tuple[dict | None, bool]:
+def tarayici_mi(k: str) -> bool:
+    """web.tarayici_mi, kısa önbellekli (tarayıcı dışı uygulamalarda her tıkta pencere sınıfı sorulmasın)."""
+    simdi = time.monotonic()
+    t = _TARAYICI.get(k)
+    if t is not None and simdi - t[0] < 60.0:
+        return t[1]
+    from . import web
+    v = bool(web.tarayici_mi(k))
+    if len(_TARAYICI) > 256:
+        _TARAYICI.clear()
+    _TARAYICI[k] = (simdi, v)
+    return v
+
+
+def _gunluk(satir: str) -> None:
+    try:
+        from .gunluk import gunluk
+        gunluk(satir)
+    except Exception:  # noqa: BLE001 - günlük yazılamazsa kapı yine çalışır
+        pass
+
+
+def tara(k: str, baslik: str | None = None, kapi: bool = False) -> tuple[dict | None, bool]:
     """Tarayıcı penceresinin sayfasını (erişilebilirlik ağacı; ekran görüntüsü/öne getirme YOK) oku, sınama durumunu yaz.
     → (sonuç | None, okundu). Pencere tarayıcı değilse ya da sayfa okunamazsa okundu=False (mevcut durum KORUNUR: iki
-    geçici zaman aşımı yanlış 'kayboldu' üretmesin). Yasak (10) ve DUR (13) yükselir."""
+    geçici zaman aşımı yanlış 'kayboldu' üretmesin); okunamayan pencere OKUNAMADI_TTL sn tekrar denenmez. Yasak (10) ve DUR
+    (13) yükselir. kapi=True (girdi kapısı): erişilebilirlik KAPALIYSA açılmaz (fail-open + günlük: kapı için kullanıcının
+    oturumunda erişilebilirlik açılmaz) ve toplam süre TARAMA_SURESI ile sınırlı."""
+    import contextlib
     from . import gozlem, web
     from .hata import Dur
-    if not k or not web.tarayici_mi(k):
+    if not k or not tarayici_mi(k):
         return None, False
     try:
-        web.hazirla(k)
+        if kapi:
+            from . import api
+            from .erisim import erisim_acik
+            if api.yasak_mi(k):
+                raise Dur(10, _("YASAK pencere: ağacı okunmaz"))
+            if not erisim_acik():
+                _gunluk("insan-dogrulama | erisim kapali: kapi taramasi yapilmadi (fail-open)")
+                okunamadi_kaydet(k, baslik)
+                return None, False
+        else:
+            web.hazirla(k)
         roller = sorted(web.ETKILESIMLI | {"image"})
-        s = web.oku(k, roller=roller, gorunur=True, en_cok=0, ad_siniri=0, ayrinti=False, cerceve_metni=True)
+        with (web.tarama_siniri(TARAMA_SURESI) if kapi else contextlib.nullcontext()):
+            s = web.oku(k, roller=roller, gorunur=True, en_cok=0, ad_siniri=0, ayrinti=False, cerceve_metni=True)
     except Dur as e:
         if e.kod in (10, 13):
             raise
+        okunamadi_kaydet(k, baslik if baslik is not None else baslik_simdi(k))
         return None, False
     except Exception:  # noqa: BLE001
+        okunamadi_kaydet(k, baslik if baslik is not None else baslik_simdi(k))
         return None, False
-    if not s["sayfa"].get("belge"):
+    baslik = baslik if baslik is not None else baslik_simdi(k) or ""
+    if not s["sayfa"].get("belge"):  # web belgesi yok (Electron arayüzü, yüklenmemiş sayfa): sonuç önbelleğe
+        okunamadi_kaydet(k, baslik)
         return None, False
     ogeler = [gozlem.web_ogesi(o, web.ETKILESIMLI) for o in s["ogeler"]]
     _SON_OKUMA[k] = s["sayfa"].get("adres") or ""
-    baslik = baslik if baslik is not None else baslik_simdi(k) or ""
     sonuc = incele(ogeler, baslik, s["sayfa"])
     ogeleri_isaretle(ogeler, sonuc)
     if sonuc:
@@ -505,20 +634,31 @@ def tara(k: str, baslik: str | None = None) -> tuple[dict | None, bool]:
     return sonuc, True
 
 
-def hazir(k: str, baslik: str | None = None) -> dict | None:
-    """Girdiden ÖNCE: pencerenin sınama durumu. Durum yoksa ve pencere tarayıcıysa BİR kez tarar; 'sınama yok' sonucu
-    pencere+başlık başına YOK_TTL sn önbellekte (her tıkta ağaç taraması yapılmaz). → durum | None."""
+def hazir_oku(k: str, baslik: str | None = None) -> tuple[dict | None, bool]:
+    """Girdiden ÖNCE: pencerenin sınama durumu + sayfanın şu an (ya da çok yakın zamanda) OKUNABİLDİĞİ. Durum yoksa ve pencere
+    tarayıcıysa BİR kez tarar; "sınama yok" sonucu YOK_TTL (3 sn), "okunamadı" OKUNAMADI_TTL sn önbellekte; mevcut durum
+    YENI_TTL'den eskiyse yeniden taranır (okunamazsa eski durum korunur: kapı AÇILMAZ). → (durum | None, okundu)."""
     if not k:
-        return None
+        return None, False
     from .arka_uc import EKRAN
     if k == EKRAN:
-        return None
+        return None, False
     baslik = baslik if baslik is not None else baslik_simdi(k)
     d = durum(k, baslik=baslik)
-    if d is not None or yok_mu(k, baslik):
-        return d
-    tara(k, baslik)
-    return durum(k, baslik=baslik)
+    if d is not None:
+        if _zaman(None) - d["zaman"] <= YENI_TTL:
+            return d, True
+    elif yok_mu(k, baslik):
+        return None, True
+    elif okunamadi_mu(k, baslik):
+        return None, False
+    _sonuc, okundu = tara(k, baslik, kapi=True)
+    return durum(k, baslik=baslik), okundu
+
+
+def hazir(k: str, baslik: str | None = None) -> dict | None:
+    """hazir_oku'nun yalnız durum kısmı."""
+    return hazir_oku(k, baslik)[0]
 
 
 # ---------------------------------------------------------------- girdi kapısı
@@ -530,20 +670,22 @@ def _kutuda(kutu, nokta) -> bool:
 
 def girdi_engeli(k: str, *, oge: dict | None = None, ad: str | None = None, nokta=None, noktalar=(),
                  klavye: bool = False, baslik: str | None = None, odak_kutusu=None,
-                 simdi: float | None = None) -> dict | None:
+                 simdi: float | None = None, rol: str | None = None, metin_kati: bool = False) -> dict | None:
     """Girdi sınama ögesine mi gidiyor? Evetse sınama sonucu (acik_sonuc biçimi), değilse None.
-      oge: observe ögesi (sinama bayrağı); ad: metin/öge adı hedefi (kısa insan-doğrulama cümlesi ise HER durumda, satıcı
-      adı ise yalnız sınama algılanmış pencerede); nokta/noktalar: pencere pikseli (algılanan sınama kutularından biri);
-      odak_kutusu: odaktaki ögenin kutusu (klavye girdisi: odak sınama kutusundaysa ret: Tab+Boşluk ile işaretleme);
-      klavye: hedefsiz klavye girdisi — yalnız sayfanın TAMAMI sınamaysa (ara sayfa) engellenir; baslik: pencerenin
-      güncel başlığı (değiştiyse eski algı atılır)."""
+      oge: observe ögesi (sinama bayrağı); ad: metin/öge adı hedefi (sınama algılanmış pencerede kısa insan-doğrulama cümlesi
+      ya da satıcı adı; sınama YOKKEN yalnız KUTU ROLÜNDEKİ ögenin adı [rol] ya da sayfa okunamadığı için doğrulanamayan
+      hedefin kısa yazısı [metin_kati]: "I'm Not a Robot (2017)" dizi adı, "Ben Robot Değilim" film adı serbest);
+      nokta/noktalar: pencere pikseli (algılanan sınama kutularından biri); odak_kutusu: odaktaki ögenin kutusu (klavye
+      girdisi: odak sınama kutusundaysa ret: Tab+Boşluk ile işaretleme); klavye: hedefsiz klavye girdisi — yalnız sayfanın
+      TAMAMI sınamaysa (ara sayfa) engellenir; baslik: pencerenin güncel başlığı (değiştiyse eski algı atılır)."""
     d = durum(k, simdi, baslik=baslik)
     if oge is not None and oge.get("sinama"):
         return acik_sonuc({"kind": (d or {}).get("kind", "captcha"), "window": (d or {}).get("window", baslik or ""),
                            "hint": IPUCU.format(kind=(d or {}).get("kind", "captcha")),
                            "confidence": (d or {}).get("confidence", "high")})
     if d is None:
-        if ad and len(katla(ad).split()) <= OCR_KISA and ad_kalibi_mi(ad, oran=KALIP_ORANI):
+        if ad and (metin_kati or rol in KUTU_ROLLERI) and len(katla(ad).split()) <= OCR_KISA \
+                and ad_kalibi_mi(ad, oran=KALIP_ORANI):
             return acik_sonuc({"kind": ad_kalibi_mi(ad), "window": baslik or "", "hint": IPUCU.format(
                 kind=ad_kalibi_mi(ad)), "confidence": "high"})
         return None
@@ -574,44 +716,121 @@ def dur(r: dict):
     return e
 
 
+def _kisa_metinler(metinler) -> list:
+    return [m for m in (metinler or ()) if m and len(katla(m).split()) <= OCR_KISA]
+
+
 def nokta_engeli(k: str, x, y, metinler=()) -> dict | None:
     """ÇEKİRDEK fare kapısı (eylem.hassas_nokta: koordinat, metin, öge, simge, renk, web ve sürükleme başlangıcı için TEK
-    nokta): tıklanan NOKTA sınama kutusundaysa → sonuç. Ajanın verdiği ada DEĞİL noktaya bakılır; yalnız kısa metinlerde
-    (öge adı + noktadaki yazı) insan-doğrulama cümlesi de reddedilir. Pencerede durum yoksa ve pencere tarayıcıysa girdiden
-    önce bir kez taranır (hazir). Pencere kimliği yoksa/masaüstü kipindeyse None."""
+    nokta): tıklanan NOKTA sınama kutusundaysa → sonuç. Ajanın verdiği ada DEĞİL noktaya bakılır. Pencerede durum yoksa ve
+    pencere tarayıcıysa girdiden önce bir kez taranır (hazir_oku); sayfa OKUNAMADIYSA (tarayıcı değil, a11y kapalı…) kısa
+    insan-doğrulama cümlesi (öge adı + noktadaki yazı) doğrulanamadığı için reddedilir, okunduysa yalnız nokta. Masaüstü
+    kipinde (EKRAN) pencere noktadan önce bilinmez: eylem.tikla_ic imleci koyduktan sonra ekran_nokta_engeli çağırır."""
     from .arka_uc import EKRAN
     if not k or k == EKRAN:
         return None
-    baslik = baslik_simdi(k)
-    hazir(k, baslik)
-    kisa = [m for m in (metinler or ()) if m and len(katla(m).split()) <= OCR_KISA]
     nokta = (x, y) if x is not None and y is not None else None
-    for m in kisa or (None,):
-        r = girdi_engeli(k, ad=m, nokta=nokta, baslik=baslik)
+    if tarayici_mi(k):
+        baslik = baslik_simdi(k)
+        _d, okundu = hazir_oku(k, baslik)
+    else:  # tarayıcı değil: ağaç taranmaz (tık gecikmesi yok); observe'un yazdığı durum varsa o kullanılır
+        okundu = False
+        baslik = baslik_simdi(k) if durum(k) is not None else None
+    for m in _kisa_metinler(metinler) or (None,):
+        r = girdi_engeli(k, ad=m, nokta=nokta, baslik=baslik, metin_kati=not okundu)
         if r is not None:
             return r
     return None
 
 
+def oge_engeli(k: str, oge: dict | None) -> dict | None:
+    """ÇEKİRDEK öge kapısı: ögenin ait olduğu iç belge (iframe) adresi (`_belge_adres` / `belge_adres`) sınama çerçevesiyse →
+    sonuç. Görünür/görünmez ayrımı yok; erişilebilirlik eylemi (via=action) ve gerçek tık AYNI kapıdan geçer."""
+    tur = adres_turu((oge or {}).get("_belge_adres") or (oge or {}).get("belge_adres"))
+    if not tur:
+        return None
+    return acik_sonuc({"kind": tur, "window": baslik_simdi(k) or "", "hint": IPUCU.format(kind=tur), "confidence": "high"})
+
+
+def ekran_nokta_engeli(au, px, py, metinler=(), pencere=None) -> dict | None:
+    """MASAÜSTÜ kipi (EKRAN) fare kapısı: imleç (px, py) ekran pikselinde DURUYOR (mouseto sonrası); imlecin altındaki pencere
+    çözülür (`pencere` verilmediyse au.fare()[2]) ve kapı O pencere + pencereye göre nokta ile çağrılır (tarayıcıda
+    sınama kutusu, tarayıcı değilse yazı kuralı). Pencere çözülemezse yalnız yazı kuralı (doğrulanamadı)."""
+    w = pencere if pencere is not None else au.fare()[2]
+    geo = None
+    if w:
+        try:
+            geo = au.geometri(w)
+        except Exception:  # noqa: BLE001 - geometri yoksa pencere-göreli nokta bilinmez
+            geo = None
+    if not w or geo is None:
+        for m in _kisa_metinler(metinler) or (None,):
+            r = girdi_engeli("", ad=m, metin_kati=True)
+            if r is not None:
+                return r
+        return None
+    return nokta_engeli(w, px - geo[0], py - geo[1], metinler)
+
+
 def odakli_oge(k: str) -> dict | None:
     """Tarayıcı sayfasında ODAKTAKİ ögenin {"rol","ad","kutu"} (pencere pikseli) | None. Yalnız sınama durumu VARKEN çağrılır
-    (Tab+Boşluk ile sınama kutusunu işaretlemeyi kapatmak için); erişilebilirlik ağacının 'focused' durumu kullanılır."""
+    (Tab+Boşluk ile sınama kutusunu işaretlemeyi kapatmak için); erişilebilirlik ağacının 'focused' durumu kullanılır.
+    Sonuç ODAK_TTL sn önbellekte (her klavye komutunda ek tam tarama yapılmasın); girdi gönderilince silinir."""
     from . import web
-    if not web.tarayici_mi(k):
+    simdi = time.monotonic()
+    t = _ODAK.get(k)
+    if t is not None and simdi - t[0] < ODAK_TTL:
+        return t[1]
+    if not tarayici_mi(k):
         return None
-    web.hazirla(k)
-    s = web.oku(k, roller=sorted(web.ETKILESIMLI | {"image"}), gorunur=True, en_cok=0, ad_siniri=0, ayrinti=False)
+    sonuc = None
+    with web.tarama_siniri(TARAMA_SURESI * 2):
+        web.hazirla(k)
+        s = web.oku(k, roller=sorted(web.ETKILESIMLI | {"image"}), gorunur=True, en_cok=0, ad_siniri=0, ayrinti=False)
     for o in s["ogeler"]:
         if "odakli" in (o.get("durum") or ()) and o.get("kutu"):
-            return {"rol": o["rol"], "ad": o["ad"], "kutu": list(o["kutu"])}
-    return None
+            sonuc = {"rol": o["rol"], "ad": o["ad"], "kutu": list(o["kutu"])}
+            break
+    _ODAK[k] = (simdi, sonuc)
+    return sonuc
 
 
-def klavye_engeli(k: str, odak_sorgu=None) -> dict | None:
+TAB_TUSLARI = frozenset({"tab", "iso_left_tab", "k:15", "x:tab", "x:iso_left_tab"})
+
+
+def _tab_mu(akor: str) -> bool:
+    return str(akor).lower().split("+")[-1] in TAB_TUSLARI
+
+
+def metin_dizisi(metin: str) -> list[str]:
+    """Yazılacak metin → klavye dizisi parçaları: her TAB karakteri "tab", aradaki boş olmayan yazı "metin:…"."""
+    cikti: list[str] = []
+    for parca in re.split("(\t)", metin or ""):
+        if parca == "\t":
+            cikti.append("tab")
+        elif parca:
+            cikti.append("metin:" + parca)
+    return cikti
+
+
+def tab_sonrasi_girdi(dizi) -> bool:
+    """Dizide Tab/Shift+Tab'dan SONRA başka bir tuş/metin var mı? (Tab odağı sınama kutusuna taşır, ardından Boşluk/Enter/yazı
+    ona gider: odak bu çağrının BAŞINDA sınama dışında göründüğü için ayrı denetim yetmez.) Yalnız art arda Tab serbest."""
+    gordu = False
+    for t in dizi or ():
+        if _tab_mu(t):
+            gordu = True
+        elif gordu:
+            return True
+    return False
+
+
+def klavye_engeli(k: str, odak_sorgu=None, dizi=None) -> dict | None:
     """ÇEKİRDEK klavye kapısı (tuş / yazı / bas): sayfanın tamamı sınamaysa ya da ODAK sınama kutusundaysa (onay kutusu,
     kaydırıcı, sınama çerçevesi içi, resimli güvenlik kodu giriş alanı) → sonuç. odak_sorgu: çağıranın verdiği, odaktaki
-    ögenin {"kutu": [x,y,w,h]} bilgisini döndüren işlev (AT-SPI; yalnız sınama durumu VARKEN çağrılır: durum yoksa
-    ek maliyet yok)."""
+    ögenin {"kutu": [x,y,w,h]} bilgisini döndüren işlev (AT-SPI; yalnız sınama durumu VARKEN çağrılır: durum yoksa ek maliyet
+    yok). dizi: gönderilecek tuş/metin parçaları (tuş akorları; yazı için metin_dizisi): sayfada sınama durumu varken Tab/
+    Shift+Tab'dan sonra başka tuş ya da yazı da içeriyorsa ret (Tab odağı sınama kutusuna taşıyıp devamı ona gönderirdi)."""
     from .arka_uc import EKRAN
     if not k or k == EKRAN:
         return None
@@ -621,6 +840,10 @@ def klavye_engeli(k: str, odak_sorgu=None) -> dict | None:
         return None
     if d.get("page_wide"):
         return girdi_engeli(k, klavye=True, baslik=baslik)
+    if dizi and tab_sonrasi_girdi(dizi):
+        kind = d.get("kind") or "captcha"
+        return acik_sonuc({"kind": kind, "window": d.get("window") or baslik or "", "hint": IPUCU.format(kind=kind),
+                           "confidence": d.get("confidence") or "high"})
     kutu = None
     try:
         kutu = ((odak_sorgu or (lambda: odakli_oge(k)))() or {}).get("kutu")

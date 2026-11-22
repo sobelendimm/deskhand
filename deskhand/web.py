@@ -16,7 +16,9 @@ org.a11y.Status.IsEnabled), Chromium/Electron için --force-renderer-accessibili
 """
 from __future__ import annotations
 
+import contextlib
 import difflib
+import threading
 import time
 
 from .arka_uc import EKRAN, sec
@@ -100,12 +102,17 @@ class _Yol:
         from jeepney.low_level import HeaderFields
         sonuc: list = [None] * len(mesajlar)
         for bas in range(0, len(mesajlar), _PARCA):
+            son = getattr(_SINIR, "bitis", None)
+            if son is not None and time.monotonic() >= son:  # tarama_siniri: toplam süre aşıldı (girdi kapısı taraması)
+                raise Dur(ARAC_EKSIK, _("erişilebilirlik ağacı süre sınırı içinde okunamadı"))
             bekleyen = {}
             for i in range(bas, min(bas + _PARCA, len(mesajlar))):
                 s = next(self.c.outgoing_serial)
                 self.c.send(mesajlar[i], serial=s)
                 bekleyen[s] = i
             bitis = time.monotonic() + sure
+            if son is not None:
+                bitis = min(bitis, son)
             while bekleyen:
                 try:
                     m = self.c.receive(timeout=max(0.0, bitis - time.monotonic()))
@@ -116,6 +123,21 @@ class _Yol:
                 if i is not None and m.header.message_type == MessageType.method_return:
                     sonuc[i] = m.body
         return sonuc
+
+
+_SINIR = threading.local()  # bu iş parçacığında ağaç taramasının TOPLAM süre sınırı (monotonic bitiş; yoksa sınırsız)
+
+
+@contextlib.contextmanager
+def tarama_siniri(sure: float):
+    """with bloğundaki ağaç taraması (toplu) en çok `sure` sn sürer; aşılırsa Dur(ARAC_EKSIK). İç içe geçerse en sıkı sınır."""
+    onceki = getattr(_SINIR, "bitis", None)
+    yeni = time.monotonic() + sure
+    _SINIR.bitis = yeni if onceki is None else min(onceki, yeni)
+    try:
+        yield
+    finally:
+        _SINIR.bitis = onceki
 
 
 def _m(bus, yol, arayuz, uye, imza=None, govde=()):
