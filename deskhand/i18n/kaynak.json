@@ -282,7 +282,7 @@
  ],
  "'{eylem}' eylemi yok; ögenin eylemleri: {liste}": [
   "erisim.py:509",
-  "erisim.py:1303",
+  "erisim.py:1305",
   "web.py:688"
  ],
  "'{metin}' artık ({x},{y}) noktasında değil (ekran değişti); tıklanmadı": [
@@ -351,7 +351,7 @@
   "eylem.py:1337"
  ],
  ", doğrulandı": [
-  "erisim.py:1370"
+  "erisim.py:1377"
  ],
  ", sayfa {n}/{t}": [
   "web.py:717"
@@ -1156,6 +1156,9 @@
  "Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}": [
   "guvenlik.py:1325"
  ],
+ "Sayfa okunamadı, bu yüzden CAPTCHA olmadığı doğrulanamıyor (olmayabilir): Boşluk, Enter ve Tab'dan sonra gelen girdi reddedildi. Belirli bir öğeye tıkla ya da tarayıcıyı erişilebilirlik açıkken yeniden başlat (ac --arka); kullanıcıya devir gerekmez.": [
+  "dogrulama_sinamasi.py:1001"
+ ],
  "Sağlık": [
   "gui/metinler.py:53"
  ],
@@ -1652,7 +1655,7 @@
  ],
  "birincil eylem yok (click/press/activate/toggle); ögenin eylemleri: {liste}; --eylem ADI ile seç": [
   "erisim.py:513",
-  "erisim.py:1308"
+  "erisim.py:1310"
  ],
  "birincil eylem yok; ögenin eylemleri: {liste}": [
   "web.py:693"
@@ -1845,8 +1848,8 @@
  ],
  "değer yazma": [
   "erisim.py:1072",
-  "erisim.py:1345",
-  "erisim.py:1351"
+  "erisim.py:1349",
+  "erisim.py:1355"
  ],
  "değer yazılamadı (öge salt okunur ya da devre dışı)": [
   "erisim.py:546"
@@ -1993,11 +1996,11 @@
   "erisim.py:1035",
   "erisim.py:1072",
   "erisim.py:1254",
-  "erisim.py:1289"
+  "erisim.py:1291"
  ],
  "erişilebilirlik eylemi pencere ister (masaüstü kipi değil)": [
   "erisim.py:1069",
-  "erisim.py:1287"
+  "erisim.py:1289"
  ],
  "erişilebilirlik görünmez masaüstünde hazırlanamadı (at-spi2-core): `agac` / `ogeye-tikla` / `--eylem` arka planda çalışmaz": [
   "masaustu.py:822",
@@ -2082,14 +2085,14 @@
   "mesgul.py:655"
  ],
  "eylem yapıldı: web {rol} '{ad}' → {eylem} (eylemler: {liste}), {sn} sn": [
-  "erisim.py:1279"
+  "erisim.py:1281"
  ],
  "eylem yapıldı: {rol} '{ad}' → {eylem} (eylemler: {liste}), {kademe} eşleşme, {sn} sn": [
-  "erisim.py:1326"
+  "erisim.py:1330"
  ],
  "eylem çalışmadı: '{eylem}' (öge reddetti)": [
-  "erisim.py:1278",
-  "erisim.py:1325"
+  "erisim.py:1280",
+  "erisim.py:1329"
  ],
  "fare": [
   "guvenlik.py:1137"
@@ -2397,7 +2400,7 @@
   "mcp_sunucu.py:146"
  ],
  "insan doğrulaması ({kind}): kullanıcıya devret — request_human kullan; girdi gönderilmedi": [
-  "dogrulama_sinamasi.py:1039"
+  "dogrulama_sinamasi.py:1045"
  ],
  "insana devir: {pencere}": [
   "mcp_sunucu.py:2569"
@@ -3224,6 +3227,9 @@
  "sayfa numarası (her sayfada 60 öge)": [
   "cli.py:454"
  ],
+ "sayfa okunamadı (CAPTCHA olmayabilir): öğeye tıkla ya da tarayıcıyı erişilebilirlik açıkken yeniden başlat (`ac --arka`); girdi gönderilmedi": [
+  "dogrulama_sinamasi.py:1043"
+ ],
  "screen ile ayrık oturumda komut çalıştırma": [
   "guvenlik.py:773"
  ],
@@ -3435,7 +3441,7 @@
  ],
  "tıklama (erişilebilirlik eylemi)": [
   "erisim.py:1255",
-  "erisim.py:1312"
+  "erisim.py:1314"
  ],
  "tıklama: {hedef} @ {pencere}": [
   "mcp_sunucu.py:1628"
@@ -3612,7 +3618,7 @@
   "eylem.py:398"
  ],
  "yazıldı: {rol} '{ad}' ← {karakter} karakter ({yontem}){dogrulandi}, {kademe} eşleşme": [
-  "erisim.py:1368"
+  "erisim.py:1375"
  ],
  "yeri/boyutu değişti": [
   "erisim.py:936"
@@ -3974,7 +3980,7 @@
   "web.py:684"
  ],
  "öge eylem arayüzü sunmuyor (Action yok): fare ile tıkla (--eylem olmadan)": [
-  "erisim.py:1298"
+  "erisim.py:1300"
  ],
  "öge kimliği yok (yol_ver)": [
   "web.py:670"
@@ -3989,7 +3995,7 @@
   "erisim.py:548"
  ],
  "öge yazılabilir değil (EditableText ya da Value arayüzü yok): '{ad}'": [
-  "erisim.py:1340"
+  "erisim.py:1344"
  ],
  "ölçek {olcek}": [
   "gorsel.py:234"

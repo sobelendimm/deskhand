@@ -1271,8 +1271,10 @@ def _web_eylem(a, w):
                             ).format(ad=o["ad"]), tur="hedef-degisti")
     from . import gonderim
     gonderim.artir()  # eylem çağrısı yarıda kalsa da "belki gitti" (MCP sent)
-    r = web.eylem_yap(k, o, a.eylem or None)
-    dogrulama_sinamasi.girdi_oldu(k)  # eylem sayfayı değiştirmiş olabilir: "sınama yok" önbelleği silinir
+    try:
+        r = web.eylem_yap(k, o, a.eylem or None)
+    finally:  # eylem sayfayı değiştirmiş olabilir (hata verse bile): sınama kaydı kirlenir
+        dogrulama_sinamasi.girdi_oldu(k)
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']} (web)" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:
         raise Dur(6, _("eylem çalışmadı: '{eylem}' (öge reddetti)").format(eylem=r["eylem"]))
@@ -1318,8 +1320,10 @@ def _ogeye_eylem(a):
     _atspi_korumalari(k, a.baslik, "fare")  # onay beklenmiş olabilir: pencere/başlık/DUR/ekran korumasını yeniden doğrula
     from . import gonderim
     gonderim.artir()  # eylem çağrısı yarıda kalsa da "belki gitti" (MCP sent)
-    r = _atspi_calistir(_oge_istegi(k, o, "eylem", eylem=eylem_adi))
-    dogrulama_sinamasi.girdi_oldu(k)  # eylem sayfayı değiştirmiş olabilir
+    try:
+        r = _atspi_calistir(_oge_istegi(k, o, "eylem", eylem=eylem_adi))
+    finally:  # eylem sayfayı değiştirmiş olabilir (hata verse bile)
+        dogrulama_sinamasi.girdi_oldu(k)
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']}" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:
         raise Dur(6, _("eylem çalışmadı: '{eylem}' (öge reddetti)").format(eylem=r["eylem"]))
@@ -1361,7 +1365,10 @@ def k_ogeye_yaz(a):
     ucbirim.tampon_isle(sec(), k, kirli=True)  # değer doğrudan yazıldı: satırın içeriği artık bilinmez
     from . import gonderim
     gonderim.artir()  # değer yazma yarıda kalsa da "belki gitti" (MCP sent)
-    r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
+    try:
+        r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
+    finally:  # değer yazıldı (sayfa değişmiş olabilir; hata verse bile): sınama kaydı kirlenir
+        dogrulama_sinamasi.girdi_oldu(k)
     gonderim.not_yaz("dogrulandi", r.get("dogrulandi"))
     goster = f"***({len(metin)})" if gizli else repr(metin if len(metin) <= 200 else metin[:197] + "…")
     _atspi_gunluk(k, etiket, f"atspi set-text {goster}")

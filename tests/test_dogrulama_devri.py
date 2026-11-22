@@ -610,7 +610,22 @@ try:
     ds.tarayici_mi = lambda k_: True
     ds.okunamadi_kaydet("arka:49", "x")
     ds.girdi_oldu("arka:49")
-    kontrol("O2: girdi_oldu `okunamadi` önbelleğini de siler", ds.okunamadi_mu("arka:49", "x") is False)
+    kontrol("R1b: girdi_oldu `okunamadi` önbelleğini SİLMEZ (10 sn süre + başlık değişimiyle yenilenir: her girdide yeniden tarama yok)",
+            ds.okunamadi_mu("arka:49", "x") is True and ds.okunamadi_mu("arka:49", "baska baslik") is False)
+    ds.okunamadi_kaydet("arka:49", "x")
+    sayac3_ = {"tara": 0}
+    ds.tara = lambda k_, baslik=None, kapi=False: (sayac3_.__setitem__("tara", sayac3_["tara"] + 1), (None, False))[1]
+    for _i in range(4):
+        ds.girdi_oldu("arka:49")
+        ds.klavye_engeli("arka:49", dizi=["a"])
+    kontrol("R1b: okunamayan pencerede art arda girdilerde yeniden tarama YOK", sayac3_["tara"] == 0, str(sayac3_))
+    r_ok = ds.okunamayan_klavye_engeli(["space"], "x")
+    r_bilinen = ds._sonuc_d({"kind": "recaptcha", "window": "w"}, "x")
+    kontrol("R1a: okunamayan sayfa reddi AYRI ileti: 'sayfa okunamadı', erişilebilirlik ipucu, request_human ÖNERMEZ",
+            r_ok.get("unreadable") and "okunamadı" in ds.red_metni(r_ok) and "request_human" not in ds.red_metni(r_ok) and
+            "ac --arka" in ds.red_metni(r_ok) and "request_human" not in ds.IPUCU_OKUNAMADI, ds.red_metni(r_ok))
+    kontrol("R1a: bilinen sınama reddi hâlâ request_human der", "request_human" in ds.red_metni(r_bilinen) and
+            not r_bilinen.get("unreadable"), ds.red_metni(r_bilinen))
 finally:
     ds.tara, ds.tarayici_mi, ds.baslik_simdi = _t0_, _tm0_, _bs0_
     ds.temizle()
@@ -777,6 +792,26 @@ finally:
         setattr(_ey, n_, v_)
     _gv.sistem_istemi_mi = _sim0_
     ds.temizle()
+
+import ast as _ast  # noqa: E402
+_src_er = _ast.parse(open(os.path.join(_yalitim.KOK, "deskhand", "erisim.py"), encoding="utf-8").read())
+
+
+def _finally_girdi_oldu(fn_adi):
+    """Fonksiyonda girdi_oldu çağrısı bir try/finally'nin finalbody'sinde mi (ve gövdede ayrıca düz çağrı yok mu)?"""
+    fn = next(n_ for n_ in _ast.walk(_src_er) if isinstance(n_, _ast.FunctionDef) and n_.name == fn_adi)
+    def cagri(n_):
+        return isinstance(n_, _ast.Call) and getattr(n_.func, "attr", "") == "girdi_oldu"
+    tum = sum(cagri(n_) for n_ in _ast.walk(fn))
+    fin = sum(cagri(c_) for t_ in _ast.walk(fn) if isinstance(t_, _ast.Try) for f_ in t_.finalbody for c_ in _ast.walk(f_))
+    return tum >= 1 and tum == fin
+
+
+kontrol("B1: erisim ogeye-yaz / web eylemi / öge eylemi girdi_oldu'yu try/finally içinde çağırır",
+        all(_finally_girdi_oldu(n_) for n_ in ("k_ogeye_yaz", "_web_eylem", "_ogeye_eylem")))
+_kaps_src = open(os.path.join(_yalitim.KOK, "tests", "test_onay_kapsami.py"), encoding="utf-8").read()
+kontrol("test_onay_kapsami: hazir_oku yaması try/finally ile geri alınır",
+        "finally:\n            _dsk.hazir_oku = _dsk_once" in _kaps_src)
 
 # ================================================================ güvenlik: görünmez masaüstü
 from deskhand import api, masaustu  # noqa: E402

@@ -316,7 +316,8 @@ def acik_sonuc(s: dict | None) -> dict | None:
     if not s:
         return None
     return {"detected": True, "kind": s["kind"], "window": s["window"], "hint": s["hint"],
-            **({"confidence": s["confidence"]} if s.get("confidence") == "low" else {})}
+            **({"confidence": s["confidence"]} if s.get("confidence") == "low" else {}),
+            **({"unreadable": True} if s.get("unreadable") else {})}
 
 
 def ogeleri_isaretle(ogeler: list[dict], s: dict | None) -> None:
@@ -529,7 +530,7 @@ def _girdi_dosyaya_yazilsin(anahtar: str) -> bool:
 def girdi_oldu(k: str | None = None) -> None:
     """Bir pencereye girdi GÖNDERİLDİ (tık/tuş/yazı/kaydırma/pencere yönetimi/eylem): sayfa değişmiş olabilir → o pencerenin
     sınama kaydı KİRLİ olur (son girdi zamanı; kutular artık eski yerinde olmayabilir: sonraki girdi yeniden tarar, tarayıcı
-    kayıttan eskiyse hazir_oku yeniden bakar), "sınama yok" / "okunamadı" önbellekleri ve odak önbelleği silinir. k yok ya da
+    kayıttan eskiyse hazir_oku yeniden bakar), "sınama yok" önbelleği ve odak önbelleği silinir ("okunamadı" 10 sn süreyle yenilenir). k yok ya da
     masaüstü kipi (EKRAN) → pencere bilinmiyor: TÜM pencereler kirli sayılır (JOKER)."""
     from .arka_uc import EKRAN
     simdi = time.monotonic()
@@ -539,8 +540,7 @@ def girdi_oldu(k: str | None = None) -> None:
         if len(_GIRDI) > 256:
             _GIRDI.clear()
         _GIRDI[anahtar] = simdi
-        _YOK.clear()
-        _OKUNAMADI.clear()
+        _YOK.clear()  # `okunamadi` SİLİNMEZ: 10 sn süre + başlık değişimiyle yenilenir (her girdide yeniden tarama yok)
     if _girdi_dosyaya_yazilsin(anahtar):
         with _depo() as d:
             d["girdi"][anahtar] = {"zaman": simdi}
@@ -998,9 +998,9 @@ def tek_basina_bosluk_enter(dizi) -> bool:
     return dizi_bosluk_enter(parcalar)
 
 
-IPUCU_OKUNAMADI = ("This page could not be read, so a human-verification challenge (CAPTCHA) cannot be ruled out. Space, Enter "
-                   "and anything after Tab are refused here. Click a specific element or read the page first; if a CAPTCHA "
-                   "is on it, call request_human(reason, window).")
+IPUCU_OKUNAMADI = _("Sayfa okunamadı, bu yüzden CAPTCHA olmadığı doğrulanamıyor (olmayabilir): Boşluk, Enter ve Tab'dan sonra "
+                    "gelen girdi reddedildi. Belirli bir öğeye tıkla ya da tarayıcıyı erişilebilirlik açıkken yeniden başlat "
+                    "(ac --arka); kullanıcıya devir gerekmez.")
 
 
 def okunamayan_klavye_engeli(dizi, baslik: str | None = None, d: dict | None = None, bosluk: bool = True) -> dict | None:
@@ -1010,7 +1010,8 @@ def okunamayan_klavye_engeli(dizi, baslik: str | None = None, d: dict | None = N
         return None
     if d is not None:
         return _sonuc_d(d, baslik)
-    return acik_sonuc({"kind": "captcha", "window": baslik or "", "hint": IPUCU_OKUNAMADI, "confidence": "low"})
+    return acik_sonuc({"kind": "captcha", "window": baslik or "", "hint": IPUCU_OKUNAMADI, "confidence": "low",
+                       "unreadable": True})
 
 
 # ---------------------------------------------------------------- request_human için kapı (bekleyen devir)
@@ -1035,6 +1036,11 @@ def devir_bitir(k: str) -> None:
 
 
 def red_metni(s: dict) -> str:
-    """[18] hata iletisi (kullanıcıya/ajana; çevrilir)."""
+    """[18] hata iletisi (kullanıcıya/ajana; çevrilir). Okunamayan tarayıcı sayfası (CAPTCHA olmayabilir) AYRI ileti: request_human
+    önerilmez."""
+    if s.get("unreadable"):
+        from .web import IPUCU_ERISIM
+        return _("sayfa okunamadı (CAPTCHA olmayabilir): öğeye tıkla ya da tarayıcıyı erişilebilirlik açıkken yeniden "
+                 "başlat (`ac --arka`); girdi gönderilmedi") + "\n" + IPUCU_ERISIM
     return _("insan doğrulaması ({kind}): kullanıcıya devret — request_human kullan; girdi gönderilmedi").format(
         kind=s["kind"])

@@ -273,10 +273,12 @@ with arka_uc.hedef_sabit("kde"):
         from deskhand import dogrulama_sinamasi as _dsk
         _dsk_once = _dsk.hazir_oku
         _dsk.hazir_oku = lambda k_, baslik=None: (None, True)
-        kod, n, g = sorar(eylem.k_tus, ns(kimlik="{o}", kombinasyon="enter"))
-        kontrol(f"[{mod}] ödeme sayfasında Enter → onay ister, tuş gitmez", kod == 10 and n == 1 and g == 0, f"{kod} {n} {g}")
-        kod, n, g = sorar(eylem.k_tus, ns(kimlik="{o}", kombinasyon="enter", onayli=True))
-        _dsk.hazir_oku = _dsk_once
+        try:
+            kod, n, g = sorar(eylem.k_tus, ns(kimlik="{o}", kombinasyon="enter"))
+            kontrol(f"[{mod}] ödeme sayfasında Enter → onay ister, tuş gitmez", kod == 10 and n == 1 and g == 0, f"{kod} {n} {g}")
+            kod, n, g = sorar(eylem.k_tus, ns(kimlik="{o}", kombinasyon="enter", onayli=True))
+        finally:
+            _dsk.hazir_oku = _dsk_once
         if mod == "kart":
             kontrol("[kart] ödeme sayfasında Enter + --onayli → yok sayılır (panel red → 10)",
                     kod == 10 and n == 1 and g == 0, f"{kod} {n} {g}")
