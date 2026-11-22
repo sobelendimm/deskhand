@@ -827,12 +827,25 @@ def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str,
     if not bwrap_var():
         raise Dur(ARAC_EKSIK, _("bwrap (bubblewrap) yok: arka plan uygulaması yalıtılamaz, başlatılmadı"))
     from . import yollar
+    from . import ses as _ses
     from .oturum import politika
+    cdir = d.get("calisma") or ""
+    ses_bagli = bool(cdir) and any(y == _ses.pulse_dizini(cdir) for y, _ro in baglar)
+    beklenen = _ses.SON_KIMLIK.get(cdir) if ses_bagli else None
+    if ses_bagli and (beklenen is None or _ses.pulse_kimlik(cdir) != beklenen):
+        # bağ listesi kurulduktan sonra pulse dizini değişmiş/bozulmuş: uygulama gerçek soketleri görmesin
+        raise Dur(14, _("özel ses dizini bağ listesi kurulurken ile başlatılırken farklı ya da güvensiz; uygulama "
+                        "başlatılmadı"))
     baglar = [*baglar, *kopya_bagi(kopya, politika.kopya_dizini()), *girdi_kopyasi_bagi(girdi)]
     popen.setdefault("stdin", subprocess.DEVNULL)
     dis = {k: v for k, v in env.items() if k not in SON_KOMUT_ORTAMI}
     dis["PATH"] = GUVENLI_PATH
-    return kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar, env), dis, **popen)
+    p = kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar, env), dis, **popen)
+    if ses_bagli and _ses.pulse_kimlik(cdir) != beklenen:  # bwrap bağı sırasında değişti: uygulamayı öldür
+        p.kill()
+        p.wait()
+        raise Dur(14, _("özel ses dizini uygulama başlatılırken değişti; uygulama durduruldu"))
+    return p
 
 
 def _sinyal(pids, sig) -> None:
@@ -1022,10 +1035,10 @@ def uygulama_runtime(cdir: str) -> str:
 def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
     """Uygulama ortamının SES bölümü (iki tür için aynı). Uygulamalar kullanıcının ses sunucusuna (pipewire/pulse)
     HİÇ erişmez — çalma da kayıt (mikrofon) da yok: bwrap ad alanında gerçek runtime dizini görünmez. İki durum:
-      - oturuma özel ses sunucusu hazırsa (ses.py; `<çalışma>/ses/pulse/native` kullanıcıya ait gerçek soket) ortam
+      - oturuma özel ses sunucusu hazırsa (ses.py; `<çalışma>/ses-pulse/native` kullanıcıya ait gerçek soket) ortam
         YALNIZ onun PULSE soketini gösterir: çıkış boş (deskhand-sessiz), mikrofon yok, modül yükleme kapalı, ses
         kullanıcının hoparlörüne gitmez; Deskhand aynı örneğin monitöründen dinler (listen aracı). PipeWire'ın kendi
-        (tam yetkili) soketi VERİLMEZ: PIPEWIRE_REMOTE var olmayan yol (ad alanında `ses/` değil yalnız `ses/pulse/`);
+        (tam yetkili) soketi VERİLMEZ: PIPEWIRE_REMOTE var olmayan yol (ad alanında `ses/` değil yalnız `ses-pulse/`);
       - değilse ortam var olmayan bir sokete yönlendirilir (uygulamalar sessiz çalışır).
     `ses` (durum kaydı) KULLANILMAZ: soket yolu çalışma dizininden kurulur ve varlığı gerçek dosya sisteminden denetlenir
     (oynanmış kayıt başka bir soketi gösteremez)."""
@@ -1045,11 +1058,17 @@ def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
 
 
 def ses_bagi(cdir: str) -> list[tuple[str, bool]]:
-    """Özel ses sunucusu hazırsa uygulamanın ad alanına bağlanacak TEK ses yolu: `<çalışma>/ses/pulse` (yalnız pulse
+    """Özel ses sunucusu hazırsa uygulamanın ad alanına bağlanacak TEK ses yolu: `<çalışma>/ses-pulse` (yalnız pulse
     soketi; SALT OKUNUR: connect salt okunur bağda çalışır, uygulama soketi değiştiremez). PipeWire soketleri,
     yapılandırma ve günlükler (`ses/`) bağlanmaz. Hazır değilse hiçbir şey."""
     from . import ses as _ses
-    return [(_ses.pulse_dizini(cdir), True)] if _ses.soket_hazir(cdir) else []
+    # pulse dizini `ses/` DIŞINDA (`<çalışma>/ses-pulse`): dizin girdisini sunucu değiştiremez (ses/ altındayken sunucu
+    # onu sembolik bağla değiştirip uygulamaya gerçek soketleri gösterebilirdi); kimlik korumali_baslat'ta bağdan önce
+    # ve sonra denetlenir
+    if not _ses.soket_hazir(cdir):
+        return []
+    _ses.kimlik_kaydet(cdir)
+    return [(_ses.pulse_dizini(cdir), True)]
 
 
 def _cikarilacak_mi(k: str) -> bool:
