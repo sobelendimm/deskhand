@@ -618,6 +618,7 @@ if adres:
 # ---------------------------------------------------------------- 8) kapanış + kalıntı
 print("\n8) kapanış")
 kimlik, calisma, xana = D["kimlik"], D["calisma"], D["x_ana"]
+bizim_x = {f"X{n}" for n in (xana, xana + 1)} | ({"X" + D["xwayland"].lstrip(":").split(".")[0]} if D.get("xwayland") else set())
 pidler = dict(D["pid"])
 uyg = [p_wl.pid, p_x.pid]
 ko.durdur(D)
@@ -628,8 +629,9 @@ kontrol("durdur: çalışma dizini silindi", not os.path.exists(calisma))
 kontrol("durdur: durum() boş", ko.durum() is None)
 kontrol("durdur: X soketleri ve kilitleri kalmadı", not any(os.path.exists(y) for y in (
     f"/tmp/.X11-unix/X{xana}", f"/tmp/.X11-unix/X{xana + 1}", f"/tmp/.X{xana}-lock", f"/tmp/.X{xana + 1}-lock")))
-fazla = {a for a in x_soketleri() - x0 if re.fullmatch(r"X\d+", a) and int(a[1:]) >= 120}
-kontrol("/tmp/.X11-unix: oturumdan fazladan soket kalmadı", not fazla, str(fazla))
+# Eşzamanlı BAŞKA KWin oturumlarının (X124…) soketleri sayılmaz: yalnız bu oturumun ekran numaraları sınanır.
+kalan = bizim_x & x_soketleri()
+kontrol("/tmp/.X11-unix: bu oturumun X soketleri silindi (başkalarının soketlerine bakılmaz)", not kalan, str(kalan))
 kontrol("durdur: deskhand-sessiz ses çıkışı yok (hiç kurulmadı)",
         masaustu._sink_modulu("deskhand-sessiz-kwin-" + kimlik) is None)
 if shutil.which("systemd-run"):
