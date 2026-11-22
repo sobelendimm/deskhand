@@ -115,6 +115,7 @@ class Panel(QObject):
         iz.durum_degisti.connect(self._durum)
         iz.onaylar_degisti.connect(self._onaylar)
         iz.sanal_degisti.connect(self.pencere.arka.sanal_guncelle)
+        iz.sanal_degisti.connect(self.pencere.gorev.sanal_guncelle)
         self.pencere.dur_istendi.connect(self.dur)
         self.pencere.devam_istendi.connect(self.devam)
         self.pencere.onaylar.ac_istendi.connect(self.diyalog_one)
@@ -127,6 +128,7 @@ class Panel(QObject):
             self.tepsi.devam_istendi.connect(self.devam_sor)  # menüyü plasmashell çizer: doğrudan kaldırma
             self.tepsi.panel_istendi.connect(self.ac_kapat)
             self.tepsi.arka_istendi.connect(self.arka_goster)
+            self.tepsi.gorev_istendi.connect(self.gorev_goster)
             self.tepsi.cikis_istendi.connect(self.cik)
         app.aboutToQuit.connect(self.kapanis)
 
@@ -139,6 +141,7 @@ class Panel(QObject):
             pass
         self._durum(iz.durum)
         self.pencere.arka.sanal_guncelle(iz.sanal)
+        self.pencere.gorev.sanal_guncelle(iz.sanal)
         ayarlar = A.panel_oku()
         if ayarlar["kisayol_acik"]:  # yalnız kullanıcı Ayarlar'da açtıysa
             QTimer.singleShot(0, lambda: self.kisayol_ayarla(True, ayarlar["kisayol"]))
@@ -211,6 +214,7 @@ class Panel(QObject):
     # -------- DUR / devam (insanın kararı: kaynak "kullanici")
     def dur(self):
         guvenlik.dur_ac("kullanici")
+        self.pencere.gorev.durdur()  # çalışan görev varsa o da dursun (ajan DUR hatalarıyla boşuna beklemesin)
         gunluk("DUR anahtarı açıldı (panel)")
         self.izleyici.yenile()
 
@@ -282,6 +286,10 @@ class Panel(QObject):
         self.pencere.arka_goster()
         self.goster()
 
+    def gorev_goster(self):
+        self.pencere.gorev_goster()
+        self.goster()
+
     def _baglanti(self):
         s = self.sunucu.nextPendingConnection()
         if s is None:
@@ -291,6 +299,8 @@ class Panel(QObject):
             veri = bytes(s.readAll()).decode(errors="replace").strip()
             if veri == "arka":
                 self.arka_goster()
+            elif veri == "gorev":
+                self.gorev_goster()
             else:
                 self.goster()
             s.disconnectFromServer()
@@ -329,6 +339,7 @@ class Panel(QObject):
         self.diyaloglar.clear()
 
     def kapanis(self):
+        self.pencere.gorev.kapat()  # çalışan görev panelle birlikte durur
         self._merkez_durdur()  # önce: kapanış sırasında girdi kabul edilmesin
         self._diyaloglari_kapat()
         if self.pencere.arka.b_devral.isChecked():

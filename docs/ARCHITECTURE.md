@@ -66,7 +66,16 @@ deskhand/
   onay_hedef.py    onay verilen hedefin özeti (kimlik, başlık, geometri, bölge görüntüsü) + onay sonrası doğrulama (§8)
   liste_koruma.py  yasak/seviye listeleri: panel yetkili kaynak (bellek, geri yazma, işaret, kanaldan okuma; §4)
   girdi_merkezi.py panelin içinde hazır bekleyen tek dotool + RUNTIME_DIR/girdi.sock (Qt'siz; §2, §4)
-  gui/             panel, tepsi, onay diyaloğu
+  gui/             panel, tepsi, onay diyaloğu; gui/gorev.py = "Görev" sekmesi (görev kutusu, canlı adımlar, görünmez
+                   masaüstünün canlı görüntüsü, geçmiş)
+  gorev.py         görev yürütücü (Qt'siz): kullanıcının yazdığı görevi `claude -p --output-format stream-json` ile
+                   YALNIZ `deskhand mcp --desktop background` araçlarıyla yaptırır. Ayrıcalık sınırı argv'de:
+                   geçici --mcp-config (tek sunucu deskhand-gorev, env DESKHAND_GERCEK_EKRAN=kapali) + --strict-mcp-config +
+                   --allowedTools mcp__deskhand-gorev__* + yerleşik araçlar --disallowedTools + --permission-mode dontAsk +
+                   --setting-sources project; boş geçici çalışma dizini; istem stdin'den; olaylar {tur, zaman, ozet};
+                   geçmiş STATE_DIR/gorevler/*.jsonl (0600, son 50); aynı anda tek görev (flock RUNTIME_DIR/gorev.lock);
+                   ayarlar [gorev] model / azami_dakika / azami_tur; MCP sunucusu GÖREV KİPİNDE (§11)
+  gorev_kipi.py    görev kipi kuralları (DESKHAND_GOREV=1): tarayıcı ilkesi, site izni, open_app süzgeci, maskeleme (§11)
   fark.py          eylem öncesi/sonrası ekran farkı (changed, changed_region, changed_ratio; NumPy, imleç dayanıklı)
   dongu.py         döngü kesici: aynı eylem 3. sonuçsuzda uyarı, 5'ten sonra ret (MCP, oturum başına bellek)
   gozlem.py        MCP observe: ögeleri tek biçime getirme, sorgu/atalar, OCR ayıklama, anlık görüntü önbelleği
@@ -890,3 +899,31 @@ sonuçları (her araçta) küçük structuredContent'i korur. Şemalardaki otoma
 element, simge, renk, koordinat, `via=action` — hedef aranmadan önce insan onayı ister (`eylem.sistem_istemi_on`;
 gözetimsiz kipte ret → 10). `type_text(ref=…)` iki çekirdek eylemdir (alan tıklaması + yazı): sistem isteminde iki
 onay sorulur.
+
+## 11. Görev kipi (panel "Görev" sekmesi; `deskhand/gorev_kipi.py`)
+
+Görev ajanı (`claude -p`) GÜVENİLMEZ web içeriği okur (istem enjeksiyonu): kip yerel dosya ve kayıtlı parola/oturum
+sızıntısını sınırlar. `gorev.mcp_ortami()` → mcp.json `env` YALNIZ `{"DESKHAND_GERCEK_EKRAN": "kapali",
+"DESKHAND_GOREV": "1"}`; görevde izin verilen siteler `DESKHAND_GOREV_SITELER` ile claude'un ortamından gelir.
+- **open_app** yalnız tarayıcı: yerel paket Firefox; Chromium ailesi yalnız ilke kökü (/etc/chromium vb.) varsa (oturum
+  politikası zaten `on`); Flatpak/Snap tarayıcı, uçbirim, dosya yöneticisi, düzenleyici, yorumlayıcı → 10. Belge
+  argümanı yalnız http(s).
+- **Ev dizini**: arka plan uygulamasına XDG veri klasörleri (Masaüstü, Belgeler, İndirilenler…) BAĞLANMAZ; yalnız görünüm
+  beyaz listesi + `RUNTIME_DIR/gorev-indirilenler` (kullanıcının XDG_DOWNLOAD_DIR yolunda, yazılabilir). Görev bitince
+  indirilenler kullanıcıya bildirilir (`bitti` olayı: `indirilenler`, `indirme_dizini`).
+- **Tarayıcı ilkesi** ad alanında salt okunur bağlanır: Firefox `<kurulum>/distribution/` yerine `policies.json` (+ özgün
+  distribution.ini): BlockAboutConfig/Profiles/Addons/Support, PasswordManagerEnabled=false (about:logins engelli),
+  DisableDeveloperTools (about:debugging), WebsiteFilter `file:///*`, uzantı kurulumu kapalı, indirme dizini sabit.
+  Chromium ailesi: `/etc/chromium` vb. yerine `policies/managed/deskhand-gorev.json` (URLBlocklist `file://*`,
+  `chrome://*`, parola yöneticisi ve geliştirici araçları kapalı).
+- **Oturum kopyası** (Firefox): logins.json, logins-backup.json, logins.db, key4.db, uzantılar ve verileri KOPYALANMAZ;
+  çerez/oturum çerezi/depo YALNIZ izinli sitelerin (boşsa ÇEREZSİZ temiz profil); user.js `signon.rememberSignons=false`.
+- **Onay**: kapsam `kart` olsa bile parola alanı + sistem istemi onayları AÇIK (`guvenlik.onaysiz_serbest` istisnası).
+- **Savunma derinliği**: observe/read_text/screenshot, tarayıcı belgesi `file:`/`about:`/`chrome:`… ise reddeder (10).
+- **claude argv**: `--tools ""` (yerleşik araç yok; kara liste ikinci katman), `--no-chrome`, `--max-turns`
+  (`[gorev] azami_tur`, varsayılan 60). Ortam: `ANTHROPIC_*` silinir; `ENABLE_CLAUDEAI_MCP_SERVERS=false`,
+  `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. Geçici çalışma dizini `XDG_RUNTIME_DIR` altında.
+- **Geçmiş**: `type_text` metni `[N karakter]`; görev metnindeki parola/kart kalıpları maskelenir; görev kutusunda "parola
+  yazmayın" ipucu, Başlat'tan önce kısa onay (görev + izinli siteler + "yalnız tarayıcı").
+- Görev görünmez masaüstünü kendisi açtıysa bitince kapatır (oturum kopyaları silinir).
+- Kalan risk: görevden ÖNCE görünmez masaüstünde açık olan pencereler görev kipinde başlatılmamıştır (ilke/ev kısıtı yok).

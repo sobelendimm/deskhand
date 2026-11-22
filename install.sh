@@ -51,6 +51,7 @@ DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 BIN_DIR="$HOME/.local/bin"
 WRAPPER="$BIN_DIR/deskhand"
 APP_FILE="$DATA_HOME/applications/deskhand.desktop"
+TASK_FILE="$DATA_HOME/applications/deskhand-gorev.desktop"
 AUTOSTART_FILE="$CFG_HOME/autostart/deskhand.desktop"
 ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/deskhand.svg"
 MARK="# deskhand wrapper (install.sh)"
@@ -126,7 +127,7 @@ if ! quiet "$PY" -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
     pyver="$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || true)"
     die "$(L "Python >= 3.11 gerekli (bulunan: ${pyver:-?})" "Python >= 3.11 is required (found: ${pyver:-?})")"
 fi
-for f in deskhand/__init__.py deskhand/cli.py deskhand/yardimci/Makefile deskhand/data/deskhand.desktop deskhand/data/deskhand.svg; do
+for f in deskhand/__init__.py deskhand/cli.py deskhand/yardimci/Makefile deskhand/data/deskhand.desktop deskhand/data/deskhand-gorev.desktop deskhand/data/deskhand.svg; do
     if [[ ! -e "$SRC_DIR/$f" ]]; then
         if (( DRY )); then warn "$(L "eksik dosya (gerçek kurulumda hata olur): $f" "missing file (a real install would fail): $f")"
         else die "$(L "eksik dosya: $SRC_DIR/$f" "missing file: $SRC_DIR/$f")"; fi
@@ -368,7 +369,8 @@ esac
 say "$(L "Simge: $ICON_FILE" "Icon: $ICON_FILE")"
 run install -Dm644 "$SRC_DIR/deskhand/data/deskhand.svg" "$ICON_FILE"
 
-# desktop_entry ARGS: deskhand/data/deskhand.desktop with an absolute Exec, without the template comments, plus our marker
+# desktop_entry ARGS [TEMPLATE]: deskhand/data/deskhand.desktop (or TEMPLATE) with an absolute Exec, without the
+# template comments, plus our marker
 desktop_entry() {
     local line
     while IFS= read -r line || [[ -n "$line" ]]; do
@@ -377,7 +379,7 @@ desktop_entry() {
             Exec=*) line="Exec=$(desktop_exec "$WRAPPER") $1" ;;
         esac
         printf '%s\n' "$line"
-    done <"$SRC_DIR/deskhand/data/deskhand.desktop"
+    done <"$SRC_DIR/deskhand/data/${2:-deskhand.desktop}"
     printf '%s\n' "$DESKTOP_MARK"
 }
 
@@ -386,6 +388,12 @@ if [[ -e "$APP_FILE" ]] && ! is_ours "$APP_FILE" "$DESKTOP_MARK"; then
     warn "$(L "$APP_FILE bizim değil, dokunulmadı" "$APP_FILE is not ours, left untouched")"
 else
     desktop_entry "panel" | write_file "$APP_FILE" 0644
+fi
+say "$(L "Görev ver kısayolu: $TASK_FILE" "Give-a-task entry: $TASK_FILE")"
+if [[ -e "$TASK_FILE" ]] && ! is_ours "$TASK_FILE" "$DESKTOP_MARK"; then
+    warn "$(L "$TASK_FILE bizim değil, dokunulmadı" "$TASK_FILE is not ours, left untouched")"
+else
+    desktop_entry "panel --gorev" deskhand-gorev.desktop | write_file "$TASK_FILE" 0644
 fi
 
 # the panel must be running to answer approval requests: start it (tray only) at login

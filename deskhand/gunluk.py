@@ -18,7 +18,9 @@ def temizle():
     bu, süreyi kesinleştirir. Ölçüm: ~1 ms."""
     simdi = time.time()
     for kok, sure in _sakla_sn().items():
-        for d, _, dosyalar in os.walk(kok):
+        for d, alt, dosyalar in os.walk(kok):
+            if kok == yollar.state_dir():
+                alt[:] = [a for a in alt if a != "gorevler"]  # görev geçmişini gorev.py kırpar (son 50), süre değil
             for f in dosyalar:
                 yol = os.path.join(d, f)
                 try:

@@ -272,8 +272,8 @@ w = p.pencere
 kontrol("panel.pid yazıldı ve canlı", onay.panel_canli() and onay.panel_pid() == os.getpid())
 kontrol("panel açılışı sahipsiz Devral dosyasını sildi", not os.path.exists(D.devral_yolu()))
 kontrol("pencere başlığı sabit", w.windowTitle() == onay.PANEL_BASLIK == "Deskhand")
-kontrol("6 sekme", w.sekmeler.count() == 6 and [w.sekmeler.tabText(i) for i in range(6)][0] == "Etkinlik",
-        str([w.sekmeler.tabText(i) for i in range(6)]))
+kontrol("7 sekme (Görev ilk)", w.sekmeler.count() == 7 and [w.sekmeler.tabText(i) for i in range(7)][:2] == ["Görev", "Etkinlik"],
+        str([w.sekmeler.tabText(i) for i in range(7)]))
 kontrol("kısayol varsayılan KAPALI: hiç kaydedilmedi", kis.cagri == [] and not w.ayarlar.k_acik.isChecked())
 kontrol("ilk günlük satırları Etkinlik'te", w.etkinlik.model.rowCount() == 2 and
         w.etkinlik.model.satirlar[1]["tur"] == "dur")
@@ -693,7 +693,7 @@ from PyQt6.QtWidgets import QGroupBox, QLineEdit  # noqa: E402
 
 from deskhand import i18n  # noqa: E402
 
-SAHTE_EN = {"Etkinlik": "Activity", "Arka plan ekranı": "Background screen", "Ayarlar": "Settings",
+SAHTE_EN = {"Görev": "Task", "Etkinlik": "Activity", "Arka plan ekranı": "Background screen", "Ayarlar": "Settings",
             "Onaylar": "Approvals", "Onaylar ({n})": "Approvals ({n})", "Zaman": "Time", "Boşta": "Idle",
             "DUR": "STOP", "Devam et": "Resume", "DUR — tüm girdileri durdur": "STOP — halt all input",
             "Dil": "Language", "Reddet": "Deny", "Bir kez izin ver": "Allow once", "izin verildi": "allowed",
@@ -730,8 +730,8 @@ try:
             json.load(open(ayar_yolu)) == {"dil": "en"} and i18n.ayar_oku() == "en")
     kontrol("dil_degisti yayıldı, etkin dil en", yayilan == ["en"] and i18n.dil() == "en", str(yayilan))
     ad = sekme_adlari()
-    kontrol("dil değişince sekme adları tazelendi", ad[0] == "Activity" and ad[1] == "Background screen" and
-            ad[3] == "Settings" and ad[2] == "Approvals", str(ad))
+    kontrol("dil değişince sekme adları tazelendi", ad[0] == "Task" and ad[1] == "Activity" and ad[2] == "Background screen" and
+            ad[4] == "Settings" and ad[3] == "Approvals", str(ad))
     kontrol("İngilizce: Etkinlik sütunu / süzgeç / onay kutusu", w.etkinlik.model.headerData(
         0, Qt.Orientation.Horizontal) == "Time" and w.etkinlik.tur.itemText(0) == "All" and
         w.etkinlik.kaydir.text() == "Auto-scroll")
@@ -748,7 +748,7 @@ try:
     kontrol("sabit günlük satırı görüntüde çevrilir, ham satır Türkçe kalır", sira is not None and
             m.data(m.index(sira, 3)) == "STOP switch on (panel)" and "DUR anahtarı" in m.satirlar[sira]["ham"])
     w.durum_guncelle(D.Durum(bekleyen=2))
-    kontrol("İngilizce: Onaylar sekmesi sayılı ad", w.sekmeler.tabText(2) == "Approvals (2)", w.sekmeler.tabText(2))
+    kontrol("İngilizce: Onaylar sekmesi sayılı ad", w.sekmeler.tabText(3) == "Approvals (2)", w.sekmeler.tabText(3))
     w.durum_guncelle(p.izleyici.durum)
     kontrol("tepsi menüsü + ipucu tazelendi", p.tepsi.a_dur.text() == "STOP — halt all input" and
             "Idle" in p.tepsi.ikon.toolTip(), p.tepsi.a_dur.text())
@@ -756,7 +756,7 @@ try:
     kontrol("çevrilmeyen metin Türkçe kalır (eksik katalog bozmaz)", w.onaylar.b_ac.text() == "Diyaloğu aç")
     kontrol("pencere başlığı dil değişse de sabit", w.windowTitle() == "Deskhand")
     dil_etkinlestir("tr")
-    kontrol("Türkçe'ye dönüş: sekmeler, tepsi, şerit", sekme_adlari()[0] == "Etkinlik" and
+    kontrol("Türkçe'ye dönüş: sekmeler, tepsi, şerit", sekme_adlari()[:2] == ["Görev", "Etkinlik"] and
             p.tepsi.a_dur.text() == "DUR — tüm girdileri durdur" and w.serit.b_dur.text() == "DUR" and
             i18n.ayar_oku() == "tr" and yayilan == ["en", "tr"])
     kontrol("aynı dili yeniden seçmek bir şey yapmaz", not y.dil_sec("tr") and yayilan == ["en", "tr"])

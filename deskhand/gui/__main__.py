@@ -1,4 +1,4 @@
-"""python3 -m deskhand.gui [--tepsi] [--arka]: paneli başlat (ikinci kez başlatılırsa çalışanı öne getirir)."""
+"""python3 -m deskhand.gui [--tepsi] [--arka] [--gorev]: paneli başlat (ikinci kez başlatılırsa çalışanı öne getirir)."""
 from __future__ import annotations
 
 import argparse
@@ -51,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="deskhand panel", description="Deskhand izleme/yönetme paneli")
     ap.add_argument("--tepsi", action="store_true", help="pencereyi açma, yalnız tepsi simgesi (oturum açılışı)")
     ap.add_argument("--arka", action="store_true", help="Arka plan ekranı sekmesini aç")
+    ap.add_argument("--gorev", action="store_true", help="Görev sekmesini aç (Claude'a görev ver)")
     a = ap.parse_args(argv)
     # Qt'nin GLib olay döngüsünü kapat: D-Bus jeepney ile (GLib'siz); GLib döngüsü başka D-Bus kitaplıklarıyla
     # (dbus-python) çakışabiliyor.
@@ -63,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setDesktopFileName(onay.PANEL_SINIF)  # Wayland app_id / X11 WM_CLASS = yasak listesindeki sınıf
     app.setQuitOnLastWindowClosed(False)
     from .panel import Panel, tek_ornek
-    sunucu = tek_ornek(b"arka\n" if a.arka else b"goster\n")
+    sunucu = tek_ornek(b"gorev\n" if a.gorev else b"arka\n" if a.arka else b"goster\n")
     if sunucu is None:
         from .panel import baska_panel_var
         if onay.panel_canli() or baska_panel_var():
@@ -73,7 +74,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     p = Panel(app, sunucu, girdi_merkezi=True)
     _sinyal_kur(app, p.cik)
-    if a.arka:
+    if a.gorev:
+        p.gorev_goster()
+    elif a.arka:
         p.arka_goster()
     elif not a.tepsi or p.tepsi is None or not p.tepsi.ikon.isSystemTrayAvailable():
         p.goster()

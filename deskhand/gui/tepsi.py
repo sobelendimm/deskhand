@@ -1,7 +1,7 @@
 """Tepsi simgesi (QSystemTrayIcon; KDE'de StatusNotifierItem) ve durum simgelerinin çizimi.
 
 Renkler: boşta gri · ekranınızda turuncu · arka planda mavi · DUR kırmızı çarpı · onay bekliyor sarı rozet.
-Sol tık: paneli aç/kapat. Menü: DUR / Devam, Paneli aç, Arka plan ekranını göster, Çık.
+Sol tık: paneli aç/kapat. Menü: DUR / Devam, Görev ver…, Paneli aç, Arka plan ekranını göster, Çık.
 Menüdeki "Devam" DUR'u doğrudan KALDIRMAZ (menüyü plasmashell çizer, yasak pencere değildir): panel penceresinde
 onay sorulur (Panel.devam_sor).
 """
@@ -83,6 +83,7 @@ class Tepsi(QObject):
     devam_istendi = pyqtSignal()
     panel_istendi = pyqtSignal()        # aç/kapat
     arka_istendi = pyqtSignal()
+    gorev_istendi = pyqtSignal()
     cikis_istendi = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -91,13 +92,15 @@ class Tepsi(QObject):
         self.ikon = QSystemTrayIcon(self)
         self.menu = QMenu()
         self.mt = Metinler()
-        self.a_dur, self.a_devam, self.a_panel, self.a_arka, self.a_cik = (
+        self.a_dur, self.a_devam, self.a_gorev, self.a_panel, self.a_arka, self.a_cik = (
             self._eylem(T.M_DUR, self.dur_istendi), self._eylem(T.M_DEVAM, self.devam_istendi),
+            self._eylem(T.M_GOREV, self.gorev_istendi),
             self._eylem(T.M_PANEL, self.panel_istendi), self._eylem(T.M_ARKA, self.arka_istendi),
             self._eylem(T.M_CIK, self.cikis_istendi))
         for a in (self.a_dur, self.a_devam):
             self.menu.addAction(a)
         self.menu.addSeparator()
+        self.menu.addAction(self.a_gorev)
         self.menu.addAction(self.a_panel)
         self.menu.addAction(self.a_arka)
         self.menu.addSeparator()

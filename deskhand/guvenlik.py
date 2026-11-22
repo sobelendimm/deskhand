@@ -1517,8 +1517,12 @@ def onay_kapsami_sifirla():
 
 def onaysiz_serbest(ne: str, ayrinti: str = "") -> bool:
     """kart kipinde SERBEST bırakılan onay noktaları için tek koşul: True → onay sorulmaz (tek satır günlük
-    yazılır; ayrıntıda gizli içerik olmamalı). "hepsi" kipinde False (bugünkü davranış)."""
+    yazılır; ayrıntıda gizli içerik olmamalı). "hepsi" kipinde False (bugünkü davranış). GÖREV KİPİNDE
+    (DESKHAND_GOREV=1, gorev_kipi.ONAYI_ACIK: parola alanı + sistem istemi) kapsam `kart` olsa da False: "hepsi" gibi."""
     if onay_kapsami() != "kart":
+        return False
+    from . import gorev_kipi
+    if gorev_kipi.etkin() and ne in gorev_kipi.ONAYI_ACIK:
         return False
     from .gunluk import gunluk
     gunluk(f"onay kapsamı kart: onaysız geçti | {ne}" + (f" | {ayrinti}" if ayrinti else ""))

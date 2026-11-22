@@ -850,7 +850,15 @@ def ev_baglari(ev: str | None = None, ek: tuple | list = (), boyut: int | None =
             esleme.append((kaynak, hedef))
     sirlar = [os.path.realpath(y) for y in _sir_ham(ev)[0]]
     maske = {y for y in ev_soketleri(ev) if any(_ic_ice(y, g) for g in gorunen)}
-    for k in veri_klasorleri(ev):
+    from . import gorev_kipi
+    gorev = gorev_kipi.etkin()
+    bilgi["gorev"] = gorev
+    if gorev:  # GÖREV KİPİ: veri klasörleri YOK; yalnız görevin geçici indirme klasörü İndirilenler yolunda (rw)
+        hedef = gorev_kipi.indirme_hedefi(ev)
+        a += ["--bind", gorev_kipi.indirme_dizini(), hedef]
+        bilgi["gorev_indirme"] = hedef
+        gorunen.append(hedef)
+    for k in ([] if gorev else veri_klasorleri(ev)):
         gorunen.append(k)
         girdiler = veri_nokta_girdileri(k)
         if girdiler is None:
@@ -978,6 +986,10 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
     for yol, ro in baglar:
         if yol and os.path.exists(yol):
             a += ["--ro-bind" if ro else "--bind", yol, yol]
+    from . import gorev_kipi
+    if gorev_kipi.etkin():  # GÖREV KİPİ: tarayıcı kurumsal ilkesi (file://, about:config/logins… engeli) salt okunur
+        for kaynak, hedef in gorev_kipi.ilke_baglari():
+            a += ["--ro-bind", kaynak, hedef]
     for k in SON_KOMUT_ORTAMI:
         if env and env.get(k):
             a += ["--setenv", k, env[k]]
