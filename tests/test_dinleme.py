@@ -1,3 +1,4 @@
+# test_kos: tek-basina (kullanıcının gerçek ses sunucusunu önce/sonra ölçer; paralel takımlar ölçümü bozar)
 """Dinleme (Tur 3) testleri: oturuma özel ses sunucusu (ses.py) + listen aracı (dinleme.py, mcp_sunucu.listen).
 
 Bölümler: 1) sözleşme (sahte kayıt + sahte motor: şekil, sessizlikte motor çalışmaz, geçici dosya silinir, günlükte metin
@@ -158,6 +159,17 @@ def gercek(*a):
 
 def akis_idleri():
     return {l.split("\t")[0] for l in gercek("list", "short", "sink-inputs").splitlines() if l.strip()}
+
+
+# Kullanıcının KENDİ sesleri (ör. hoparlör uyanık tutma betiği `paplay` ile ara ara çalar, tarayıcı videosu) gerçek
+# sunucuda akış açar: denetimler yalnız BU testin izlerini arar (konuşma dosyası adı, Deskhand-sessiz, deskhand).
+BIZIM_IZ = ("konusma-", "Deskhand-sessiz", "deskhand")
+
+
+def bizim_akislar(tur="sink-inputs"):
+    """Gerçek sunucuda bu testin izini taşıyan akış blokları (pactl list çıktısı `#N` bloklarına bölünür)."""
+    bloklar = gercek("list", tur).split("\n\n")
+    return [b.splitlines()[0] for b in bloklar if b.strip() and any(iz in b for iz in BIZIM_IZ)]
 
 
 def gercek_ozet():
@@ -390,11 +402,15 @@ else:
                     and r["duration"] > 1 and "UNTRUSTED" in r["warning"] and r["language"] == dil_k, str(r)[:300])
             olcum[f"motor ({dil_k})"] = "GPU (ROCm)" if r.get("gpu") else "CPU"
             print("   metin:", r["text"], "| süre:", r["duration"], "| dil:", r["language"])
-        kontrol(f"ölçüm ({dil_k}): oynatma sırasında kullanıcının gerçek sunucusunda 'paplay' akışı YOK",
-                "paplay" not in gercek("list", "sink-inputs") and "parec" not in gercek("list", "source-outputs")
-                and "Deskhand-sessiz" not in gercek("list", "sink-inputs"))
-        kontrol(f"ölçüm ({dil_k}): kullanıcının gerçek sunucusunda yeni akış yok (önce/sonra aynı)",
-                akis_idleri() == once_akis, f"{once_akis} -> {akis_idleri()} (ortada {ortada_akis})")
+        kontrol(f"ölçüm ({dil_k}): oynatma sırasında kullanıcının gerçek sunucusunda bu testin akışı YOK",
+                not bizim_akislar("sink-inputs") and not bizim_akislar("source-outputs")
+                and "parec" not in gercek("list", "source-outputs"),
+                str(bizim_akislar("sink-inputs") + bizim_akislar("source-outputs")))
+        yeni = akis_idleri() - once_akis
+        kontrol(f"ölçüm ({dil_k}): kullanıcının gerçek sunucusunda bu testten yeni akış yok",
+                not bizim_akislar("sink-inputs"),
+                f"{once_akis} -> {akis_idleri()} (ortada {ortada_akis}; yeni {sorted(yeni)} — kullanıcının kendi "
+                f"sesleri olabilir, yalnız test izi taşıyanlar sayılır)")
     # sessiz kayıt: ses çalınmıyorsa motor çalışmaz, hızlı döner
     t0 = time.monotonic()
     r = mcp_sunucu.listen(seconds=2, desktop="background", language="auto")

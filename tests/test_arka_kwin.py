@@ -1,3 +1,4 @@
+# test_kos: tek-basina (X ekran numaralarını önce/sonra ölçer; paralel takımlar ölçümü bozar)
 """KWin arka ucu testleri (deskhand/arka_uc/kwin.py + masaustu.py KWin türü): arka plan masaüstü yalıtık KWin oturumuyla
 açılır; kullanıcının GERÇEK oturumuna HİÇBİR girdi gitmez (kwin_wayland --virtual, özel D-Bus, özel Wayland soketi).
 
