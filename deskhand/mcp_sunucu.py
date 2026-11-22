@@ -309,6 +309,7 @@ class TopluSonuc(TypedDict, total=False):
     sent: str
     error: HataAyrinti
     desktop: str
+    note: str
     steps: list[dict[str, Any]]
     failed_step: int
     not_sent: list[int]
@@ -932,7 +933,8 @@ def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str]:
                                                                         simdi="x".join(map(str, geo[2:]))))
     if baslik_simdi != an.baslik:
         raise _ref_hatasi("window", _("ref'in penceresinin başlığı değişti (başka belge/sekme olabilir); eylem "
-                                      "yapılmadı. observe çağırıp yeni ref kullan"))
+                                      "yapılmadı. observe çağırıp yeni ref kullan. Başlığı sürekli değişen pencerelerde "
+                                      "(indirme yüzdesi, \"(3) Gmail\") ref yerine window deseni + text/koordinat kullan"))
     o = an.oge(n)
     if o is None:
         raise _ref_hatasi("element", _("ref {ref}: anlık görüntüde {n} numaralı öge yok; observe çıktısındaki "
@@ -2034,18 +2036,27 @@ def batch(
     sequence (fill fields, then submit); observe between batches when the screen may change unexpectedly. Returns
     per-step ok/effect/changed_region."""
     hazir = _toplu_hazirla(steps, desktop)
-    hedef, _not = masaustu_coz(desktop, _("toplu iş"))  # "auto" BİR kez çözülür: tüm adımlar aynı masaüstüne
-    desktop = DIS_AD[hedef]
-    for _ad, _args in hazir:
-        if _ad != "wait":
-            _args["desktop"] = desktop
+    ilk_hata: ToolError | None = None  # "sonra" kararı: tur6 gibi yapılandırılmış stopped (1. adım reddedildi)
+    _not = ""
+    try:
+        hedef, _not = masaustu_coz(desktop, _("toplu iş"))  # "auto" BİR kez çözülür: tüm adımlar aynı masaüstüne
+        desktop = DIS_AD[hedef]
+        for _ad, _args in hazir:
+            if _ad != "wait":
+                _args["desktop"] = desktop
+    except ToolError as e:
+        ilk_hata = e
     cekirdek = {ad: globals()[ad] for ad in ("click", "type_text", "press_key", "scroll", "drag")}
     sonuclar: list[dict] = []
     s: dict[str, Any] = {"status": "ok", "steps": sonuclar}
+    if _not:
+        s["note"] = _not
     _SON.k = None
     for i, (ad, args) in enumerate(hazir, 1):
         gonderim.sifirla()
         try:
+            if ilk_hata is not None:
+                raise ilk_hata
             if i > 1:
                 _adim_arasi(desktop)
             if ad == "wait":
@@ -2082,6 +2093,8 @@ def batch(
     son_k = getattr(_SON, "k", None)
     metin = [f"batch {s['status']}: {sum(1 for x in sonuclar if x['ok'])}/{len(hazir)} steps ok" +
              (f" | effect {s['effect']}" if s.get("effect") else "")]
+    if s.get("note"):
+        metin.append(f"note: {s['note']}")
     for x in sonuclar:
         metin.append(f"{x['i']}. {x['tool']} " + (x.get("effect") or "ok" if x["ok"] else f"ERROR {x['error']}") +
                      (f" changed_region={x['changed_region']}" if x.get("changed_region") else "") +
@@ -2164,7 +2177,8 @@ def wait_for(
     error: satisfied=false. Read-only, sends no input; other tools keep working while it waits. On the foreground
     desktop it never raises the window: screenshots/OCR are taken only while the target is already the active
     window; otherwise (text, gone, stable) it polls the accessibility tree only (no tree: satisfied=false with a
-    note), and a poll is skipped while the user is using the keyboard/mouse (the timeout keeps counting)."""
+    note; gone there counts only text that was seen in the tree during this wait), and a poll is skipped while the
+    user is using the keyboard/mouse (the timeout keeps counting)."""
     if condition != "stable" and not value:
         raise ToolError("[1] " + _("value gerekli (stable dışındaki koşullar)"))
     if condition == "window" and value:
@@ -2185,6 +2199,8 @@ def wait_for(
         tamam = False
         on_plan = api.arka().ad == "kde" and condition in ("text", "gone", "stable")
         agacsiz_not = False
+        goruldu = False  # gone (yalnız ağaç kipi): metin BU beklemede önce ağaçta görüldü mü
+        gone_agac = False  # son yoklama gone'ı yalnız ağaçla mı yaptı
         while True:
             tur += 1
             atla = agac_ile = False
@@ -2222,7 +2238,10 @@ def wait_for(
                                 eslesme = {"source": o["kaynak"], "text": gozlem.kisalt(
                                     o.get("ad") or o.get("deger") or "", gozlem.AD_SINIRI), "frame": o["kutu"]}
                         else:
-                            tamam = o is None
+                            # OCR-yalnız metin ağaçta hiç yoktur: "ağaçta yok" ≠ "ekranda yok" → önce görülmeli
+                            gone_agac = True
+                            goruldu = goruldu or o is not None
+                            tamam = goruldu and o is None
                 elif condition == "window":
                     for p in api.pencereler(value):
                         if not p.get("forbidden"):
@@ -2252,6 +2271,7 @@ def wait_for(
                         r = api.metin_oku(k, value, en_cok=5)
                         bulundu = ({"source": "ocr", "text": r["items"][0]["text"], "frame": r["items"][0]["box"]}
                                    if r["items"] else None)
+                    gone_agac = False
                     if condition == "text":
                         tamam, eslesme = bulundu is not None, bulundu
                     else:
@@ -2259,6 +2279,10 @@ def wait_for(
             if tamam or time.monotonic() + BEKLEME_ARALIK > bitis:
                 break
             time.sleep(BEKLEME_ARALIK)
+        if condition == "gone" and gone_agac and not goruldu and not tamam:
+            n_ = _("metin erişilebilirlik ağacında hiç görülmedi; pencere önde değilken OCR yapılmaz — pencereyi öne "
+                   "getirip yeniden dene ya da window deseniyle arka plan masaüstünü kullan")
+            bilgi["note"] = (bilgi["note"] + "; " if bilgi.get("note") else "") + n_
         s = {**bilgi, "status": "ok", "satisfied": tamam, "condition": condition,
              "elapsed_s": round(time.monotonic() - t0, 2), "polls": tur}
         if eslesme:
