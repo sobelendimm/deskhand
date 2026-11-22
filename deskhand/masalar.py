@@ -223,12 +223,14 @@ def pid_ad_alani() -> str:
         return "-"
 
 
-def sahip_icerik(pid: int | None = None, oto: bool = False, ebeveyn: int | None = None) -> str:
-    """"mcp <pid> <başlangıç> <ebeveyn_pid> <ebeveyn_başlangıç> <oto> <pid ad alanı>". ebeveyn: MCP sunucusunun İLK
-    ebeveyni (main'de saklanır; sonradan systemd'ye geçmiş olsa da Claude oturumu o)."""
+def sahip_icerik(pid: int | None = None, oto: bool = False, ebeveyn: int | None = None, tur: str = "mcp") -> str:
+    """"<tür> <pid> <başlangıç> <ebeveyn_pid> <ebeveyn_başlangıç> <oto> <pid ad alanı>". tür: mcp (MCP sunucusu) |
+    cli (komut satırının ata zincirindeki claude süreci; cli_sahiplen). ebeveyn: MCP sunucusunun İLK ebeveyni (main'de
+    saklanır; sonradan systemd'ye geçmiş olsa da Claude oturumu o)."""
     pid = os.getpid() if pid is None else int(pid)
     eb = (_ebeveyn(pid) or 0) if ebeveyn is None else int(ebeveyn)
-    return f"mcp {pid} {_baslangic(pid) or '-'} {eb} {_baslangic(eb) or '-'} {1 if oto else 0} {pid_ad_alani()}\n"
+    tur = "cli" if tur == "cli" else "mcp"
+    return f"{tur} {pid} {_baslangic(pid) or '-'} {eb} {_baslangic(eb) or '-'} {1 if oto else 0} {pid_ad_alani()}\n"
 
 
 def _sahip_alanlari(ad: str | None) -> list[str] | None:
@@ -237,7 +239,7 @@ def _sahip_alanlari(ad: str | None) -> list[str] | None:
             p = f.read(300).split()
     except OSError:
         return None
-    if len(p) not in (6, 7) or p[0] != "mcp":
+    if len(p) not in (6, 7) or p[0] not in ("mcp", "cli"):
         return None
     return p
 
@@ -258,10 +260,12 @@ def sahip_oku(ad: str | None = None) -> dict | None:
     yabanci = len(p) == 7 and p[6] != "-" and p[6] != pid_ad_alani()
     if not yabanci and _baslangic(pid) != p[2]:
         return None
-    return {"pid": pid, "bas": p[2], "ebeveyn": eb, "ebeveyn_bas": p[4], "oto": p[5] == "1", "yabanci_ns": yabanci}
+    return {"pid": pid, "bas": p[2], "ebeveyn": eb, "ebeveyn_bas": p[4], "oto": p[5] == "1", "yabanci_ns": yabanci,
+            "cli": p[0] == "cli"}
 
 
-def sahiplen(ad: str | None = None, oto: bool = False, pid: int | None = None, ebeveyn: int | None = None) -> bool:
+def sahiplen(ad: str | None = None, oto: bool = False, pid: int | None = None, ebeveyn: int | None = None,
+             tur: str = "mcp") -> bool:
     """Masaüstünü bu sürece (pid) yaz. Canlı başka sahip varsa False (değiştirmez)."""
     ad = _ad(ad)
     pid = os.getpid() if pid is None else int(pid)
@@ -273,7 +277,7 @@ def sahiplen(ad: str | None = None, oto: bool = False, pid: int | None = None, e
     gecici = f"{yol}.{os.getpid()}"
     fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
-        f.write(sahip_icerik(pid, oto, ebeveyn))
+        f.write(sahip_icerik(pid, oto, ebeveyn, tur))
     os.replace(gecici, yol)
     return True
 
@@ -298,6 +302,31 @@ def oto_mu(ad: str | None = None) -> bool:
     """Sahip dosyasında oto bayrağı (sahip ölü olsa da okunur)."""
     p = _sahip_alanlari(ad)
     return p is not None and p[5] == "1"
+
+
+def cli_mu(ad: str | None = None) -> bool:
+    """Sahip kaydı komut satırından (cli_sahiplen) mı yazıldı (sahip ölü olsa da okunur): sahibi ölünce oto gibi
+    temizlenir (masaustu.oto_temizle; yoksa sızan masaüstleri [masaustu] azami sınırını yer)."""
+    p = _sahip_alanlari(ad)
+    return p is not None and p[0] == "cli"
+
+
+def ajan_pid(pid: int | None = None) -> int | None:
+    """Ata zincirindeki EN YAKIN yapay zekâ ajanı (claude) sürecinin PID'i; yoksa (insan) None."""
+    return next((p for p, _b in _atalar(pid) if _ajan_mi(p)), None)
+
+
+def cli_sahiplen(ad: str | None = None) -> bool:
+    """Komut satırı masaüstünü açtı (desktop start, ac --background): çağıranın ata zincirinde claude varsa o claude
+    süreci SAHİP yazılır (MCP gibi; başka Claude oturumları Dur 14 alır, aynı oturumun MCP'si/Bash'i paylaşır). İnsan
+    (zincirde claude yok), görev kipi, panel ya da canlı sahibi olan masaüstü → dokunulmaz. → yazıldı mı."""
+    from . import gorev_kipi
+    if gorev_kipi.etkin() or gorev_kipi.GOZLEMCI:
+        return False
+    ajan = ajan_pid()
+    if ajan is None or sahip_oku(ad) is not None:
+        return False
+    return sahiplen(ad, pid=ajan, ebeveyn=ajan, tur="cli")
 
 
 def izinli_mi(ad: str | None = None, pid: int | None = None) -> bool:

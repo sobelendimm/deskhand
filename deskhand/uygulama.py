@@ -781,6 +781,8 @@ def k_ac(a):
         from . import masaustu
         if masaustu.durum() is None:
             masaustu.masaustu_baslat()
+            from . import masalar
+            masalar.cli_sahiplen(masalar.secili())  # ata zincirinde claude varsa o oturumun masaüstü
             print(_("görünmez masaüstü başlatıldı"), file=sys.stderr)
             au = sec()  # masaüstü türü (KWin | Xvfb) şimdi belli: arka ucu yeniden seç
     env = None

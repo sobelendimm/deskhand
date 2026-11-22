@@ -480,7 +480,7 @@ class SanalArkaUc(ArkaUc):
     def _durum(self) -> dict:
         d = masaustu.durum_oku()
         if d is None or masaustu.tur(d) != "xvfb":  # KWin türündeki masaüstü bu arka uca ait değil (arka_uc.sec)
-            raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+            raise _kapali_hatasi()
         from .. import gorev_kipi
         gorev_kipi.masaustu_kapisi(d)  # görev masaüstü ↔ kipsiz istemci ayrımı (Dur 14)
         return masaustu.guvenli_kayit(d)  # yollar/adresler kayıttan değil, ekran numarasından (Dur 14)
@@ -492,7 +492,7 @@ class SanalArkaUc(ArkaUc):
             if self._x_ is not None:
                 self._x_.kapat()
             if masaustu.durum(saglik=False) is None:
-                raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+                raise _kapali_hatasi()
             masaustu.xvfb_karsi_denetle(d)
             self._x_, self._imza = _X(d["ekran"]), imza
         return self._x_
@@ -502,7 +502,7 @@ class SanalArkaUc(ArkaUc):
         sanal.json + aynı numarada başka bir X sunucusu → girdi oraya gitmesin: Dur 14."""
         d = masaustu.durum(saglik=False)
         if d is None or masaustu.tur(d) != "xvfb":
-            raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+            raise _kapali_hatasi()
         from .. import gorev_kipi
         gorev_kipi.masaustu_kapisi(d)
         masaustu.xvfb_karsi_denetle(d)  # X / veri yolu soketinin karşı tarafı bu masaüstünün süreçleri (sert bağa karşı)
@@ -1330,3 +1330,8 @@ class SanalGirdi:
         if self._kilit_f is not None:
             self._kilit_f.close()  # kilit bırakılır
             self._kilit_f = None
+
+
+def _kapali_hatasi():
+    from .. import masaustu
+    return masaustu.kapali_hatasi()

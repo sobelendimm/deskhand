@@ -396,7 +396,8 @@ def masaustu_coz(desktop: str, ozet: str) -> tuple[str, str]:
 # ---------------------------------------------------------------- görünmez masaüstü bağlama (çoklu masaüstü)
 
 # Bu MCP oturumu TEK görünmez masaüstüne bağlıdır (masalar). İlk desktop=background çözümünde: (a) --desktop-name /
-# DESKHAND_MASAUSTU sabitse o; (b) yoksa varsayılanın canlı sahibi yoksa varsayılan (sahiplenilir); (c) yoksa en küçük
+# DESKHAND_MASAUSTU sabitse o; (b) yoksa varsayılanın canlı sahibi yoksa ve sahipsiz açık değilse (kafesinde uygulama
+# çalışan sahipsiz varsayılan = dolu: CLI/eski oturum kullanıyor) varsayılan (sahiplenilir); (c) yoksa en küçük
 # boş `oturum-N` (oto: oturum bitince ayrık temizleyici kapatır). Varsayılanın sahibi bu sunucunun atasıysa (sunucuyu
 # o başlattı) varsayılan paylaşılır. Aynı Claude oturumunun Bash'i (CLI) sahibin masaüstüne erişebilir
 # (masalar.erisim_kapisi: ata zinciri).
@@ -430,9 +431,9 @@ def masa_bagla() -> str:
                 # görev kipi: panel görevi VARSAYILAN masaüstünde yürütür (önizleme, Devral, kapanış ona bakar);
                 # yetki görev işaretindedir (masalar.erisim_kapisi), sahiplik dosyasına dokunulmaz
                 ad = ""
-            elif (vs := masalar.sahip_oku("")) is None:
+            elif (vs := masalar.sahip_oku("")) is None and not masaustu.dolu_mu(""):
                 ad, sahip = "", masalar.sahiplen("", ebeveyn=eb)
-            elif any(p == vs["pid"] and b == vs["bas"] for p, b in masalar._atalar()):
+            elif vs is not None and any(p == vs["pid"] and b == vs["bas"] for p, b in masalar._atalar()):
                 ad = ""  # varsayılanın sahibi bu sunucunun ATASI (onu başlatan süreç): onun işinin parçası, paylaşır
             else:
                 dolu = {a for a in masalar.adlar() if masalar.sahip_oku(a) is not None
