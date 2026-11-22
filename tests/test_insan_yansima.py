@@ -85,6 +85,23 @@ kontrol("pencere dışı 'aktif' (gerçek insan olayı) → İNSAN, yerleşme be
 kontrol("kendi pencere payı ≥ 0,2 sn (gecikmeli yansıma toleransı)", insan.KENDI_PAY >= 0.2, str(insan.KENDI_PAY))
 
 
+print("2b) taban_bekle: ilk girdiden önce ilk 'bosta'")
+e = sahte_etk(hazir_once=0.0)
+threading.Timer(0.06, lambda: e.olaylar.append(("bosta", time.monotonic()))).start()
+t0 = time.monotonic()
+insan.taban_bekle(e)
+kontrol("bosta 60 ms'de geldi → hemen döner", e.olaylar and 0.05 <= time.monotonic() - t0 < 0.15,
+        f"{time.monotonic() - t0:.3f}")
+e = sahte_etk(hazir_once=0.0)
+t0 = time.monotonic()
+insan.taban_bekle(e)
+kontrol("bosta gelmiyor (kullanıcı o an yazıyor) → en çok ETKINLIK_MS+0,15 sn bekler, sonra insan sayılır",
+        0.18 <= time.monotonic() - t0 < 0.4 and e.insan(t0), f"{time.monotonic() - t0:.3f}")
+e = sahte_etk([("bosta", time.monotonic() - 0.5)], hazir_once=0.6)
+t0 = time.monotonic()
+insan.taban_bekle(e)
+kontrol("bosta zaten gelmiş → beklemez", time.monotonic() - t0 < 0.02)
+
 # ================================================================ 3) benzetici: KWin boşta bildirimi + gerçek yazma yolu
 class SimKWin:
     """ext-idle-notify-v1: ETKINLIK_MS girdisiz → 'bosta'; ardından ilk girdi → 'aktif' (zaman = iletim anı).

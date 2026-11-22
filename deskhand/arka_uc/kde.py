@@ -19,7 +19,7 @@ from .. import yollar
 from ..gunluk import gunluk
 from ..hata import INSAN, KULLANICI_DUR, KULLANICI_MESGUL, Dur, dur_denetle, gercek_ekran_denetle
 from ..i18n import _
-from ..insan import INSAN_TAKLIDI, YERLESME, Etkinlik, girdi_suresi, insan_bekle, klavye_bekle
+from ..insan import INSAN_TAKLIDI, YERLESME, Etkinlik, girdi_suresi, insan_bekle, klavye_bekle, taban_bekle
 from . import EKRAN, ArkaUc
 
 EKRAN_ADLARI = {"ekran", "masaustu", "masaüstü", "tum-ekran", "tüm-ekran"}
@@ -465,6 +465,7 @@ class Girdi:
                 hata = self.p.stderr.read().strip()
                 raise Dur(9, _("dotool çalışmadı: {hata} (uinput yüklü mü? `sudo modprobe uinput`)").format(hata=hata))
         insan_bekle(self.fare0, self.au.fare)
+        taban_bekle(self.etk)  # ilk 'bosta' (kullanıcı boşta) gelmeden yazmaya başlama: sonra her 'aktif' eşlenebilir
         klavye_bekle(self.etk, self.t0)  # kurulum süresince (≈0,65 sn) klavye/fare kullanıldıysa sessizliği bekle
         self.son_etk = time.monotonic()
         self.hazir = True

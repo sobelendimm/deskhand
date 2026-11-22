@@ -414,9 +414,14 @@ def _temizle_dosya(d: dict) -> dict:
 @contextlib.contextmanager
 def _depo():
     """Durum dosyasını kilitleyip oku (DOĞRULANARAK) → sözlük; çıkışta (değiştiyse) atomik yaz. İş parçacığı + süreç kilidi."""
+    from .hata import alan_dolu_denetle
     yol = _yol()
     with _KILIT:
-        fd = os.open(yol + ".kilit", os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fd = os.open(yol + ".kilit", os.O_RDWR | os.O_CREAT, 0o600)
+        except OSError as e:
+            alan_dolu_denetle(e, os.path.dirname(yol))  # geçici alan dolu: çökme yerine anlaşılır Dur 9
+            raise
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
             try:
@@ -430,10 +435,18 @@ def _depo():
             yield d
             if json.dumps(d, sort_keys=True) != once or once != ham:
                 gecici = f"{yol}.{os.getpid()}.tmp"
-                g = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(g, "w", encoding="utf-8") as f:
-                    json.dump(d, f)
-                os.replace(gecici, yol)
+                try:
+                    g = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(g, "w", encoding="utf-8") as f:
+                        json.dump(d, f)
+                    os.replace(gecici, yol)
+                except OSError as e:
+                    try:
+                        os.unlink(gecici)  # yarım geçici dosya alanı daha da doldurmasın
+                    except OSError:
+                        pass
+                    alan_dolu_denetle(e, os.path.dirname(yol))  # geçici alan dolu: anlaşılır Dur 9
+                    raise
         finally:
             os.close(fd)
 

@@ -100,3 +100,21 @@ def dur_denetle() -> None:
     """DUR anahtarı açıksa Dur(13). Her girdi satırından önce çağrılır (iki arka uçta da). ~2 µs."""
     if os.path.exists(dur_dosyasi()):
         raise Dur(KULLANICI_DUR, _("kullanıcı DUR dedi (deskhand devam ile kaldırılır); girdi gönderilmedi"))
+
+
+# ---------------------------------------------------------------- geçici alan dolu (ENOSPC)
+
+def alan_dolu_mu(e: BaseException) -> bool:
+    """OSError ENOSPC / EDQUOT mu (RUNTIME_DIR tmpfs doldu)?"""
+    import errno
+    return isinstance(e, OSError) and e.errno in (errno.ENOSPC, errno.EDQUOT)
+
+
+def alan_dolu_denetle(e: BaseException, yol: str | None = None) -> None:
+    """e geçici alan dolu hatasıysa anlaşılır Dur 9 (çökme yerine); değilse hiçbir şey yapmaz (çağıran yeniden fırlatır).
+    22 Kas 2026: kapanan arka plan tarayıcılarının oturum kopyaları /run/user/<uid>'i doldurdu → durum dosyası yazımı
+    OSError 28 ile key/type komutunu düşürüyordu."""
+    if alan_dolu_mu(e):
+        raise Dur(ARAC_EKSIK, _("geçici alan dolu ({yol}): durum dosyası yazılamadı. Ayrıntı ve temizlik: "
+                                "deskhand doctor").format(yol=yol or calisma_dizini()),
+                  tur="alan-dolu") from e

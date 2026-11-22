@@ -1072,6 +1072,9 @@ def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str,
         p.kill()
         p.wait()
         raise Dur(14, _("özel ses dizini uygulama başlatılırken değişti; uygulama durduruldu"))
+    if kopya:  # kopyanın sahibi bu süreç: bitince bekçi kopyayı HEMEN siler (tmpfs dolmasın; oturum/kopya_bekcisi.py)
+        from .oturum import kopya as _kopya
+        _kopya.sahip_kaydet(kopya, p.pid)
     return p
 
 

@@ -2,6 +2,27 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
+## 0.8.1 (22 Kasım 2026)
+
+- **Düzeltme: yazı, kullanıcı dokunmadığı hâlde "kullanıcı klavye/fare kullandı" ile kesiliyordu.** Ön planda
+  (kullanıcının ekranı) `type_text` ikinci kelime sınırında (ör. "Satın alımdan vazgeçtim." → 12/24) duruyordu.
+  Neden: her komut yeni bir etkinlik izleyicisi açar; girdi merkezi hazır olduğundan yazı 50 ms'lik boşta süresi
+  dolmadan başlar ve harfler arası boşluk 50 ms'den kısa olduğundan "boşta" bildirimi hiç gelmez; bu durum 0,2 sn sonra
+  koşulsuz insan sayılıyordu. Artık kesintisiz etkinlik, Deskhand'in kendi girdisiyle örtülüyorsa insan sayılmaz;
+  kelime sınırında kısa bir yerleşme beklemesi (en çok 0,3 sn) kendi girdimizin gecikmeli yansımasını ayırır, kendi
+  girdi payı 0,12 → 0,25 sn; ilk girdiden önce izleyicinin ilk "boşta" bildirimi beklenir (en çok ~0,2 sn). Kullanıcı
+  gerçekten yazarsa (ya da yazmayı sürdürürse) yazı YİNE 12 ile kesilir.
+- **Düzeltme: Steam istemcisinde (CEF/Chromium, XWayland) fare tekerleği kaydırması etkisizdi** (`scroll`:
+  no_change). Tek olay olarak giden "wheel N" bu uygulamalarda tümüyle yutuluyordu; çentikler artık ayrı olaylar
+  olarak gider (en çok ilk çentik kaybolur; tek çentikte End/PageDown tuşu daha güvenilir).
+- **Düzeltme: kapanan arka plan tarayıcılarının oturum kopyaları geçici alanı (/run/user, tmpfs) dolduruyordu.**
+  Kopya (225-514 MB) masaüstü kapanana dek kalıyordu; alan dolunca `key`/`type` OSError 28 ile çöküyordu. Artık her
+  kopyanın sahibi (tarayıcı süreci + başlangıç zamanı) kaydedilir, tarayıcı bitince kopya bir bekçi tarafından silinir;
+  yeni kopya açılırken, masaüstü başlarken ve `deskhand doctor`'da sahipsiz kopyalar süpürülür (canlı ya da başka
+  masaüstünün kullandığı kopya ASLA silinmez); toplam 3 kopya / 1,5 GB aşılınca en eski sahipsizler silinir.
+  `deskhand doctor` "Oturum kopyaları: N adet, X MB" satırını gösterir; geçici alan doluysa komutlar çökmek yerine
+  "geçici alan dolu … deskhand doctor" ile durur (9).
+
 ## 0.8.0 (22 Kasım 2026)
 
 - **Çoklu görünmez masaüstü (çekirdek).** Aynı anda birden çok görünmez masaüstü açılabilir (KWin türü; en çok

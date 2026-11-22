@@ -623,6 +623,8 @@ def masaustu_baslat(boyut: str | None = None, openbox: bool = True, ad: str | No
     ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
     with masalar.masa_sabit(ad):
         oto_temizle(haric=(ad,))
+        from .oturum import kopya as _kopya
+        _kopya.supur_sessiz()  # kapanmış arka plan tarayıcılarının kopyaları (tüm masaüstleri; canlılara dokunmaz)
         with _kilit(ad):
             d = durum()
             gorev_kipi.baslatma_kapisi(d)  # görev sürerken kipsiz istemci açamaz; görev başkasının masaüstünü kullanamaz

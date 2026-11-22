@@ -246,6 +246,32 @@ def satir_calisma_dizini():
                   _("{yol} (henüz yok)").format(yol=yol))
 
 
+def satir_oturum_kopyalari():
+    """Arka plan tarayıcılarının oturum kopyaları (tüm masaüstleri, RUNTIME_DIR tmpfs): sayı + toplam boyut; önce
+    sahibi ölmüş ve kimsenin kullanmadığı kopyalar süpürülür (canlı kopyaya dokunulmaz). Geçici alan %90'dan doluysa
+    uyarı (22 Kas 2026: kopyalar /run/user/<uid>'i doldurdu, durum dosyaları yazılamadı)."""
+    from .oturum import kopya
+    ad = _("Oturum kopyaları")
+    silinen = kopya.supur()
+    sayi, bayt, _olu = kopya.ozet()
+    metin = _("{sayi} adet, {mb} MB").format(sayi=sayi, mb=bayt // (1024 * 1024))
+    if silinen:
+        metin += _(" ({n} sahipsiz kopya silindi)").format(n=len(silinen))
+    yol = yollar.runtime_dir()
+    try:
+        st = os.statvfs(yol if os.path.isdir(yol) else os.path.dirname(yol))
+        toplam, bos = st.f_blocks * st.f_frsize, st.f_bavail * st.f_frsize
+    except OSError:
+        toplam = bos = 0
+    if toplam:
+        metin += _("; geçici alan: {bos} MB boş / {toplam} MB").format(bos=bos // (1024 * 1024),
+                                                                       toplam=toplam // (1024 * 1024))
+        if bos < toplam * 0.10:
+            return _satir(ad, "uyari", metin + _(" (neredeyse dolu)"),
+                          _("kullanılmayan arka plan tarayıcılarını kapatın (deskhand masaustu durdur)"))
+    return _satir(ad, "tamam", metin)
+
+
 def satir_arka_tur():
     """Arka plan masaüstü hangi türle açılır (KWin oturumu / Xvfb) ve KWin türünün ön koşulları: ScreenShot2 sanal
     arka uçta /dev/udmabuf okuma-yazma ister (yoksa görüntü alınamaz). Salt okunur; süreç başlatmaz."""
@@ -296,7 +322,7 @@ def satir_dinleme():
 
 
 SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_onay_kapsami, satir_hesap_oturumlari, satir_girdi_merkezi, satir_yardimcilar,
-            satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
+            satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_oturum_kopyalari, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
 
 
 def topla() -> list[dict]:

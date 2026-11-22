@@ -171,6 +171,17 @@ class Etkinlik:
             self.p.terminate()
 
 
+def taban_bekle(etk, azami=ETKINLIK_MS / 1000 + 0.15):
+    """İlk girdiden ÖNCE: yardımcının ilk olayını ('bosta' = kullanıcı şu an boşta) en çok 'azami' sn (hazir'dan
+    itibaren) bekle. Yazı bosta gelmeden başlarsa harfler arası < ETKINLIK_MS olduğundan bosta hiç gelmez ve o andaki
+    insan girdisi bizimkinden ayrılamaz; taban önce kurulunca sonraki her 'aktif' bizim pencerelerimizle eşlenir.
+    Bosta gelmezse (kullanıcı tam o an yazıyor/fareyi oynatıyor) ardından gelen klavye_bekle sessizliği bekler."""
+    if etk is None or not hasattr(etk, "olaylar") or not etk.calisiyor():  # sahte/sanal izleyicide taban yok
+        return
+    while not etk.olaylar and time.monotonic() - etk.hazir_an < azami:
+        time.sleep(0.005)
+
+
 def klavye_bekle(etk, beri, azami=8.0):
     """İNSAN ÖNCELİĞİ (klavye + fare): 'beri'den bu yana insan girdisi varsa, 1,5 sn hiç girdi olmayana dek
     bekle (en çok 'azami' sn), yoksa DUR 12. Kullanıcı ör. terminale yazarken araç araya girmesin."""
