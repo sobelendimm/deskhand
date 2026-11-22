@@ -26,7 +26,7 @@ import tempfile
 import threading
 import time
 
-from .. import hata, kwin_oturum, masaustu
+from .. import arka_ortak, hata, kwin_oturum, masaustu
 from ..hata import (AKTIF_DEGIL, ARAC_EKSIK, BASLIK_SINIF, BELIRSIZ, INSAN, KULLANICI_DUR, PENCERE_YOK,
                     SANAL_KAPALI, Dur)
 from ..i18n import _
@@ -56,8 +56,8 @@ def oturum_pencereleri(d: dict) -> list[tuple[str, str, tuple[int, int, int, int
 
     def kd(*a):
         for _i in range(4):
-            r = subprocess.run(["kdotool", *a], capture_output=True, text=True, env=env, timeout=KD_ZAMAN,
-                               stdin=subprocess.DEVNULL)
+            r = subprocess.run([arka_ortak.arac("kdotool"), *a], capture_output=True, text=True, env=env,
+                               timeout=KD_ZAMAN, stdin=subprocess.DEVNULL)
             if r.stdout.strip() or a[0] not in _KD_OKUMA:
                 return r.stdout.strip()
             time.sleep(0.01)
@@ -126,8 +126,8 @@ class KwinArkaUc(ArkaUc):
         env = kwin_oturum.kdotool_ortami(d)
         for deneme in range(4):
             try:
-                r = subprocess.run(["kdotool", *a], capture_output=True, text=True, env=env, timeout=KD_ZAMAN,
-                                   stdin=subprocess.DEVNULL)
+                r = subprocess.run([arka_ortak.arac("kdotool"), *a], capture_output=True, text=True, env=env,
+                                   timeout=KD_ZAMAN, stdin=subprocess.DEVNULL)
             except FileNotFoundError:
                 raise Dur(ARAC_EKSIK, _("kdotool yok"))
             except subprocess.TimeoutExpired:
@@ -417,11 +417,12 @@ class KwinArkaUc(ArkaUc):
         return set(linux_tuslari()) | set(DEGISTIRICI)
 
     # -------- uygulama
-    def baslat(self, argv: list[str], env: dict | None = None, cikti=None):
-        """Arka plan masaüstünde (kafes + oturum ortamı: Wayland yerel, X11 isteyenler oturumun XWayland'ine)."""
+    def baslat(self, argv: list[str], env: dict | None = None, cikti=None, kopya: str | None = None):
+        """Arka plan masaüstünde (kafes + oturum ortamı: Wayland yerel, X11 isteyenler oturumun XWayland'ine).
+        kopya: oturum politikasının kopyası (ad alanına yalnız o bağlanır)."""
         if cikti is not None:
-            return masaustu.baslat(argv, env, stdout=cikti, stderr=cikti)
-        return masaustu.baslat(argv, env)
+            return masaustu.baslat(argv, env, kopya=kopya, stdout=cikti, stderr=cikti)
+        return masaustu.baslat(argv, env, kopya=kopya)
 
     def oturum_veri_yolu(self) -> str | None:
         return self._d().get("dbus_adres") or None
@@ -442,12 +443,15 @@ class KwinArkaUc(ArkaUc):
         çocuğu da orada yaşar, masaüstü kapanınca kapanır)."""
         d = self._d()
         env = self._wl_ortami(d)
+        yol = arka_ortak.arac(argv[0], zorunlu=False)
+        if not yol:
+            raise Dur(ARAC_EKSIK, _("{arac} yok (wl-clipboard paketi)").format(arac=argv[0]))
+        argv = [yol, *argv[1:]]
         with tempfile.TemporaryFile() as cikti, tempfile.TemporaryFile() as hata_:
             try:
                 std = dict(stdin=subprocess.PIPE if girdi is not None else subprocess.DEVNULL, stdout=cikti,
                            stderr=hata_)
                 if kafes:
-                    from .. import arka_ortak
                     p = arka_ortak.kafeste_baslat(d, argv, env, **std)
                 else:
                     p = subprocess.Popen(argv, env=env, start_new_session=True, **std)

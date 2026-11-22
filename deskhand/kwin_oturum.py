@@ -50,7 +50,7 @@ ASGARI_SURUM = (6, 8)          # EIS + ScreenShot2 yetkisiz (X-KDE-DBUS-Restrict
 ILK_XEKRAN = 120               # Xvfb masaüstü :90'dan başlar; çakışmasın
 OTURUM_ONEK = "kwin-"
 DURUM_DOSYASI = "oturum.json"
-ASGARI_PATH = "/usr/local/bin:/usr/bin:/bin"
+ASGARI_PATH = ao.GUVENLI_PATH  # yalnız root korumalı dizinler (denetim 12c Y2)
 YEDEK_PATH = ASGARI_PATH
 # Uygulama araçkiti ipuçları: açıkça verilirse uygulama ortamında değişebilen (güvenlikle ilgisiz) değişkenler
 ARAC_IPUCLARI = ("QT_QPA_PLATFORM", "GDK_BACKEND", "MOZ_ENABLE_WAYLAND", "SDL_VIDEODRIVER", "SDL_VIDEO_DRIVER",
@@ -170,13 +170,25 @@ def guvenli_kayit(d: dict) -> dict:
     return g
 
 
+_KARSI_ONBELLEK: dict = {}
+KARSI_SURE = 1.0  # sn: aynı soketler + aynı süreçler için doğrulama sonucu bu kadar geçerli (sık komutlarda ~ms kazanç)
+
+
 def _karsi_denetle(g: dict) -> None:
     """Bağlanılacak soketlerin KARŞI TARAFI bu oturumun süreçleri mi (sert bağ / yer değiştirme ile kullanıcının
     gerçek veri yoluna/compositor'ına yönlendirmeye karşı): veri yolu soketinin SO_PEERCRED PID'i kayıttaki
     dbus-daemon (başlangıç zamanı aynı, komut satırında `--config-file=<dizin>/bus.conf`), Wayland soketininki kayıttaki
-    KWin; iki soket de kullanıcının gerçek soketlerinden birinin (st_dev, st_ino) kopyası olmamalı."""
+    KWin; iki soket de kullanıcının gerçek soketlerinden birinin (st_dev, st_ino) kopyası olmamalı. Başarılı sonuç
+    (soket inode'ları, PID'ler, başlangıç zamanları) anahtarıyla KARSI_SURE boyunca önbellekte: soket değişirse ya da
+    süreç yeniden doğarsa anahtar değişir, yeniden doğrulanır."""
     pid = g.get("pid") or {}
     bas = g.get("pid_bas") or {}
+    bus_yol = os.path.join(g["calisma"], "bus")
+    anahtar = (g["calisma"], ao.soket_kimligi(bus_yol), ao.soket_kimligi(g["wayland_yol"]), pid.get("dbus"),
+               bas.get("dbus"), pid.get("kwin"), bas.get("kwin"))
+    t = _KARSI_ONBELLEK.get(anahtar)
+    if t is not None and time.monotonic() - t < KARSI_SURE and None not in anahtar[1:3]:
+        return
     gercek = ao.gercek_soket_kimlikleri()
     for yol, ad in ((os.path.join(g["calisma"], "bus"), "dbus"), (g["wayland_yol"], "kwin")):
         if ao.soket_kimligi(yol) in gercek:
@@ -188,6 +200,8 @@ def _karsi_denetle(g: dict) -> None:
                                       "bağlanılmadı").format(ad=ad, karsi=karsi))
     if f"--config-file={g['calisma']}/bus.conf" not in ao._komut_satiri(pid.get("dbus")):
         raise Dur(SANAL_KAPALI, _("özel veri yolu süreci bu oturumun yapılandırmasıyla çalışmıyor; bağlanılmadı"))
+    _KARSI_ONBELLEK.clear()
+    _KARSI_ONBELLEK[anahtar] = time.monotonic()
 
 
 def baglanti_denetle(d: dict) -> dict:
@@ -291,7 +305,11 @@ def surec_gpu_pci(pid) -> list[str]:
 
 def kwin_surumu() -> tuple[int, ...] | None:
     try:
-        c = subprocess.run(["kwin_wayland", "--version"], capture_output=True, text=True, timeout=5).stdout
+        kw = ao.arac("kwin_wayland", zorunlu=False)
+        if not kw:
+            return None
+        c = subprocess.run([kw, "--version"], capture_output=True, text=True, timeout=5,
+                           env={"PATH": ASGARI_PATH}).stdout
     except (OSError, subprocess.TimeoutExpired):
         return None
     m = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", c)
@@ -307,9 +325,9 @@ def kullanilabilir() -> tuple[bool, str]:
         return False, _("KWin {surum} < 6.8 (EIS/ScreenShot2 yetkisi için 6.8 gerekir)").format(
             surum=".".join(map(str, s)))
     from .arka_uc.kwin import pencere_araci
-    for arac in ("dbus-daemon", "nice", "ionice", "sh", "busctl", "env", pencere_araci()):
-        if not shutil.which(arac):
-            return False, _("{arac} yok").format(arac=arac)
+    for arac in ("bwrap", "dbus-daemon", "nice", "ionice", "sh", "busctl", "env", "systemd-run", pencere_araci()):
+        if not ao.arac(arac, zorunlu=False):
+            return False, _("{arac} yok (ya da güvenli dizinde değil: /usr/bin, /bin)").format(arac=arac)
     if not any(a["erisim"] for a in render_aygitlari()):
         return False, _("erişilebilir render aygıtı yok (/dev/dri/renderD*)")
     if not yollar.eis_bin():
@@ -535,7 +553,7 @@ def _log_sonu(cdir: str, ad: str, n: int = 400) -> str:
 
 def _busctl(d: dict, *a, zaman: float = 5.0) -> subprocess.CompletedProcess:
     d = guvenli_kayit(d)
-    return subprocess.run(["busctl", f"--address={d['dbus_adres']}", "--no-pager", *a], capture_output=True, text=True,
+    return subprocess.run([ao.arac("busctl"), f"--address={d['dbus_adres']}", "--no-pager", *a], capture_output=True, text=True,
                           timeout=zaman, env=kdotool_ortami(d))
 
 
@@ -627,8 +645,9 @@ def _oncelik_dusur(d: dict, pid: int) -> None:
         except OSError:
             pass
     tidler = [str(t) for t, _n, _p in oncelik_durumu(pid)]
-    if tidler and shutil.which("ionice"):  # KWin disk iş parçacıklarını best-effort'a çekiyor: hepsi idle
-        subprocess.run(["ionice", "-c", "3", "-p", *tidler], capture_output=True, timeout=5)
+    if tidler and ao.arac("ionice", zorunlu=False):  # KWin disk iş parçacıklarını best-effort'a çekiyor: hepsi idle
+        subprocess.run([ao.arac("ionice"), "-c", "3", "-p", *tidler], capture_output=True, timeout=5,
+                       env={"PATH": ASGARI_PATH})
     kalan = [(t, n, p) for t, n, p in oncelik_durumu(pid) if n < 10 or p in (1, 2, 6)]
     if kalan:
         raise Dur(ARAC_EKSIK, _("KWin düşük önceliğe alınamadı (iş parçacığı, nice, politika): {kalan}").format(
@@ -682,8 +701,8 @@ def _ozel_adlar(cdir: str) -> str:
     → KWin'in çalıştırılacak yolu."""
     b = os.path.join(cdir, "bin")
     os.makedirs(b, mode=0o700, exist_ok=True)
-    kwin = shutil.which("kwin_wayland", path=ASGARI_PATH) or "/usr/bin/kwin_wayland"
-    xw = shutil.which("Xwayland", path=ASGARI_PATH)
+    kwin = ao.arac("kwin_wayland")
+    xw = ao.arac("Xwayland", zorunlu=False)
     if xw:
         os.symlink(os.path.realpath(xw), os.path.join(b, XWAYLAND_AD))
         betik = os.path.join(b, "Xwayland")
@@ -745,7 +764,7 @@ def _baslat_tek(boyut, xwayland: bool, duzen: tuple[str, str], render_dugumu: st
         raise Dur(1, _("geçersiz ekran boyutu: {boyut}").format(boyut=repr(boyut)))
     bellek = ao._bellek_siniri()
     takas = ao._takas_siniri() if bellek else None
-    if bellek and not shutil.which("systemd-run"):
+    if bellek and not ao.arac("systemd-run", zorunlu=False):
         raise Dur(ARAC_EKSIK, _("systemd-run yok: bellek kafesi kurulamaz (bilerek kapatmak için DESKHAND_SANAL_BELLEK=0)"))
     temizle_kalintilar()
     kimlik = secrets.token_hex(4)
@@ -794,11 +813,12 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     if adres != d["dbus_adres"]:
         raise Dur(ARAC_EKSIK, _("özel veri yolu adresi beklenenden farklı: {adres}").format(adres=adres))
     env_args = [f"{k}={v}" for k, v in ortam.items()]
-    dbus_cmd = ["env", "-i", *env_args, "dbus-daemon", f"--config-file={conf}", "--nofork", "--nopidfile", "--nosyslog"]
+    dbus_cmd = [ao.arac("env"), "-i", *env_args, ao.arac("dbus-daemon"), f"--config-file={conf}", "--nofork",
+                "--nopidfile", "--nosyslog"]
     with _gunluk(cdir, "dbus") as log:
         if d["bellek"]:
             kafes = f"deskhand-kwin-{d['kimlik']}-{os.getpid()}.scope"
-            komut = ["systemd-run", "--user", "--scope", "--quiet", f"--unit={kafes}",
+            komut = [ao.arac("systemd-run"), "--user", "--scope", "--quiet", f"--unit={kafes}",
                      "-p", f"MemoryMax={d['bellek']}", "-p", f"MemorySwapMax={d.get('takas') or '0'}",
                      "-p", "Delegate=yes", "-p", "TimeoutStopSec=5", "--", *ao._oncelik(), *dbus_cmd]
             p = subprocess.Popen(komut, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
@@ -824,8 +844,9 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     # zamanlama; arka plan masaüstü oyun oynayan kullanıcıdan işlemci çalardı). Yan kazanç: süreç /proc'tan okunabilir.
     # RLIMIT_RTPRIO=0 + RLIMIT_NICE=10 (en düşük nice 10): yetenek olmadan da kullanıcı sınırları (limits.conf) izin
     # veriyorsa SCHED_RR alıp nice -12ye inebiliyordu (ölçüldü)
-    kwin = [*(["prlimit", "--rtprio=0", "--nice=10"] if shutil.which("prlimit") else []),
-            *(["setpriv", "--no-new-privs"] if shutil.which("setpriv") else []),
+    prlimit, setpriv = ao.arac("prlimit", zorunlu=False), ao.arac("setpriv", zorunlu=False)
+    kwin = [*([prlimit, "--rtprio=0", "--nice=10"] if prlimit else []),
+            *([setpriv, "--no-new-privs"] if setpriv else []),
             _ozel_adlar(cdir), "--virtual", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
             "--socket", d["wayland"], "--width", str(d["boyut"][0]), "--height", str(d["boyut"][1])]
     xs = None
@@ -978,18 +999,19 @@ def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
     """Uygulamanın bwrap ad alanında görebileceği oturum yolları ((yol, salt_okunur)): kendi runtime dizini, özel veri
     yolu soketi, Wayland soketi, erişilebilirlik veri yolu, XWayland soketi + Xauthority (salt okunur). Başka hiçbir
     şey (oturum.json, kwin.log, ev/, BAŞKA uygulamaların oturum kopyaları) yok; uygulamanın kendi kopyası
-    korumali_baslat'ta komutundan eklenir."""
+    korumali_baslat'ta (politikanın kararından, kopya=) eklenir."""
     c = g["calisma"]
     b = [(ao.uygulama_runtime(c), False), (os.path.join(c, "bus"), False), (g["wayland_yol"], False),
          (os.path.join(c, "at-spi"), False)]
     if g.get("x_ana") is not None:
         b += [(f"{X_DIZIN}/X{g['x_ana']}", False), (g["xauth"], True)]
-    return b  # oturum kopyası: yalnız uygulamanın KENDİSİNİNKİ (arka_ortak.korumali_baslat, komuttan)
+    return b  # oturum kopyası: yalnız politikanın verdiği (arka_ortak.korumali_baslat, kopya=)
 
 
-def uygulama_baslat(d: dict, argv: list[str], env: dict | None = None, **popen) -> subprocess.Popen:
-    """Uygulamayı bu oturumda başlat: kapı (baglanti_denetle), bwrap ad alanı (gerçek runtime dizini ve Deskhand'in
-    RUNTIME_DIR'i görünmez; yalnız uygulama_baglari), bellek kafesi; ortam uygulama_ortami(güvenli kayıt, env)."""
+def uygulama_baslat(d: dict, argv: list[str], env: dict | None = None, kopya: str | None = None,
+                    **popen) -> subprocess.Popen:
+    """Uygulamayı bu oturumda başlat: kapı (baglanti_denetle), bwrap ad alanı (arka_ortak.korumali_argv; yalnız
+    uygulama_baglari + kopya), bellek kafesi; ortam uygulama_ortami(güvenli kayıt, env)."""
     if not argv or not (shutil.which(argv[0]) or os.path.isfile(argv[0])):
         raise Dur(ARAC_EKSIK, _("başlatılamadı: {komut} bulunamadı").format(komut=argv[0] if argv else _("(boş komut)")))
     g = baglanti_denetle(d)
@@ -1000,7 +1022,7 @@ def uygulama_baslat(d: dict, argv: list[str], env: dict | None = None, **popen) 
         popen.setdefault("stdout", log)
         popen.setdefault("stderr", log)
     try:
-        return ao.korumali_baslat(g, list(argv), uygulama_ortami(g, env), uygulama_baglari(g), **popen)
+        return ao.korumali_baslat(g, list(argv), uygulama_ortami(g, env), uygulama_baglari(g), kopya=kopya, **popen)
     finally:
         if log is not None:
             log.close()
@@ -1060,17 +1082,19 @@ def atspi_baslat(d: dict) -> str | None:
         return None
     pid = (d["pid"] or {}).get("a11y")
     if not (pid and ao._canli(pid)):
-        if not os.path.exists(ATSPI_REGISTRYD):
+        kayit_exe = ao.arac(ATSPI_REGISTRYD, zorunlu=False)
+        if not kayit_exe:
             return None
         with _gunluk(d["calisma"], "atspi") as log:
-            p = ao.kafeste_baslat(d, [ATSPI_REGISTRYD], kdotool_ortami(d), stdin=subprocess.DEVNULL, stdout=log,
+            p = ao.kafeste_baslat(d, [kayit_exe], kdotool_ortami(d), stdin=subprocess.DEVNULL, stdout=log,
                                         stderr=log)
         ao.pid_kaydet(d, "a11y", p.pid)
         _durum_yaz(d)
 
         def a11y_kayit():  # kayıt defteri a11y veri yolunda: --address ile ona bağlan
             try:
-                r = subprocess.run(["busctl", f"--address={adres}", "--no-pager", "status", "org.a11y.atspi.Registry"],
+                r = subprocess.run([ao.arac("busctl"), f"--address={adres}", "--no-pager", "status",
+                                    "org.a11y.atspi.Registry"],
                                    capture_output=True, text=True, timeout=3, env=kdotool_ortami(d))
                 return r.returncode == 0
             except (OSError, subprocess.TimeoutExpired):

@@ -103,6 +103,31 @@ def _baslangic(pid: int) -> str | None:
         return None
 
 
+def kesin_olu(pid: int, bas: str | None) -> bool:
+    """İzlenen sunucu KESİN ölü mü: süreç yok (/proc/<pid> yok, ESRCH), zombi/ölü, ya da başlangıç zamanı farklı (PID
+    başka sürece geçmiş). /proc/<pid>/stat GEÇİCİ okunamıyorsa (EACCES, EAGAIN, bellek baskısı…) ölü SAYILMAZ: canlı
+    oturum kapatılmaz (denetim 12c O3)."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            v = f.read()
+    except (FileNotFoundError, ProcessLookupError):
+        return True
+    except OSError:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except OSError:
+            pass
+        return False
+    try:
+        alanlar = v[v.rindex(")") + 2:].split()
+        durum, baslangic = alanlar[0], alanlar[19]
+    except (ValueError, IndexError):
+        return False  # yarım okuma: bir sonraki turda yeniden bakılır
+    return durum in ("X", "Z") or (bas is not None and baslangic != bas)
+
+
 def _durum(pid: int) -> str:
     try:
         with open(f"/proc/{pid}/stat") as f:
@@ -176,7 +201,7 @@ def main(argv: list[str]) -> int:
     print("hazir", flush=True)
     while True:
         time.sleep(aralik)
-        if izle is not None and (_baslangic(izle) != bas or _durum(izle) in ("X", "Z")):
+        if izle is not None and kesin_olu(izle, bas):
             oturumu_kapat(cg, izle, xno, dizin)
             return 0
         if not surecler(cg):

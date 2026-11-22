@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import subprocess
 import time
 
@@ -247,76 +246,344 @@ def gercek_soket_kimlikleri() -> set[tuple[int, int]]:
     return sonuc
 
 
-def runtime_denetle(yol: str) -> None:
-    """Deskhand'in RUNTIME_DIR'i (var olan dizin) kullanıcıya ait gerçek dizin olmalı (başkasının hazırladığı dizine /
-    sembolik bağa oturum soketi/durum dosyası konmasın; değilse Dur 14) ve 0700 (bizimse gevşek izin sıkılaştırılır)."""
+def runtime_durumu(yol: str) -> str | None:
+    """RUNTIME_DIR'in güvenlik durumu (doktor ve runtime_denetle ortak): None = uygun (yok ya da kullanıcıya ait,
+    sembolik bağ olmayan, 0700 dizin); değilse kullanıcıya gösterilecek neden."""
     try:
         st = os.lstat(yol)
     except FileNotFoundError:
-        return
+        return None
+    except OSError as e:
+        return str(e)
     import stat as _stat
     if not _stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
-        raise Dur(14, _("çalışma dizini güvensiz (sahibi/türü): {yol}").format(yol=yol))
-    if st.st_mode & 0o077:  # bizim dizinimiz ama gevşek izinli (ör. eski sürüm/ara dizin): sıkılaştır
-        os.chmod(yol, 0o700)
-        if os.stat(yol).st_mode & 0o077:
-            raise Dur(14, _("çalışma dizini izinleri 0700 yapılamadı: {yol}").format(yol=yol))
+        return _("çalışma dizini güvensiz (sahibi/türü): {yol}").format(yol=yol)
+    if st.st_mode & 0o077:
+        return _("çalışma dizini gevşek izinli ({izin}; 0700 olmalı): {yol} — `chmod 700 {yol}` ile düzeltin").format(
+            izin=oct(st.st_mode & 0o777), yol=yol)
+    return None
+
+
+def runtime_denetle(yol: str) -> None:
+    """Deskhand'in RUNTIME_DIR'i (var olan dizin) kullanıcıya ait, sembolik bağ olmayan, 0700 dizin olmalı; değilse
+    Dur 14. Gevşek izinli dizin sessizce sıkılaştırılmaz: arada başkası soket/dosya bırakmış olabilir (doktor gösterir)."""
+    neden = runtime_durumu(yol)
+    if neden:
+        raise Dur(14, neden)
+
+
+# ---------------------------------------------------------------- güvenli yardımcı ikililer
+
+# Deskhand'in çalıştırdığı her yardımcı ikili (bwrap, nice, ionice, sh, systemd-run, busctl, dbus-daemon, Xvfb, KWin,
+# kdotool, wl-copy…) PATH'ten DEĞİL yalnız bu dizinlerden, mutlak yolla bulunur ve dosya + bütün üst dizinleri root'a
+# ait, grup/diğerleri yazamaz olmalı. Neden (denetim 12c, Y2): PATH'in başı kullanıcının yazılabilir ~/.local/bin'i;
+# oraya bırakılan sahte `bwrap` sonraki bütün başlatmaları yalıtımsız yapıyordu.
+GUVENLI_DIZINLER = ("/usr/bin", "/bin")
+GUVENLI_PATH = ":".join(GUVENLI_DIZINLER)
+_ARAC_ONBELLEK: dict[str, str] = {}
+
+
+def guvenli_yol(yol: str) -> bool:
+    """Mutlak yol güvenli bir çalıştırılabilir mi: yol BİLEŞEN BİLEŞEN çözülür; her bileşen (sembolik bağlar ve
+    zincirdeki her ara bağ dahil) root'a ait, dizinler grup/diğerleri tarafından yazılamaz, son öğe root'a ait,
+    başkası yazamaz, çalıştırılabilir normal dosya. Böylece zincirin hiçbir halkası root olmayan biri tarafından
+    değiştirilemez."""
+    import stat as _stat
+    if not os.path.isabs(yol):
+        return False
+    kalan = [p for p in yol.split("/") if p]
+    mevcut = "/"
+    try:
+        st = os.lstat("/")
+    except OSError:
+        return False
+    if st.st_uid != 0 or st.st_mode & 0o022:
+        return False
+    bag_sayisi = 0
+    while kalan:
+        p = kalan.pop(0)
+        if p == ".":
+            continue
+        if p == "..":
+            mevcut = os.path.dirname(mevcut) or "/"
+            continue
+        aday = os.path.join(mevcut, p)
+        try:
+            st = os.lstat(aday)
+        except OSError:
+            return False
+        if st.st_uid != 0:
+            return False
+        if _stat.S_ISLNK(st.st_mode):
+            bag_sayisi += 1
+            if bag_sayisi > 40:
+                return False
+            hedef = os.readlink(aday)
+            if hedef.startswith("/"):
+                mevcut = "/"
+            kalan = [x for x in hedef.split("/") if x] + kalan
+            continue
+        if st.st_mode & 0o022:
+            return False
+        if _stat.S_ISDIR(st.st_mode):
+            mevcut = aday
+            continue
+        return not kalan and _stat.S_ISREG(st.st_mode) and bool(st.st_mode & 0o111)
+    return False
+
+
+def arac(ad: str, zorunlu: bool = True) -> str | None:
+    """Yardımcı ikilinin GÜVENLİ mutlak yolu (yalnız GUVENLI_DIZINLER; ad mutlak yolsa yalnız o). Bulunamazsa ya da
+    güvenli değilse zorunlu → Dur(9), değilse None. Uygun yol süreç boyunca önbellekte (root dizinleri değişmez)."""
+    if ad in _ARAC_ONBELLEK:
+        return _ARAC_ONBELLEK[ad]
+    adaylar = [ad] if os.path.isabs(ad) else [os.path.join(d, ad) for d in GUVENLI_DIZINLER] if "/" not in ad else []
+    for a in adaylar:
+        if not os.path.lexists(a):
+            continue
+        if guvenli_yol(a):
+            _ARAC_ONBELLEK[ad] = a
+            return a
+        break  # var ama güvensiz: başka dizindeki kopyasına düşülmez
+    if zorunlu:
+        raise Dur(ARAC_EKSIK, _("güvenli araç bulunamadı: {ad} (yalnız /usr/bin ve /bin; dosya ve üst dizinleri root'a "
+                                "ait, başkası yazamaz olmalı)").format(ad=ad))
+    return None
+
+
+def python_yolu() -> str:
+    """Deskhand'in kendi yardımcı betiklerini (bekçiler, pano sahibi, bildirim yakalayıcı) çalıştıracak yorumlayıcı:
+    çalışan yorumlayıcı güvenliyse o, değilse (ör. kullanıcının sanal ortamı) /usr/bin/python3."""
+    import sys
+    return sys.executable if sys.executable and guvenli_yol(sys.executable) else arac("python3")
 
 
 # ---------------------------------------------------------------- uygulama ad alanı yalıtımı (bwrap)
 
 def bwrap_var() -> bool:
-    return bool(shutil.which("bwrap"))
+    return arac("bwrap", zorunlu=False) is not None
 
 
-def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, bool]]) -> list[str]:
-    """Arka plan UYGULAMASININ komutu bwrap ad alanında: kök dosya sistemi aynen (`--dev-bind / /`), ama kullanıcının
-    gerçek runtime dizini (/run/user/UID: Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh, xauth, at-spi, portal
-    soketleri) ve Deskhand'in kendi RUNTIME_DIR'i (girdi.sock, sanal.json, diğer oturumlar) BOŞ tmpfs ile örtülür,
-    /tmp/.X11-unix boşaltılır; yalnız `baglar` (oturumun kendi soketleri/dizinleri; (yol, salt_okunur)) geri bağlanır.
-    --die-with-parent YOK (masaüstü CLI'den uzun yaşar); kafes ve PID temizliği aynen geçerli."""
-    uid = os.getuid()
-    a = ["bwrap", "--dev-bind", "/", "/", "--tmpfs", f"/run/user/{uid}"]
-    rk = os.path.realpath(runtime_kok)
-    if not (rk == f"/run/user/{uid}" or rk.startswith(f"/run/user/{uid}/")):
-        a += ["--tmpfs", rk]
-    a += ["--tmpfs", "/tmp/.X11-unix", "--new-session"]
-    for yol, ro in baglar:
-        if yol and os.path.exists(yol):
-            a += ["--ro-bind" if ro else "--bind", yol, yol]
-    return [*a, "--", *argv]
+_EV_ZORLA: str | None = None  # yalnız testler (süreç içi): sahte ev dizini; gerçek kullanıcı dosyalarına dokunmadan sınama
 
 
-def kopya_baglari(argv: list[str], env: dict, kok: str) -> list[tuple[str, bool]]:
-    """Uygulamanın KENDİ oturum kopyaları: komut satırında ya da ortamında geçen `<kopya kökü>/<ad>` dizinleri (Firefox
-    `--profile <kopya>`, `XDG_CONFIG_HOME=<kopya>/.xdg-config`…) ve Flatpak örnek kaydı dosyası. Kökün kendisi ve başka
-    kopyalar BAĞLANMAZ: bir uygulama ötekinin kopyasını göremez."""
-    sonuc, gorulen = [], set()
-    rx = re.compile(re.escape(os.path.realpath(kok).rstrip("/")) + r"/([^/\s:=,;]+)")
-    for metin in [*argv, *(v for v in env.values() if isinstance(v, str))]:
-        for m in rx.finditer(os.path.realpath(metin) if os.path.isabs(metin) else metin):
-            yol = os.path.join(os.path.realpath(kok), m.group(1))
-            if yol in gorulen or m.group(1) in (".", ".."):
-                continue
-            gorulen.add(yol)
-            if os.path.isdir(yol) and not os.path.islink(yol):
-                sonuc.append((yol, False))
-            elif os.path.isfile(yol) and yol.endswith(".json"):  # Flatpak örnek kaydı (sarmalayıcı yazar)
-                sonuc.append((yol, False))
+def gercek_ev() -> str:
+    """Kullanıcının GERÇEK ev dizini (parola veritabanından; ortamdaki HOME değil)."""
+    if _EV_ZORLA:
+        return os.path.realpath(_EV_ZORLA)
+    import pwd
+    try:
+        return os.path.realpath(pwd.getpwuid(os.getuid()).pw_dir)
+    except KeyError:
+        return os.path.realpath(os.path.expanduser("~"))
+
+
+VARSAYILAN_VERI = ("Desktop", "Downloads", "Templates", "Public", "Documents", "Music", "Pictures", "Videos")
+
+
+def _nokta_yok(ev: str, yol: str) -> bool:
+    """yol ev dizininin İÇİNDE (kendisi değil) ve göreli yolunun hiçbir bileşeni nokta ile başlamıyor."""
+    if not yol.startswith(ev.rstrip("/") + "/"):
+        return False
+    return not any(p.startswith(".") for p in os.path.relpath(yol, ev).split("/"))
+
+
+def veri_klasorleri(ev: str | None = None) -> list[str]:
+    """Arka plan uygulamasının YAZABİLECEĞİ gerçek klasörler: kullanıcının XDG veri klasörleri (~/.config/user-dirs.dirs;
+    dosya yoksa standart İngilizce adlar). Yalnız ev dizininin İÇİNDE, ev dizininin kendisi olmayan, yolunda nokta ile
+    başlayan bileşen bulunmayan, var olan dizinler (gerçek yolları). Ev dizinini/gizli dizini gösteren girdi yok sayılır."""
+    ev = ev or gercek_ev()
+    adaylar: list[str] = []
+    try:
+        with open(os.path.join(ev, ".config", "user-dirs.dirs"), encoding="utf-8", errors="replace") as f:
+            for satir in f:
+                m = re.fullmatch(r'\s*XDG_[A-Z]+_DIR="(.*)"\s*', satir)
+                if not m:
+                    continue
+                v = m.group(1)
+                if v.startswith("$HOME"):
+                    v = ev + v[len("$HOME"):]
+                if os.path.isabs(v):
+                    adaylar.append(v)
+    except OSError:
+        adaylar = [os.path.join(ev, a) for a in VARSAYILAN_VERI]
+    sonuc = []
+    for a in adaylar:
+        g = os.path.realpath(a)
+        if g not in sonuc and os.path.isdir(g) and _nokta_yok(ev, os.path.normpath(a)) and _nokta_yok(ev, g):
+            sonuc.append(g)
     return sonuc
 
 
-def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str, bool]], **popen) -> subprocess.Popen:
+NOKTA_AZAMI = 3000      # bir veri klasöründe salt okunur örtülecek en çok gizli girdi (aşarsa klasör salt okunur)
+NOKTA_DERINLIK = 6
+
+
+def _bul(kok: str, *ifade: str, zaman: float = 10.0) -> list[tuple[str, str]] | None:
+    """find (güvenli yol) → [(tür harfi, yol)]; çalışmazsa None. -xdev: başka dosya sistemine inmez."""
+    try:
+        r = subprocess.run([arac("find"), kok, "-xdev", *ifade], capture_output=True, timeout=zaman,
+                           env={"PATH": GUVENLI_PATH, "LC_ALL": "C"}, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired, Dur):
+        return None
+    sonuc = []
+    for p in r.stdout.split(b"\0"):
+        if len(p) > 2 and p[1:2] == b" ":
+            sonuc.append((chr(p[0]), os.fsdecode(p[2:])))
+    return sonuc
+
+
+def veri_nokta_girdileri(klasor: str) -> list[tuple[str, str]] | None:
+    """Veri klasörünün İÇİNDEKİ gizli (nokta ile başlayan) dizin/dosyalar (en dıştakiler; içlerine inilmez) ve
+    soket/FIFO'lar: [(tür, yol)] (tür: d dizin, f dosya, s soket, p FIFO; sembolik bağlar yok). Sayı NOKTA_AZAMI'yı
+    aşar ya da tarama başarısızsa None (çağıran klasörü salt okunur bağlar)."""
+    r = _bul(klasor, "-mindepth", "1", "-maxdepth", str(NOKTA_DERINLIK), "(", "-name", ".*", "(", "-type", "d", "-o",
+             "-type", "f", ")", "-printf", r"%y %p\0", "-prune", ")", "-o", "(", "-type", "s", "-o", "-type", "p", ")",
+             "-printf", r"%y %p\0")
+    if r is None or len(r) > NOKTA_AZAMI:
+        return None
+    return r
+
+
+def ev_soketleri(ev: str | None = None) -> list[str]:
+    """Ev dizininde (derinlik 4, gizli dizinler dahil) soket ve FIFO'lar + bilinenler (~/.steam/steam.pipe): ad
+    alanında /dev/null ile maskelenir (katman yazılabilir olsa da gerçek sokete/boruya bağlanılmasın)."""
+    ev = ev or gercek_ev()
+    bulunan = {y for _t, y in (_bul(ev, "-maxdepth", "4", "(", "-type", "s", "-o", "-type", "p", ")", "-printf",
+                                     r"%y %p\0") or [])}
+    for b in (".steam/steam.pipe",):
+        y = os.path.join(ev, b)
+        if os.path.exists(y) and not os.path.islink(y):
+            bulunan.add(y)
+    return sorted(bulunan)
+
+
+_KATMAN: dict[str, bool] = {}
+
+
+def katman_destekli(ev: str | None = None) -> bool:
+    """bwrap ev dizininin üstüne geçici katman (overlayfs, kullanıcı ad alanında) kurabiliyor mu (süreç başına bir kez
+    ölçülür, ~15 ms). Kurulamıyorsa korumali_argv ev dizinini salt okunur bağlar."""
+    ev = ev or gercek_ev()
+    if ev not in _KATMAN:
+        try:
+            r = subprocess.run([arac("bwrap"), "--unshare-user", "--ro-bind", "/", "/", "--overlay-src", ev,
+                                "--tmp-overlay", ev, "--", arac("true")], capture_output=True, timeout=10,
+                               env={"PATH": GUVENLI_PATH}, stdin=subprocess.DEVNULL)
+            _KATMAN[ev] = r.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            _KATMAN[ev] = False
+    return _KATMAN[ev]
+
+
+def _ic_ice(yol: str, ust: str) -> bool:
+    return yol == ust or yol.startswith(ust.rstrip("/") + "/")
+
+
+def ev_baglari(ev: str | None = None) -> tuple[list[str], dict]:
+    """Ev dizini için bwrap argümanları → (argümanlar, bilgi). Ev dizini GEÇİCİ katmanla örtülür (gerçek dosyalar
+    okunur, yazılanlar oturumla atılır: ~/.config/autostart, ~/.bashrc, ~/.local/bin… kalıcı olarak değiştirilemez);
+    katman kurulamazsa ev dizini salt okunur + ~/.cache tmpfs. Yazılabilir GERÇEK bağlar yalnız veri klasörleri
+    (veri_klasorleri); onların içindeki gizli dizin/dosyalar (.git, .vscode, .envrc…) salt okunur örtülür, soket/FIFO'lar
+    /dev/null ile maskelenir; gizli girdisi çok olan klasör bütünüyle salt okunur. Ev dizinindeki soket/FIFO'lar da
+    maskelenir."""
+    ev = ev or gercek_ev()
+    a: list[str] = []
+    bilgi: dict = {"katman": katman_destekli(ev), "yazilabilir": [], "salt_okunur_klasor": [], "nokta": 0, "maske": 0}
+    if bilgi["katman"]:
+        a += ["--overlay-src", ev, "--tmp-overlay", ev]
+    else:
+        a += ["--ro-bind", ev, ev]
+        if os.path.isdir(os.path.join(ev, ".cache")):
+            a += ["--tmpfs", os.path.join(ev, ".cache")]
+    maske = set(ev_soketleri(ev))
+    for k in veri_klasorleri(ev):
+        girdiler = veri_nokta_girdileri(k)
+        if girdiler is None:
+            a += ["--ro-bind", k, k]
+            bilgi["salt_okunur_klasor"].append(k)
+            continue
+        a += ["--bind", k, k]
+        bilgi["yazilabilir"].append(k)
+        for tur, y in girdiler:
+            if tur in ("s", "p"):
+                maske.add(y)
+            elif tur in ("d", "f"):
+                a += ["--ro-bind", y, y]
+                bilgi["nokta"] += 1
+    for y in sorted(maske):
+        if _ic_ice(y, ev):
+            a += ["--ro-bind", "/dev/null", y]
+            bilgi["maske"] += 1
+    return a, bilgi
+
+
+# Uygulamanın ortamından YALNIZ son komuta (bwrap --setenv) giden değişkenler: yardımcı zincir (sh, nice, ionice,
+# bwrap) bunlarla ÇALIŞMAZ (PATH araç çözümü, LD_* yükleyici)
+SON_KOMUT_ORTAMI = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT")
+
+
+def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, bool]], env: dict | None = None,
+                  ev: str | None = None) -> list[str]:
+    """Arka plan UYGULAMASININ komutu bwrap ad alanında (denetim 12c: Y1 aygıtlar, Y3 süreçler, HOME, Y4 IPC):
+      - ayrı kullanıcı + PID ad alanı (`--unshare-user --unshare-pid`, kendi /proc): kullanıcının başka süreçleri
+        görünmez, sinyal/ptrace gönderilemez;
+      - kök dosya sistemi SALT OKUNUR (`--ro-bind / /`), /dev bwrap'in asgari /dev'i + yalnız /dev/dri (GPU): uinput,
+        input/event*, snd, hidraw, usb, video düğümleri YOK;
+      - /tmp, /run/user/UID ve (başka yerdeyse) Deskhand'in RUNTIME_DIR'i BOŞ tmpfs: kullanıcının Wayland/D-Bus/ses/
+        kwallet/gnupg/ssh soketleri, /tmp'deki Steam/Chromium/ICE/Kulak Kesil soketleri görünmez;
+      - ev dizini geçici katman (ev_baglari): okunur, yazılanlar atılır; yalnız veri klasörleri gerçek yazılır;
+      - yalnız `baglar` (oturumun kendi soketleri/dizinleri; (yol, salt_okunur)) geri bağlanır;
+      - env verilirse PATH/LD_* YALNIZ son komuta `--setenv` ile gider.
+    --die-with-parent YOK (masaüstü CLI'den uzun yaşar); kafes ve PID temizliği aynen geçerli."""
+    uid = os.getuid()
+    ev = ev or gercek_ev()
+    a = [arac("bwrap"), "--unshare-user", "--unshare-pid", "--ro-bind", "/", "/", "--dev", "/dev"]
+    if os.path.isdir("/dev/dri"):
+        a += ["--dev-bind", "/dev/dri", "/dev/dri"]
+    a += ["--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", f"/run/user/{uid}"]
+    a += ev_baglari(ev)[0]
+    rk = os.path.realpath(runtime_kok)
+    if not (_ic_ice(rk, f"/run/user/{uid}") or _ic_ice(rk, "/tmp")):
+        a += ["--tmpfs", rk]
+    a += ["--new-session"]
+    for yol, ro in baglar:
+        if yol and os.path.exists(yol):
+            a += ["--ro-bind" if ro else "--bind", yol, yol]
+    for k in SON_KOMUT_ORTAMI:
+        if env and env.get(k):
+            a += ["--setenv", k, env[k]]
+    a += ["--setenv", "DESKHAND_AD_ALANI", "1"]  # oturum/flatpak_ornek: ana makine kaydı yazılmaz (ad alanı)
+    return [*a, "--", *argv]
+
+
+def kopya_bagi(kopya: str | None, kok: str) -> list[tuple[str, bool]]:
+    """Oturum politikasının bu uygulama için hazırladığı kopya (Hazirlik.kopya_yolu) → bağ. Yalnız kopya kökünün
+    DOĞRUDAN alt dizini (sembolik bağ değil); başka yol Dur 14. Komut satırı/ortamdan kopya ÇIKARILMAZ: bir uygulama
+    yalnız politikanın ona verdiği kopyayı görür."""
+    if not kopya:
+        return []
+    k = os.path.realpath(kok)
+    if os.path.islink(kopya) or not os.path.isdir(kopya) or os.path.dirname(os.path.realpath(kopya)) != k:
+        raise Dur(14, _("oturum kopyası geçersiz (kopya kökünün alt dizini değil): {yol}").format(yol=kopya))
+    return [(os.path.realpath(kopya), False)]
+
+
+def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str, bool]], kopya: str | None = None,
+                    **popen) -> subprocess.Popen:
     """Arka plan UYGULAMASINI başlatmanın TEK yolu (iki tür): bwrap ad alanı (korumali_argv) + bellek kafesi + düşük
-    öncelik. Oturum kopyası dizininden YALNIZ bu uygulamanın kendi kopyası bağlanır (kopya_baglari). bwrap yoksa Dur(9):
-    yalıtımsız başlatma yok."""
+    öncelik. kopya: oturum politikasının hazırladığı kopya dizini (yalnız o bağlanır, kopya_bagi). bwrap yoksa ya da
+    güvenli yolda değilse Dur(9): yalıtımsız başlatma yok. Yardımcı zincir güvenli PATH ile çalışır; uygulamanın PATH'i
+    yalnız son komuta gider."""
     if not bwrap_var():
         raise Dur(ARAC_EKSIK, _("bwrap (bubblewrap) yok: arka plan uygulaması yalıtılamaz, başlatılmadı"))
     from . import yollar
     from .oturum import politika
-    baglar = [*baglar, *kopya_baglari(list(argv), env, politika.kopya_dizini())]
+    baglar = [*baglar, *kopya_bagi(kopya, politika.kopya_dizini())]
     popen.setdefault("stdin", subprocess.DEVNULL)
-    return kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar), env, **popen)
+    dis = {k: v for k, v in env.items() if k not in SON_KOMUT_ORTAMI}
+    dis["PATH"] = GUVENLI_PATH
+    return kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar, env), dis, **popen)
 
 
 def _sinyal(pids, sig) -> None:
@@ -353,7 +620,7 @@ def _kullanici_bus_ortami() -> dict:
 
 
 def _kafese_al(kafes: str, pid: int) -> None:
-    r = subprocess.run(["busctl", "--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+    r = subprocess.run([arac("busctl"), "--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
                         "org.freedesktop.systemd1.Manager", "AttachProcessesToUnit", "ssau", kafes, "/", "1",
                         str(pid)], capture_output=True, text=True, env=_kullanici_bus_ortami(), timeout=5)
     if r.returncode != 0:
@@ -363,21 +630,23 @@ def _kafese_al(kafes: str, pid: int) -> None:
 def _oncelik() -> list[str]:
     """nice MUTLAK 10 (nice -n göreli: çağıran -4'teyse 6 olurdu) + ionice idle."""
     fark = 10 - os.getpriority(os.PRIO_PROCESS, 0)
-    return [*(["nice", "-n", str(fark)] if fark > 0 else []), "ionice", "-c", "3"]
+    return [*([arac("nice"), "-n", str(fark)] if fark > 0 else []), arac("ionice"), "-c", "3"]
 
 
 def kafeste_baslat(d: dict, argv: list[str], env: dict, pass_fds=(), **popen) -> subprocess.Popen:
     """argv'yi nice 10 + ionice idle ile, kafese ALINDIKTAN SONRA çalıştır (kapı borusu). pass_fds: süreçte açık
-    kalacak ek dosya tanıtıcıları (XWayland soketleri)."""
+    kalacak ek dosya tanıtıcıları (XWayland soketleri). Zincirin her ikilisi (sh, nice, ionice, argv[0]) güvenli mutlak
+    yoldan (arac); argv[0] göreliyse yalnız güvenli dizinlerde aranır, PATH'e bakılmaz."""
     if not argv:
         raise Dur(1, _("başlatılacak komut boş"))
+    argv = [argv[0] if os.path.isabs(argv[0]) else arac(argv[0]), *argv[1:]]
     tam = [*_oncelik(), *argv]
     kafes = d.get("kafes")
     if not kafes:  # kafes kapalı (DESKHAND_SANAL_BELLEK=0): yalnız öncelik
         return subprocess.Popen(tam, env=env, pass_fds=tuple(pass_fds), start_new_session=True, **popen)
     r, w = os.pipe()
     try:
-        p = subprocess.Popen(["sh", "-c", KAPI.format(fd=r), "deskhand-kapi", *tam], env=env,
+        p = subprocess.Popen([arac("sh"), "-c", KAPI.format(fd=r), "deskhand-kapi", *tam], env=env,
                              pass_fds=(r, *pass_fds), start_new_session=True, **popen)
     finally:
         os.close(r)
@@ -409,8 +678,8 @@ def oncelik_bekcisi_baslat(d: dict, cdir: str, izle: int | None = None, xno: int
         ek += ["--x", str(int(xno))]
     ek += ["--dizin", cdir]
     with _gunluk_dosyasi(cdir, "oncelik-bekcisi") as log:
-        p = kafeste_baslat(d, [sys.executable, "-I", oncelik_bekcisi.__file__, d["cgroup"], *ek],
-                           {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": os.environ.get("LANG") or "C.UTF-8"},
+        p = kafeste_baslat(d, [python_yolu(), "-I", oncelik_bekcisi.__file__, d["cgroup"], *ek],
+                           {"PATH": GUVENLI_PATH, "LANG": os.environ.get("LANG") or "C.UTF-8"},
                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=log)
     pid_kaydet(d, "oncelik_bekcisi", p.pid)
     satir = _satir_bekle(p, 5)
@@ -424,10 +693,11 @@ def oncelik_bekcisi_baslat(d: dict, cdir: str, izle: int | None = None, xno: int
 # ---------------------------------------------------------------- ses (boş çıkış)
 
 def _pactl(*a, timeout=5) -> subprocess.CompletedProcess | None:
-    if not shutil.which("pactl"):
+    pactl = arac("pactl", zorunlu=False)
+    if not pactl:
         return None
     try:
-        return subprocess.run(["pactl", *a], capture_output=True, text=True, timeout=timeout)
+        return subprocess.run([pactl, *a], capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired):
         return None
 
@@ -453,7 +723,7 @@ def ses_kur(ek: str = "") -> tuple[dict | None, str | None]:
     """→ (ses bilgisi, uyarı). Her sanal masaüstünün KENDİ boş çıkışı var (deskhand-sessiz-<ekran no>): biri kapanınca
     öbürünün sesi varsayılan çıkışa (kullanıcının kulaklığına) düşmesin. Önceden kalmış aynı adlı çıkış kullanılır
     ama durdurmada KALDIRILMAZ (sahibi biz değiliz)."""
-    if not shutil.which("pactl"):
+    if not arac("pactl", zorunlu=False):
         return None, _("pactl yok: arka plan sesi tamamen kapatıldı")
     sink = f"{SINK}-{ek}" if ek else SINK
     m = _sink_modulu(sink)

@@ -1055,6 +1055,7 @@ def open_app(
                                         "(kullanıcının ekranı).").format(uygulama=app))
         argv, ad, yasak_metin = api.uygulama_komutu(app, args)
         env = None
+        kopya = None
         notlar = []
         if api.arka().ad == "sanal":
             if masaustu.durum() is None:
@@ -1092,13 +1093,15 @@ def open_app(
                         argv = list(h.argv)
                         yasak_metin = [*yasak_metin, " ".join(argv)]
                     env = dict(getattr(h, "env_ek", None) or {}) or None
-                    if karar == "kopya" and hasattr(ot, "parmak_kaydet"):
-                        ot.parmak_kaydet(getattr(h, "kopya_yolu", None))
+                    if karar == "kopya":
+                        kopya = getattr(h, "kopya_yolu", None)  # ad alanına YALNIZ bu kopya bağlanır
+                        if hasattr(ot, "parmak_kaydet"):
+                            ot.parmak_kaydet(kopya)
                     notlar.append(_("oturum politikası: {karar}").format(karar=karar)
                                   + (f" ({aciklama})" if aciklama else ""))
                 elif karar:
                     raise ToolError("[1] " + _("bilinmeyen oturum kararı: {karar}").format(karar=repr(karar)))
-        r = api.uygulama_ac(argv, ad, yasak_metin, env, title, wait_s)
+        r = api.uygulama_ac(argv, ad, yasak_metin, env, title, wait_s, kopya=kopya)
         if notlar:
             r["notes"] = notlar
         return {**bilgi, **r}

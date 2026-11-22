@@ -689,12 +689,13 @@ class SanalArkaUc(ArkaUc):
         return _devral_var()
 
     # -------- uygulama
-    def baslat(self, argv: list[str], env: dict | None = None, cikti=None):
+    def baslat(self, argv: list[str], env: dict | None = None, cikti=None, kopya: str | None = None):
         """Sanal masaüstünde (kafes + sanal ortam) başlat. env: os.environ'a eklenecek/değişecek değişkenler;
-        cikti: açık dosya (stdout+stderr), yoksa masaüstünün uygulamalar.log'u."""
+        cikti: açık dosya (stdout+stderr), yoksa masaüstünün uygulamalar.log'u; kopya: oturum politikasının kopyası
+        (ad alanına yalnız o bağlanır)."""
         if cikti is not None:
-            return masaustu.baslat(argv, env, stdout=cikti, stderr=cikti)
-        return masaustu.baslat(argv, env)
+            return masaustu.baslat(argv, env, kopya=kopya, stdout=cikti, stderr=cikti)
+        return masaustu.baslat(argv, env, kopya=kopya)
 
     # -------- CHANGE 1 isteğe bağlı yöntemler
     def kimlikler(self) -> list[str]:
@@ -758,7 +759,7 @@ class SanalArkaUc(ArkaUc):
                 return s
             from .. import pano_sahibi
             with masaustu._gunluk_dosyasi(d["calisma"], "pano") as log:
-                p = masaustu.kafeste_baslat(d, [sys.executable, "-I", pano_sahibi.__file__, d["ekran"], yol],
+                p = masaustu.kafeste_baslat(d, [masaustu.python_yolu(), "-I", pano_sahibi.__file__, d["ekran"], yol],
                                             masaustu.uygulama_ortami(d), stdin=subprocess.DEVNULL,
                                             stdout=subprocess.PIPE, stderr=log)
             satir = masaustu._satir_bekle(p, 5)
