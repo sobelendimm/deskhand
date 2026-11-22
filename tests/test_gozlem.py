@@ -795,6 +795,16 @@ async def kapi_testleri():
         s._DONGU.temizle()
 
 
+def baslik_norm_testleri():
+    n = gozlem.baslik_norm
+    kontrol("baslik_norm: '(3) Gmail' ≡ '(4) Gmail' ≡ 'Gmail'", n("(3) Gmail") == n("(4) Gmail") == n("Gmail") == "Gmail")
+    kontrol("baslik_norm: 'İndiriliyor %45' ≡ 'İndiriliyor %46' ≡ 'İndiriliyor 7 %'",
+            n("İndiriliyor %45") == n("İndiriliyor %46") == n("İndiriliyor 7 %") == "İndiriliyor #")
+    kontrol("baslik_norm: 'A.txt — KWrite' ≠ 'B.txt — KWrite'; 'A — Dolphin' ≠ 'B — Dolphin'",
+            n("A.txt — KWrite") != n("B.txt — KWrite") and n("A — Dolphin") != n("B — Dolphin"))
+    kontrol("baslik_norm: None/boş güvenli; boşluklar sadeleşir", n(None) == "" and n("  a   b ") == "a b")
+
+
 async def duzeltme_a_testleri():
     """Son denetim A düzeltmeleri (sahte kde + sahte AT-SPI; gerçek ekrana girdi YOK):
     - ref'in anlık görüntüsündeki pencere başlığı değişince eylem reddedilir ([8]); ref yollarında başlık kilidi
@@ -834,13 +844,20 @@ async def duzeltme_a_testleri():
         ref = f"{sid.group(1)}:{m.group(1)}" if (m and sid) else None
         kontrol("ön koşul: observe 'Kaydet' ögesini verdi", ref is not None, metin(r)[:200])
         if ref:
-            sm.AGAC["Yeni belge — KWrite"] = sm.AGAC.pop("Belge — KWrite")
-            au.pen[sm.PENCERE][0] = "Yeni belge — KWrite"
+            sm.AGAC["(3) Belge — KWrite"] = sm.AGAC.pop("Belge — KWrite")
+            au.pen[sm.PENCERE][0] = "(3) Belge — KWrite"
             n0 = len(sm.eylemler())
             r = await c.call_tool("click", {"ref": ref, **F})
-            kontrol("ağaç ref'i: başlık değişti → öge kimliğiyle yeniden doğrulandı, click gitti (başlık denetimi "
-                    "yalnız OCR ref'lerinde; '(3) Gmail' gibi değişen başlıklar ref'i bozmasın)",
+            kontrol("ağaç ref'i: başlıkta YALNIZ sayaç değişti ('(3) Belge' ≡ 'Belge') → öge kimliğiyle doğrulandı, click gitti",
                     not r.is_error and "[8]" not in metin(r), metin(r)[:200])
+            sm.AGAC["Yeni belge — KWrite"] = sm.AGAC.pop("(3) Belge — KWrite")
+            au.pen[sm.PENCERE][0] = "Yeni belge — KWrite"
+            n0 = len(sm.eylemler())
+            nk = len([x for x in au.satirlar if x.startswith("click")])
+            r = await c.call_tool("click", {"ref": ref, **F})
+            kontrol("ağaç ref'i: başlık BAŞKA belgeye değişti → [8] 'başlığı değişti', eylem yok",
+                    r.is_error and "[8]" in metin(r) and "başlığı değişti" in metin(r) and len(sm.eylemler()) == n0 and
+                    len([x for x in au.satirlar if x.startswith("click")]) == nk, metin(r)[:200])
             au = sm.sifirla()
             r = await c.call_tool("observe", {"window": "KWrite", **F})
             m = re.search(r"\[(\d+)\] push button \"Kaydet\"", metin(r))
@@ -980,6 +997,53 @@ async def duzeltme_a_testleri():
                     r.is_error and "[8]" in metin(r) and "window" in metin(r) and "click left" not in au.satirlar[n0:],
                     metin(r)[:300])
         sm.AGACSIZ.discard("Belge — KWrite")
+
+        # --- web ref'i: bağlam = belge ADRESİ (parça dahil); başlık serbest ("(3) Gmail", tık günlüğü)
+        au = sm.sifirla()
+        adres = ["https://posta.ornek/#inbox/A"]
+
+        class SahteWeb:
+            ETKILESIMLI = frozenset({"push button"})
+
+            @staticmethod
+            def sayfa_bilgisi(k):
+                if adres[0] is None:
+                    raise Dur(6, "adres yok")
+                return {"adres": adres[0], "baslik": "x", "belge": 1}
+        web_oge = gozlem.web_ogesi({"rol": "push button", "ad": "Sil", "kutu": [10, 10, 60, 20], "_bus": ":1.9",
+                                    "_yol": "/o/1", "_anahtar": [0]}, {"push button"})
+        asil_topla, asil_web = s._agac_topla, s._web
+        s._agac_topla = lambda k, genis=False: ([dict(web_oge)], "web", {"adres": adres[0], "baslik": "A", "belge": 1}, [])
+        s._web = lambda: SahteWeb
+        try:
+            r = await c.call_tool("observe", {"window": "KWrite", **F})
+            sil = next((e for e in yapi(r).get("elements", []) if e.get("name") == "Sil"), None)
+            kontrol("web ref: observe sahte web ögesi + ref", sil is not None, metin(r)[:300])
+            if sil:
+                ref = sil["ref"]
+                au.pen[sm.PENCERE][0] = "(3) Gmail — Firefox"  # başlık değişti, adres aynı
+                try:
+                    k_, o_, b_ = s._ref_coz(ref, None)
+                    kontrol("web ref: başlık değişti ama adres aynı → ref çözüldü (başlık denetimi yok)",
+                            o_["kaynak"] == "web" and b_ is None)
+                except Exception as e:  # noqa: BLE001
+                    kontrol("web ref: başlık değişti ama adres aynı → ref çözüldü", False, repr(e)[:200])
+                adres[0] = "https://posta.ornek/#inbox/B"  # SPA gezinmesi: yalnız parça değişti
+                n0 = len(au.satirlar)
+                r = await c.call_tool("click", {"ref": ref, **F})
+                kontrol("web ref: adres (yalnız #parça) değişti → [8] 'sayfası değişti', eylem yok",
+                        r.is_error and "[8]" in metin(r) and "sayfası değişti" in metin(r) and
+                        "click left" not in au.satirlar[n0:], metin(r)[:300])
+                adres[0] = None  # adres okunamıyor → normalize başlığa düşülür (başlık başka belge → [8])
+                try:
+                    s._ref_coz(ref, None)
+                    kontrol("web ref: adres okunamaz → başlık denetimine düştü (başlık değişmiş → [8])", False,
+                            "reddedilmeliydi")
+                except Exception as e:  # noqa: BLE001
+                    kontrol("web ref: adres okunamaz → başlık denetimine düştü (başlık değişmiş → [8])",
+                            "[8]" in str(e) and "başlığı değişti" in str(e), repr(e)[:200])
+        finally:
+            s._agac_topla, s._web = asil_topla, asil_web
 
 
 async def tur5_kapi_testleri():
@@ -1218,6 +1282,7 @@ def main():
         print("ATLANDI (C2): firefox / Xvfb / jeepney yok")
     asyncio.run(kapi_testleri())
     asyncio.run(tur5_kapi_testleri())
+    baslik_norm_testleri()
     asyncio.run(duzeltme_a_testleri())
     print("\n# ölçümler:")
     print(f"  tools/list: {OLCUM.get('tools_list')} karakter (~{(OLCUM.get('tools_list') or 0) // 4} token); "

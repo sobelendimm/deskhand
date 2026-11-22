@@ -755,31 +755,34 @@ def k_ac(a):
 
     def uyar(b, s):
         return (not a.baslik or re.search(a.baslik, b, re.I)) and (not a.sinif or re.search(a.sinif, s, re.I))
+    son_kwin = None  # son yutulan geçici pencere listesi hatası (zaman aşımında iletiye eklenir)
     while time.monotonic() - t0 < a.sure:
         time.sleep(0.25)
-        try:
+        try:  # yoklama gövdesinin TAMAMI (KWin geçici hatası au.baslik/sinif/aktif'te de çıkabilir): çift açılış olmasın
             yeni = tum_pencereler() - once
+            for w in yeni:
+                b, s = au.baslik(w), au.sinif(w)
+                if b or s:
+                    gorulen[w] = (b, s)
+            uygun = [w for w, (b, s) in gorulen.items() if uyar(b, s)]
+            if uygun:
+                w = uygun[0]
+                b, s = gorulen[w]
+                print(f"{w} | {b} | {s} | " + _("açıldı ({sn} sn)").format(sn=f"{time.monotonic() - t0:.1f}"))
+                return
+            ak = au.aktif()
+            if (a.baslik or a.sinif) and ak and ak != onceki_aktif and ak in once and \
+                    uyar(au.baslik(ak), au.sinif(ak)):
+                print(f"{ak} | {au.baslik(ak)} | {au.sinif(ak)} | "
+                      + _("zaten açıktı, öne geldi ({sn} sn)").format(sn=f"{time.monotonic() - t0:.1f}"))
+                return
         except Dur as e:
             if e.kod != 7:
                 raise
-            yeni = set()  # geçici pencere listesi hatası: uygulama başladı, yoklamaya devam (çift açılış olmasın)
-        for w in yeni:
-            b, s = au.baslik(w), au.sinif(w)
-            if b or s:
-                gorulen[w] = (b, s)
-        uygun = [w for w, (b, s) in gorulen.items() if uyar(b, s)]
-        if uygun:
-            w = uygun[0]
-            b, s = gorulen[w]
-            print(f"{w} | {b} | {s} | " + _("açıldı ({sn} sn)").format(sn=f"{time.monotonic() - t0:.1f}"))
-            return
-        ak = au.aktif()
-        if (a.baslik or a.sinif) and ak and ak != onceki_aktif and ak in once and \
-                uyar(au.baslik(ak), au.sinif(ak)):
-            print(f"{ak} | {au.baslik(ak)} | {au.sinif(ak)} | "
-                  + _("zaten açıktı, öne geldi ({sn} sn)").format(sn=f"{time.monotonic() - t0:.1f}"))
-            return
+            son_kwin = e.mesaj  # geçici pencere listesi hatası: uygulama başladı, yoklamaya devam
+            continue
     diger = "; ".join(f"{w} {b!r} [{s}]" for w, (b, s) in gorulen.items())
     raise Dur(7, _("{sn} sn içinde uygun pencere açılmadı").format(sn=f"{a.sure:.0f}")
               + (_("; açılan başka pencereler: {pencereler}").format(pencereler=diger) if diger else
-                 _("; çıktı: {log}").format(log=log)))
+                 _("; çıktı: {log}").format(log=log))
+              + (("; " + _("KWin pencere listesi alınamadı: {hata}").format(hata=son_kwin)) if son_kwin else ""))
