@@ -75,7 +75,8 @@ deskhand/
                    --setting-sources project; boş geçici çalışma dizini; istem stdin'den; olaylar {tur, zaman, ozet};
                    geçmiş STATE_DIR/gorevler/*.jsonl (0600, son 50); aynı anda tek görev (flock RUNTIME_DIR/gorev.lock);
                    ayarlar [gorev] model / azami_dakika / azami_tur; MCP sunucusu GÖREV KİPİNDE (§11)
-  gorev_kipi.py    görev kipi kuralları (DESKHAND_GOREV=1): tarayıcı ilkesi, site izni, open_app süzgeci, maskeleme (§11)
+  gorev_kipi.py    görev kipi kuralları (DESKHAND_GOREV=1): tarayıcı ilkesi, site izni, open_app süzgeci, maskeleme,
+                   görev masaüstü kapısı, pencere sınırı, kimlik değişkeni süzgeci (§11)
   fark.py          eylem öncesi/sonrası ekran farkı (changed, changed_region, changed_ratio; NumPy, imleç dayanıklı)
   dongu.py         döngü kesici: aynı eylem 3. sonuçsuzda uyarı, 5'ten sonra ret (MCP, oturum başına bellek)
   gozlem.py        MCP observe: ögeleri tek biçime getirme, sorgu/atalar, OCR ayıklama, anlık görüntü önbelleği
@@ -926,8 +927,46 @@ sızıntısını sınırlar. `gorev.mcp_ortami()` → mcp.json `env` YALNIZ `{"D
   `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. Geçici çalışma dizini `XDG_RUNTIME_DIR` altında.
 - **Geçmiş**: `type_text` metni `[N karakter]`; görev metnindeki parola/kart kalıpları maskelenir; görev kutusunda "parola
   yazmayın" ipucu, Başlat'tan önce kısa onay (görev + izinli siteler + "yalnız tarayıcı").
-- Görev görünmez masaüstünü kendisi açtıysa bitince kapatır (oturum kopyaları silinir).
-- Kalan risk: görevden ÖNCE görünmez masaüstünde açık olan pencereler görev kipinde başlatılmamıştır (ilke/ev kısıtı yok).
+- **Görev masaüstü (tek masaüstü mimarisinde ayrım)**: durum tek dosyada (`sanal.json`, `sanal.lock`, tek ses çıkışı,
+  panel izleyicisi/Devral aynı kayda bakar) olduğundan görev AYRI bir masaüstü açmaz; bunun yerine (1) görünmez masaüstü
+  AÇIKSA görev BAŞLAMAZ: `GorevHatasi(kod="masaustu_acik")` → panel "Görünmez masaüstü başka bir iş için açık; kapatıp
+  başlatılsın mı?" sorar, onayla `masaustu_durdur()` ve görev temiz masaüstüyle başlar (önceki oturumların kipsiz
+  Firefox/Dolphin pencereleri görevde YOK); (2) görev başlarken `RUNTIME_DIR/gorev-masaustu` işareti (sahip PID +
+  başlangıç zamanı) yazılır, ÖNCE işaret sonra açık-masaüstü denetimi (yarış yok); görev kipinde açılan masaüstünün
+  kaydı `"gorev": true`; (3) `gorev_kipi.masaustu_kapisi` her bağlantıda (arka_uc sanal/kwin, erişilebilirlik,
+  `masaustu.baslat`, `masaustu_baslat`): görev kipi `gorev` işaretsiz masaüstünü KULLANAMAZ (14); kipsiz istemci
+  (başka Claude oturumu, CLI `--background`) işaretli masaüstüne ya da işaret varken bağlanamaz/uygulama açamaz/masaüstü
+  açamaz (14, "görev bitince yeniden deneyin"). Panel önizlemesi `gorev_kipi.GOZLEMCI=True` ile serbest. Görev bitince
+  yalnız `gorev` işaretli masaüstü kapatılır, işaret kaldırılır.
+- **Pencere sınırı** (`gorev_kipi.pencere_denetle`, `guvenlik.yasak_denetle` + okuma araçlarından): görev kipinde her
+  girdi/okuma hedefi yalnız tarayıcı penceresi — sınıf beyaz listesi (firefox, navigator, chromium…) VE pencerenin
+  süreç ikilisi (`/proc/PID/exe`; PID X-Resource/KWin'den, istemci yazamaz) tarayıcı. Sınıf tek başına yetmez (taklit
+  edilebilir). Başka pencere (indirme panelinden "Aç" → Kate, Konsole…) → pencere kapatılır, süreci masaüstü kafesindeyse
+  SIGKILL, günlüğe olay, Dur 10. Tüm ekran (pencere verilmeyen) okuma/girdi: yalnız ekranda tarayıcı dışı pencere yokken
+  ve en az bir görev tarayıcı penceresi varken. Tarayıcı belgesi yasak adreste (`file:`, `jar:`, `about:preferences`
+  dahil `about:*`) okuma da girdi de reddedilir.
+- **Firefox ilkesi ek**: `browser.download.forbid_open_with` (kilitli true: indirilen dosya dış uygulamayla açılamaz),
+  `always_ask_before_handling_new_types` false, `open_pdf_attachments_inline` false, `alwaysOpenPanel` false; Linux
+  Firefox önce `/etc/firefox/policies`'e baktığından o dizin varsa aynı ilke oraya da bağlanır. WebsiteFilter
+  MatchPattern sözdizimindedir (Firefox 160 WebsiteFilter.sys.mjs): `file:///*` geçerli; `file://*/*`, `jar:`,
+  `about:` kalıpları GEÇERSİZ (Firefox atar) → `jar:file:` ve `about:preferences` için ilke yolu yok; adres denetimi
+  (yukarıda) kapatır. Ölçüm: `tests/test_gorev_kipi.py` başsız Firefox + Marionette (ölçümde yalnız
+  DisableDeveloperTools çıkarılır, çünkü o ilke uzaktan denetimi de kapatır).
+- **Ad alanı**: görev kipinde `xdotool`, `kdotool`, `ydotool`, `wtype`, `xauth`, `xdg-open`, `gio`, `kioclient`,
+  `kde-open` boş dosyayla örtülür (çalıştırılamaz); PATH `/usr/bin:/bin`.
+- **Kimlik değişkenleri**: `gorev_kipi.KIMLIK_ORTAM_DENEN` (TOKEN, SECRET, PASSWORD, KEY, AUTH, COOKIE…) claude'un
+  ortamından (yalnız `CLAUDE_CODE_OAUTH_TOKEN` kalır; claude girişini `~/.claude/.credentials.json`'dan okur), MCP
+  sunucusunun ortamından (açılışta) ve uygulama ortamından (`ortam_tabani`) silinir.
+- **Site listesi**: joker (`*`), tek başına genel son ek (`com`, `com.tr`, `co.uk`, `gov.tr`…; küçük liste
+  `GENEL_SON_EKLER`) ve geçersiz ad RET; panel açık iletiyle görevi başlatmaz. Arayüz uyarısı: "Bu sitelerde ajan
+  sizin adınıza işlem yapabilir (ayar değiştirme, gönderi, silme); güvenilmeyen sayfa içeriği ajanı kandırabilir."
+- **İndirme klasörü** her görev başında boşaltılır. **Geçmiş**: `batch(steps=[{"text": …}])` gibi iç içe girdilerde
+  gizli anahtarlar yinelemeli maskelenir.
+- Kalan risk: görev sürerken kullanıcı CLI ile `deskhand masaustu durdur` diyebilir (yalnız kapatma; erişim yok).
+  Pencere sınırı denetim anında uygulanır: Firefox'un açtığı yabancı pencere bir sonraki araç çağrısına kadar
+  (milisaniye–saniye) ekranda yaşar; o arada kendi başına çalışabilir (ör. Kate) ama ad alanı (boş ev, XDG yok, girdi
+  araçları örtülü) ve ilke (`forbid_open_with`) bu yolu zaten kapatır. `about:preferences` sayfası açılabilir ama
+  okunamaz/girdi alamaz.
 
 ## 13. İnsan doğrulaması (CAPTCHA) devri: algıla, reddet, devret, devam et
 

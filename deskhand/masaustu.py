@@ -613,8 +613,10 @@ def masaustu_baslat(boyut: str | None = None, openbox: bool = True) -> dict:
     """Arka plan masaüstünü başlat (zaten açıksa durumunu döndürür): türü secilen_tur() belirler. KWin oturumu
     kendiliğinden seçilip AÇILAMAZSA Xvfb'ye düşülür (uyarıyla). Hata olursa başlatılan her şeyi kapatır.
     openbox: yalnız Xvfb türünde (KWin kendi pencere yöneticisidir)."""
+    from . import gorev_kipi
     with _kilit():
         d = durum()
+        gorev_kipi.baslatma_kapisi(d)  # görev sürerken kipsiz istemci açamaz; görev başkasının masaüstünü kullanamaz
         if d is not None:
             d["zaten"] = True
             return d
@@ -638,6 +640,8 @@ def masaustu_baslat(boyut: str | None = None, openbox: bool = True) -> dict:
                 d["uyarilar"].insert(0, _("KWin oturumu açılamadı ({hata}); Xvfb kullanılıyor").format(hata=e.mesaj))
         else:
             d = _xvfb_baslat(boyut, openbox)
+        if gorev_kipi.etkin():
+            d["gorev"] = True  # görev masaüstü: kipsiz istemciler bağlanamaz (gorev_kipi.masaustu_kapisi)
         _durum_yaz(d)
         return d
 
@@ -1007,7 +1011,10 @@ def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, g
     politikasının bu uygulama için hazırladığı kopya (Hazirlik.kopya_yolu): ad alanına YALNIZ o bağlanır. girdi:
     onaylı kullanıcı girdisinin özel .desktop kopyası (salt okunur bağlanır; arka_ortak.girdi_kopyasi_bagi). ev:
     politikanın uygulama başına ev dizini beyaz liste girdileri (Hazirlik.ev; varsayılan boş)."""
-    d = baglanti_denetle(gerekli())  # kapı: yollar çalışma dizininden, karşı taraf doğrulanmış
+    from . import gorev_kipi
+    d = gerekli()
+    gorev_kipi.masaustu_kapisi(d)  # görev masaüstü ↔ kipsiz istemci ayrımı
+    d = baglanti_denetle(d)  # kapı: yollar çalışma dizininden, karşı taraf doğrulanmış
     if not argv or not (shutil.which(argv[0]) or os.path.isfile(argv[0])):
         raise Dur(ARAC_EKSIK, _("başlatılamadı: {komut} bulunamadı").format(komut=argv[0] if argv else _("(boş komut)")))
     popen.setdefault("stdin", subprocess.DEVNULL)

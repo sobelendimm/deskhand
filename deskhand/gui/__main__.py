@@ -60,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
 
     from .. import onay, yollar
     app = QApplication(sys.argv[:1])
+    from .. import gorev_kipi
+    gorev_kipi.GOZLEMCI = True  # panel önizlemesi görev masaüstünü görebilir (kullanıcının kendi süreci)
     app.setApplicationName(onay.PANEL_SINIF)
     app.setDesktopFileName(onay.PANEL_SINIF)  # Wayland app_id / X11 WM_CLASS = yasak listesindeki sınıf
     app.setQuitOnLastWindowClosed(False)

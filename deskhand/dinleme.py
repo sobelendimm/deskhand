@@ -122,6 +122,8 @@ def oturum_kaydi(cdir: str) -> dict:
     if d is None:
         raise Dur(14, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
     d.setdefault("tur", "xvfb")
+    from . import gorev_kipi
+    gorev_kipi.masaustu_kapisi(d)  # görev masaüstü ↔ kipsiz istemci ayrımı
     g = masaustu.baglanti_denetle(d)
     if os.path.realpath(g.get("calisma") or "") != os.path.realpath(cdir):
         raise Dur(14, _("dinleme: oturum dizini çalışan masaüstününki değil"))
