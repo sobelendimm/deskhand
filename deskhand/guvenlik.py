@@ -932,13 +932,12 @@ def yasak_desenler():
 
 
 def _kullanici_yasaklari():
-    yol = yollar.yasak_dosya()
-    if not os.path.exists(yol):
-        os.makedirs(os.path.dirname(yol), exist_ok=True)
-        with open(yol, "w") as f:
-            f.write(_(VARSAYILAN_YASAK))
-    with open(yol) as f:
-        return [l.strip() for l in f if l.strip() and not l.lstrip().startswith("#")]
+    """Kullanıcının yasak desenleri. Panel YETKİLİ kaynaktır (liste_koruma): panel açıksa onun bellekteki kopyası
+    (onay kanalından), kapalıysa dosya; panelin işaretlediği dosya kayıp/değişmişse Dur 10 (hiçbir girdi yok).
+    İlk kurulumda (işaret yok) dosya yoksa varsayılanla oluşturulur."""
+    from .liste_koruma import metin
+    icerik = metin("yasak") or ""
+    return [l.strip() for l in icerik.splitlines() if l.strip() and not l.lstrip().startswith("#")]
 
 
 def yasak_denetle(k):
@@ -997,14 +996,11 @@ def seviye_satiri_coz(satir):
 
 
 def seviye_kurallari():
-    """Dosyadaki [(desen, seviye)] (dosya yoksa/boşsa []). Dosya OKUNURKEN oluşturulmaz. Her çağrıda taze okunur
-    (küçük dosya, ~20 µs; önbellek zaman damgası kaba kaldığında eski kuralı gösterebilirdi): panelden yapılan
-    değişiklik hemen geçerli olur."""
-    try:
-        with open(yollar.seviye_dosya()) as f:
-            return [k for k in (seviye_satiri_coz(l) for l in f) if k]
-    except OSError:
-        return []
+    """[(desen, seviye)] (yoksa/boşsa []). Panel YETKİLİ kaynaktır (liste_koruma): panel açıksa onun bellekteki
+    kopyası, kapalıysa dosya (OKUNURKEN oluşturulmaz); panelin işaretlediği dosya kayıp/değişmişse Dur 10."""
+    from .liste_koruma import metin
+    icerik = metin("seviye")
+    return [k for k in (seviye_satiri_coz(l) for l in (icerik or "").splitlines()) if k]
 
 
 def seviye_coz(baslik, sinif, kurallar=None):

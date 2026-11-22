@@ -131,6 +131,7 @@ class Panel(QObject):
         app.aboutToQuit.connect(self.kapanis)
 
         onay.panel_kaydet()
+        self._liste_koruma_baslat()
         try:  # önceki (çökmüş / SIGKILL) panelden kalan sahipsiz Devral bayrağı ajanı bekletmesin
             from .durum import devral_sahipsiz_sil
             devral_sahipsiz_sil()
@@ -143,6 +144,51 @@ class Panel(QObject):
             QTimer.singleShot(0, lambda: self.kisayol_ayarla(True, ayarlar["kisayol"]))
         if self.tepsi is not None:
             self.tepsi.goster()
+
+    # -------- yasak/seviye listeleri: panel yetkili kaynak (deskhand/liste_koruma.py)
+    LISTE_YOKLA_MS = 2000
+
+    def _liste_koruma_baslat(self):
+        from PyQt6.QtCore import QFileSystemWatcher
+
+        from .. import liste_koruma
+        self.liste_uyarilari: list[str] = []
+        self.koruyucu = liste_koruma.panel_baslat(self._liste_uyari)
+        self._liste_izci = QFileSystemWatcher(self)
+        self._liste_izle()
+        self._liste_izci.fileChanged.connect(self._liste_degisti)
+        self._liste_izci.directoryChanged.connect(self._liste_degisti)
+        self._liste_zaman = QTimer(self)  # izleyici silinen dosyayı bırakır / kaçırabilir: düşük sıklıkta yoklama
+        self._liste_zaman.setInterval(self.LISTE_YOKLA_MS)
+        self._liste_zaman.timeout.connect(self._liste_degisti)
+        self._liste_zaman.start()
+
+    def _liste_izle(self):
+        from .. import liste_koruma
+        istenen = [yollar.config_dir()] + [liste_koruma.dosya(t) for t in liste_koruma.TURLER]
+        var = set(self._liste_izci.files()) | set(self._liste_izci.directories())
+        yeni = [y for y in istenen if y not in var and os.path.exists(y)]
+        if yeni:
+            self._liste_izci.addPaths(yeni)
+
+    def _liste_degisti(self, *_a):
+        k = getattr(self, "koruyucu", None)
+        if k is None:
+            return
+        k.denetle()
+        self._liste_izle()  # geri yazılan dosya yeni inode: yeniden izle
+
+    def _liste_uyari(self, metin: str):
+        """Ayar dosyası panel dışında değişti/silindi ve geri yüklendi: günlük satırı (panel penceresinde görünür) +
+        tepsi bildirimi."""
+        self.liste_uyarilari.append(metin)
+        gunluk("UYARI: " + metin)
+        if self.tepsi is not None:
+            try:
+                from PyQt6.QtWidgets import QSystemTrayIcon
+                self.tepsi.ikon.showMessage("Deskhand", metin, QSystemTrayIcon.MessageIcon.Warning, 8000)
+            except Exception:  # noqa: BLE001 - bildirim isteğe bağlı
+                pass
 
     # -------- girdi merkezi (panel yaşadıkça hazır bekleyen tek dotool; deskhand/girdi_merkezi.py)
     @staticmethod
@@ -291,6 +337,11 @@ class Panel(QObject):
         isciler_bekle()  # masaüstü durdurma sürüyorsa bitsin (QThread çalışırken yok edilmesin)
         self.izleyici.durdur()
         self.kisayol.kapat(kaydi_sil=False)
+        z = getattr(self, "_liste_zaman", None)
+        if z is not None:
+            z.stop()
+        from .. import liste_koruma
+        liste_koruma.panel_durdur()
         onay.panel_sil()
         if self.sunucu is not None:
             self.sunucu.close()

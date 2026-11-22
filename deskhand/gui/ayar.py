@@ -54,7 +54,11 @@ def panel_yaz(d: dict) -> None:
 # ---------------------------------------------------------------- yasak pencereler
 
 def yasak_metni() -> str:
-    """Yasak dosyasının metni; yoksa varsayılan (dosya OLUŞTURULMAZ: yalnız Kaydet yazar)."""
+    """Yasak listesinin metni: panel koruyucusu etkinse BELLEKTEKİ yetkili kopya; değilse dosya; yoksa varsayılan
+    (dosya OLUŞTURULMAZ: yalnız Kaydet yazar)."""
+    from .. import liste_koruma
+    if liste_koruma.AKTIF is not None and liste_koruma.AKTIF.metin("yasak") is not None:
+        return liste_koruma.AKTIF.metin("yasak")
     try:
         with open(yollar.yasak_dosya()) as f:
             return f.read()
@@ -80,19 +84,18 @@ def yasak_kaydet(metin: str) -> None:
     hata = yasak_dogrula(metin)
     if hata:
         raise ValueError(hata)
-    yol = yollar.yasak_dosya()
-    os.makedirs(os.path.dirname(yol), exist_ok=True)
-    gecici = yol + f".{os.getpid()}"
-    with open(gecici, "w") as f:
-        f.write(metin if metin.endswith("\n") else metin + "\n")
-    os.replace(gecici, yol)
+    from .. import liste_koruma
+    liste_koruma.panel_kaydet("yasak", metin if metin.endswith("\n") else metin + "\n")  # panel: tek yetkili yazar
 
 
 # ---------------------------------------------------------------- uygulama erişim seviyeleri
 
 def seviye_metni() -> str:
     """uygulama-seviyeleri.txt metni; yoksa açıklamalı boş şablon (dosya OLUŞTURULMAZ: yalnız Kaydet yazar).
-    Varsayılan kurulumda dosyada hiçbir kural satırı yoktur."""
+    Varsayılan kurulumda dosyada hiçbir kural satırı yoktur. Panel koruyucusu etkinse bellekteki yetkili kopya."""
+    from .. import liste_koruma
+    if liste_koruma.AKTIF is not None and liste_koruma.AKTIF.metin("seviye") is not None:
+        return liste_koruma.AKTIF.metin("seviye")
     try:
         with open(yollar.seviye_dosya()) as f:
             return f.read()
@@ -127,12 +130,8 @@ def seviye_kaydet(metin: str) -> None:
     hata = seviye_dogrula(metin)
     if hata:
         raise ValueError(hata)
-    yol = yollar.seviye_dosya()
-    os.makedirs(os.path.dirname(yol), exist_ok=True)
-    gecici = yol + f".{os.getpid()}"
-    with open(gecici, "w") as f:
-        f.write(metin if metin.endswith("\n") else metin + "\n")
-    os.replace(gecici, yol)
+    from .. import liste_koruma
+    liste_koruma.panel_kaydet("seviye", metin if metin.endswith("\n") else metin + "\n")  # panel: tek yetkili yazar
 
 
 # ---------------------------------------------------------------- deskhand.ayarlar köprüsü
