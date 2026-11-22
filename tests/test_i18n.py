@@ -117,7 +117,7 @@ kontrol("onay penceresi başlığı çevrilmez (yasak desenler sabit adlara baka
         onay.ONAY_BASLIK == "Deskhand — Onay" and any(__import__("re").search(d, onay.ONAY_BASLIK) for d in onay.YASAK_DESENLER))
 yardim_tr = cli.yardim_metni()
 kontrol("yardım (tr): İngilizce komut + parantezde Türkçe ad",
-        f"{cli.prog_adi()} windows (bul) <desen>" in yardim_tr and f"{cli.prog_adi()} click-text (metne-tikla)" in yardim_tr
+        f"{cli.prog_adi()} windows (bul) [desen]" in yardim_tr and f"{cli.prog_adi()} click-text (metne-tikla)" in yardim_tr
         and f"{cli.prog_adi()} stop | resume | status (dur | devam | durum)" in yardim_tr)
 kontrol("yardım: her komutun İngilizce adı geçer", all(f" {en}" in yardim_tr for _tr, en in komutlar.KOMUTLAR),
         [en for _tr, en in komutlar.KOMUTLAR if f" {en}" not in yardim_tr])
@@ -135,7 +135,7 @@ ORNEK = {  # komut → kimliksiz argümanlar
     "ac": ["x"], "akis": [K, "ad"], "erisim": [], "agac": [K], "web": [K], "ogeye-tikla": [K, "ad"], "ogeye-yaz": [K, "ad", "metin"],
     "dur": [], "devam": [],
     "durum": [], "mesgul": [], "karar": ["görev"], "panel": [], "masaustu": ["durum"], "oturum": ["durum"],
-    "mcp": [], "pano": ["read"], "pencere": [K, "move", "1", "2"], "doktor": [], "yardım": [],
+    "git": [K, "https://x.example"], "mcp": [], "pano": ["read"], "pencere": [K, "move", "1", "2"], "doktor": [], "yardım": [],
 }
 kontrol("örnek tablosu tüm komutları kapsıyor", set(ORNEK) == set(komutlar.TR_EN), set(komutlar.TR_EN) ^ set(ORNEK))
 hatalar = []

@@ -224,7 +224,11 @@ def k_foto(a):
         im, kenar = ciz_izgara(im, a.izgara, kok, olcek)
     os.makedirs(yollar.cikti(), exist_ok=True)
     cikti = a.cikti or os.path.join(yollar.cikti(), "pencere.png")
-    im.save(cikti)
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(cikti)), exist_ok=True)  # --out klasörü yoksa oluştur
+        im.save(cikti)
+    except OSError as e:
+        raise Dur(1, _("görüntü yazılamadı ({yol}): {hata}").format(yol=cikti, hata=e.strerror or e))
     with open(yollar.son_foto(), "w") as fp:
         json.dump({"kimlik": a.kimlik, "geo": geo, "kok": kok, "olcek": olcek, "kenar": kenar, "dosya": cikti}, fp)
     ek = []

@@ -35,7 +35,12 @@ deskhand/
   akis.py, erisim.py (AT-SPI), uygulama.py (ac)
   web.py           web sayfası ögeleri: tarayıcının erişilebilirlik ağacından okuma (§9); MCP read_text(source="web"),
                    CLI `web`, click-element'in web yolu
-  cli.py           argparse; komut adları İngilizce + Türkçe takma adlar
+  cli.py           argparse; komut adları İngilizce + Türkçe takma adlar. `deskhand --help` alt komut tablosu
+                   (`KISA_ACIKLAMA`); `screenshot` kimliksiz (`varsayilan_foto_hedefi`: görünmez masaüstünde tüm
+                   masaüstü, ön planda etkin pencere + gerçek ekran kilidi 17), `windows` desensiz (yasak pencere
+                   başlığı maskeli)
+  gezin.py         `goto KİMLİK ADRES`: adres çubuğu yolu (ctrl+l → adres → Return) `api.tus`/`api.yaz` üzerinden; yeni
+                   güvenlik yolu YOK (başlık kilidi, hassas sayfa, CAPTCHA kapısı, DUR, insan önceliği aynen); yalnız http(s)
   arka_uc/__init__.py   ArkaUc arayüzü + sec(hedef)
   arka_uc/kde.py        kdotool + dotool + kscreen-doctor (+ spectacle yalnız görüntü kurtarması)
   arka_uc/kde_goruntu.py  ekran görüntüsü: yardimci/deskhand-goruntu (C, sd-bus) → KWin ScreenShot2
@@ -487,6 +492,12 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     deposunun KÖKÜ olan yol reddedilir. Teşhis: çözülmüş exec (`gio launch` için .desktop Exec'i) ev altında ama ad
     alanında görünmüyorsa `korumali_baslat` HEMEN `Dur(9)` verir (iletide `oturum.toml` `[uygulama.<ad>] ev = [...]`
     ipucu; MCP `open_app` ve CLI `ac` aynı kapıdan geçer).
+    CLI `ac --background` MCP `open_app` gibi görünmez masaüstü kapalıysa onu kendiliğinden başlatır (`masaustu_baslat`:
+    aynı kafes, kilit ve görev kipi kapısı) ve oturum kopyası hazırlanmadan ÖNCE denetler (boşa kopya yok).
+    `ac APP [ADRES]` / `--url`: adres `uygulama.web_adresi_denetle`'den geçer (yalnız http/https, boşluk/denetim
+    karakteri/`-` yok; `file:`, `about:`, `javascript:`, `data:` → 10), politikanın komutunun SONUNA tek argüman olarak
+    eklenir (http(s):// ile başladığından seçenek konumunda olamaz; Chromium'da erişilebilirlik bayrağı adresten önce
+    gelir); `--komut` ile birlikte verilemez; görev kipinde `open_app_denetle` ve ham komut yasağı CLI'de de geçerlidir.
     Uygulamanın yazdıkları (`~/.config/autostart`, `~/.bashrc`, `~/.config/systemd/user`, `~/.local/bin`, kendi
     ayarı, önbelleği…) oturumla ATILIR → kalıcılık kaçışı yok. Bir uygulamanın kendi ayarı gerekiyorsa oturum
     politikasında uygulama başına `ev = [...]` (ev dizinine göreli; salt okunur; VARSAYILAN hiçbir uygulamada YOK;

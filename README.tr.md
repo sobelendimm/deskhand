@@ -250,20 +250,23 @@ Sistem geneline hiçbir şey kurulmaz. Güncelleme: `git pull && ./install.sh`. 
 ```bash
 deskhand panel                          # izleme paneli + tepsi
 deskhand busy                           # meşgul müyüm? (yalnız okur)
-deskhand windows firefox                # pencere bul: kimlik | başlık | konum
+deskhand windows [firefox]              # pencere bul: kimlik | başlık | konum (desensiz: hepsi)
+deskhand screenshot --out ekran.png --width 800   # kimliksiz: etkin pencere (--background: tüm görünmez masaüstü)
 deskhand read firefox                   # penceredeki yazıları koordinatlarıyla oku (OCR)
 deskhand -b "Örnek" click-text firefox "Giriş yap"     # görünen yazıya tıkla, başlık kilitli
 deskhand --background open firefox --site github.com   # görünmez masaüstünde girişli Firefox
+deskhand --background open firefox https://example.com # masaüstü kapalıysa kendiliğinden başlar; yalnız http/https
+deskhand goto <pencere> https://example.com            # tarayıcıda adres çubuğuyla git (ctrl+l → adres → Return)
 deskhand stop                           # DUR: bundan sonra girdi yok
 deskhand resume                         # komut satırından konan DUR'u kaldır
 ```
 
-Komutlar (`deskhand help` hepsini gösterir; Türkçe adlar da çalışır, parantez içinde):
+Komutlar (`deskhand --help` alt komutları tablo olarak, `deskhand help` ayrıntılı söz dizimini gösterir; Türkçe adlar da çalışır, parantez içinde):
 
 | Komut | Ne yapar |
 |---|---|
-| `windows` (`bul`) `<desen>` | pencere bul |
-| `screenshot` (`foto`) `<pencere>` | ekran görüntüsü (pencere ya da `ekran` = tüm ekran) |
+| `windows` (`bul`) `[desen]` | pencere bul (desensiz: tüm pencereler; yasak pencerenin başlığı gösterilmez) |
+| `screenshot` (`foto`) `[pencere] [--out DOSYA] [--width N]` | ekran görüntüsü; kimliksiz: `--background` ise tüm görünmez masaüstü, değilse etkin pencere (gerçek ekran kilitliyse 17); `--width`: küçültülmüş görüntü |
 | `read` (`metin`) `<pencere> [desen]` | yazıları + koordinatları oku (OCR) |
 | `click-text` (`metne-tikla`) `<pencere> <yazı>` | görünen yazıya tıkla |
 | `click` (`tikla`) `<pencere> <x> <y>` | pencere koordinatına tıkla |
@@ -271,7 +274,8 @@ Komutlar (`deskhand help` hepsini gösterir; Türkçe adlar da çalışır, para
 | `key` (`tus`) `<pencere> <tuşlar>` | tuş ya da kısayol, ör. `ctrl+s` |
 | `scroll` (`kaydir`) `<pencere> [down\|up]` | kaydır |
 | `wait` (`bekle`) `<pencere> <yazı>` | yazı görünene dek bekle (`--gone`: kaybolana dek) |
-| `open` (`ac`) `<uygulama>` / `open --command "KOMUT"` | uygulamayı aç, yeni penceresini bekle |
+| `open` (`ac`) `<uygulama> [adres]` / `open --command "KOMUT"` | uygulamayı aç, yeni penceresini bekle; `--url`/konumsal adres yalnız http/https (oturum kopyalı tarayıcı dahil); `--background` masaüstü kapalıysa kendiliğinden başlatır |
+| `goto` (`git`) `<pencere> <adres>` | tarayıcı penceresinde adrese git: mevcut `key`/`type` denetimleriyle (başlık kilidi, hassas sayfa onayı, insan doğrulaması kapısı); yalnız http/https |
 | `tree` (`agac`) / `click-element` (`ogeye-tikla`) | erişilebilirlik ağacı / ögeye adıyla tıkla |
 | `desktop` (`masaustu`) `start\|stop\|status` | arka plan masaüstü |
 | `sessions` (`oturum`) `status\|policy\|clear` | arka planda hangi uygulama girişli açılır |

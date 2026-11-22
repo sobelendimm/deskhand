@@ -9,7 +9,7 @@ import re
 import os
 import sys
 
-from . import __version__, desen, guvenlik, yollar
+from . import __version__, api, desen, guvenlik, hata, yollar
 from .akis import k_akis
 from .arka_uc import ARKA_ONEK, hedef_ad, sec
 from .doktor import k_doktor
@@ -17,6 +17,7 @@ from .erisim import k_agac, k_erisim, k_ogeye_tikla, k_ogeye_yaz
 from .eylem import (GIRDI_KOMUTLARI, KAYDIR_YON, OKUMA_KOMUTLARI, k_bas, k_dizi, k_fare, k_kapat, k_kaydir,
                     k_metne_tikla, k_pencere, k_renge_tikla, k_simgeye_tikla, k_surukle, k_tikla, k_tus, k_uyu,
                     k_yaz)
+from .gezin import k_git
 from .gorsel import k_foto, k_renk_bul, k_simge_bul, k_simge_kaydet
 from .gunluk import gunluk, temizle
 from .guvenlik import yasak_denetle
@@ -56,8 +57,10 @@ YARDIM_KOMUT_BASI = (
        "Parantezdeki Türkçe komut adları ve Türkçe seçenekler (--baslik, --bolge, --sure …) de çalışır:"),
 )
 YARDIM_KOMUTLAR = (
-    N_("  ekran windows (bul) <desen>             kimlik | başlık | x y genişlik yükseklik"),
-    N_("  ekran screenshot (foto) <kimlik> [png] [--region x,y,g,y] [--width N] [--grid [ADIM]]"),
+    N_("  ekran windows (bul) [desen]             kimlik | başlık | x y genişlik yükseklik (desensiz: tüm pencereler)"),
+    N_("  ekran screenshot (foto) [kimlik] [png] [--out DOSYA] [--region x,y,g,y] [--width N] [--grid [ADIM]]\n"
+       "                                          kimliksiz: --background ise tüm görünmez masaüstü, değilse etkin pencere;\n"
+       "                                          --width N: küçültülmüş görüntü (yapay zekâ bağlamı için)"),
     N_("  ekran click (tikla) <kimlik> <x> <y> [right|double|triple|middle] [--mod ctrl+shift] [--shot] [--approved]"),
     N_("  ekran key (tus) <kimlik> <kombinasyon> [--approved]   ör. ctrl+s, Return, alt+F4"),
     N_("  ekran type (yaz) <kimlik> <metin> [--secret]   \\n → Return, \\t → Tab, \\\\ → \\; --secret günlüğe metni yazmaz;\n"
@@ -87,9 +90,12 @@ YARDIM_KOMUTLAR = (
     N_("  ekran find-icon (simge-bul) <kimlik> <ad> [--threshold 0.9] [--region ..]"),
     N_("  ekran click-icon (simgeye-tikla) <kimlik> <ad> [right|double] [--nth N] [--threshold 0.9] [--region ..]\n"
        "                    [--approved]"),
-    N_("  ekran open (ac) <uygulama | --command \"KOMUT\"> [-b DESEN] [-s SINIF] [--timeout 30]\n"
+    N_("  ekran goto (git) <kimlik> <http(s)-adres> [--approved]   tarayıcı penceresinde adres çubuğuyla adrese git\n"
+       "                                          (ctrl+l → adres → Return; tüm girdi denetimleri aynen; yalnız http/https)"),
+    N_("  ekran open (ac) <uygulama [http(s)-adres] | --command \"KOMUT\"> [--url ADRES] [-b DESEN] [-s SINIF] [--timeout 30]\n"
        "                                          başlat → YENİ penceresini bekle → kimlik | başlık | sınıf "
-       "(yasak: başlatılmaz)"),
+       "(yasak: başlatılmaz).\n"
+       "                                          --background: görünmez masaüstü kapalıysa kendiliğinden başlar"),
     N_("  ekran flow (akis) <kimlik> <dosya|ad> [--timeout SN]   ekran tanıma akışı "
        "(~/.local/share/deskhand/akislar/AD.akis):\n"
        "                                          ekranı oku → hangi ekran → o ekranın adımları; başarıya dek, "
@@ -165,6 +171,53 @@ def yardim_metni():
     return re.sub(r"(?m)^(\s+)(?:ekran|deskhand)(?=\s)", lambda m: m.group(1) + prog_adi(), metin)
 
 
+# `deskhand --help` komut tablosu: Türkçe iç ad → tek satırlık açıklama (argparse alt komut listesi). Ayrıntılı söz
+# dizimi `deskhand help` ve `deskhand KOMUT -h` içindedir.
+KISA_ACIKLAMA = {
+    "bul": N_("pencereleri listele (desensiz: hepsi)"),
+    "foto": N_("pencere/masaüstü görüntüsü al (--out, --width)"),
+    "tikla": N_("pencerede x,y noktasına tıkla"),
+    "tus": N_("tuş ya da kısayol gönder"),
+    "yaz": N_("metin yaz"),
+    "kaydir": N_("kaydır"),
+    "metin": N_("penceredeki yazıyı oku (OCR) + koordinatlar"),
+    "metne-tikla": N_("görünen metne tıkla"),
+    "bekle": N_("metin görünene (ya da kaybolana) dek bekle"),
+    "kapat": N_("pencereyi kapat (başlık kilidi zorunlu)"),
+    "bas": N_("tuşu basılı tut (oyun)"),
+    "surukle": N_("sürükle-bırak"),
+    "fare": N_("fareyi tıklamadan gezdir"),
+    "dizi": N_("adımları tek süreçte çalıştır"),
+    "uyu": N_("(dizi içinde) bekle"),
+    "pano": N_("panoyu oku/yaz"),
+    "git": N_("tarayıcı penceresinde http(s) adresine git"),
+    "renk-bul": N_("renkli alanları bul"),
+    "renge-tikla": N_("en büyük renk alanına tıkla"),
+    "simge-kaydet": N_("yazısız simgeyi kaydet"),
+    "simge-bul": N_("kayıtlı simgeyi bul"),
+    "simgeye-tikla": N_("kayıtlı simgeye tıkla"),
+    "ac": N_("uygulamayı aç (--url ADRES; --background: masaüstü kendiliğinden başlar)"),
+    "akis": N_("ekran tanıma akışını çalıştır"),
+    "erisim": N_("erişilebilirlik ağacını aç/kapat/göster"),
+    "agac": N_("penceredeki ögeleri listele (erişilebilirlik ağacı)"),
+    "web": N_("tarayıcı sayfasının ögelerini listele"),
+    "ogeye-tikla": N_("ögeye adıyla tıkla"),
+    "dur": N_("DUR anahtarını aç (hiçbir girdi gönderilmez)"),
+    "devam": N_("DUR anahtarını kaldır"),
+    "ogeye-yaz": N_("ögenin değerini yaz"),
+    "durum": N_("arka uç ve DUR durumunu göster"),
+    "mesgul": N_("kullanıcı meşgul mü (salt okunur)"),
+    "karar": N_("işi nerede yapayım: on | arka | sonra"),
+    "panel": N_("izleme paneli + tepsi simgesi"),
+    "masaustu": N_("görünmez arka plan masaüstü: start | stop | status"),
+    "oturum": N_("arka plan oturum aktarımı: status | policy | clear"),
+    "mcp": N_("MCP sunucusu (stdio)"),
+    "pencere": N_("pencereyi taşı/boyutlandır/küçült/büyüt/geri yükle"),
+    "doktor": N_("kurulum ve oturum sağlığı"),
+    "yardım": N_("ayrıntılı yardım metnini yaz"),
+}
+
+
 KOMUTSUZ_ARKA_UC = {"dur", "devam", "durum", "yardım", "yardim", "uyu", "mesgul", "karar", "panel", "masaustu", "oturum", "mcp",
                     "doktor"}  # arka uç gerekmeyen komutlar
 
@@ -187,7 +240,13 @@ def arka_al():
 # ---------------------------------------------------------------- küçük komutlar
 
 def k_bul(a):
+    """Pencere listesi; desen verilmezse TÜM pencereler. Yasak pencerelerin başlığı gösterilmez (MCP list_windows gibi)."""
     for w, b, geo in arka_al().pencereler(a.desen):
+        try:
+            if api.yasak_mi(w):
+                b = _("(yasak pencere)")
+        except Dur:
+            continue
         print(f"{w} | {b} | {' '.join(map(str, geo))}")
 
 
@@ -293,6 +352,12 @@ def secenek(s, *adlar, en=None, **kw):
     return s.add_argument(*kisa, *([en] if en and en not in uzun else []), *uzun, **kw)
 
 
+class _YardimBicimleyici(argparse.RawDescriptionHelpFormatter):
+    """Komut tablosunda ad ve açıklama aynı satırda kalsın (uzun adlarda argparse açıklamayı alt satıra atıyordu)."""
+    def __init__(self, prog, **kw):
+        super().__init__(prog, max_help_position=30, **kw)
+
+
 class AyristirmaHatasi(ValueError):
     """sessiz ayrıştırıcıda argparse hatası (yazdırıp çıkmak yerine)."""
 
@@ -329,7 +394,7 @@ def ayristirici(prog=None, sessiz=False):
     secenek(ortak, "-s", "--sinif", default=argparse.SUPPRESS, help=h_("pencere sınıfı kilidi (regex), ör. krunner"))
     okuma = sinif(add_help=False, allow_abbrev=False)
     secenek(okuma, "--kal", action="store_true", help=h_("bitince önceki pencereyi geri getirme"))
-    p = sinif(prog=prog or prog_adi(), description=yardim_metni(), formatter_class=argparse.RawDescriptionHelpFormatter,
+    p = sinif(prog=prog or prog_adi(), description=yardim_metni(), formatter_class=_YardimBicimleyici,
               allow_abbrev=False)
     secenek(p, "-b", "--baslik", default=None, help=h_("başlık kilidi (regex)"))
     secenek(p, "-s", "--sinif", default=None, help=h_("pencere sınıfı kilidi (regex), ör. krunner"))
@@ -350,6 +415,8 @@ def ayristirici(prog=None, sessiz=False):
 
     def komut(tr, f, **kw):
         """Alt komut: İngilizce adla, Türkçe ad(lar) takma ad; `komut` alanı her zaman Türkçe iç ad."""
+        if tr in KISA_ACIKLAMA:
+            kw.setdefault("help", h_(KISA_ACIKLAMA[tr]))  # `--help` komut tablosu
         s = alt.add_parser(TR_EN[tr], aliases=takma_adlar(tr), allow_abbrev=False, **kw)
         s.set_defaults(f=f, komut=tr)
         return s
@@ -363,9 +430,12 @@ def ayristirici(prog=None, sessiz=False):
         secenek(s, "--degistirici", en="--mod", dest="mod", default=None,
                 help=h_("tık sırasında basılı tutulacak tuşlar: ctrl, shift, alt, meta (ör. ctrl+shift)"))
 
-    s = komut("bul", k_bul, parents=[ortak]); s.add_argument("desen")
-    s = komut("foto", k_foto, parents=[ortak, okuma]); s.add_argument("kimlik"); s.add_argument("cikti", nargs="?")
-    secenek(s, "--bolge"); secenek(s, "--genislik", type=int)
+    s = komut("bul", k_bul, parents=[ortak]); s.add_argument("desen", nargs="?", default=None)
+    s = komut("foto", k_foto, parents=[ortak, okuma]); s.add_argument("kimlik", nargs="?", default=None)
+    s.add_argument("cikti", nargs="?")
+    secenek(s, "--cikti", en="--out", dest="cikti_dosya", help=h_("çıktı dosyası (konumsal [png] ile aynı)"))
+    secenek(s, "--bolge")
+    secenek(s, "--genislik", type=int, help=h_("görüntüyü bu genişliğe küçült (yapay zekâ bağlamı için)"))
     secenek(s, "--izgara", type=int, nargs="?", const=100)
     s = komut("tikla", k_tikla, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("x", type=float)
     s.add_argument("y", type=float); dugme(s); degistirici(s)
@@ -436,11 +506,15 @@ def ayristirici(prog=None, sessiz=False):
     secenek(s, "--sure", en="--timeout", type=float, default=10.0); secenek(s, "--yok", action="store_true")
     secenek(s, "--bolge")
     s = komut("ac", k_ac, parents=[ortak]); s.add_argument("uygulama", nargs="?")
+    s.add_argument("adres", nargs="?", help=h_("açılacak http/https adresi (tarayıcılar; --url ile aynı)"))
+    s.add_argument("--url", dest="url", metavar="URL", help=h_("tarayıcıyı bu http/https adresiyle aç"))
     secenek(s, "--komut", dest="komut_satiri", help=h_("uygulama adı yerine bu komutu başlat"))
     secenek(s, "--onayli", action="store_true", help=h_("--komut yıkıcı bir kalıba uyuyorsa: kullanıcı AÇIKÇA onayladı"))
     s.add_argument("--site", action="append",
                    help=h_("(--arka) oturum kopyasına bu sitenin yerel deposunu da al; tekrarlanabilir"))
     secenek(s, "--sure", en="--timeout", type=float, default=30.0)
+    s = komut("git", k_git, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("adres")
+    secenek(s, "--onayli", action="store_true", help=h_("hassas sayfada Enter: kullanıcı AÇIKÇA onayladı"))
     s = komut("akis", k_akis, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("dosya")
     secenek(s, "--sure", en="--timeout", type=float, help=h_("dosyadaki süreyi geçersiz kıl"))
     s = komut("erisim", k_erisim)
@@ -481,6 +555,18 @@ def ayristirici(prog=None, sessiz=False):
     return p
 
 
+def varsayilan_foto_hedefi(au):
+    """`screenshot` kimliksiz: görünmez masaüstünde tüm masaüstü; kullanıcının ekranında etkin pencere. Gerçek ekran
+    kilidi (DESKHAND_GERCEK_EKRAN) açıkça denetlenir (17); etkin pencere belirlenemezse Dur(8)."""
+    if au.ad == "sanal":
+        return "ekran"
+    hata.gercek_ekran_denetle(_("ekran görüntüsü"), okuma=True)
+    ak = au.aktif()
+    if not ak:
+        raise Dur(8, _("etkin pencere belirlenemedi: kimlik ver (windows ile bul)"))
+    return ak
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
@@ -511,6 +597,13 @@ def main(argv=None):
             dur_denetle()  # DUR anahtarı açıkken hiçbir şeye başlama
         if a.komut not in KOMUTSUZ_ARKA_UC:
             au = arka_al()
+        if a.komut == "foto":
+            if getattr(a, "cikti_dosya", None):
+                if a.cikti:
+                    raise Dur(1, _("çıktı yolu iki kez verildi (konumsal ve --out)"))
+                a.cikti = a.cikti_dosya
+            if a.kimlik is None:
+                a.kimlik = varsayilan_foto_hedefi(au)
         if hasattr(a, "kimlik"):
             a.kimlik_ham = a.kimlik
             a.kimlik = au.pencere_coz(a.kimlik)

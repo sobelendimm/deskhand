@@ -15,6 +15,17 @@
   ödeme siteleri hiçbir ayarla açılmaz; görev kipinde izin hiç uygulanmaz. `deskhand doctor` ve `open` çıktısı
   hangi hesabın aktarıldığını ya da neden süzüldüğünü söyler ("kimlik oturumları: Microsoft aktarıldı (5 çerez,
   1 kayıtlı giriş)").
+- **CLI sürtünmeleri giderildi.** Görünmez masaüstünde gerçek işte (Firefox ile bir web sayfasına gitme) çıkan altı engel:
+  - `deskhand --background open firefox` masaüstü kapalıysa artık kendiliğinden başlatır ("görünmez masaüstü başlatıldı"),
+    MCP `open_app` ile aynı kafes/kilit/görev kipi kapılarından geçer; oturum kopyası hazırlanmadan ÖNCE denetlenir.
+  - `deskhand open firefox https://…` / `--url ADRES`: oturum kopyalı tarayıcıyı adresle açar (yalnız http/https; Chromium
+    ailesi dahil; `file:`, `about:`, `javascript:`, `data:` reddedilir). Görev kipi kuralları CLI'de de geçerlidir.
+  - `deskhand screenshot` kimliksiz çalışır (`--background`: tüm görünmez masaüstü, değilse etkin pencere; gerçek ekran
+    kilitliyse 17) ve `--out DOSYA` alır (klasör yoksa oluşturulur); `--width N` küçültülmüş görüntü verir.
+  - `deskhand windows` desensiz tüm pencereleri listeler.
+  - Yeni `deskhand goto KİMLİK ADRES`: tarayıcıda adres çubuğuyla (ctrl+l → adres → Return) adrese gider; başlık kilidi,
+    hassas sayfa onayı ve insan doğrulaması kapısı mevcut `key`/`type` yollarından aynen geçer; yalnız http/https.
+  - `deskhand --help` alt komutları ve kısa açıklamalarını tablo olarak listeler.
 
 ## 0.7.0 (22 Kasım 2026)
 
