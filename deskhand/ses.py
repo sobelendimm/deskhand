@@ -440,14 +440,15 @@ def _bilgi_oku(r: int, p: subprocess.Popen, sure: float = 5.0) -> int | None:
 
 # Ad alanının 1 numaralı süreci (bash): üç sunucuyu başlatır, SIGTERM'de onları kapatır (ata ad alanından gelen sinyal
 # yalnız işleyicisi olan init'e ulaşır), biri ölürse (`wait -n`: bash'e özgü; dash'te yok) diğerlerini de kapatıp çıkar
-# (yarım sunucu/bayat soket kalmaz; hazir() ölü sunucuyu görür, sonraki listen yeniden kurar). Süreç günlükleri `ses/`.
+# (yarım sunucu/bayat soket kalmaz; hazir() ölü sunucuyu görür, sonraki listen yeniden kurar). Sunucu çıktıları ayrı
+# dosyaya değil, yöneticinin stdout'una (Deskhand'in açıp verdiği, boyutu sınırlanan ses.log) gider.
 YONETICI = """\
 trap 'kill -TERM $c $b $a 2>/dev/null; wait; exit 0' TERM INT HUP
-"$1" -c "$4" >ses_pw.log 2>&1 & a=$!
+"$1" -c "$4" & a=$!
 i=0
 while [ ! -S pipewire-0 ] && [ $i -lt 100 ]; do sleep 0.05; i=$((i+1)); done
-"$2" -p policy >ses_wp.log 2>&1 & b=$!
-"$3" -c "$5" >ses_pulse.log 2>&1 & c=$!
+"$2" -p policy & b=$!
+"$3" -c "$5" & c=$!
 wait -n
 kill -TERM $c $b $a 2>/dev/null
 ( sleep 3; kill -KILL $c $b $a 2>/dev/null ) & k=$!
