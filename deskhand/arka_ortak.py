@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import time
 
 from .hata import ARAC_EKSIK, Dur
@@ -703,6 +704,15 @@ def ev_baglari(ev: str | None = None, ek: tuple | list = ()) -> tuple[list[str],
         a += ["--ro-bind", kaynak, hedef]
         bilgi["beyaz"].append(hedef)
         gorunen.append(hedef)
+    # Deskhand'in KENDİ kodu (ad alanında çalışan sarmalayıcı: oturum/flatpak_ornek.py) ve Python ortamı (venv) ev
+    # dizinindeyse (git klonu, pip --user, pipx): salt okunur görünür — yalnız kod; ev kökü/üstü ya da sır yolu değilse
+    sirlar = [os.path.realpath(y) for y in _sir_ham(ev)[0]]
+    for y in {os.path.realpath(os.path.dirname(os.path.abspath(__file__))), os.path.realpath(sys.prefix)}:
+        if _ic_ice(y, ev) and y != ev and not _ic_ice(ev, y) and not any(_ic_ice(y, s) for s in sirlar) and \
+                all(not _ic_ice(y, g) for g in gorunen):
+            a += ["--ro-bind", y, y]
+            bilgi["beyaz"].append(y)
+            gorunen.append(y)
     maske = {y for y in ev_soketleri(ev) if any(_ic_ice(y, g) for g in gorunen)}
     for k in veri_klasorleri(ev):
         gorunen.append(k)
