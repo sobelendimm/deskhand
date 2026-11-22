@@ -590,7 +590,7 @@
   "guvenlik.py:165"
  ],
  "D-Bus (python-jeepney)": [
-  "gui/saglik.py:20"
+  "gui/saglik.py:24"
  ],
  "D-Bus ile kapatma/yeniden başlatma/askıya alma/oturum kapatma": [
   "guvenlik.py:765"
@@ -761,7 +761,7 @@
   "gui/metinler.py:47"
  ],
  "Evet": [
-  "gui/metinler.py:186"
+  "gui/metinler.py:187"
  ],
  "Exec satırı boş ya da çözümlenemedi": [
   "uygulama.py:200"
@@ -801,6 +801,9 @@
  ],
  "GPU metin okuma (OCR)": [
   "doktor.py:223"
+ ],
+ "GPU'lu arka plan masaüstü; yoksa Xvfb kullanılır (kwin)": [
+  "gui/saglik.py:18"
  ],
  "Genel kısayol": [
   "gui/metinler.py:159"
@@ -849,7 +852,7 @@
   "guvenlik.py:1316"
  ],
  "Hayır": [
-  "gui/metinler.py:187"
+  "gui/metinler.py:188"
  ],
  "Hedef": [
   "gui/metinler.py:96",
@@ -960,7 +963,7 @@
   "gui/metinler.py:130"
  ],
  "Kapat": [
-  "gui/metinler.py:188"
+  "gui/metinler.py:189"
  ],
  "Kart bilgisi yaz": [
   "guvenlik.py:1756"
@@ -996,7 +999,7 @@
   "gui/metinler.py:166"
  ],
  "MCP sunucusu (python-mcp)": [
-  "gui/saglik.py:21"
+  "gui/saglik.py:25"
  ],
  "Masaüstü": [
   "gui/metinler.py:56",
@@ -1027,7 +1030,7 @@
   "gui/metinler.py:179"
  ],
  "OCR dili": [
-  "gui/metinler.py:183"
+  "gui/metinler.py:184"
  ],
  "OCR satırının erişilebilirlik eylemi yok: via='mouse' kullan": [
   "mcp_sunucu.py:1461"
@@ -1101,7 +1104,7 @@
   "doktor.py:80"
  ],
  "Python modülü": [
-  "gui/metinler.py:183"
+  "gui/metinler.py:184"
  ],
  "Rahatsız Etme açık": [
   "mesgul.py:551"
@@ -1170,7 +1173,7 @@
   "gui/metinler.py:161"
  ],
  "Türkçe OCR (tesseract-data-tur)": [
-  "gui/saglik.py:17"
+  "gui/saglik.py:21"
  ],
  "UYARI: '{duzen}' düzeninde olmayan karakterler değiştirildi: {liste}": [
   "eylem.py:69"
@@ -1362,10 +1365,10 @@
   "mcp_sunucu.py:1943"
  ],
  "arayüz (python-pyqt6)": [
-  "gui/saglik.py:18"
+  "gui/saglik.py:22"
  ],
  "araç": [
-  "gui/metinler.py:183"
+  "gui/metinler.py:184"
  ],
  "araç eksik": [
   "mcp_sunucu.py:136"
@@ -1377,7 +1380,7 @@
   "gui/metinler.py:57"
  ],
  "arka plan girdi/görüntü (python-xlib)": [
-  "gui/saglik.py:18"
+  "gui/saglik.py:22"
  ],
  "arka plan girdisi gönderilemedi: {hata}": [
   "arka_uc/kwin.py:802",
@@ -1389,6 +1392,9 @@
  ],
  "arka plan pencere yöneticisi (openbox)": [
   "gui/saglik.py:16"
+ ],
+ "arka plan uygulama yalıtımı; yoksa arka planda hiçbir uygulama açılmaz (bubblewrap)": [
+  "gui/saglik.py:17"
  ],
  "arka plan yedek araç (xdotool)": [
   "gui/saglik.py:15"
@@ -2203,13 +2209,13 @@
   "mcp_sunucu.py:1455"
  ],
  "görüntü (python-pillow)": [
-  "gui/saglik.py:20"
+  "gui/saglik.py:24"
  ],
  "görüntü alınırken pencere değişti → {baslik}": [
   "gorsel.py:59"
  ],
  "görüntü işleme (python-numpy)": [
-  "gui/saglik.py:19"
+  "gui/saglik.py:23"
  ],
  "gözcü hatası: {hata}": [
   "arka_uc/kwin.py:761",
@@ -2538,6 +2544,9 @@
  ],
  "kurulu değil: {liste}": [
   "doktor.py:231"
+ ],
+ "kurulum/oturum durumu": [
+  "gui/metinler.py:184"
  ],
  "kwin_wayland yok": [
   "kwin_oturum.py:355"
@@ -3132,7 +3141,7 @@
   "gorsel.py:142"
  ],
  "simge eşleme (python-scipy)": [
-  "gui/saglik.py:19"
+  "gui/saglik.py:23"
  ],
  "simge kaydedildi: {ad} ({genislik}x{yukseklik}) → {yol}": [
   "gorsel.py:248"
@@ -3301,6 +3310,9 @@
  ],
  "tıklandı ({dugme}{tekrar}): pencere ({x},{y}) = ekran ({ex},{ey})": [
   "eylem.py:230"
+ ],
+ "uyarı": [
+  "gui/metinler.py:183"
  ],
  "uygulama adı boş": [
   "uygulama.py:84"
@@ -3887,7 +3899,7 @@
   "cli.py:43"
  ],
  "İngilizce OCR (tesseract-data-eng)": [
-  "gui/saglik.py:17"
+  "gui/saglik.py:21"
  ],
  "İptal": [
   "gui/metinler.py:128"

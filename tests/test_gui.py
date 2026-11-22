@@ -666,8 +666,24 @@ sd = S.denetle(which=lambda a: a in ("kdotool", "Xvfb"), find_spec=lambda m: obj
                diller_f=lambda: {"tur"})
 ok_ = {d["ad"]: d["ok"] for d in sd}
 kontrol("sağlık: araç/dil/modül denetimi", ok_["kdotool"] and ok_["Xvfb"] and not ok_["dotool"] and
-        ok_["tesseract: tur"] and not ok_["tesseract: eng"] and ok_["numpy"] and not ok_["mcp"] and len(sd) == 16,
+        ok_["tesseract: tur"] and not ok_["tesseract: eng"] and ok_["numpy"] and not ok_["mcp"] and len(sd) == 18,
         str(ok_))
+
+ek = S.ek_satirlar()
+adlar_ = [r["ad"] for r in ek]
+kontrol("sağlık: yardımcılar + arka plan türü + onay kapsamı satırları (doctor'dan)",
+        len(ek) == 3 and "C yardımcıları" in adlar_ and "Arka plan masaüstü türü" in adlar_ and
+        "Onay kapsamı" in adlar_ and all(r["tur"] == "ek" and r["durum"] in ("tamam", "uyari", "eksik") for r in ek), str(adlar_))
+kontrol("sağlık: bwrap zorunlu (kırmızı), kwin_wayland bilgi (sarı)",
+        {d["ad"]: d["durum"] for d in S.denetle(which=lambda a: False, find_spec=lambda m: None,
+                                                diller_f=lambda: set())}["bwrap"] == "eksik" and
+        {d["ad"]: d["durum"] for d in S.denetle(which=lambda a: False, find_spec=lambda m: None,
+                                                diller_f=lambda: set())}["kwin_wayland"] == "uyari")
+w.saglik.goster(sd + [{"ad": "Onay kapsamı", "tur": "ek", "ok": True, "durum": "tamam", "not": "hepsi"}])
+bul_ = {w.saglik.tablo.item(i, 0).text(): i for i in range(w.saglik.tablo.rowCount())}
+kontrol("sağlık sekmesinde bwrap/kwin_wayland/Onay kapsamı satırları görünür",
+        all(a in bul_ for a in ("bwrap", "kwin_wayland", "Onay kapsamı")) and
+        w.saglik.tablo.item(bul_["kwin_wayland"], 1).text() == "uyarı" and w.saglik.tablo.item(bul_["bwrap"], 1).text() == "yok", str(bul_))
 
 # ---- Dil (i18n): seçici arayuz.json'a yazar; sahte en kataloğu; dil değişince metinler yerinde tazelenir
 import json  # noqa: E402

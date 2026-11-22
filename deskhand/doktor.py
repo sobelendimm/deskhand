@@ -18,7 +18,7 @@ from .gui import saglik
 from .i18n import _
 
 # install.sh'de "rec": eksikse çalışır (yedek yol / küçük kayıp). Tek dizeden: ham araç taraması (tests/test_mantik.py)
-OPSIYONEL = set("spectacle xdotool scipy".split())
+OPSIYONEL = set("spectacle xdotool scipy kwin_wayland".split())
 IMGE = {"tamam": "✓", "uyari": "!", "eksik": "✗"}
 
 
