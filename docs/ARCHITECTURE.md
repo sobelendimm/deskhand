@@ -213,6 +213,10 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   yanlışlıkla giden yazı parola denemesi sayılır ve hesabı kilitleyebilir. Durum 0,5 sn önbellekte; sanal masaüstünde yok.
 - **Onay verilen hedef değişmesin**: hassas tık panelden onaylandıysa tıklamadan HEMEN önce noktadaki yazı yeniden OCR'lanıp
   onay isteğindeki yazıyla bulanık karşılaştırılır (benzerlik < 0,85 → tık yapılmaz, 10 "onay verilen hedef değişti").
+  Ağaç ögesine tıkta (`click-element`, web ögesi dahil) öge ayrıca ağaçtan yeniden bulunur (`erisim._onay_sonrasi_oge`):
+  adı, rolü, merkezi (±3 px; web'de veri yolu adı + nesne yolu) aynı değilse ya da yoksa 10. Onay anında noktada OCR
+  yazısı yoksa (yazısız simge / `aria-label` düğmesi: öge adı OCR'da görünmez) nokta karşılaştırması "şimdi de yazı yok"
+  olur; kimlik ağaçtan doğrulanmıştır. Web erişilebilirlik eyleminde (`via="action"`) aynı öge denetimi eylemden önce.
 - **Sürükleme bitişi** başlangıç gibi denetlenir: tek onay iki noktanın yazısını taşır; ara hareketlerde gözcü (etkin
   pencere + başlık kilidi); bırakmadan hemen önce bitiş noktasının altındaki pencere (yasak / kendi istemci / onaysız
   sistem istemi / başka uygulama) — uymazsa imleç başlangıca götürülüp bırakılır (sürükleme iptal).
@@ -250,7 +254,10 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   alır almaz beklemeden `[7] onay bekleniyor` ile reddedilir (`mcp_sunucu.kilitli(girdi=True)`); kayıt kilit
   bırakılmadan önce açılır, onaydan sonra kilit yeniden alındıktan sonra kapanır. Başka canlı Deskhand süreçlerinin
   aynı masaüstündeki istekleri de sayılır (`onay.bekleyen_var`; ömrü olağandışı uzun sahte istek sayılmaz). Okuma
-  araçları ve DUR her zaman serbest.
+  araçları ve DUR her zaman serbest. Aynı kapı CLI/akış girdisinde de vardır: `eylem.girdi_al` (her fare/klavye yolu)
+  ve erişilebilirlik eylem yolunun korumaları (`erisim._atspi_korumalari`, web eylemi dahil) BAŞKA bir canlı Deskhand
+  sürecinin o masaüstü için bekleyen onayında 7 verir (sürecin kendi istekleri sayılmaz). `bekleyen_var` masaüstünü
+  "ekran"/"arka" ya da arka uç adıyla ("kde"/"sanal") alır.
 - **Gözetimsiz kip.** `DESKHAND_GOZETIMSIZ=1` ya da genel bayrak `--unattended` (`--gozetimsiz`): onay gerektiren her
   eylem panel diyaloğu açılmadan ve beklemeden reddedilir (10, "gözetimsiz çalışmada hassas eylem yapılmaz"). Tek nokta
   `onay.iste_sonuc` (CLI, MCP, akış hepsi oradan geçer). Sohbet/insan olmadığından `--onayli` de geçersiz sayılır
@@ -268,8 +275,10 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   başlatılır (denetimsiz girdi sürmez). DUR açılınca tüm bağlantıların basılıları bırakılır, kuyrukta girdi varsa
   dotool yeniden başlatılır (kuyruk düşer). Panel ölürse dotool'un girişi kapanır, dotool çıkar, aygıt yok olur.
 - İnsan önceliği (12): kde arka ucunda kullanıcı klavye/fareyi kullanıyorsa; sanalda yalnız "Devral" açıkken.
-- Pencere yönetimi, pencere kapatma ve (kde) pano yazma da insan önceliğine (12) uyar (`guvenlik.insan_onceligi`);
-  kapatma DUR'a (13) bakar.
+- Pencere yönetimi, pencere kapatma ve (kde) pano yazma da insan önceliğine (12) uyar (`guvenlik.insan_onceligi`;
+  pano: CLI `pano yaz` ve MCP `clipboard(write)` → `api.pano_yaz`); kapatma DUR'a (13) bakar. Deskhand'in panoya yazdığı
+  metinlerin özeti TEK kaynaktadır (`guvenlik.kendi_pano_ekle/kendi_pano_mu`): CLI, MCP `clipboard(read)` ve yapıştırma
+  onayı aynı listeye bakar.
 - Kullanıcı meşgulken ön plan yok (15): kde arka ucu girdi, pencere öne getirme ve uygulama açmadan önce
   `mesgul.ekran_korumasi()` çağırır. Etkin pencere tam ekran / oyun biçimli ya da MPRIS'te video çalıyorsa
   Dur(15). İstisna yalnız kullanıcının açık izni (`--ekranimda`, `DESKHAND_EKRANIMDA=1` ya da bildirimdeki
@@ -401,7 +410,14 @@ hedef metne eklenir (yazısız `aria-label` düğmesinde OCR yazıyı okumasa da
 pencere başlığına EK denetlenir (`hassas_sayfa_engel(ek_basliklar=…)`). Devre dışı öge 6 (genel `ogeye-tikla` iletisiyle
 aynı); görüş alanı dışındaki öge mevcut kaydırma yoluyla (`kaydir_ic`, tüm girdi denetimleriyle, en çok 8 tur, ilerleme
 yoksa hata) görüş alanına getirilip tıklanır. `via="action"`: Action arayüzü (NActions + GetName) üzerinden, fare/odak yok;
-denetimler `_ogeye_eylem` ile aynı (öge kimliği veri yolu adı + nesne yolu BİRLİKTE tutulur).
+denetimler `_ogeye_eylem` ile aynı (öge kimliği veri yolu adı + nesne yolu BİRLİKTE tutulur; sistem istemi onayı da).
+**Çerçeve (B2 kuralı web'de de).** `web._cerceve_bul` çerçeveyi YALNIZ pencerenin süreç ağacındaki bağlantılardan seçer
+(pencerenin süreci ya da torunları; atalar — pencereyi başlatan uçbirim/başlatıcı — ve Deskhand'in kendi bağlantısı
+sayılmaz); PID bilinmiyor ya da ağaçta uygulama yoksa 6, başlık benzerliğiyle başka uygulamaya düşülmez. Seçilen çerçeve
+`erisim._cerceve_denetle` ile denetlenir: okumada (`read_text(source="web")`, CLI `web`, tık öncesi arama) panel süreci /
+yasak desen 10; eylemde (`web.eylem_yap`, çerçeve DoAction'dan hemen önce yeniden seçilir, öge o çerçevenin bağlantısında
+olmalı, yoksa 8) ek olarak ajanın kendi istemcisi ve uygulama erişim seviyesi 10. Parola alanının (`password text`)
+değeri okunmaz. Fare yolunda pencere düzeyi denetimler `tikla_ic`'te (kendi istemci, sistem istemi, seviye, B3).
 **Konum doğrulama (fail-closed).** Wayland'de ögeler uygulamaya göre pencere-yerel, küresel istemci alanı ya da küresel
 dekorlu çerçeve koordinatında gelebilir. `web.konum_coz`, üst düzey çerçevenin sınırını (GetExtents SCREEN ve WINDOW)
 pencerenin bilinen geometrisiyle ±1 px karşılaştırıp çerçeveyi belirler; hiçbirine uymuyorsa okuma `konum_dogrulandi=false`
