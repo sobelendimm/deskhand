@@ -838,9 +838,9 @@ async def duzeltme_a_testleri():
             au.pen[sm.PENCERE][0] = "Yeni belge — KWrite"
             n0 = len(sm.eylemler())
             r = await c.call_tool("click", {"ref": ref, **F})
-            kontrol("ağaç ref'i: başlık değişti → click reddedildi, eylem yok",
-                    r.is_error and "[8]" in metin(r) and len(sm.eylemler()) == n0 and
-                    not [x for x in au.satirlar if x.startswith("click")], metin(r)[:200])
+            kontrol("ağaç ref'i: başlık değişti → öge kimliğiyle yeniden doğrulandı, click gitti (başlık denetimi "
+                    "yalnız OCR ref'lerinde; '(3) Gmail' gibi değişen başlıklar ref'i bozmasın)",
+                    not r.is_error and "[8]" not in metin(r), metin(r)[:200])
             au = sm.sifirla()
             r = await c.call_tool("observe", {"window": "KWrite", **F})
             m = re.search(r"\[(\d+)\] push button \"Kaydet\"", metin(r))
@@ -966,16 +966,20 @@ async def duzeltme_a_testleri():
             kontrol("tüm ekran ref ile click: [8] YOK, tık gitti (başlık pencere_bilgi'den, EKRAN başlığı '')",
                     not r.is_error and "[8]" not in metin(r) and "click left" in au.satirlar[n0:], metin(r)[:300])
         au = sm.sifirla()
-        r = await c.call_tool("observe", {"window": "KWrite", **F})
-        m = re.search(r"\[(\d+)\] push button \"Kaydet\"", metin(r))
-        sid = re.search(r"snapshot ([0-9a-f]{4}-\d+)", metin(r))
-        if m and sid:
+        sm.AGACSIZ.add("Belge — KWrite")  # ağaç yok → pencerenin ögeleri yalnız OCR
+        r = await c.call_tool("observe", {"window": "KWrite", "include_ocr": True, **F})
+        st = yapi(r)
+        kay = next((e for e in st.get("elements", []) if e.get("source") == "ocr"), None)
+        kontrol("pencere observe include_ocr: en az bir OCR ögesi + ref", not r.is_error and kay is not None,
+                metin(r)[:300])
+        if kay:
             au.pen[sm.PENCERE][0] = "Başka başlık — KWrite"
             n0 = len(au.satirlar)
-            r = await c.call_tool("click", {"ref": f"{sid.group(1)}:{m.group(1)}", **F})
-            kontrol("pencere ref'i: başlık değişince yine [8] + ipucu (window deseni + text/koordinat), tık yok",
+            r = await c.call_tool("click", {"ref": kay["ref"], **F})
+            kontrol("pencere OCR ref'i: başlık değişince yine [8] + ipucu (window deseni + text/koordinat), tık yok",
                     r.is_error and "[8]" in metin(r) and "window" in metin(r) and "click left" not in au.satirlar[n0:],
                     metin(r)[:300])
+        sm.AGACSIZ.discard("Belge — KWrite")
 
 
 async def tur5_kapi_testleri():

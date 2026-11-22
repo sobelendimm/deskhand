@@ -899,7 +899,7 @@ def _ocr_topla(k: str) -> list[dict]:
     return [gozlem.ocr_ogesi(s) for s in r["items"] if gozlem.temiz(s["text"])]
 
 
-def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str]:
+def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str | None]:
     """ref → (pencere kimliği, gözlem ögesi, anlık görüntüdeki pencere başlığı). Anlık görüntü düzeyindeki bayatlık burada, ÖGE düzeyindeki doğrulama
     çekirdekte (erisim.ref_oge_sec; güncel ağaç) yapılır. Üç neden ayrı iletilir: snapshot / window / element."""
     p = gozlem.ref_ayir(ref)
@@ -931,16 +931,20 @@ def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str]:
         raise _ref_hatasi("window", _("ref'in penceresinin boyutu değişti ({once} → {simdi}); eylem yapılmadı. observe "
                                       "çağırıp yeni ref kullan").format(once="x".join(map(str, an.boyut)),
                                                                         simdi="x".join(map(str, geo[2:]))))
-    if baslik_simdi != an.baslik:
-        raise _ref_hatasi("window", _("ref'in penceresinin başlığı değişti (başka belge/sekme olabilir); eylem "
-                                      "yapılmadı. observe çağırıp yeni ref kullan. Başlığı sürekli değişen pencerelerde "
-                                      "(indirme yüzdesi, \"(3) Gmail\") ref yerine window deseni + text/koordinat kullan"))
     o = an.oge(n)
     if o is None:
         raise _ref_hatasi("element", _("ref {ref}: anlık görüntüde {n} numaralı öge yok; observe çıktısındaki "
                                        "ref'leri kullan").format(ref=ref, n=n))
     _SON.k = an.k
-    return an.k, o, an.baslik
+    # Başlık denetimi YALNIZ OCR ref'lerinde: OCR ögesi yalnız ekrandaki yazı + kutudur, aynı pencerede başka belge/sekme
+    # aynı yerde aynı yazıyı gösterebilir. Ağaç/web ögeleri ise eylem anında veri yolu adı + nesne yolu + rol/ad ile
+    # yeniden doğrulanır (erisim.ref_oge_sec); başlığı sürekli değişen sayfalarda ("(3) Gmail", sayaçlar) ref bozulmasın.
+    ocr_ref = o.get("kaynak") == "ocr"
+    if ocr_ref and baslik_simdi != an.baslik:
+        raise _ref_hatasi("window", _("ref'in penceresinin başlığı değişti (başka belge/sekme olabilir); eylem "
+                                      "yapılmadı. observe çağırıp yeni ref kullan. Başlığı sürekli değişen pencerelerde "
+                                      "(indirme yüzdesi, \"(3) Gmail\") ref yerine window deseni + text/koordinat kullan"))
+    return an.k, o, (an.baslik if ocr_ref else None)
 
 
 def _ref_hedef(o: dict) -> dict:
