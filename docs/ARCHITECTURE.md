@@ -735,6 +735,10 @@ son adımın penceresini gözler.
 **`wait_for` (salt okunur).** `text` (ağaçta ad/değer, yoksa OCR), `gone`, `element` (ad + isteğe bağlı rol), `window`
 (başlık deseni, yasak pencere sayılmaz), `stable` (pencere görüntüsü `stable_ms` boyunca aynı, fark.py). Kilit her
 yoklamada alınıp bırakılır; zaman aşımı hata değil `satisfied:false`.
+Ön planda (kde) `text`/`gone`/`stable` pencereyi ÖNE GETİRMEZ: hedef etkinse görüntü/OCR; değilse yalnız AT-SPI ağacı
+(ağaç yoksa `satisfied:false` + bir kez `note`); kullanıcı etkinken (`insan_var_mi`) yoklama atlanır, süre sayılır.
+Arka planda davranış aynıdır. `batch` `desktop=auto`'yu başta BİR kez çözer; `click`/`type_text`/`scroll`/`drag` ref'i
+anlık görüntüdeki pencere başlığı değiştiyse reddeder ([8]) ve başlık kilidini o başlıktan kurar.
 **Sonuç sözleşmesi.** Girdi araçlarının sonucu `effect`: `confirmed` (beklenen değişim görüldü: tıklanan ref ögesinin
 checked/selected/expanded durumu değişti, yazılan metin değişen bölgenin OCR'ında görüldü ya da değer geri okundu,
 kaydırmada görünüm değişti, pencere geometrisi değişti), `changed`, `no_change` (döngü kesiciyle uyumlu), `unverifiable`

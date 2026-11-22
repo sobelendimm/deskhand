@@ -700,13 +700,16 @@ def _kimlik_mi(arg: str, k: str) -> bool:
     return arg == k or arg.startswith(("arka:", "0x", "{"))
 
 
-def baslik_kilidi(arg: str | None, k: str) -> str | None:
-    """Girdi için başlık kilidi: desen verildiyse o, kimlik verildiyse pencerenin şu anki başlığı (tam)."""
+def baslik_kilidi(arg: str | None, k: str, ref_baslik: str | None = None) -> str | None:
+    """Girdi için başlık kilidi: desen verildiyse o; ref verildiyse ref'in anlık görüntüsündeki başlık (tam; eylem
+    sırasında başlık değişirse durur); kimlik verildiyse pencerenin şu anki başlığı (tam)."""
     import re
     if k == EKRAN:
         return None
     if arg and not _kimlik_mi(arg, k):
         return arg
+    if ref_baslik is not None:
+        return "^" + re.escape(ref_baslik) + "$"
     return "^" + re.escape(api.arka().baslik(k)) + "$"
 
 
@@ -895,8 +898,8 @@ def _ocr_topla(k: str) -> list[dict]:
     return [gozlem.ocr_ogesi(s) for s in r["items"] if gozlem.temiz(s["text"])]
 
 
-def _ref_coz(ref: str, window: str | None) -> tuple[str, dict]:
-    """ref → (pencere kimliği, gözlem ögesi). Anlık görüntü düzeyindeki bayatlık burada, ÖGE düzeyindeki doğrulama
+def _ref_coz(ref: str, window: str | None) -> tuple[str, dict, str]:
+    """ref → (pencere kimliği, gözlem ögesi, anlık görüntüdeki pencere başlığı). Anlık görüntü düzeyindeki bayatlık burada, ÖGE düzeyindeki doğrulama
     çekirdekte (erisim.ref_oge_sec; güncel ağaç) yapılır. Üç neden ayrı iletilir: snapshot / window / element."""
     p = gozlem.ref_ayir(ref)
     if p is None:
@@ -919,6 +922,7 @@ def _ref_coz(ref: str, window: str | None) -> tuple[str, dict]:
             raise _ref_hatasi("window", _("ref başka pencereye ait; eylem yapılmadı. Bu pencere için observe çağır"))
     try:
         geo = api.pencere_bilgi(an.k)["geometry"]
+        baslik_simdi = au.baslik(an.k)
     except hata.Dur:
         raise _ref_hatasi("window", _("ref'in penceresi kapandı ya da artık yok; eylem yapılmadı. get_status ve observe "
                                       "çağır")) from None
@@ -926,12 +930,15 @@ def _ref_coz(ref: str, window: str | None) -> tuple[str, dict]:
         raise _ref_hatasi("window", _("ref'in penceresinin boyutu değişti ({once} → {simdi}); eylem yapılmadı. observe "
                                       "çağırıp yeni ref kullan").format(once="x".join(map(str, an.boyut)),
                                                                         simdi="x".join(map(str, geo[2:]))))
+    if baslik_simdi != an.baslik:
+        raise _ref_hatasi("window", _("ref'in penceresinin başlığı değişti (başka belge/sekme olabilir); eylem "
+                                      "yapılmadı. observe çağırıp yeni ref kullan"))
     o = an.oge(n)
     if o is None:
         raise _ref_hatasi("element", _("ref {ref}: anlık görüntüde {n} numaralı öge yok; observe çıktısındaki "
                                        "ref'leri kullan").format(ref=ref, n=n))
     _SON.k = an.k
-    return an.k, o
+    return an.k, o, an.baslik
 
 
 def _ref_hedef(o: dict) -> dict:
@@ -1441,9 +1448,9 @@ def click(
     with baglam(desktop, _("tıklama: {hedef} @ {pencere}").format(hedef=text or icon or element or ref or _("koordinat"),
                                                                  pencere=window or _("görüntü"))) as bilgi:
         hata.dur_denetle()
-        ref_o = None
+        ref_o = ref_b = None
         if ref:
-            k, ref_o = _ref_coz(ref, window)
+            k, ref_o, ref_b = _ref_coz(ref, window)
             if ref_o["kaynak"] == "ocr" and via == "action":
                 raise ToolError("[1] " + _("OCR satırının erişilebilirlik eylemi yok: via='mouse' kullan"))
         elif x is not None or y is not None:
@@ -1459,7 +1466,7 @@ def click(
         y_ = api.yasak_mi(k)
         if y_:
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
-        desen = baslik_kilidi(window if not ref else None, k)
+        desen = baslik_kilidi(window if not ref else None, k, ref_b)
         once = {}
         mod = list(dict.fromkeys(modifiers or ()))
         if ref_o is not None:
@@ -1541,13 +1548,13 @@ def type_text(
         raise ToolError("[1] " + _("window ya da ref gerekli"))
     with baglam(desktop, _("yazı: {pencere}").format(pencere=window or ref)) as bilgi:
         hata.dur_denetle()
-        ref_o = None
+        ref_o = ref_b = None
         if ref:
-            k, ref_o = _ref_coz(ref, window)
+            k, ref_o, ref_b = _ref_coz(ref, window)
         else:
             k = _pencere_zorunlu(window)
         _SON.k = k
-        desen = baslik_kilidi(window if not ref else None, k)
+        desen = baslik_kilidi(window if not ref else None, k, ref_b)
         if element and submit:
             raise ToolError("[1] " + _("submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)"))
         metin_ = text + ("\n" if submit else "")  # submit = sondaki Enter: yazıyla TEK eylem, tek onay
@@ -1685,9 +1692,9 @@ def scroll(
         raise ToolError("[1] " + _("window ya da ref gerekli"))
     with baglam(desktop, _("kaydırma: {pencere}").format(pencere=window or ref)) as bilgi:
         hata.dur_denetle()
-        ref_o = None
+        ref_o = ref_b = None
         if ref:
-            k, ref_o = _ref_coz(ref, window)
+            k, ref_o, ref_b = _ref_coz(ref, window)
         else:
             k = _pencere_zorunlu(window)
         _SON.k = k
@@ -1696,7 +1703,7 @@ def scroll(
             if x is None or y is None:
                 raise ToolError("[1] " + _("x ve y birlikte verilmeli"))
             nokta = cekim_noktasi(cekim_coz(shot_id, k), x, y)
-        desen = baslik_kilidi(window if not ref else None, k)
+        desen = baslik_kilidi(window if not ref else None, k, ref_b)
         with kilitli(girdi=True):
             if ref_o is not None:
                 nokta = _ref_nokta(k, ref_o)  # kilit altında, eylemden hemen önce: öge hâlâ aynı yerde mi
@@ -1743,12 +1750,12 @@ def drag(
         raise ToolError("[1] " + _("window ya da ref gerekli"))
     with baglam(desktop, _("sürükleme: {pencere}").format(pencere=window or from_ref or to_ref)) as bilgi:
         hata.dur_denetle()
-        o1 = o2 = None
+        o1 = o2 = ref_b = None
         k = None
         if from_ref:
-            k, o1 = _ref_coz(from_ref, window)
+            k, o1, ref_b = _ref_coz(from_ref, window)
         if to_ref:
-            k2, o2 = _ref_coz(to_ref, window)
+            k2, o2, ref_b = _ref_coz(to_ref, window)
             if k is not None and k2 != k:
                 raise _ref_hatasi("window", _("from_ref ve to_ref aynı pencerede olmalı"))
             k = k2
@@ -1763,7 +1770,7 @@ def drag(
         y_ = api.yasak_mi(k)
         if y_:
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
-        desen = baslik_kilidi(window if not (from_ref or to_ref) else None, k)
+        desen = baslik_kilidi(window if not (from_ref or to_ref) else None, k, ref_b)
         once = {}
         noktalar = {}
 
@@ -2026,6 +2033,11 @@ def batch(
     sequence (fill fields, then submit); observe between batches when the screen may change unexpectedly. Returns
     per-step ok/effect/changed_region."""
     hazir = _toplu_hazirla(steps, desktop)
+    hedef, _not = masaustu_coz(desktop, _("toplu iş"))  # "auto" BİR kez çözülür: tüm adımlar aynı masaüstüne
+    desktop = DIS_AD[hedef]
+    for _ad, _args in hazir:
+        if _ad != "wait":
+            _args["desktop"] = desktop
     cekirdek = {ad: globals()[ad] for ad in ("click", "type_text", "press_key", "scroll", "drag")}
     sonuclar: list[dict] = []
     s: dict[str, Any] = {"status": "ok", "steps": sonuclar}
@@ -2098,14 +2110,10 @@ def batch(
 BEKLEME_ARALIK = 0.35
 
 
-def _agacta_metin(k: str, deger: str, rol: str | None = None, ad_tam: bool = False) -> dict | None:
-    """Ağaçta (web sayfası ya da genel ağaç) adı/değeri `deger`i içeren öge → gözlem ögesi | None. Okunamazsa None."""
+def _agacta_bul(agac: list[dict], deger: str, rol: str | None = None, ad_tam: bool = False) -> dict | None:
+    """Gözlem ögeleri içinde adı/değeri `deger`i içeren (ad_tam: tam eşit) ilk öge | None."""
     from .ocr import katla
     q = katla(deger)
-    try:
-        agac, _kaynak, _sayfa, _n = _agac_topla(k, True)
-    except hata.Dur:
-        return None
     for o in agac:
         if rol and rol.lower() not in o["rol"]:
             continue
@@ -2114,6 +2122,27 @@ def _agacta_metin(k: str, deger: str, rol: str | None = None, ad_tam: bool = Fal
             if a and (a == q if ad_tam else q in a):
                 return o
     return None
+
+
+def _agacta_metin(k: str, deger: str, rol: str | None = None, ad_tam: bool = False) -> dict | None:
+    """Ağaçta (web sayfası ya da genel ağaç) adı/değeri `deger`i içeren öge → gözlem ögesi | None. Okunamazsa None."""
+    try:
+        agac, _kaynak, _sayfa, _n = _agac_topla(k, True)
+    except hata.Dur:
+        return None
+    return _agacta_bul(agac, deger, rol, ad_tam)
+
+
+def _agac_ogeleri(k: str) -> list[dict] | None:
+    """Pencerenin erişilebilirlik ağacı (görüntü almadan, pencereyi öne getirmeden) → gözlem ögeleri | None (ağaç
+    yok/okunamadı/boş). Yasak (10) ve DUR (13) yükselir."""
+    try:
+        agac, _kaynak, _sayfa, _n = _agac_topla(k, True)
+    except hata.Dur as e:
+        if e.kod in (10, 13):
+            raise
+        return None
+    return agac or None
 
 
 @arac(BeklemeSonuc, title="Wait for", annotations=OKUMA)
@@ -2131,7 +2160,10 @@ def wait_for(
 ) -> dict[str, Any]:
     """Wait until something is on screen instead of polling with screenshots. text/gone check the accessibility tree
     and OCR, element checks the tree, window checks window titles, stable compares screenshots. A timeout is not an
-    error: satisfied=false. Read-only, sends no input; other tools keep working while it waits."""
+    error: satisfied=false. Read-only, sends no input; other tools keep working while it waits. On the foreground
+    desktop it never raises the window: screenshots/OCR are taken only while the target is already the active
+    window; otherwise (text, gone, stable) it polls the accessibility tree only (no tree: satisfied=false with a
+    note), and a poll is skipped while the user is using the keyboard/mouse (the timeout keeps counting)."""
     if condition != "stable" and not value:
         raise ToolError("[1] " + _("value gerekli (stable dışındaki koşullar)"))
     if condition == "window" and value:
@@ -2150,10 +2182,47 @@ def wait_for(
         tur, eslesme, pencere_id = 0, None, None
         onceki, sabit_bas = None, None
         tamam = False
+        on_plan = api.arka().ad == "kde" and condition in ("text", "gone", "stable")
+        agacsiz_not = False
         while True:
             tur += 1
+            atla = agac_ile = False
+            if on_plan:
+                au = api.arka()
+                if au.insan_var_mi():
+                    atla = True  # kullanıcı etkin: bu yoklama atlanır (süre sayılır, odak/görüntü alınmaz)
+                    onceki = None
+                else:
+                    agac_ile = k != EKRAN and au.aktif() != k
             with kilitli():
-                if condition == "window":
+                if atla:
+                    tamam = False
+                elif agac_ile:
+                    agac = _agac_ogeleri(k)
+                    if agac is None:
+                        tamam = False
+                        if not agacsiz_not:
+                            agacsiz_not = True
+                            n_ = _("pencere önde değil; ön planda bekleme yalnız erişilebilirlik ağacıyla "
+                                   "(pencere öne getirilmez)")
+                            bilgi["note"] = (bilgi["note"] + "; " if bilgi.get("note") else "") + n_
+                    elif condition == "stable":
+                        oz = ("agac", tuple((o["rol"], o.get("ad"), o.get("deger"), tuple(o["kutu"])) for o in agac))
+                        simdi = time.monotonic()
+                        if onceki is None or onceki != oz:
+                            sabit_bas = simdi
+                        onceki = oz
+                        tamam = simdi - sabit_bas >= stable_ms / 1000.0
+                    else:
+                        o = _agacta_bul(agac, value)
+                        if condition == "text":
+                            tamam = o is not None
+                            if tamam:
+                                eslesme = {"source": o["kaynak"], "text": gozlem.kisalt(
+                                    o.get("ad") or o.get("deger") or "", gozlem.AD_SINIRI), "frame": o["kutu"]}
+                        else:
+                            tamam = o is None
+                elif condition == "window":
                     for p in api.pencereler(value):
                         if not p.get("forbidden"):
                             tamam, pencere_id = True, p["id"]
@@ -2164,7 +2233,7 @@ def wait_for(
                         im = api.goruntu_al(k)[0]
                     oz = fark.once_al(im)
                     simdi = time.monotonic()
-                    if onceki is None or not fark.ayni_ekran(onceki, oz):
+                    if onceki is None or not isinstance(onceki, fark.Once) or not fark.ayni_ekran(onceki, oz):
                         sabit_bas = simdi
                     onceki = oz
                     tamam = simdi - sabit_bas >= stable_ms / 1000.0

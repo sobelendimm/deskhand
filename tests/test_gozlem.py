@@ -794,6 +794,117 @@ async def kapi_testleri():
         s._DONGU.temizle()
 
 
+async def duzeltme_a_testleri():
+    """Son denetim A düzeltmeleri (sahte kde + sahte AT-SPI; gerçek ekrana girdi YOK):
+    - ref'in anlık görüntüsündeki pencere başlığı değişince eylem reddedilir ([8]); ref yollarında başlık kilidi
+      anlık görüntünün başlığından kurulur;
+    - wait_for ön planda pencereyi ÖNE GETİRMEZ (hedef etkin değilse yalnız ağaç; ağaç yoksa satisfied=false + not;
+      kullanıcı etkinken yoklama atlanır, süre sayılır);
+    - batch desktop='auto' başta BİR kez çözülür."""
+    from mcp import Client
+    import sahte_masaustu as sm
+    F = {"desktop": "foreground"}
+    sm.kur()
+
+    def oge_sayaci(au):
+        say = {"n": 0}
+        asil = au.one_getir
+
+        def sayan(k):
+            if k != au.aktif_:
+                say["n"] += 1
+            asil(k)
+        au.one_getir = sayan
+        return say
+
+    def baska_pencere(au):
+        au.pen["{diger}"] = ["Kullanıcının penceresi", "firefox", (900, 100, 600, 600)]
+        au.aktif_ = "{diger}"
+
+    async with Client(s.mcp) as c:
+        # --- 1) ref + başlık
+        kontrol("baslik_kilidi: ref başlığı verilince tam eşleşen desen (kimlikle değil anlık görüntüyle)",
+                s.baslik_kilidi(None, "{w}", "Eski [başlık]") == "^" + re.escape("Eski [başlık]") + "$" and
+                s.baslik_kilidi("^x$", "{w}", "Eski") == "^x$")
+        au = sm.sifirla()
+        r = await c.call_tool("observe", {"window": "KWrite", **F})
+        m = re.search(r"\[(\d+)\] push button \"Kaydet\"", metin(r))
+        sid = re.search(r"snapshot ([0-9a-f]{4}-\d+)", metin(r))
+        ref = f"{sid.group(1)}:{m.group(1)}" if (m and sid) else None
+        kontrol("ön koşul: observe 'Kaydet' ögesini verdi", ref is not None, metin(r)[:200])
+        if ref:
+            sm.AGAC["Yeni belge — KWrite"] = sm.AGAC.pop("Belge — KWrite")
+            au.pen[sm.PENCERE][0] = "Yeni belge — KWrite"
+            n0 = len(sm.eylemler())
+            r = await c.call_tool("click", {"ref": ref, **F})
+            kontrol("ağaç ref'i: başlık değişti → click reddedildi, eylem yok",
+                    r.is_error and "[8]" in metin(r) and len(sm.eylemler()) == n0 and
+                    not [x for x in au.satirlar if x.startswith("click")], metin(r)[:200])
+            au = sm.sifirla()
+            r = await c.call_tool("observe", {"window": "KWrite", **F})
+            m = re.search(r"\[(\d+)\] push button \"Kaydet\"", metin(r))
+            sid = re.search(r"snapshot ([0-9a-f]{4}-\d+)", metin(r))
+            r = await c.call_tool("click", {"ref": f"{sid.group(1)}:{m.group(1)}", **F})
+            kontrol("kontrol: başlık değişmediyse ref tıklaması yine çalışır", not r.is_error, metin(r)[:200])
+
+        # --- 2) wait_for ön planda
+        au = sm.sifirla()
+        baska_pencere(au)
+        say = oge_sayaci(au)
+        r = await c.call_tool("wait_for", {"condition": "text", "value": "Kaydet", "window": "KWrite",
+                                           "timeout_s": 2, **F})
+        sy = r.structured_content or {}
+        kontrol("wait_for(text) ön plan, hedef etkin değil, ağaç var → ağaçtan bulundu, pencere öne getirilmedi",
+                sy.get("satisfied") is True and say["n"] == 0 and au.aktif_ == "{diger}", f"{say} {metin(r)[:200]}")
+        r = await c.call_tool("wait_for", {"condition": "gone", "value": "Kaydet", "window": "KWrite",
+                                           "timeout_s": 1, **F})
+        kontrol("wait_for(gone) etkin değil: öge ağaçta duruyor → satisfied=false, öne getirme yok",
+                (r.structured_content or {}).get("satisfied") is False and say["n"] == 0)
+        r = await c.call_tool("wait_for", {"condition": "stable", "window": "KWrite", "timeout_s": 3,
+                                           "stable_ms": 300, **F})
+        kontrol("wait_for(stable) etkin değil: ağaç imzası durgun → satisfied, öne getirme yok",
+                (r.structured_content or {}).get("satisfied") is True and say["n"] == 0, metin(r)[:200])
+        sm.AGACSIZ.add("Belge — KWrite")
+        r = await c.call_tool("wait_for", {"condition": "text", "value": "Kaydet", "window": "KWrite",
+                                           "timeout_s": 1.5, **F})
+        sy = r.structured_content or {}
+        kontrol("wait_for(text) etkin değil + ağaç yok → satisfied=false, tek 'not', öne getirme yok",
+                sy.get("satisfied") is False and say["n"] == 0 and str(sy.get("note", "")).count("pencere önde değil") == 1,
+                f"{say} {sy}")
+        au.insan = True
+        sm.AGACSIZ.clear()
+        t0 = time.monotonic()
+        r = await c.call_tool("wait_for", {"condition": "text", "value": "Kaydet", "window": "KWrite",
+                                           "timeout_s": 1.5, **F})
+        sy = r.structured_content or {}
+        kontrol("wait_for kullanıcı etkinken: yoklama atlanır (satisfied=false), süre sayılır, odak değişmez",
+                sy.get("satisfied") is False and say["n"] == 0 and time.monotonic() - t0 >= 1.0 and sy.get("polls", 0) > 1,
+                f"{say} {sy}")
+        au.insan = False
+        au.aktif_ = sm.PENCERE  # hedef etkin: eski yol (görüntü/OCR) çalışır
+        sm.AGACSIZ.add("Belge — KWrite")
+        r = await c.call_tool("wait_for", {"condition": "text", "value": "Kaydet", "window": "KWrite",
+                                           "timeout_s": 5, **F})
+        kontrol("wait_for(text) hedef zaten etkin: OCR yolu aynı kaldı (satisfied)",
+                (r.structured_content or {}).get("satisfied") is True, metin(r)[:200])
+
+        # --- 3) batch auto bir kez
+        au = sm.sifirla()
+        cagri = []
+        asil = s.masaustu_coz
+
+        def sayac(desktop, ozet):
+            cagri.append(desktop)
+            return asil(desktop, ozet)
+        s.masaustu_coz = sayac
+        try:
+            r = await c.call_tool("batch", {"steps": [{"tool": "wait", "args": {"seconds": 0}}] * 3})
+        finally:
+            s.masaustu_coz = asil
+        kontrol("batch desktop='auto': başta bir kez çözüldü, adımlara somut masaüstü gitti",
+                not r.is_error and cagri.count("auto") == 1 and set(cagri) <= {"auto", "foreground"}, str(cagri))
+
+
 async def tur5_kapi_testleri():
     """tur6 birleştirmesi: Faz 10'un ref/batch/observe yolları tur5'in kapılarından geçer (sahte kde + sahte AT-SPI).
     - type_text(ref) ve batch adımlarındaki HER Enter (uçbirimde) ayrı onay ister (bir Enter = bir onay);
@@ -1030,6 +1141,7 @@ def main():
         print("ATLANDI (C2): firefox / Xvfb / jeepney yok")
     asyncio.run(kapi_testleri())
     asyncio.run(tur5_kapi_testleri())
+    asyncio.run(duzeltme_a_testleri())
     print("\n# ölçümler:")
     print(f"  tools/list: {OLCUM.get('tools_list')} karakter (~{(OLCUM.get('tools_list') or 0) // 4} token); "
           f"talimat {OLCUM.get('talimat')} karakter")
