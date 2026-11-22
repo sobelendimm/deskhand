@@ -673,14 +673,17 @@ def tum_pencereler():
     return set(kimlikler()) if kimlikler else {w for w, _, _ in au.pencereler()}
 
 
-def _baslat(au, komut, fp, env=None, kopya=None, girdi=None):
+def _baslat(au, komut, fp, env=None, kopya=None, girdi=None, ev=()):
     """Arka ucun oturumunda başlat; arka uç çıktı dosyası destekliyorsa stdout/stderr oraya. kopya: oturum
     politikasının kopyası (yalnız arka plan arka uçları alır; ad alanına yalnız o bağlanır); girdi: onaylı kullanıcı
-    girdisinin özel .desktop kopyası (arka planda ad alanına salt okunur bağlanır: RUNTIME_DIR orada boştur)."""
+    girdisinin özel .desktop kopyası (arka planda ad alanına salt okunur bağlanır: RUNTIME_DIR orada boştur); ev:
+    politikanın uygulama başına ev dizini beyaz liste girdileri (yalnız arka plan arka uçları alır)."""
     p = inspect.signature(au.baslat).parameters
     ek = {"kopya": kopya} if kopya and "kopya" in p else {}
     if girdi and "girdi" in p:
         ek["girdi"] = girdi
+    if ev and "ev" in p:
+        ek["ev"] = tuple(ev)
     if "cikti" in p:
         return au.baslat(komut, env=env, cikti=fp, **ek)
     return au.baslat(komut, env=env, **ek)
@@ -690,7 +693,8 @@ def oturum_hazirla(uygulama, siteler=None, ham_komut=False):
     """Görünmez masaüstünde açılacak uygulama için oturum politikası (docs: oturum.toml). Politika ÇÖZÜLMÜŞ
     uygulamadan hesaplanır (oturum.hazirla: .desktop kimliği, Exec ikilisi, Flatpak kimliği, kısmi ad, yol).
     ham_komut: `ac --komut` satırının ilk öğesi (bilinen bir uygulamaya uymuyorsa olduğu gibi çalışır).
-    → (komut veya None, ek ortam, not, kopya yolu veya None). Açılamıyorsa Dur: kapali → 10, bekle/on → 16."""
+    → (komut veya None, ek ortam, not, kopya yolu veya None, ev beyaz liste girdileri). Açılamıyorsa Dur: kapali → 10,
+    bekle/on → 16."""
     from . import oturum
     from .hata import OTURUM_POLITIKASI
     h = oturum.hazirla(uygulama, siteler or None, ham_komut=ham_komut)
@@ -704,7 +708,8 @@ def oturum_hazirla(uygulama, siteler=None, ham_komut=False):
     if kopya:
         oturum.parmak_kaydet(kopya)
     return (list(h.argv) or None), dict(h.env_ek or {}), (_("oturum: {karar}").format(karar=h.karar)
-                                                          + (f" ({h.aciklama})" if h.aciklama else "")), kopya
+                                                          + (f" ({h.aciklama})" if h.aciklama else "")), kopya, \
+        tuple(getattr(h, "ev", ()) or ())
 
 
 def k_ac(a):
@@ -725,8 +730,9 @@ def k_ac(a):
     au = sec()
     env = None
     kopya = None
+    ev = ()
     if au.ad == "sanal" and a.uygulama and not a.komut_satiri:
-        yeni, env, notu, kopya = oturum_hazirla(a.uygulama, getattr(a, "site", None))
+        yeni, env, notu, kopya, ev = oturum_hazirla(a.uygulama, getattr(a, "site", None))
         if yeni:
             komut = yeni
         print(notu, file=sys.stderr)
@@ -735,7 +741,7 @@ def k_ac(a):
         # uygulamaya uymayan komut olduğu gibi çalışır: test pencereleri vb.)
         from .oturum.cozum import _flatpak_kimligi
         fk = _flatpak_kimligi(komut)[0]
-        _yeni, env_ek, notu, _kopya = oturum_hazirla(fk or komut[0], None, ham_komut=True)
+        _yeni, env_ek, notu, _kopya, _ev = oturum_hazirla(fk or komut[0], None, ham_komut=True)
         env = env_ek or None
         if fk:  # flatpak run kendi scope'una geçer: kayıt + bellek sınırı + kapanışta kapatma için sarmala
             from . import oturum
@@ -747,7 +753,7 @@ def k_ac(a):
     os.makedirs(yollar.cikti(), exist_ok=True)
     log = os.path.join(yollar.cikti(), f"ac-{time.strftime('%H%M%S')}-{os.getpid()}.log")
     with open(log, "w") as fp:
-        _baslat(au, komut, fp, env, kopya)
+        _baslat(au, komut, fp, env, kopya, ev=ev)
     gunluk(f"ac | {ad} | {' '.join(komut)}")
     print(_("başlatıldı: {ad}").format(ad=ad), file=sys.stderr)
     t0 = time.monotonic()

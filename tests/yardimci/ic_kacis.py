@@ -75,7 +75,7 @@ r["tmp_soket_var"] = os.path.exists(y["tmp_soket"])
 r["gercek_bus"] = os.path.exists(f"/run/user/{uid}/bus")
 r["ice"] = os.path.exists("/tmp/.ICE-unix")
 
-# ---- HOME: katman (yazılanlar atılır), veri klasörü yazılır, içindeki gizli dizin salt okunur
+# ---- HOME: boş tmpfs + beyaz liste (yazılanlar atılır), veri klasörü yazılır, içindeki gizli dizin salt okunur
 
 
 def yaz(yol, icerik="dh12c\n", kip="w"):
