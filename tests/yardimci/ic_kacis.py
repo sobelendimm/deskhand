@@ -119,6 +119,13 @@ except OSError as e:
     r["veri_soketi"] = hata_adi(e)
 finally:
     s.close()
+# sır yolları: okunamamalı (dizin boş tmpfs, dosya /dev/null)
+r["sir"] = {}
+for y_ in y.get("sirlar", []):
+    try:
+        r["sir"][y_] = sorted(os.listdir(y_)) if os.path.isdir(y_) else open(y_, errors="replace").read()
+    except OSError as e:
+        r["sir"][y_] = hata_adi(e)
 r["kopya_kok"] = sorted(os.listdir(y["kopya_kok"])) if y.get("kopya_kok") and os.path.isdir(y["kopya_kok"]) else None
 for k in ("kopya_ben", "kopya_oteki"):
     if y.get(k):

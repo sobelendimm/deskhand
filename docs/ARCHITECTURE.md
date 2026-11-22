@@ -289,6 +289,17 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     derinlik 6, en dıştakiler) salt okunur örtülür; bu sayı 3000'i aşan klasör bütünüyle salt okunur bağlanır. Ev
     dizinindeki (derinlik 4) ve veri klasörlerindeki soket/FIFO'lar + bilinenler (`~/.steam/steam.pipe`) `/dev/null` ile
     maskelenir (ölçüldü: katman üstünden gerçek sokete/FIFO'ya zaten bağlanılamıyor; maske ikinci hat).
+  - **Sır yolları OKUNAMAZ** (`arka_ortak.SIR_YOLLARI`, tek sabit liste; glob olabilir): `~/.ssh`, `~/.gnupg`,
+    `~/.local/share/keyrings`, `~/.local/share/kwalletd`, `~/.password-store`, gerçek Firefox profilleri
+    (`~/.config/mozilla`, `~/.mozilla`), Chromium ailesi profil kökleri (`~/.config/chromium`, `google-chrome*`,
+    `vivaldi*`, `BraveSoftware`, `microsoft-edge*`), ajan/bulut/depo kimlik bilgileri (`~/.claude`, `~/.claude.json`,
+    `~/.config/gh`, `~/.git-credentials`, `~/.netrc`, `~/.aws`, `~/.docker/config.json`, `~/.config/rclone`, `~/.kube`),
+    Deskhand'in kendi ayar/günlüğü (`~/.config/deskhand`, `~/.local/state/deskhand`) ve Flatpak uygulama verileri
+    (`~/.var/app`). Dizin → boş tmpfs (uygulama yazabilir, atılır), dosya → `/dev/null`; sembolik bağsa (ör.
+    profile-sync-daemon) HEDEFİ örtülür (hedef ad alanında zaten boş olan /run/user ya da /tmp'deyse gerek yok). Örtü
+    veri klasörü bağlarından SONRA, oturum kopyası ondan da SONRA bağlanır: arka plan Firefox'u kendi kopyasıyla
+    (`--profile <kopya>`, `XDG_CONFIG_HOME=<kopya>/.xdg-config`), Flatpak Electron kopyası `--filesystem=<kopya>` + XDG_*
+    ile çalışır (ölçüldü: Firefox iki türde açılıyor/indiriyor; Flatpak çalışma zamanı ad alanında açılıyor).
   - **Geri bağlananlar** yalnız oturumun kendi yolları (`uygulama_baglari`: kendi runtime dizini, özel veri yolu ve
     Wayland soketi, erişilebilirlik veri yolu, kendi X soketi + Xauthority salt okunur) ve oturum kopyalarından YALNIZ
     politikanın bu uygulamaya verdiği kopya (`Hazirlik.kopya_yolu` → `baslat(..., kopya=)` → `arka_ortak.kopya_bagi`:
@@ -309,9 +320,10 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     yazılıyor; Qt test penceresi; tık/yazı süreleri değişmedi. Ayrıntı `tests/test_denetim12c.py`.
 
   **Neyi korumaz (bilerek / kalan riskler):**
-  - **Okuma:** uygulama kullanıcının dosyalarını OKUYABİLİR (ev dizini dahil: belgeler, `~/.ssh` anahtar dosyaları,
-    başka uygulamaların profilleri, tarayıcı çerez veritabanları). Ad alanı yazmayı ve oturumlara/süreçlere/aygıtlara
-    erişimi keser, okumayı kesmez; hangi uygulamanın arka planda açılacağı oturum politikasının (kopya/bekle/kapali/on)
+  - **Okuma:** uygulama kullanıcının dosyalarını OKUYABİLİR (belgeler, veri klasörleri, SIR_YOLLARI dışındaki her
+    şey: listede olmayan uygulamaların ayar/oturum dosyaları, ör. Telegram/Discord yerel verisi, `~/.config` altındaki
+    diğer jetonlar). Sır listesi bilinen yerleri örter; tam liste değildir. Ad alanı yazmayı ve oturumlara/süreçlere/
+    aygıtlara erişimi keser; hangi uygulamanın arka planda açılacağı oturum politikasının (kopya/bekle/kapali/on)
     işidir.
   - **Veri klasörleri yazılabilir:** uygulama `~/İndirilenler`, `~/Belgeler`, `~/Projeler`… içindeki NORMAL dosyaları
     değiştirebilir/silebilir; YENİ gizli girdi oluşturabilir (ör. `.git`'i olmayan bir alt dizinde yeni `.git/` ya da

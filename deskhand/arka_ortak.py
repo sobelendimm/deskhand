@@ -463,6 +463,43 @@ def ev_soketleri(ev: str | None = None) -> list[str]:
     return sorted(bulunan)
 
 
+# Ad alanında OKUNAMAYAN sır yolları (ev dizinine göreli; glob olabilir): dizin → boş tmpfs (uygulama yazabilir,
+# atılır), dosya → /dev/null. Uygulamanın kendi oturum kopyası bu örtünün ÜSTÜNE bağlanır (korumali_argv sırası).
+# Yeni öge eklemek için listeye bir satır yeter.
+SIR_YOLLARI = (
+    ".ssh", ".gnupg", ".local/share/keyrings", ".local/share/kwalletd", ".password-store",
+    ".config/mozilla", ".mozilla",                                     # gerçek Firefox profilleri (arka plan: kopya)
+    ".config/chromium", ".config/google-chrome*", ".config/vivaldi*", ".config/BraveSoftware",
+    ".config/microsoft-edge*",                                         # Chromium ailesi profil kökleri
+    ".claude", ".claude.json", ".config/gh", ".git-credentials", ".netrc", ".aws", ".docker/config.json",
+    ".config/rclone", ".kube",                                         # ajan / bulut / depo kimlik bilgileri
+    ".config/deskhand", ".local/state/deskhand",                      # Deskhand'in kendi ayar ve günlüğü
+    ".var/app",                                                        # Flatpak uygulama verileri (Electron: kopya)
+)
+
+
+def sir_yollari(ev: str | None = None) -> list[str]:
+    """SIR_YOLLARI'nın ev dizininde VAR olanları (glob açılmış, sıralı). Sembolik bağsa (ör. profile-sync-daemon
+    profili tmpfs'e taşır) HEDEFİ örtülür (bwrap bağ üstüne bağlayamaz); hedef ad alanında zaten boş olan yerdeyse
+    (/run/user/UID, /tmp) gerek yok."""
+    import glob
+    ev = ev or gercek_ev()
+    gizli = (f"/run/user/{os.getuid()}", "/tmp")
+    sonuc: list[str] = []
+    for d in SIR_YOLLARI:
+        for y in sorted(glob.glob(os.path.join(glob.escape(ev), d))):
+            if os.path.islink(y):
+                y = os.path.realpath(y)
+                if not os.path.exists(y) or y in ("/", ev) or \
+                        (any(_ic_ice(y, g) for g in gizli) and not _ic_ice(y, ev)):
+                    continue
+            elif not os.path.lexists(y) or not _ic_ice(y, ev) or y == ev:
+                continue
+            if y not in sonuc:
+                sonuc.append(y)
+    return sonuc
+
+
 _KATMAN: dict[str, bool] = {}
 
 
@@ -494,7 +531,8 @@ def ev_baglari(ev: str | None = None) -> tuple[list[str], dict]:
     maskelenir."""
     ev = ev or gercek_ev()
     a: list[str] = []
-    bilgi: dict = {"katman": katman_destekli(ev), "yazilabilir": [], "salt_okunur_klasor": [], "nokta": 0, "maske": 0}
+    bilgi: dict = {"katman": katman_destekli(ev), "yazilabilir": [], "salt_okunur_klasor": [], "nokta": 0, "maske": 0,
+                   "sir": []}
     if bilgi["katman"]:
         a += ["--overlay-src", ev, "--tmp-overlay", ev]
     else:
@@ -520,6 +558,9 @@ def ev_baglari(ev: str | None = None) -> tuple[list[str], dict]:
         if _ic_ice(y, ev):
             a += ["--ro-bind", "/dev/null", y]
             bilgi["maske"] += 1
+    for y in sir_yollari(ev):  # EN SON: veri klasörü bağlarının da üstüne (oturum kopyası bundan SONRA bağlanır)
+        a += ["--tmpfs", y] if os.path.isdir(y) else ["--ro-bind", "/dev/null", y]
+        bilgi["sir"].append(y)
     return a, bilgi
 
 

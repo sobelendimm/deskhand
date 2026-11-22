@@ -146,6 +146,20 @@ with open(os.path.join(EV, ".bashrc"), "w") as f:
 with open(os.path.join(EV, "Belgeler/proje/.git/config"), "w") as f:
     f.write("[core]\n")
 os.mkfifo(os.path.join(EV, ".steam/steam.pipe"))
+# sır yolları (arka_ortak.SIR_YOLLARI): ad alanında okunamamalı
+SIRLAR = {".ssh/id_ed25519": "GIZLI-ANAHTAR", ".config/mozilla/firefox/profiles.ini": "GIZLI-PROFIL",
+          ".mozilla/firefox/x.default/cookies.sqlite": "GIZLI-CEREZ", ".config/google-chrome-beta/Default/Cookies": "GIZLI",
+          ".claude.json": "GIZLI-JETON", ".config/gh/hosts.yml": "GIZLI-GH", ".var/app/com.example.X/data/x": "GIZLI-FP",
+          ".config/deskhand/ayar": "GIZLI-DH", ".netrc": "GIZLI-NETRC", ".docker/config.json": "GIZLI-DOCKER"}
+for y_, v_ in SIRLAR.items():
+    os.makedirs(os.path.dirname(os.path.join(EV, y_)), exist_ok=True)
+    with open(os.path.join(EV, y_), "w") as f:
+        f.write(v_)
+# sembolik bağ olan profil kökü (profile-sync-daemon gibi): hedefi örtülmeli
+os.makedirs(os.path.join(EV, ".psd-chromium/Default"))
+with open(os.path.join(EV, ".psd-chromium/Default/Cookies"), "w") as f:
+    f.write("GIZLI-PSD")
+os.symlink("../.psd-chromium", os.path.join(EV, ".config/chromium"))
 ao._EV_ZORLA = EV
 vk = ao.veri_klasorleri()
 kontrol("veri klasörleri: yalnız ev İÇİNDEKİ, gizli olmayan klasörler (ev kökü, .gizli, /, ../ dışarı reddedilir)",
@@ -209,7 +223,9 @@ try:
     ana = [os.getpid(), uyku.pid, sunucu, d["pid"]["dbus"]]
     ad = f"{os.getpid()}{int(time.time()) % 100000}"
     yap = {"ev": EV, "uyku": uyku.pid, "ana": ana, "rt": os.path.realpath(RT), "tmp_soket": tmp_soket, "ad": ad,
-           "gercek_ev": gercek_ev, "kopya_kok": KOPYA, "kopya_ben": kA, "kopya_oteki": kB}
+           "gercek_ev": gercek_ev, "kopya_kok": KOPYA, "kopya_ben": kA, "kopya_oteki": kB,
+           "sirlar": [os.path.join(EV, y_) for y_ in SIRLAR] + [os.path.join(EV, ".ssh"), os.path.join(EV, ".var/app"),
+                                                         os.path.join(EV, ".config/chromium/Default/Cookies")]}
     t = time.monotonic()
     # Y6: komut satırında B'nin kopyası GEÇİYOR ama politika A'yı verdi → yalnız A bağlanır
     p = masaustu.baslat([sys.executable, "-I", IC, json.dumps(yap), f"--user-data-dir={kB}"],
@@ -267,6 +283,13 @@ try:
     kontrol(f"HOME ({TUR}): ad alanında görünen gerçek ev dizini de salt okunur (sahte ev dışında)",
             y_["gercek_ev_config"] in ("EROFS", "EACCES") and
             not os.path.exists(os.path.join(gercek_ev, ".config", f"dh12c-{ad}.tmp")), y_["gercek_ev_config"])
+    # sır yolları
+    sizan = {k_: v_ for k_, v_ in ic["sir"].items() if isinstance(v_, str) and "GIZLI" in v_ or
+             (isinstance(v_, list) and v_)}
+    kontrol(f"SIR ({TUR}): ~/.ssh, Firefox/Chromium profilleri, .claude.json, gh, .netrc, docker, .var/app, "
+            "~/.config/deskhand ad alanında OKUNAMAZ", not sizan and len(ic["sir"]) == len(SIRLAR) + 3, str(sizan))
+    kontrol(f"SIR ({TUR}): sır dosyaları ana makinede bozulmadı",
+            all(open(os.path.join(EV, y_)).read() == v_ for y_, v_ in SIRLAR.items()))
     # Y6
     kontrol(f"Y6 ({TUR}): politikanın verdiği kopya görünür, komut satırında geçen BAŞKA kopya görünmez",
             ic["kopya_ben"] and not ic["kopya_oteki"] and ic["kopya_kok"] == ["firefox-dh12cA"], str(ic["kopya_kok"]))
