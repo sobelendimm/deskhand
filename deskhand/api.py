@@ -557,7 +557,11 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     with open(log, "w") as fp:
         onayli_program_denetle()  # onaylı kullanıcı girdisinin programı onaydan sonra değiştiyse başlatılmaz (10)
         from .uygulama import _baslat
-        _baslat(au, argv, fp, env, kopya)  # arka planda: masaustu.baslat → arka_ortak.korumali_baslat (bwrap)
+        # onaylı kullanıcı girdisinin özel kopyası (`gio launch KOPYA`): arka planda ad alanına salt okunur bağlanır
+        girdi = argv[2] if len(argv) > 2 and argv[:2] == ["gio", "launch"] and \
+            os.path.dirname(os.path.realpath(argv[2])) == os.path.realpath(os.path.join(yollar.runtime_dir(),
+                                                                                         "uygulama")) else None
+        _baslat(au, argv, fp, env, kopya, girdi)  # arka planda: masaustu.baslat → arka_ortak.korumali_baslat (bwrap)
     gunluk(f"ac | {ad} | {shlex.join(argv)}" + (f" | env {sorted(env)}" if env else ""))
     t0 = time.monotonic()
     while time.monotonic() - t0 < sure:

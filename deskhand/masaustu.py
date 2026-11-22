@@ -929,12 +929,14 @@ def masaustu_durdur() -> tuple[bool, list[str]]:
 
 # ---------------------------------------------------------------- uygulama başlatma
 
-def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, **popen) -> subprocess.Popen:
+def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, girdi: str | None = None,
+           **popen) -> subprocess.Popen:
     """Uygulamayı arka plan masaüstünde başlat: ortam uygulama_ortami(d, env) (xvfb: DISPLAY + x11 arka uçları,
     WAYLAND_DISPLAY var olmayan yol; kwin: oturumun Wayland soketi + Wayland arka uçları, X11 isteyenler oturumun
     XWayland'ine), özel DBUS_SESSION_BUS_ADDRESS, sessiz ses çıkışı; süreç bellek kafesinin içinde (nice 10, ionice
     idle). env: os.environ'a eklenecek/değişecek değişkenler (masaüstü değerleri her zaman üstün). kopya: oturum
-    politikasının bu uygulama için hazırladığı kopya (Hazirlik.kopya_yolu): ad alanına YALNIZ o bağlanır."""
+    politikasının bu uygulama için hazırladığı kopya (Hazirlik.kopya_yolu): ad alanına YALNIZ o bağlanır. girdi:
+    onaylı kullanıcı girdisinin özel .desktop kopyası (salt okunur bağlanır; arka_ortak.girdi_kopyasi_bagi)."""
     d = baglanti_denetle(gerekli())  # kapı: yollar çalışma dizininden, karşı taraf doğrulanmış
     if not argv or not (shutil.which(argv[0]) or os.path.isfile(argv[0])):
         raise Dur(ARAC_EKSIK, _("başlatılamadı: {komut} bulunamadı").format(komut=argv[0] if argv else _("(boş komut)")))
@@ -951,7 +953,8 @@ def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, *
         # PULSE_SERVER'ı kendi soketine EZER (ölçüldü) → ses kullanıcının kulaklığına giderdi
         argv.insert(argv.index("run") + 1, "--nosocket=pulseaudio")
     try:
-        return korumali_baslat(d, argv, uygulama_ortami(d, env), uygulama_baglari(d), kopya=kopya, **popen)
+        return korumali_baslat(d, argv, uygulama_ortami(d, env), uygulama_baglari(d), kopya=kopya, girdi=girdi,
+                               **popen)
     except FileNotFoundError as e:
         raise Dur(ARAC_EKSIK, _("başlatılamadı: {hata}").format(hata=e))
     finally:

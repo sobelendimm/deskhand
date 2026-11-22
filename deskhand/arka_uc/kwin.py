@@ -417,12 +417,13 @@ class KwinArkaUc(ArkaUc):
         return set(linux_tuslari()) | set(DEGISTIRICI)
 
     # -------- uygulama
-    def baslat(self, argv: list[str], env: dict | None = None, cikti=None, kopya: str | None = None):
+    def baslat(self, argv: list[str], env: dict | None = None, cikti=None, kopya: str | None = None,
+               girdi: str | None = None):
         """Arka plan masaüstünde (kafes + oturum ortamı: Wayland yerel, X11 isteyenler oturumun XWayland'ine).
         kopya: oturum politikasının kopyası (ad alanına yalnız o bağlanır)."""
         if cikti is not None:
-            return masaustu.baslat(argv, env, kopya=kopya, stdout=cikti, stderr=cikti)
-        return masaustu.baslat(argv, env, kopya=kopya)
+            return masaustu.baslat(argv, env, kopya=kopya, girdi=girdi, stdout=cikti, stderr=cikti)
+        return masaustu.baslat(argv, env, kopya=kopya, girdi=girdi)
 
     def oturum_veri_yolu(self) -> str | None:
         return self._d().get("dbus_adres") or None
@@ -663,9 +664,9 @@ class KwinGirdi:
         self.son_etk = time.monotonic()
 
     # -------- gözcü
-    def izle(self, k: str, desen: str | None) -> None:
+    def izle(self, k: str, desen: str | None, fare_izle: bool = True) -> None:
         """Yazı GÖZCÜSÜ (~12 ms, yoklama başına 1-2 kdotool çağrısı ~1,6 ms): etkin pencere, başlık,
-        DUR, Devral. DUR'u görünce bu nesnenin basılı tuttuklarını HEMEN bırakır. Değişince bayrak kalkar; ham() bir
+        DUR, Devral (fare izlenmez: fare_izle yalnız arayüz uyumu — sürükleme kde ile aynı imzayla çağırır). DUR'u görünce bu nesnenin basılı tuttuklarını HEMEN bırakır. Değişince bayrak kalkar; ham() bir
         sonraki satırdan (harften) önce durur."""
         self.izle_bitir()
         self.kesildi = None

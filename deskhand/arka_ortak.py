@@ -475,6 +475,18 @@ SIR_YOLLARI = (
     ".config/rclone", ".kube",                                         # ajan / bulut / depo kimlik bilgileri
     ".config/deskhand", ".local/state/deskhand",                      # Deskhand'in kendi ayar ve günlüğü
     ".var/app",                                                        # Flatpak uygulama verileri (Electron: kopya)
+    ".local/share/TelegramDesktop", ".config/discord*", ".config/Signal", ".config/Element*", ".config/Slack",
+    ".config/WhatsApp*", ".config/teams*", ".config/Mattermost",      # mesajlaşma oturumları
+    ".steam/steam/config", ".local/share/Steam/config", ".local/share/Steam/ssfn*", ".config/heroic",
+    ".config/lutris",                                                  # oyun platformu hesap jetonları
+    ".config/kdeconnect",                                              # KDE Connect eşleşme anahtarları
+    ".config/qBittorrent", ".var/app/org.qbittorrent.qBittorrent",     # qBittorrent (WebUI parolası)
+    ".config/syncthing", ".local/state/syncthing",                     # Syncthing aygıt anahtarı / API anahtarı
+    ".config/obs-studio/basic/profiles",                               # OBS yayın anahtarı
+    ".config/rustdesk",                                                # uzak masaüstü kimliği/parolası
+    ".thunderbird", ".config/filezilla", ".config/remmina", ".local/share/remmina",  # e-posta / FTP / uzak bağlantı
+    ".npmrc", ".pypirc", ".cargo/credentials", ".cargo/credentials.toml",  # paket deposu jetonları
+    ".bash_history", ".zsh_history", ".local/share/fish/fish_history",  # kabuk geçmişi (komutlarda jeton olabilir)
 )
 
 
@@ -497,7 +509,8 @@ def sir_yollari(ev: str | None = None) -> list[str]:
                 continue
             if y not in sonuc:
                 sonuc.append(y)
-    return sonuc
+    # zaten örtülen bir dizinin İÇİNDEKİ yol ayrıca bağlanmaz (ör. .var/app altındaki bir uygulama): üst örtü yeter
+    return [y for y in sonuc if not any(u != y and _ic_ice(y, u) for u in sonuc)]
 
 
 _KATMAN: dict[str, bool] = {}
@@ -642,17 +655,37 @@ def kopya_bagi(kopya: str | None, kok: str) -> list[tuple[str, bool]]:
     return [(os.path.realpath(kopya), False)]
 
 
+def girdi_kopyasi_bagi(yol: str | None) -> list[tuple[str, bool]]:
+    """MCP open_app'in onaylı kullanıcı girdisi için yazdığı ÖZEL .desktop kopyası (uygulama._ozel_kopya: RUNTIME_DIR/
+    uygulama/, 0600) → SALT OKUNUR bağ (ad alanında RUNTIME_DIR boş tmpfs: `gio launch KOPYA` onu görmeli). Yalnız o
+    dizinin DOĞRUDAN çocuğu, kullanıcıya ait, sembolik bağ olmayan düz `.desktop` dosyası; başka yol Dur 14."""
+    if not yol:
+        return []
+    import stat as _stat
+    from . import yollar
+    kok = os.path.realpath(os.path.join(yollar.runtime_dir(), "uygulama"))
+    try:
+        st = os.lstat(yol)
+    except OSError:
+        st = None
+    if st is None or not _stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or not yol.endswith(".desktop") or \
+            os.path.dirname(os.path.realpath(yol)) != kok:
+        raise Dur(14, _("uygulama girdisi kopyası geçersiz: {yol}").format(yol=yol))
+    return [(os.path.realpath(yol), True)]
+
+
 def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str, bool]], kopya: str | None = None,
-                    **popen) -> subprocess.Popen:
+                    girdi: str | None = None, **popen) -> subprocess.Popen:
     """Arka plan UYGULAMASINI başlatmanın TEK yolu (iki tür): bwrap ad alanı (korumali_argv) + bellek kafesi + düşük
-    öncelik. kopya: oturum politikasının hazırladığı kopya dizini (yalnız o bağlanır, kopya_bagi). bwrap yoksa ya da
+    öncelik. kopya: oturum politikasının hazırladığı kopya dizini (yalnız o bağlanır, kopya_bagi); girdi: onaylı
+    girdinin özel .desktop kopyası (salt okunur, girdi_kopyasi_bagi). bwrap yoksa ya da
     güvenli yolda değilse Dur(9): yalıtımsız başlatma yok. Yardımcı zincir güvenli PATH ile çalışır; uygulamanın PATH'i
     yalnız son komuta gider."""
     if not bwrap_var():
         raise Dur(ARAC_EKSIK, _("bwrap (bubblewrap) yok: arka plan uygulaması yalıtılamaz, başlatılmadı"))
     from . import yollar
     from .oturum import politika
-    baglar = [*baglar, *kopya_bagi(kopya, politika.kopya_dizini())]
+    baglar = [*baglar, *kopya_bagi(kopya, politika.kopya_dizini()), *girdi_kopyasi_bagi(girdi)]
     popen.setdefault("stdin", subprocess.DEVNULL)
     dis = {k: v for k, v in env.items() if k not in SON_KOMUT_ORTAMI}
     dis["PATH"] = GUVENLI_PATH

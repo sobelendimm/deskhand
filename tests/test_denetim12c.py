@@ -150,7 +150,14 @@ os.mkfifo(os.path.join(EV, ".steam/steam.pipe"))
 SIRLAR = {".ssh/id_ed25519": "GIZLI-ANAHTAR", ".config/mozilla/firefox/profiles.ini": "GIZLI-PROFIL",
           ".mozilla/firefox/x.default/cookies.sqlite": "GIZLI-CEREZ", ".config/google-chrome-beta/Default/Cookies": "GIZLI",
           ".claude.json": "GIZLI-JETON", ".config/gh/hosts.yml": "GIZLI-GH", ".var/app/com.example.X/data/x": "GIZLI-FP",
-          ".config/deskhand/ayar": "GIZLI-DH", ".netrc": "GIZLI-NETRC", ".docker/config.json": "GIZLI-DOCKER"}
+          ".config/deskhand/ayar": "GIZLI-DH", ".netrc": "GIZLI-NETRC", ".docker/config.json": "GIZLI-DOCKER",
+          # tur6: mesajlaşma, oyun platformu, eşleşme anahtarı, WebUI parolası, yayın anahtarı, e-posta, geçmiş
+          ".local/share/TelegramDesktop/tdata/key_datas": "GIZLI-TG", ".config/discordcanary/Local State": "GIZLI-DC",
+          ".config/Signal/config.json": "GIZLI-SIGNAL", ".local/share/Steam/config/loginusers.vdf": "GIZLI-STEAM",
+          ".local/share/Steam/ssfn4242": "GIZLI-SSFN", ".config/kdeconnect/privateKey.pem": "GIZLI-KDEC",
+          ".config/qBittorrent/qBittorrent.conf": "GIZLI-QBT", ".config/syncthing/key.pem": "GIZLI-ST",
+          ".config/obs-studio/basic/profiles/P/service.json": "GIZLI-OBS", ".config/rustdesk/RustDesk.toml": "GIZLI-RD",
+          ".thunderbird/x.default/logins.json": "GIZLI-TB", ".npmrc": "GIZLI-NPM", ".bash_history": "GIZLI-GECMIS"}
 for y_, v_ in SIRLAR.items():
     os.makedirs(os.path.dirname(os.path.join(EV, y_)), exist_ok=True)
     with open(os.path.join(EV, y_), "w") as f:
@@ -288,6 +295,35 @@ try:
              (isinstance(v_, list) and v_)}
     kontrol(f"SIR ({TUR}): ~/.ssh, Firefox/Chromium profilleri, .claude.json, gh, .netrc, docker, .var/app, "
             "~/.config/deskhand ad alanında OKUNAMAZ", not sizan and len(ic["sir"]) == len(SIRLAR) + 3, str(sizan))
+    yeni_sir = [y_ for y_ in SIRLAR if "GIZLI-" in SIRLAR[y_] and SIRLAR[y_] not in (
+        "GIZLI-ANAHTAR", "GIZLI-PROFIL", "GIZLI-CEREZ", "GIZLI", "GIZLI-JETON", "GIZLI-GH", "GIZLI-FP", "GIZLI-DH",
+        "GIZLI-NETRC", "GIZLI-DOCKER")]
+    kontrol(f"SIR ({TUR}): tur6 eklenen {len(yeni_sir)} yol (Telegram, Discord, Signal, Steam, KDE Connect, "
+            "qBittorrent, Syncthing, OBS, RustDesk, Thunderbird, npm, geçmiş) ad alanında OKUNAMAZ",
+            len(yeni_sir) >= 5 and all(not (isinstance(ic["sir"].get(os.path.join(EV, y_)), str) and
+                                            "GIZLI" in ic["sir"][os.path.join(EV, y_)]) for y_ in yeni_sir),
+            str({y_: ic["sir"].get(os.path.join(EV, y_)) for y_ in yeni_sir}))
+    # onaylı kullanıcı girdisinin özel .desktop kopyası (RUNTIME_DIR/uygulama/): ad alanında SALT OKUNUR görünür
+    ud = os.path.join(yollar.runtime_dir(), "uygulama")
+    os.makedirs(ud, mode=0o700, exist_ok=True)
+    gk = os.path.join(ud, f"dh12c-{ad}.desktop")
+    with open(gk, "w") as f:
+        f.write("[Desktop Entry]\nExec=true\n")
+    komsu = os.path.join(ud, f"dh12c-komsu-{ad}.desktop")
+    with open(komsu, "w") as f:
+        f.write("KOMSU")
+    p = masaustu.baslat([sys.executable, "-I", "-c", "import json,os,sys\ng,k=sys.argv[1:]\nr=[open(g).read()[:15]]\n"
+                         "try:\n open(g,'a').write('x'); r.append('YAZILDI')\nexcept OSError as e: r.append(e.errno)\n"
+                         "r.append(os.path.exists(k))\nprint(json.dumps(r))", gk, komsu], girdi=gk,
+                        stdout=subprocess.PIPE)
+    o3 = json.loads(p.communicate(timeout=30)[0].decode().strip().splitlines()[-1])
+    kontrol(f"GİRDİ KOPYASI ({TUR}): `gio launch KOPYA` için özel .desktop kopyası ad alanında okunur, SALT OKUNUR; "
+            "aynı dizindeki başka dosya görünmez", o3[0] == "[Desktop Entry]" and o3[1] != "YAZILDI" and o3[2] is False,
+            str(o3))
+    kontrol(f"GİRDİ KOPYASI ({TUR}): RUNTIME_DIR/uygulama dışındaki yol girdi olarak verilemez (Dur 14)",
+            dur_kodu(masaustu.baslat, ["/usr/bin/true"], None, girdi=os.path.join(EV, ".bashrc")) == 14)
+    os.remove(gk)
+    os.remove(komsu)
     kontrol(f"SIR ({TUR}): sır dosyaları ana makinede bozulmadı",
             all(open(os.path.join(EV, y_)).read() == v_ for y_, v_ in SIRLAR.items()))
     # Y6

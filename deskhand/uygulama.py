@@ -669,11 +669,14 @@ def tum_pencereler():
     return set(kimlikler()) if kimlikler else {w for w, _, _ in au.pencereler()}
 
 
-def _baslat(au, komut, fp, env=None, kopya=None):
+def _baslat(au, komut, fp, env=None, kopya=None, girdi=None):
     """Arka ucun oturumunda başlat; arka uç çıktı dosyası destekliyorsa stdout/stderr oraya. kopya: oturum
-    politikasının kopyası (yalnız arka plan arka uçları alır; ad alanına yalnız o bağlanır)."""
+    politikasının kopyası (yalnız arka plan arka uçları alır; ad alanına yalnız o bağlanır); girdi: onaylı kullanıcı
+    girdisinin özel .desktop kopyası (arka planda ad alanına salt okunur bağlanır: RUNTIME_DIR orada boştur)."""
     p = inspect.signature(au.baslat).parameters
     ek = {"kopya": kopya} if kopya and "kopya" in p else {}
+    if girdi and "girdi" in p:
+        ek["girdi"] = girdi
     if "cikti" in p:
         return au.baslat(komut, env=env, cikti=fp, **ek)
     return au.baslat(komut, env=env, **ek)
