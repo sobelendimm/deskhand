@@ -269,7 +269,9 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   pipewire/pulse, kwallet, gnupg, ssh, xauth, at-spi, portal soketleri) ve Deskhand'in RUNTIME_DIR'i (girdi.sock,
   sanal.json, diğer oturumlar) boş tmpfs ile örtülür, `/tmp/.X11-unix` boşaltılır; yalnız oturumun gerekenleri geri
   bağlanır (kendi runtime dizini, özel veri yolu ve Wayland soketi, erişilebilirlik veri yolu, kendi X soketi +
-  Xauthority salt okunur, oturum kopyaları dizini). `--die-with-parent` YOK (masaüstü CLI'den uzun yaşar); kafes ve
+  Xauthority salt okunur) ve oturum kopyalarından YALNIZ uygulamanın kendi kopyası (`arka_ortak.kopya_baglari`: komut
+  satırında ya da ortamında geçen `<kopya kökü>/<ad>` dizinleri, ör. Firefox `--profile`, `XDG_CONFIG_HOME`; Flatpak
+  örnek kaydı dosyası) — başka uygulamanın kopyası ve kopya kökünün geri kalanı görünmez. `--die-with-parent` YOK (masaüstü CLI'den uzun yaşar); kafes ve
   PID temizliği aynen. bwrap yoksa uygulama başlatılmaz (Dur 9). Ölçüldü: Firefox (boş geçici profil) iki türde açılıyor,
   sayfa yüklüyor, erişilebilirlik ağacı sunuyor; ad alanı içinde iç içe bwrap ve `flatpak run` (sistem çalışma zamanı)
   çalışıyor → Flatpak uygulamaları da ad alanında. Soyut (abstract) unix soketleri paylaşılır (ağ ad alanı paylaşılıyor:

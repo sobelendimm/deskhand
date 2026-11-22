@@ -958,15 +958,15 @@ def baslat(argv: list[str], env: dict | None = None, **popen) -> subprocess.Pope
 
 def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
     """Uygulamanın bwrap ad alanında görebileceği masaüstü yolları (iki tür): kwin → kwin_oturum.uygulama_baglari;
-    xvfb → kendi runtime dizini, özel veri yolu soketi, X soketi + Xauthority (salt okunur), oturum kopyaları."""
+    xvfb → kendi runtime dizini, özel veri yolu soketi, X soketi + Xauthority (salt okunur). Oturum kopyası
+    korumali_baslat'ta komuta göre eklenir (yalnız uygulamanın kendi kopyası)."""
     if tur(g) == "kwin":
         from . import kwin_oturum
         return kwin_oturum.uygulama_baglari(g)
-    from .oturum import politika
     from .arka_ortak import uygulama_runtime
     c = g["calisma"]
     return [(uygulama_runtime(c), False), (os.path.join(c, "bus"), False), (f"/tmp/.X11-unix/X{g['no']}", False),
-            (os.path.join(c, XAUTH_DOSYA), True), (politika.kopya_dizini(), False)]
+            (os.path.join(c, XAUTH_DOSYA), True)]  # oturum kopyası: yalnız KENDİSİNİNKİ (korumali_baslat)
 
 
 def _flatpak_run_mi(argv: list[str]) -> bool:

@@ -287,12 +287,34 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
     return [*a, "--", *argv]
 
 
+def kopya_baglari(argv: list[str], env: dict, kok: str) -> list[tuple[str, bool]]:
+    """Uygulamanın KENDİ oturum kopyaları: komut satırında ya da ortamında geçen `<kopya kökü>/<ad>` dizinleri (Firefox
+    `--profile <kopya>`, `XDG_CONFIG_HOME=<kopya>/.xdg-config`…) ve Flatpak örnek kaydı dosyası. Kökün kendisi ve başka
+    kopyalar BAĞLANMAZ: bir uygulama ötekinin kopyasını göremez."""
+    sonuc, gorulen = [], set()
+    rx = re.compile(re.escape(os.path.realpath(kok).rstrip("/")) + r"/([^/\s:=,;]+)")
+    for metin in [*argv, *(v for v in env.values() if isinstance(v, str))]:
+        for m in rx.finditer(os.path.realpath(metin) if os.path.isabs(metin) else metin):
+            yol = os.path.join(os.path.realpath(kok), m.group(1))
+            if yol in gorulen or m.group(1) in (".", ".."):
+                continue
+            gorulen.add(yol)
+            if os.path.isdir(yol) and not os.path.islink(yol):
+                sonuc.append((yol, False))
+            elif os.path.isfile(yol) and yol.endswith(".json"):  # Flatpak örnek kaydı (sarmalayıcı yazar)
+                sonuc.append((yol, False))
+    return sonuc
+
+
 def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str, bool]], **popen) -> subprocess.Popen:
     """Arka plan UYGULAMASINI başlatmanın TEK yolu (iki tür): bwrap ad alanı (korumali_argv) + bellek kafesi + düşük
-    öncelik. bwrap yoksa Dur(9): yalıtımsız başlatma yok."""
+    öncelik. Oturum kopyası dizininden YALNIZ bu uygulamanın kendi kopyası bağlanır (kopya_baglari). bwrap yoksa Dur(9):
+    yalıtımsız başlatma yok."""
     if not bwrap_var():
         raise Dur(ARAC_EKSIK, _("bwrap (bubblewrap) yok: arka plan uygulaması yalıtılamaz, başlatılmadı"))
     from . import yollar
+    from .oturum import politika
+    baglar = [*baglar, *kopya_baglari(list(argv), env, politika.kopya_dizini())]
     popen.setdefault("stdin", subprocess.DEVNULL)
     return kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar), env, **popen)
 

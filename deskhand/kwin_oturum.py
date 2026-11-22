@@ -39,7 +39,6 @@ import shutil
 import signal
 import socket
 import subprocess
-import sys
 import time
 
 from . import arka_ortak as ao
@@ -977,16 +976,15 @@ def temizle_kalintilar() -> list[str]:
 
 def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
     """Uygulamanın bwrap ad alanında görebileceği oturum yolları ((yol, salt_okunur)): kendi runtime dizini, özel veri
-    yolu soketi, Wayland soketi, erişilebilirlik veri yolu, XWayland soketi + Xauthority (salt okunur), oturum
-    kopyaları (Firefox/Electron profil kopyası, Flatpak kaydı). Başka hiçbir şey (oturum.json, kwin.log, ev/) yok."""
-    from .oturum import politika
+    yolu soketi, Wayland soketi, erişilebilirlik veri yolu, XWayland soketi + Xauthority (salt okunur). Başka hiçbir
+    şey (oturum.json, kwin.log, ev/, BAŞKA uygulamaların oturum kopyaları) yok; uygulamanın kendi kopyası
+    korumali_baslat'ta komutundan eklenir."""
     c = g["calisma"]
     b = [(ao.uygulama_runtime(c), False), (os.path.join(c, "bus"), False), (g["wayland_yol"], False),
          (os.path.join(c, "at-spi"), False)]
     if g.get("x_ana") is not None:
         b += [(f"{X_DIZIN}/X{g['x_ana']}", False), (g["xauth"], True)]
-    b.append((politika.kopya_dizini(), False))
-    return b
+    return b  # oturum kopyası: yalnız uygulamanın KENDİSİNİNKİ (arka_ortak.korumali_baslat, komuttan)
 
 
 def uygulama_baslat(d: dict, argv: list[str], env: dict | None = None, **popen) -> subprocess.Popen:

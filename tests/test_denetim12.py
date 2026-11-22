@@ -174,6 +174,54 @@ masaustu._durum_yaz({"tur": "xvfb", "no": 91, "ekran": ":0", "dbus_adres": GERCE
 kontrol("Xvfb kaydı: dizini olmayan/oynanmış kayıt → durum() None (gerçek adres kullanılmaz)", masaustu.durum() is None)
 os.remove(masaustu.durum_yolu())
 
+# ---------------------------------------------------------------- oturum kopyaları: her uygulama YALNIZ kendi kopyasını görür
+# (arka plan masaüstü türü DESKHAND_ARKA_TUR'a göre: iki türde de koşulur)
+print("\nKopya) oturum kopyası yalıtımı")
+from deskhand.oturum import politika  # noqa: E402
+KOPYA = politika.kopya_dizini()
+os.makedirs(KOPYA, mode=0o700, exist_ok=True)
+kA, kB = os.path.join(KOPYA, "firefox-sahteA"), os.path.join(KOPYA, "chromium-sahteB")
+for k_, ad_ in ((kA, "A"), (kB, "B")):
+    os.makedirs(k_, mode=0o700, exist_ok=True)
+    open(os.path.join(k_, "gizli-cerez.txt"), "w").write(ad_)
+# denetlenecek yollar base64'le verilir: bağlanan kopyalar komut satırında/ortamda GEÇEN yollardan bulunur, test
+# betiğinin kendi argümanları kopya isteği sayılmasın
+GOR = ("import base64, json, os, sys, time\nben, oteki, kok, cikti = (base64.b64decode(a).decode() for a in "
+       "sys.argv[1:5])\ntime.sleep(1.5)\n"
+       "r = {'kendi': os.path.exists(os.path.join(ben, 'gizli-cerez.txt')), 'oteki_var': os.path.exists(oteki),\n"
+       " 'oteki_dosya': os.path.exists(os.path.join(oteki, 'gizli-cerez.txt')), 'kok': sorted(os.listdir(kok)) if os.path.isdir(kok) else None,\n"
+       " 'env_kopya': os.path.isdir(os.environ.get('XDG_CONFIG_HOME', '/yok'))}\n"
+       "json.dump(r, open(cikti, 'w'))\n")
+os.makedirs(os.path.join(kA, ".xdg-config"), exist_ok=True)
+import base64  # noqa: E402
+
+
+def b64(*yollar_):
+    return [base64.b64encode(y.encode()).decode() for y in yollar_]
+dk_ = masaustu.masaustu_baslat("800x600")
+try:
+    raporA, raporB = os.path.join(G, "kopyaA.json"), os.path.join(G, "kopyaB.json")
+    # A: Firefox gibi --profile <kopya> + XDG_CONFIG_HOME=<kopya>/.xdg-config; B: Chromium gibi --user-data-dir=<kopya>
+    pA = masaustu.baslat([sys.executable, "-c", GOR, *b64(kA, kB, KOPYA, raporA), "--profile", kA],
+                         {"XDG_CONFIG_HOME": os.path.join(kA, ".xdg-config")})
+    pB = masaustu.baslat([sys.executable, "-c", GOR, *b64(kB, kA, KOPYA, raporB), f"--user-data-dir={kB}"])
+    pA.wait(30)
+    pB.wait(30)
+    rA, rB = json.load(open(raporA)), json.load(open(raporB))
+    kontrol(f"kopya ({masaustu.tur(dk_)}): A kendi kopyasını görür, B'ninkini GÖREMEZ (dizin yok)",
+            rA["kendi"] and not rA["oteki_var"] and not rA["oteki_dosya"] and rA["env_kopya"], str(rA))
+    kontrol(f"kopya ({masaustu.tur(dk_)}): B kendi kopyasını görür, A'nınkini GÖREMEZ", rB["kendi"] and not rB["oteki_var"]
+            and not rB["oteki_dosya"], str(rB))
+    kontrol(f"kopya ({masaustu.tur(dk_)}): kopya kökünde yalnız kendi kopyası listelenir",
+            rA["kok"] == ["firefox-sahteA"] and rB["kok"] == ["chromium-sahteB"], f"{rA['kok']} {rB['kok']}")
+    pC = masaustu.baslat([sys.executable, "-c", GOR, *b64(kA, kB, KOPYA, os.path.join(G, "kopyaC.json"))])
+    pC.wait(30)
+    rC = json.load(open(os.path.join(G, "kopyaC.json")))
+    kontrol(f"kopya ({masaustu.tur(dk_)}): kopyası olmayan uygulama hiçbir kopyayı görmez",
+            not rC["kendi"] and not rC["oteki_var"] and rC["kok"] in (None, []), str(rC))
+finally:
+    masaustu.masaustu_durdur()
+
 ok, neden = ko.kullanilabilir()
 if not ok:
     print(f"ATLANDI (canlı bölümler): {neden}")
