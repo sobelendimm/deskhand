@@ -98,6 +98,16 @@ def satir_panel():
                   "deskhand panel --tepsi")
 
 
+def satir_onay_kapsami():
+    from . import guvenlik
+    kap = guvenlik.onay_kapsami(taze=True)
+    if kap == "kart":
+        return _satir(_("Onay kapsamı"), "tamam",
+                      _("kart: yalnız kartla ödeme (para düğmesi/ödeme sayfası, kart bilgisi yazma) onay ister; "
+                        "diğer onaylar kapalı"))
+    return _satir(_("Onay kapsamı"), "tamam", _("hepsi: tüm onaylar açık (varsayılan)"))
+
+
 def satir_girdi_merkezi():
     from . import girdi_merkezi
     yol = girdi_merkezi.soket_yolu()
@@ -214,8 +224,8 @@ def satir_gpu_ocr():
                   _("./install.sh eksikleri ve kurulum komutlarını listeler"))
 
 
-SATIRLAR = (satir_surum, satir_oturum, satir_kwin, satir_panel, satir_girdi_merkezi, satir_yardimcilar, satir_erisim,
-            satir_arka_plan, satir_calisma_dizini, satir_arka_tur, satir_gpu_ocr)
+SATIRLAR = (satir_surum, satir_oturum, satir_kwin, satir_panel, satir_onay_kapsami, satir_girdi_merkezi, satir_yardimcilar,
+            satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_arka_tur, satir_gpu_ocr)
 
 
 def topla() -> list[dict]:

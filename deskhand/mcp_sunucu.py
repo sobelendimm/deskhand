@@ -1618,7 +1618,8 @@ def clipboard(
         if icerik is None:
             return {**bilgi, "status": "empty", "text": None, "length": 0}
         onaylandi = False
-        if api.arka().ad == "kde" and not guvenlik.kendi_pano_mu(icerik):
+        if api.arka().ad == "kde" and not guvenlik.kendi_pano_mu(icerik) and \
+                not guvenlik.onaysiz_serbest("clipboard read (MCP)"):
             # kullanıcının gerçek panosu parola/özel veri taşıyabilir: içerik ajana yalnız insan onayıyla gider
             izin, neden = _onay_iste("clipboard", _("kullanıcının panosu"),
                                      _("Ajan panonun metnini okumak istiyor ({n} karakter)").format(n=len(icerik)),

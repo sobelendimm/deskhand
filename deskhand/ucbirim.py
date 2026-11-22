@@ -342,6 +342,11 @@ def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True, olabilir=False,
     au = sec()
     if not (olabilir or ucbirim_hedefi(au, k)):
         return False
+    if guvenlik.onay_kapsami() == "kart":  # Enter kapısı onay istemez; satır uyarısı yalnız günlüğe (ucuz: OCR yok)
+        t = {"metin": "", "kirli": False} if yalniz_ek else tampon_oku(au, k)
+        uyari = next((r for r in (guvenlik.riskli_komut(a) for a in (t.get("metin", "") + ek, ek)) if r), None)
+        guvenlik.onaysiz_serbest("uçbirim Enter", f"YIKICI OLABİLİR: {uyari}" if uyari else "")
+        return False
     if guvenlik.onayli_gecerli(onayli):
         return True
     okunan = None if yalniz_ek else satir_oku(k)

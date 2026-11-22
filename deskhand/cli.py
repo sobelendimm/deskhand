@@ -216,7 +216,7 @@ def k_pano(a):
     metin = au.pano_oku()
     # gözetimsiz kipte --onayli geçmez (onayli_gecerli); Deskhand'in bu oturumda yazdığı metin onay istemez
     if au.ad == "kde" and metin is not None and not guvenlik.onayli_gecerli(a.onayli) and \
-            not guvenlik.kendi_pano_mu(metin):
+            not guvenlik.kendi_pano_mu(metin) and not guvenlik.onaysiz_serbest("pano oku (CLI)"):
         izin, neden = guvenlik._panelden_onay(
             _("Panoyu oku"), _("pano"), _("Bir yapay zekâ ajanı kullanıcının panosunun metnini okumak istiyor"))
         if not izin:

@@ -134,6 +134,24 @@ def seviye_kaydet(metin: str) -> None:
     liste_koruma.panel_kaydet("seviye", metin if metin.endswith("\n") else metin + "\n")  # panel: tek yetkili yazar
 
 
+# ---------------------------------------------------------------- onay kapsamı ([guvenlik] onaylar)
+
+ONAY_KAPSAMLARI = ("hepsi", "kart")
+
+
+def onay_kapsami_oku() -> str:
+    from .. import guvenlik
+    return guvenlik.onay_kapsami(taze=True)
+
+
+def onay_kapsami_yaz(deger: str) -> None:
+    if deger not in ONAY_KAPSAMLARI:
+        raise ValueError(deger)
+    from .. import ayarlar, guvenlik
+    ayarlar.ayarla("guvenlik", "onaylar", deger)
+    guvenlik.onay_kapsami_sifirla()
+
+
 # ---------------------------------------------------------------- deskhand.ayarlar köprüsü
 
 class KararAyarlari:

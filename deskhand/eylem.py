@@ -586,7 +586,7 @@ def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=(), ek_basliklar=())
         _onayli_etiket(g)
     metinler = [*ek_metinler, *yakin]
     once = getattr(guvenlik._EYLEM, "onaylandi", False)
-    panelden = not guvenlik.onayli_gecerli(onayli)
+    panelden = not guvenlik.onayli_gecerli_kati(onayli)
     if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=(x, y), ek_basliklar=ek_basliklar):  # True = hassas sayfa VE onaylandı
         _onayli_etiket(g)
         onayli = True
@@ -781,6 +781,18 @@ def _parola_alani_mi(k):
         return False
 
 
+def _kart_alani_mi(k):
+    """Pencerede odaklı öge bir kart bilgisi alanı mı (ad/etiket/autocomplete)? Yalnız onay kapsamı "kart"ta sorulur;
+    erişilebilirlik kapalıysa açılmaz (bilinmez → False)."""
+    if k == EKRAN or not k or guvenlik.onay_kapsami() != "kart":
+        return False
+    try:
+        from .erisim import odakli_kart_mi
+        return odakli_kart_mi(k)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def k_yaz(a):
     ham = a.metin.replace("\r\n", "\n").replace("\r", "\n")
     # yapıştırılacak yazıda klavye düzeninde olmayan karakter (emoji…) sorun değil: yazima_hazirla yalnız harf harf yazılacaksa
@@ -800,6 +812,11 @@ def k_yaz(a):
             if guvenlik.parola_alani_engel(a.kimlik, onayli, len(metin), _("yazı")):
                 _onayli_etiket(g)
                 onayli = True
+        if guvenlik.onay_kapsami() == "kart":  # kart bilgisi: hedef alan kart alanı ya da metinde Luhn'lu numara
+            kart = _kart_alani_mi(a.kimlik) or guvenlik.kart_numarasi(metin) is not None
+            if kart:
+                g.gizli = True  # tam numara günlüğe/iletiye hiç yazılmaz
+                guvenlik.kart_bilgisi_engel(a.kimlik, onayli, metin, _kart_alani_mi(a.kimlik), _("yazı"))
         _au().one_getir(a.kimlik)
         yaz_ic(g, a.kimlik, a.baslik, metin, onayli)
     finally:

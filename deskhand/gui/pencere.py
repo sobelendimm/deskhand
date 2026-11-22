@@ -685,6 +685,19 @@ class AyarlarSekmesi(QScrollArea):
             gl.addRow(self._soluk(T.Y_MESGUL_YOK))
         kok.addWidget(g)
 
+        # ---- onay soruları (kapsam): hepsi | kart; seçilince hemen kaydedilir
+        g = self._grup(T.Y_ONAY)
+        gl = QFormLayout(g)
+        self.c_onay = QComboBox()
+        self._doldur(self.c_onay, A.ONAY_KAPSAMLARI, T.Y_ONAY_SECENEK)
+        self._sec(self.c_onay, A.onay_kapsami_oku())
+        self.c_onay.activated.connect(lambda i: self.onay_kapsami_sec(self.c_onay.itemData(i)))
+        gl.addRow(self._etiket(T.Y_ONAY_SORULARI), self.c_onay)
+        self.l_onay = soluk_etiket("")
+        gl.addRow(self.l_onay)
+        gl.addRow(self._soluk(T.Y_ONAY_NOT))
+        kok.addWidget(g)
+
         # ---- yasak pencereler
         g = self._grup(T.Y_YASAK)
         gl = QVBoxLayout(g)
@@ -818,7 +831,7 @@ class AyarlarSekmesi(QScrollArea):
         self.mt.tazele()
         self._tus_yaz()
         self.cakisma_goster()
-        for e in (getattr(self, "l_karar", None), self.l_yasak, self.l_seviye):  # eski dildeki "Kaydedildi." vb.
+        for e in (getattr(self, "l_karar", None), self.l_onay, self.l_yasak, self.l_seviye):  # eski dildeki "Kaydedildi." vb.
             if e is not None:
                 e.setText("")
 
@@ -874,6 +887,16 @@ class AyarlarSekmesi(QScrollArea):
             self.l_karar.setText(_(T.Y_KAYDEDILDI))
         except Exception as e:  # noqa: BLE001
             self.l_karar.setText(str(e))
+
+    def onay_kapsami_sec(self, kapsam: str) -> bool:
+        try:
+            A.onay_kapsami_yaz(kapsam)
+        except Exception as e:  # noqa: BLE001
+            self._sec(self.c_onay, A.onay_kapsami_oku())
+            self.l_onay.setText(_(T.Y_ONAY_HATA).format(hata=e))
+            return False
+        self.l_onay.setText(_(T.Y_KAYDEDILDI))
+        return True
 
     def yasak_yukle(self):
         self.yasak.setPlainText(A.yasak_metni())

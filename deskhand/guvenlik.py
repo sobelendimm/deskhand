@@ -33,12 +33,14 @@ VARSAYILAN_YASAK = N_("""# Bu desenlere (regex, büyük/küçük harf duyarsız)
 # ^Online Banking
 """)  # dosyaya ilk açılışta, seçili dilde yazılır
 # Ödeme / yetki verme / hesap silme: kullanıcının kararı. Türkçe harfler katlanmış (ş→s, ı→i…) metinde aranır.
-HASSAS = re.compile(
-    r"\b(satin al\w*|simdi al|hemen al|ode|odeme yap\w*|odemeyi (tamamla|onayla)\w*|siparis ver\w*|"
-    r"siparisi (tamamla|onayla)\w*|alisverisi tamamla\w*|buy( now)?|purchase|pay( now)?|place order|"
-    r"complete (order|purchase|payment)|confirm (order|payment|purchase)|authori[sz]e|yetkilendir\w*|"
-    r"izin ver\w*|allow|grant( access)?|hesab\w* sil\w*|delete (my )?account|kalici olarak sil\w*|"
-    r"permanently delete)\b")
+_PARA_KALIPLARI = (r"satin al\w*|simdi al|hemen al|ode|odeme yap\w*|odemeyi (tamamla|onayla)\w*|siparis ver\w*|"
+                   r"siparisi (tamamla|onayla)\w*|alisverisi tamamla\w*|buy( now)?|purchase|pay( now)?|place order|"
+                   r"complete (order|purchase|payment)|confirm (order|payment|purchase)")
+_YETKI_KALIPLARI = (r"authori[sz]e|yetkilendir\w*|izin ver\w*|allow|grant( access)?|hesab\w* sil\w*|"
+                    r"delete (my )?account|kalici olarak sil\w*|permanently delete")
+HASSAS = re.compile(r"\b(" + _PARA_KALIPLARI + "|" + _YETKI_KALIPLARI + r")\b")
+# onay kapsamı "kart": onay istemeye devam eden YALNIZ para alt kümesi (satın alma/ödeme/sipariş onayı düğmeleri)
+PARA_DUGMESI = re.compile(r"\b(" + _PARA_KALIPLARI + r")\b")
 # başlığı ödeme/sipariş onayı olan sayfada HER tıklama ve Enter/boşluk onay ister: OCR'ın okuyamadığı
 # ödeme düğmesine (ör. orta ton zeminde beyaz yazı) koordinatla basılmasın. Form doldurmak (yaz) serbest; ama
 # yazı Enter/Tab/boşluk içeriyorsa (\n = gönder, Tab+boşluk = odaktaki düğmeye bas) o da onay ister.
@@ -1298,7 +1300,9 @@ def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=Tr
         m = HASSAS_SAYFA.search(katla(eb or ""))
         if m:
             b = eb
-    onayli = onayli_gecerli(onayli)
+    if m and onay_kapsami() == "kart" and yakin and not any(PARA_DUGMESI.search(katla(t)) for t in yakin if t):
+        m = None  # kart kipi: ödeme sayfasında okunabilen, para olmayan öge ("Kuponu uygula") sorulmaz
+    onayli = onayli_gecerli_kati(onayli)
     if m and not onayli:
         ayrinti = _("Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}").format(eslesen=repr(m.group(0)))
         ayrinti += _nokta_ayrintisi(nokta, yakin)
@@ -1315,6 +1319,15 @@ def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=Tr
                             "({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
                 eslesen=repr(m.group(0)), baslik=repr(b), eylem=ne, neden=neden), tur="hassas")
     return bool(m)
+
+
+def para_mi(*metinler):
+    """Metinlerden biri para düğmesi (satın al / öde / siparişi onayla…) mi? (onay kapsamı "kart")"""
+    for t in metinler:
+        m = PARA_DUGMESI.search(katla(t or ""))
+        if m:
+            return m.group(0)
+    return None
 
 
 def hassas_mi(*metinler):
@@ -1351,11 +1364,12 @@ def hassas_engel(onayli, *metinler, hedef="", k=None, nokta=None):
     noktadaki yazıyı ve çevresinin küçük görüntüsünü taşır."""
     if yapistirma_metni_mi(*metinler):  # kde: menüden yapıştırma da kullanıcının panosunu taşır
         yapistirma_engel(k, onayli)
-    eslesen = hassas_mi(*metinler)
-    onayli = onayli_gecerli(onayli)
+    eslesen = para_mi(*metinler) if onay_kapsami() == "kart" else hassas_mi(*metinler)  # kart: yalnız para düğmesi
+    onayli = onayli_gecerli_kati(onayli)
     if eslesen and not onayli:
         yakin = [m for m in metinler if m]
-        asil = next((m for m in yakin if HASSAS.search(katla(m))), eslesen)  # kullanıcıya ekrandaki yazı gösterilir
+        asil = next((m for m in yakin if (PARA_DUGMESI if onay_kapsami() == "kart" else HASSAS).search(katla(m))),
+                    eslesen)  # kullanıcıya ekrandaki yazı gösterilir
         ayrinti = _("Ödeme/yetki/hesap silme gibi hassas bir düğme") + _nokta_ayrintisi(nokta, yakin)
         goruntu = None if k is None or getattr(_EYLEM, "onaylandi", False) else hedef_goruntusu(k, nokta)
         izin, neden = _panelden_onay(_("Düğmeye tıkla: “{dugme}”").format(dugme=asil), hedef or " / ".join(yakin[:2]),
@@ -1377,6 +1391,8 @@ def riskli_tus_engel(k, onayli, kombinasyon, birlikte=False):
     panelden insan onayı, panel kapalıysa/red/gözetimsiz kipte Dur(10). → kombinasyon riskli mi (onaylandı)."""
     neden = riskli_tus(kombinasyon, birlikte)
     if not neden:
+        return False
+    if onaysiz_serbest("riskli tuş", kombinasyon):
         return False
     if not onayli_gecerli(onayli):
         b = sec().baslik(k) if k and k != EKRAN else ""
@@ -1405,6 +1421,8 @@ def ucbirim_komut_engel(k, onayli, metin, gizli=False, goruntu_al=True):
     sinif = au.sinif(pen) if pen else ""
     if not pen or not ucbirim_penceresi_mi(pen):  # sınıf ya da gömülü uçbirim (süreç ağacı)
         return False
+    if onaysiz_serbest("uçbirime yıkıcı komut yazma", neden):
+        return False
     if not onayli_gecerli(onayli):
         b = au.baslik(pen)
         ayrinti = neden + "\n" + _("uçbirim: {sinif}").format(sinif=sinif) + "\n" + \
@@ -1426,6 +1444,8 @@ def baslatma_komut_engel(komut_metni, onayli=False):
     neden = riskli_komut(komut_metni)
     if not neden:
         return False
+    if onaysiz_serbest("ac --komut yıkıcı komut", neden):
+        return False
     eylem_basladi()  # başlatma kendi eylemi: önceki eylemin onayı taşınmaz
     if not onayli_gecerli(onayli):
         izin, onay_neden = _panelden_onay(_("Komut başlat: {komut}").format(komut=_yazilacak(komut_metni, False)),
@@ -1442,6 +1462,55 @@ def onayli_gecerli(onayli):
     """--onayli (kullanıcı sohbette açıkça onayladı) geçerli mi? Gözetimsiz kipte sohbet/insan yoktur: --onayli
     sayılmaz, onay gerektiren her eylem reddedilir (onay.iste_sonuc 'gozetimsiz')."""
     return bool(onayli) and not gozetimsiz()
+
+
+# ---------------------------------------------------------------- onay kapsamı (ayarlar.toml [guvenlik] onaylar)
+
+ONAY_KAPSAMLARI = ("hepsi", "kart")
+_KAPSAM = {"zaman": -1e9, "deger": "hepsi"}
+KAPSAM_ONBELLEK_SN = 1.0
+
+
+def onay_kapsami(taze=False) -> str:
+    """Hangi eylemler insan onayı ister: "hepsi" (VARSAYILAN: ARCHITECTURE §4'teki tüm onaylar) | "kart"
+    (yalnız kartla ödeme: para düğmesi/ödeme sayfası ve kart bilgisi yazma). Kipi okuyan TEK yer: ayarlar.toml
+    [guvenlik] onaylar, süreç içinde kısa önbellek. Okunamayan/geçersiz değer → "hepsi" (güvenli taraf)."""
+    import time as _t
+    if not taze and _t.monotonic() - _KAPSAM["zaman"] < KAPSAM_ONBELLEK_SN:
+        return _KAPSAM["deger"]
+    try:
+        from . import ayarlar
+        d = ayarlar.al("guvenlik", "onaylar")
+    except Exception:  # noqa: BLE001 - ayar okunamadı: güvenli taraf
+        d = "hepsi"
+    if d not in ONAY_KAPSAMLARI:
+        d = "hepsi"
+    _KAPSAM.update(zaman=_t.monotonic(), deger=d)
+    return d
+
+
+def onay_kapsami_sifirla():
+    """Önbelleği at (ayar yazıldıktan sonra / testler)."""
+    _KAPSAM["zaman"] = -1e9
+
+
+def onaysiz_serbest(ne: str, ayrinti: str = "") -> bool:
+    """kart kipinde SERBEST bırakılan onay noktaları için tek koşul: True → onay sorulmaz (tek satır günlük
+    yazılır; ayrıntıda gizli içerik olmamalı). "hepsi" kipinde False (bugünkü davranış)."""
+    if onay_kapsami() != "kart":
+        return False
+    from .gunluk import gunluk
+    gunluk(f"onay kapsamı kart: onaysız geçti | {ne}" + (f" | {ayrinti}" if ayrinti else ""))
+    return True
+
+
+def onayli_gecerli_kati(onayli) -> bool:
+    """Kart sınıfı (para düğmesi, ödeme sayfası, kart bilgisi yazma) için --onayli geçerli mi? "kart" kipinde
+    CLI --onayli YOK SAYILIR: onay HER ZAMAN panelden (terminali serbest ajan CLI'yi --onayli ile çağırıp atlatamasın).
+    "hepsi" kipinde onayli_gecerli ile aynı."""
+    if onay_kapsami() == "kart":
+        return False
+    return onayli_gecerli(onayli)
 
 
 # ---------------------------------------------------------------- ajanın kendi istemcisi (deskhand/kendi.py)
@@ -1518,6 +1587,8 @@ def sistem_istemi_mi(k):
 def sistem_istemi_denetle(k):
     """Girdiden HEMEN önce: sistem istemine bu eylemde onay alınmadıysa Dur 10 (onay eylem başında
     sistem_istemi_engel ile sorulur; sorulmamış her yol burada güvenli tarafta durur)."""
+    if onay_kapsami() == "kart":  # kart kipi: sistem istemleri onaysız (kullanıcı kararı)
+        return
     ad = sistem_istemi_mi(k)
     if ad and k not in getattr(_EYLEM, "sistem_onay", set()):
         raise Dur(10, _("SİSTEM İSTEMİ: {baslik} ({ad}) bir yetki/parola/izin istemi; girdi kullanıcının onayını ister "
@@ -1534,6 +1605,8 @@ def sistem_istemi_engel(k, onayli, ne, goruntu_al=True):
         _EYLEM.sistem_onay = set()
     if k in _EYLEM.sistem_onay:
         return True
+    if onaysiz_serbest("sistem istemi girdisi", ad):
+        return False
     if not onayli_gecerli(onayli):
         b = sec().baslik(k)
         goruntu = None if getattr(_EYLEM, "onaylandi", False) or not goruntu_al else hedef_goruntusu(k)
@@ -1612,6 +1685,8 @@ def yapistirma_engel(k, onayli, kaynak="pano"):
     au = sec()
     if au.ad != "kde":
         return False
+    if onaysiz_serbest("yapıştırma (pano okuma)", kaynak):
+        return False
     try:
         metin = au.pano_oku() if kaynak == "pano" else getattr(au, "secim_oku", lambda: _OKUNAMADI)()
     except Dur:
@@ -1632,10 +1707,64 @@ def yapistirma_engel(k, onayli, kaynak="pano"):
     return True
 
 
+_KART_ALANI = re.compile(
+    r"kart numaras|kredi kart|banka kart|kart no\b|card[\s_-]?number|credit[\s_-]?card|debit[\s_-]?card|cc[\s_-]?(?:num|csc|exp|cvc)|"
+    r"\bcvc\d?\b|\bcvv\d?\b|\bcvn\b|guvenlik kodu|security code|son kullanma|expir|\bskt\b")
+_KART_ADAYI = re.compile(r"(?<!\d)\d(?:[ -]?\d){12,18}(?!\d)")
+
+
+def kart_alani_mi(*adlar) -> bool:
+    """AT-SPI/web ögesinin adı, etiketi, açıklaması ya da autocomplete/id/placeholder nitelikleri bir kart bilgisi alanı
+    (kart numarası, cvc/cvv, güvenlik kodu, son kullanma) mı?"""
+    return any(a and _KART_ALANI.search(katla(a)) for a in adlar)
+
+
+def kart_numarasi(metin):
+    """Metinde 13–19 haneli, Luhn sınamasını geçen (boşluk/tire ayırıcılı da) numara var mı? → son 4 hane | None.
+    Numaranın kendisi hiçbir yere döndürülmez."""
+    for m in _KART_ADAYI.finditer(metin or ""):
+        rakam = re.sub(r"\D", "", m.group(0))
+        if 13 <= len(rakam) <= 19:
+            toplam = 0
+            for i, c in enumerate(reversed(rakam)):
+                d = int(c)
+                if i % 2:
+                    d = d * 2 - 9 if d > 4 else d * 2
+                toplam += d
+            if toplam % 10 == 0:
+                return rakam[-4:]
+    return None
+
+
+def kart_bilgisi_engel(k, onayli, metin, alan_kart=False, ne="yazı") -> bool:
+    """Onay kapsamı "kart": hedef alan kart alanıysa (alan_kart) ya da yazılacak metinde Luhn'dan geçen kart numarası varsa
+    yazma/yapıştırma/değer yazma insan onayı ister (CLI --onayli yok sayılır; gözetimsiz kipte ret). Onay isteğine ve
+    iletilere YALNIZ son 4 hane / uzunluk girer; çağıran metni günlükte gizli tutmalı. "hepsi" kipinde dokunmaz.
+    → kart bilgisi vardı (onaylandı)."""
+    if onay_kapsami() != "kart":
+        return False
+    son4 = kart_numarasi(metin)
+    if not (alan_kart or son4):
+        return False
+    if onayli_gecerli_kati(onayli):
+        return True
+    b = sec().baslik(k) if k and k != EKRAN else ""
+    ayrinti = _("Ajan bir kart bilgisi yazmak istiyor ({ne}).").format(ne=ne)
+    ayrinti += "\n" + (_("kart numarası: **** {son4}").format(son4=son4) if son4 else
+                       _("kart bilgisi alanı, {n} karakter").format(n=len(metin or "")))
+    izin, neden = _panelden_onay(_("Kart bilgisi yaz"), b, ayrinti)
+    if not izin:
+        raise Dur(10, _("HASSAS: kart bilgisi yazmak ({ne}) kullanıcının onayını ister ({neden}); bu onay yalnız "
+                        "panelden verilir").format(ne=ne, neden=neden), tur="hassas")
+    return True
+
+
 def parola_alani_engel(k, onayli, uzunluk, ne):
     """Hedef/odaklı öge bir PAROLA alanı (AT-SPI rolü 'password text'): yazı / yapıştırma / değer yazma insan onayı
     ister (--onayli yoksa panelden; red/gözetimsiz → 10). Metin hiçbir iletiye/günlüğe/onay isteğine yazılmaz: yalnız
     uzunluğu. → True (onaylandı)."""
+    if onaysiz_serbest("parola alanına yazma", ne):  # DEĞERİNİ OKUMA reddi (erisim) bundan bağımsız
+        return False
     if onayli_gecerli(onayli):
         return True
     b = sec().baslik(k) if k and k != EKRAN else ""
