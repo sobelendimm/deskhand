@@ -29,7 +29,7 @@ atexit.register(lambda: masaustu.durum_oku() is not None and masaustu.masaustu_d
 KOK = _yalitim.KOK
 GECICI = _yalitim.GECICI
 PENCERE = os.path.join(KOK, "tests", "yardimci", "dogrulama_pencere.py")
-LOG = os.path.join(GECICI, "dogrulama.log")
+LOG = os.path.join(_yalitim.PAYLASIM, "dogrulama.log")
 gecen = toplam = 0
 olcum = {}
 

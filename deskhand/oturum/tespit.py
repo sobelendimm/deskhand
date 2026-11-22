@@ -133,7 +133,7 @@ def _flatpak_calisan() -> set[str] | None:
     """`flatpak ps` ile KULLANICININ çalışan uygulama kimlikleri (Deskhand'nin başlattığı örnekler hariç).
     flatpak yok → boş küme; sorgu başarısız → None (bilinemiyor)."""
     from . import flatpak_ornek, politika
-    if not shutil.which("flatpak"):
+    if not flatpak_ornek._arac("flatpak"):  # yalnız /usr/bin, /bin (PATH değil)
         return set()
     ornekler = flatpak_ornek.ornekler()
     if ornekler is None:

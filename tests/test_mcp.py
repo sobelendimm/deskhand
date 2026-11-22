@@ -284,8 +284,8 @@ async def on_plan_testleri():
 
 # ================================================================ B) uçtan uca stdio, görünmez masaüstü
 
-LOG = os.path.join(GECICI, "pencere.log")
-LOG2 = os.path.join(GECICI, "gizli.log")
+LOG = os.path.join(_yalitim.PAYLASIM, "pencere.log")
+LOG2 = os.path.join(_yalitim.PAYLASIM, "gizli.log")
 
 
 def log_satirlari(yol=LOG):

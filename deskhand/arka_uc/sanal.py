@@ -716,6 +716,17 @@ class SanalArkaUc(ArkaUc):
         wid = kimlik_coz(k)
 
         def f(x: _X):
+            # Önce X sunucusunun bildiği PID (X-Resource, SO_PEERCRED: ana makine PID'i). _NET_WM_PID'i istemci
+            # kendisi yazar: bwrap PID ad alanındaki uygulama orada ad alanı içindeki PID'ini (ör. 2) yazar.
+            try:
+                if x.d.has_extension("X-Resource"):
+                    from Xlib.ext import res
+                    r = x.d.res_query_client_ids([{"client": wid, "mask": res.LocalClientPIDMask}])
+                    for c in r.ids:
+                        if c.spec.mask == res.LocalClientPIDMask and len(c.value):
+                            return int(c.value[0])
+            except Exception:  # noqa: BLE001 - eklenti yok / eski python-xlib: istemcinin yazdığına düş
+                pass
             p = x._ozellik(x.pencere(wid), "_NET_WM_PID")
             return int(p.value[0]) if p is not None and len(p.value) else None
         return self._cagir(f)

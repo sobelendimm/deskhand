@@ -316,8 +316,8 @@ kontrol("bildirim: günlük yalıtılmış STATE_DIR'de", masaustu.bildirim_yolu
 
 # ---------------------------------------------------------------- 2) test penceresi
 
-LOG = os.path.join(GECICI, "test.log")
-LOG2 = os.path.join(GECICI, "test2.log")
+LOG = os.path.join(_yalitim.PAYLASIM, "test.log")
+LOG2 = os.path.join(_yalitim.PAYLASIM, "test2.log")
 t_ac = time.monotonic()
 p1 = au.baslat([sys.executable, TEST_PENCERE], env={"LOG": LOG, "BASLIK": "deskhand-sanal ANA", "HAZIR_MS": "300"})
 k = bekle(lambda: next((w for w, b, _ in au.pencereler("deskhand-sanal ANA")), None), 20, 0.05)
@@ -686,7 +686,7 @@ if not KW_2B:
 # (mikrofon gizliliği: çalma da kayıt da yok). Uygulama bwrap ad alanında gerçek runtime dizinini göremez; açık
 # PULSE_SERVER/PIPEWIRE_REMOTE verse bile soket görünmez. Yalnız sıfır (sessiz) veri denenir.
 if shutil.which("pactl"):
-    SES_LOG = os.path.join(GECICI, "ses.txt")
+    SES_LOG = os.path.join(_yalitim.PAYLASIM, "ses.txt")
     kod_ = ("import os, subprocess\nr = subprocess.run(['pactl', 'info'], capture_output=True, text=True, timeout=10)\n"
             "r2 = subprocess.run(['pactl', 'info'], capture_output=True, text=True, timeout=10, env={**os.environ, "
             "'PULSE_SERVER': f'unix:/run/user/{os.getuid()}/pulse/native'})\n"

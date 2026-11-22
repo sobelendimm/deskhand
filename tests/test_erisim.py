@@ -798,7 +798,7 @@ if not sanal_mumkun():
 else:
     gercek0 = gercek_a11y()  # kullanıcının GERÇEK oturumu: baştan sona dokunulmaz
     BASLIK = "a11y-deneme"
-    LOG = os.path.join(_yalitim.GECICI, "a11y.log")
+    LOG = os.path.join(_yalitim.PAYLASIM, "a11y.log")
 
     def log():
         try:

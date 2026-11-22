@@ -529,6 +529,8 @@ def _sahte_ortam():
     eski_path = os.environ.get("PATH", "")
     os.environ["PATH"] = bin_ + os.pathsep + eski_path
     os.environ["FAKE_FLATPAK_DIR"] = tdir
+    from deskhand.oturum import flatpak_ornek  # flatpak/systemctl PATH'ten değil ARAC_DIZINLERI'nden (sahteler başta)
+    flatpak_ornek.ARAC_DIZINLERI.insert(0, bin_)
     eski_dizinler = uygulama.UYGULAMA_DIZINLERI
     uygulama.UYGULAMA_DIZINLERI = (app,)
     return tdir, eski_path, eski_dizinler
@@ -539,6 +541,8 @@ def _sahte_ortam_kapat(tdir, eski_path, eski_dizinler):
     from deskhand import uygulama
     os.environ["PATH"] = eski_path
     os.environ.pop("FAKE_FLATPAK_DIR", None)
+    from deskhand.oturum import flatpak_ornek
+    flatpak_ornek.ARAC_DIZINLERI[:] = [d for d in flatpak_ornek.ARAC_DIZINLERI if not d.startswith(tdir)]
     uygulama.UYGULAMA_DIZINLERI = eski_dizinler
     shutil.rmtree(tdir, ignore_errors=True)
 

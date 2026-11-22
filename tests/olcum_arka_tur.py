@@ -71,7 +71,7 @@ sonuc["gpu"] = d.get("gpu") or ("yok (Xvfb: yazılım)" if sonuc["tur"] == "xvfb
 time.sleep(2)
 sonuc["bos_bellek_mib"] = kafes_bellek(d)
 au = sec(arka_bayragi=True)
-LOG = os.path.join(GECICI, "olcum.log")
+LOG = os.path.join(_yalitim.PAYLASIM, "olcum.log")
 
 
 def loglar():
@@ -164,22 +164,36 @@ sonuc["bellek_qt_penceresiyle_mib"] = kafes_bellek(d)
 
 # Firefox: boş geçici profil + oturum köprüsüyle aynı yalıtım
 if FIREFOX and subprocess.run(["which", "firefox"], capture_output=True).returncode == 0:
-    from deskhand.oturum import firefox as ff
-    prof = os.path.join(GECICI, "ff-profil")
+    # profil = oturum kopyası benzeri SAHTE kopya (kopya kökünün alt dizini; ad alanına yalnız kopya= ile bağlanır)
+    from deskhand.oturum import firefox as ff, politika
+    prof = os.path.join(politika.kopya_dizini(), "firefox-olcum")
     xdg = os.path.join(prof, ".xdg-config")
     os.makedirs(xdg, mode=0o700)
+    INDIR = None
+    if "--indir" in sys.argv:  # Firefox'un GERÇEK ~/İndirilenler'e (XDG_DOWNLOAD_DIR) yazabildiğini sına (geçici ad, silinir)
+        from deskhand import arka_ortak
+        indir_dizini = next((k for k in arka_ortak.veri_klasorleri() if "ndir" in k or "ownload" in k), None)
+        INDIR = os.path.join(indir_dizini, f"deskhand-olcum-{os.getpid()}.txt") if indir_dizini else None
     with open(os.path.join(prof, "user.js"), "w") as f:
         f.write(ff._USER_JS)
-    sayfa = os.path.join(GECICI, "webgl.html")
+        if INDIR:
+            f.write(f'user_pref("browser.download.dir", "{os.path.dirname(INDIR)}");\n'
+                    'user_pref("browser.download.folderList", 2);\nuser_pref("browser.download.useDownloadDir", true);\n'
+                    'user_pref("browser.download.always_ask_before_handling_new_types", false);\n'
+                    'user_pref("browser.download.start_downloads_in_tmp_dir", false);\n'
+                    'user_pref("browser.download.alwaysOpenPanel", false);\n')
+    sayfa = os.path.join(prof, "webgl.html")
+    indir_js = (f"var a = document.createElement('a'); a.href = 'data:text/plain,deskhand-olcum'; "
+                f"a.download = '{os.path.basename(INDIR)}'; document.body.appendChild(a); a.click();" if INDIR else "")
     with open(sayfa, "w") as f:
         f.write("""<!doctype html><html><head><title>WEBGL bekliyor</title></head><body><canvas id=c></canvas><script>
 var gl = document.getElementById('c').getContext('webgl'); var r = 'YOK';
 if (gl) { var e = gl.getExtension('WEBGL_debug_renderer_info');
   r = e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); }
-document.title = 'WEBGL ' + r;</script></body></html>""")
+document.title = 'WEBGL ' + r;""" + indir_js + "</script></body></html>")
     env = {"XDG_CONFIG_HOME": xdg, "MOZ_LEGACY_PROFILES": "1", "XDG_CACHE_HOME": os.path.join(prof, ".cache")}
     t = time.monotonic()
-    pf = au.baslat(["firefox", "--profile", prof, "--no-remote", "--new-instance", f"file://{sayfa}"], env)
+    pf = au.baslat(["firefox", "--profile", prof, "--no-remote", "--new-instance", f"file://{sayfa}"], env, kopya=prof)
     w = bekle(lambda: next(((k_, b) for k_, b, _ in au.pencereler("WEBGL") if "bekliyor" not in b), None), 60, 0.05)
     sonuc["firefox_acilis_sn"] = round(time.monotonic() - t, 2) if w else None
     sonuc["firefox_webgl"] = w[1] if w else "pencere açılmadı"
@@ -191,6 +205,11 @@ document.title = 'WEBGL ' + r;</script></body></html>""")
         sonuc["firefox_ses_sunucusu"] = "yok (ad alanında gerçek runtime dizini görünmez)"
     time.sleep(3)
     sonuc["bellek_firefox_ile_mib"] = kafes_bellek(d)
+    if INDIR:
+        bekle(lambda: os.path.isfile(INDIR), 15, 0.1)
+        sonuc["firefox_indirme_gercek_dizinde"] = os.path.isfile(INDIR) and open(INDIR).read() == "deskhand-olcum"
+        if os.path.exists(INDIR):
+            os.remove(INDIR)
     if BOSTA:
         ornek = []
         bitis = time.monotonic() + BOSTA

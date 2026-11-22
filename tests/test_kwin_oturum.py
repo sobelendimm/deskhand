@@ -256,7 +256,7 @@ def kesir(kutu, W, H):
     return ((kutu[0] + kutu[2]) / 2 + 0.5) / W, ((kutu[1] + kutu[3]) / 2 + 0.5) / H
 
 
-LOG = os.path.join(GECICI, "pencere.log")
+LOG = os.path.join(_yalitim.PAYLASIM, "pencere.log")
 
 
 def loglar():
@@ -525,7 +525,7 @@ kontrol("kdotool: pencere listesinde Wayland test penceresi (başlık + geometri
 
 # ---------------------------------------------------------------- 6) XWayland
 print("\n6) XWayland")
-LOG_X = os.path.join(GECICI, "x.log")
+LOG_X = os.path.join(_yalitim.PAYLASIM, "x.log")
 p_x = ko.uygulama_baslat(D, [sys.executable, PENCERE], {"LOG": LOG_X, "BASLIK": "Deskhand XWayland Test",
                                                         "QT_QPA_PLATFORM": "xcb"})
 
@@ -580,7 +580,7 @@ olcum["AT-SPI adresi (özel veri yolunda org.a11y.Bus)"] = adres or "yok"
 kontrol("erişilebilirlik: org.a11y.Bus özel veri yolunda etkinleşti, adres oturum dizininde",
         bool(adres) and D["calisma"] in adres, str(adres))
 if adres:
-    LOG_A = os.path.join(GECICI, "a.log")
+    LOG_A = os.path.join(_yalitim.PAYLASIM, "a.log")
     p_a = ko.uygulama_baslat(D, [sys.executable, PENCERE], {"LOG": LOG_A, "BASLIK": "Deskhand AT-SPI Test"})
     bekle(lambda: os.path.exists(LOG_A) and "hazir" in open(LOG_A).read(), 15)
     betik = ("import gi\ngi.require_version('Atspi','2.0')\nfrom gi.repository import Atspi\n"

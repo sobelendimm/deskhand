@@ -737,8 +737,8 @@ kontrol("sanal: masaüstü açıldı, arka uç sanal, pano uygulanıyor", au.ad 
         type(au).pano_yaz is not arka_uc.ArkaUc.pano_yaz)
 KW = masaustu.tur(d) == "kwin"  # KWin türü: pano = wl-copy/wl-paste (oturum soketi), yardımcı = wl-copy sunucusu
 print(f"arka plan masaüstü türü: {masaustu.tur(d)}")
-LOG = os.path.join(GECICI, "pano.log")
-LOG2 = os.path.join(GECICI, "pano2.log")
+LOG = os.path.join(_yalitim.PAYLASIM, "pano.log")
+LOG2 = os.path.join(_yalitim.PAYLASIM, "pano2.log")
 p1 = au.baslat([sys.executable, PANO_PENCERE], env={"LOG": LOG, "BASLIK": "pano-test ANA"})
 k = bekle(lambda: next((w for w, b, _ in au.pencereler("pano-test ANA")), None), 20, 0.05)
 kontrol("sanal: Qt pano test penceresi açıldı", k is not None)

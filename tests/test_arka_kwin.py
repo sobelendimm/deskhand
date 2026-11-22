@@ -278,7 +278,7 @@ if GERCEK_GPU:
             str(d.get("render_dugumu")))
 
 # ortam sızıntısı: oturumda başlatılan bir sürecin GERÇEK ortamı
-ENV_LOG = os.path.join(GECICI, "env.txt")
+ENV_LOG = os.path.join(_yalitim.PAYLASIM, "env.txt")
 os.environ["SSH_AUTH_SOCK"] = os.environ.get("SSH_AUTH_SOCK") or "/tmp/sahte-ssh-ajan"
 os.environ["AT_SPI_BUS_ADDRESS"] = "unix:path=/run/user/0/sahte-a11y"
 os.environ["LIBEI_SOCKET"] = "eis-0"
@@ -331,8 +331,8 @@ def kutu_bul(im, renk, tol=6):
     return int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
 
 
-LOG = os.path.join(GECICI, "a.log")
-LOG2 = os.path.join(GECICI, "b.log")
+LOG = os.path.join(_yalitim.PAYLASIM, "a.log")
+LOG2 = os.path.join(_yalitim.PAYLASIM, "b.log")
 
 
 def loglar(yol=LOG):

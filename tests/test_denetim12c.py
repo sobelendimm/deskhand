@@ -345,6 +345,32 @@ kontrol(f"kapanış ({TUR}): sahte ev dizinine kalıcı bir şey yazılmadı (au
         os.listdir(os.path.join(EV, ".config/autostart")) == [] and os.listdir(os.path.join(EV, ".local/bin")) == [])
 kontrol(f"kapanış ({TUR}): gerçek ~/.config'te testin dosyası yok",
         not os.path.exists(os.path.join(gercek_ev, ".config", f"dh12c-{ad}.tmp")))
+
+# ---------------------------------------------------------------- denetim12b_xw: XWayland kafeste + düşük öncelikte
+from deskhand import kwin_oturum as ko  # noqa: E402
+if TUR == "kwin" and ko.kullanilabilir()[0] and os.path.exists("/usr/bin/xprop"):
+    ao._EV_ZORLA = None
+    X = ko.baslat((800, 600), xwayland=True)
+    try:
+        px = ko.uygulama_baslat(X, ["/usr/bin/xprop", "-root", "-spy"])  # X istemcisi: XWayland'i uyandırır
+
+        def xwayland():
+            for p_ in ao._kafes_surecleri(X["cgroup"]):
+                if os.path.basename((ao._komut_satiri(p_) or [""])[0]) == ko.XWAYLAND_AD:
+                    return p_
+            return None
+        xw = None
+        bitis = time.monotonic() + 10
+        while time.monotonic() < bitis and not xw:
+            xw = xwayland()
+            time.sleep(0.1)
+        time.sleep(2.0)  # öncelik bekçisi (~0,5 sn aralık)
+        o_ = ko.oncelik_durumu(xw) if xw else []
+        kontrol("xw: XWayland oturumun kafesinde, takma adla, tüm iş parçacıkları nice >= 10 ve gerçek zamanlı değil",
+                bool(o_) and all(n >= 10 and pol not in (1, 2, 6) for _t, n, pol in o_), f"{xw} {o_[:3]}")
+        kontrol("xw: X istemcisi (ad alanında) çalışıyor", px.poll() is None)
+    finally:
+        ko.durdur(X)
 uyku.kill()
 uyku.wait()
 srv.close()

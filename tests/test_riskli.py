@@ -802,8 +802,8 @@ kontrol("yalıtım: seviye dosyası yolu geçici CONFIG'te (gerçek ~/.config/de
         not gui_yol.startswith(os.path.expanduser("~")))
 
 # ================================================================ 7. uçtan uca: görünmez sanal masaüstü (Xvfb)
-LOG = os.path.join(_yalitim.GECICI, "riskli.log")
-LOG2 = os.path.join(_yalitim.GECICI, "riskli2.log")
+LOG = os.path.join(_yalitim.PAYLASIM, "riskli.log")
+LOG2 = os.path.join(_yalitim.PAYLASIM, "riskli2.log")
 
 
 def log_satirlari(yol):

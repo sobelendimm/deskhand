@@ -445,13 +445,18 @@ def veri_nokta_girdileri(klasor: str) -> list[tuple[str, str]] | None:
     return r
 
 
+# Ev dizininde her zaman maskelenen IPC uçları ve kimlik bilgileri: Steam komut borusu; ICE/X yetki dosyaları (ağ
+# ad alanı paylaşıldığından ksmserver ICE ve X :0 SOYUT soketlerine erişilebilir — anahtarları görünmesin)
+BILINEN_MASKELER = (".steam/steam.pipe", ".ICEauthority", ".Xauthority")
+
+
 def ev_soketleri(ev: str | None = None) -> list[str]:
-    """Ev dizininde (derinlik 4, gizli dizinler dahil) soket ve FIFO'lar + bilinenler (~/.steam/steam.pipe): ad
-    alanında /dev/null ile maskelenir (katman yazılabilir olsa da gerçek sokete/boruya bağlanılmasın)."""
+    """Ev dizininde (derinlik 4, gizli dizinler dahil) soket ve FIFO'lar + bilinenler (BILINEN_MASKELER): ad alanında
+    /dev/null ile maskelenir (katman yazılabilir olsa da gerçek sokete/boruya bağlanılmasın, yetki anahtarı okunmasın)."""
     ev = ev or gercek_ev()
     bulunan = {y for _t, y in (_bul(ev, "-maxdepth", "4", "(", "-type", "s", "-o", "-type", "p", ")", "-printf",
                                      r"%y %p\0") or [])}
-    for b in (".steam/steam.pipe",):
+    for b in BILINEN_MASKELER:
         y = os.path.join(ev, b)
         if os.path.exists(y) and not os.path.islink(y):
             bulunan.add(y)
@@ -518,6 +523,30 @@ def ev_baglari(ev: str | None = None) -> tuple[list[str], dict]:
     return a, bilgi
 
 
+def test_paylasimi() -> str | None:
+    """YALNIZ test takımı (tests/_yalitim.py): DESKHAND_TEST_PAYLASIM ad alanına yazılabilir bağlanır — test pencerelerinin
+    olay günlükleri ana makinedeki teste ulaşsın (ad alanında /tmp boş). Dar tutulur: yalnız geçici dizindeki
+    `deskhand-test-*/paylasim` adlı, kullanıcıya ait, 0700, sembolik bağ olmayan dizin; başka her değer yok sayılır
+    (ev dizini, soketler, başka yollar bu yolla açılamaz)."""
+    y = os.environ.get("DESKHAND_TEST_PAYLASIM")
+    if not y:
+        return None
+    import stat as _stat
+    import tempfile
+    g = os.path.realpath(y)
+    ust = os.path.dirname(g)
+    if os.path.basename(g) != "paylasim" or not os.path.basename(ust).startswith("deskhand-test-") or \
+            os.path.dirname(ust) != os.path.realpath(tempfile.gettempdir()):
+        return None
+    try:
+        st = os.lstat(y)
+    except OSError:
+        return None
+    if not _stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or (st.st_mode & 0o777) != 0o700:
+        return None
+    return g
+
+
 # Uygulamanın ortamından YALNIZ son komuta (bwrap --setenv) giden değişkenler: yardımcı zincir (sh, nice, ionice,
 # bwrap) bunlarla ÇALIŞMAZ (PATH araç çözümü, LD_* yükleyici)
 SON_KOMUT_ORTAMI = ("PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT")
@@ -547,6 +576,9 @@ def korumali_argv(argv: list[str], runtime_kok: str, baglar: list[tuple[str, boo
     if not (_ic_ice(rk, f"/run/user/{uid}") or _ic_ice(rk, "/tmp")):
         a += ["--tmpfs", rk]
     a += ["--new-session"]
+    paylasim = test_paylasimi()
+    if paylasim:
+        a += ["--bind", paylasim, paylasim]
     for yol, ro in baglar:
         if yol and os.path.exists(yol):
             a += ["--ro-bind" if ro else "--bind", yol, yol]
