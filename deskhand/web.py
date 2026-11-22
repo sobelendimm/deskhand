@@ -445,8 +445,11 @@ def _bicimle(o, ad_siniri, bus=None) -> dict:
 
 def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> None:
     """Yalnız döndürülecek ögeler için: bağlantıların adresi (href), giriş alanlarının değeri, seçim kutusunun seçili
-    seçeneği. Parola alanının değeri OKUNMAZ."""
+    seçeneği. Parola alanının değeri OKUNMAZ. Giriş alanı değeri erisim._deger_temizle ile süzülür (masaüstü yoluyla
+    AYNI): ad, açıklama ve autocomplete/id/placeholder/text-input-type nitelikleri kart/parola/PIN/OTP/CVC alanı
+    gösteriyorsa değer "***"; yalnız maske karakterlerinden oluşan değer atlanır; denetim karakterleri ayıklanır."""
     m, hedef = [], []
+    yol_of = {id(o): h["_yol"] for o, h in zip(ogeler, ham)}
     for o, h in zip(ogeler, ham):
         if o["rol"] == "link":
             m.append(_m(bus, h["_yol"], "org.a11y.atspi.Hyperlink", "GetURI", "i", (0,)))
@@ -454,19 +457,54 @@ def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> N
         elif o["rol"] in ("entry", "spin button"):
             m.append(_m(bus, h["_yol"], "org.a11y.atspi.Text", "GetText", "ii", (0, -1)))
             hedef.append((o, "deger"))
+            # değer maskesi için ipuçları (ad zaten ham["ad"]'da; kırpılmamış hâli)
+            m.append(_ozellik(bus, h["_yol"], "Description"))
+            hedef.append((o, "_aciklama"))
+            m.append(_m(bus, h["_yol"], ERISIM, "GetAttributes"))
+            hedef.append((o, "_nitelik"))
         elif o["rol"] == "combo box":
             m.append(_m(bus, h["_yol"], ERISIM, "GetChildren"))
             hedef.append((o, "_secenek"))
     r = yol.toplu(m)
     secenek_m, secenek_o = [], []
+    ad_of = {id(o): h.get("ad", "") for o, h in zip(ogeler, ham)}
+    degerler = []  # (öge, ham değer, [açıklama], {nitelikler}): süzme tüm ipuçları gelince
     for (o, alan), v in zip(hedef, r):
+        if alan == "_aciklama":
+            degerler[-1][2].append(_ozd(v, "") or "")
+            continue
+        if alan == "_nitelik":
+            nit = _deg(v, {}) or {}
+            degerler[-1][3].update(nit if isinstance(nit, dict) else {})
+            continue
         v = _deg(v)
-        if alan == "_secenek":
+        if alan == "deger":
+            degerler.append((o, v, [], {}))
+        elif alan == "_secenek":
             for b_, y in (v or [])[:1]:  # select → (menü) → seçenekler
                 secenek_m.append(_m(b_, y, ERISIM, "GetChildren"))
                 secenek_o.append(o)
         elif v:
             o[alan] = v if len(v) <= 300 else v[:299] + "…"
+    if degerler:
+        from .erisim import _DEGER_NITELIKLERI, _deger_temizle
+        # Firefox, ögenin niteliklerini ilk sorguda BOŞ ({}) döndürebiliyor (ölçüldü: sayfadaki ilk giriş alanı; ikinci
+        # sorguda id/placeholder-text/text-input-type gelir) → değeri olan ve niteliği boş alanlar bir kez daha sorulur
+        bos = [t for t in degerler if t[1] and not t[3]]
+        if bos:
+            for t, v in zip(bos, yol.toplu([_m(bus, yol_of[id(t[0])], ERISIM, "GetAttributes") for t in bos])):
+                nit = _deg(v, {}) or {}
+                t[3].update(nit if isinstance(nit, dict) else {})
+        for o, v, aciklama, nit in degerler:
+            if not v or not isinstance(v, str):
+                continue
+            ipucu = [ad_of.get(id(o), "") or o.get("ad", "")] + aciklama
+            ipucu += [str(nit[a]) for a in _DEGER_NITELIKLERI if nit.get(a)]
+            if str(nit.get("text-input-type", "")).lower() == "password":
+                ipucu.append("parola")
+            v = _deger_temizle(v, *ipucu)
+            if v:
+                o["deger"] = v if len(v) <= 300 else v[:299] + "…"
     if not secenek_m:
         return
     listeler = yol.toplu(secenek_m)

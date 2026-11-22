@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8"><title>Deskhand Maske Testi</title></head>
+<body>
+<!-- Tamamen sentetik: değer maskesi (web yolu). Değerler sayfa yüklenince JS ile yazılır. -->
+<p><input id="otp-input" autocomplete="one-time-code" aria-label="Kod"></p>
+<p><input id="cc-number" autocomplete="cc-number" aria-label="Numara"></p>
+<p><input id="cvc" autocomplete="cc-csc" aria-label="Üç hane"></p>
+<!-- yalnız autocomplete ile işaretli, adı/id'si sıradan: Firefox HTML autocomplete belirtecini AT-SPI'ye VERMİYOR -->
+<p><input id="k9" autocomplete="one-time-code" aria-label="Giriş 9"></p>
+<p><input id="pinkutu" aria-label="PIN"></p>
+<p><input id="x5" aria-label="Doğrulama kodu"></p>
+<p><input id="x6" placeholder="Parola tekrar" aria-label="Alan altı"></p>
+<p><input id="x7" type="number" aria-label="Güvenlik kodu"></p>
+<p><input id="sehir" aria-label="Şehir"></p>
+<script>
+const d = {"otp-input": "482913", "cc-number": "4111111111111111", cvc: "737", k9: "246810", pinkutu: "1234", x5: "55667",
+           x6: "gizli-deger-6", x7: "909", sehir: "Niğde"};
+for (const [k, v] of Object.entries(d)) document.getElementById(k).value = v;
+</script>
+</body></html>
