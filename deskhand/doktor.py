@@ -233,8 +233,24 @@ def satir_gpu_ocr():
                   _("./install.sh eksikleri ve kurulum komutlarını listeler"))
 
 
+def satir_dinleme():
+    """Dinleme (listen): konuşma tanıma motoru + model + özel ses sunucusu araçları. Salt okunur."""
+    from . import dinleme, ses
+    ad = _("Dinleme")
+    eksik = dinleme.eksikler()
+    ses_eksik = ses.eksik_araclar()
+    if not eksik and not ses_eksik:
+        return _satir(ad, "tamam", _("hazır (motor: {motor}, model: {model})").format(
+            motor=os.path.basename(dinleme.motor_yolu() or ""), model=os.path.basename(dinleme.model_yolu())))
+    if eksik:
+        return _satir(ad, "uyari", _("motor yok") + f": {dinleme.ipucu(eksik)}",
+                      _("isteğe bağlı: yalnız listen aracı için"))
+    return _satir(ad, "uyari", _("özel ses sunucusu için eksik araç: {araclar}").format(araclar=", ".join(ses_eksik)),
+                  _("pipewire, wireplumber, pipewire-pulse ve libpulse araçlarını kur"))
+
+
 SATIRLAR = (satir_surum, satir_oturum, satir_kwin, satir_panel, satir_onay_kapsami, satir_girdi_merkezi, satir_yardimcilar,
-            satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_arka_tur, satir_gpu_ocr)
+            satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
 
 
 def topla() -> list[dict]:

@@ -42,7 +42,7 @@ from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYIL
                          _takas_siniri, _xauth_yaz, kafeste_baslat, korumali_baslat, oncelik_bekcisi_baslat, ortam_tabani, pid_dogru,
                          pid_kaydet, runtime_denetle, ses_kaldir, ses_kur, soket_karsi_pid, soket_kimligi,
                          gercek_soket_kimlikleri, GUVENLI_PATH, python_yolu,
-                         ses_ortami_uygula, uygulama_runtime)
+                         ses_bagi, ses_ortami_uygula, uygulama_runtime)
 from .arka_ortak import a11y_bagi, a11y_dizini_hazirla, a11y_kimlik_temizle, a11y_soket_denetle
 from .arka_ortak import arac as _arac
 from .hata import ARAC_EKSIK, SANAL_KAPALI, Dur
@@ -425,6 +425,49 @@ def gerekli() -> dict:
 
 # ---------------------------------------------------------------- ses
 
+def ses_var() -> bool:
+    """Çalışan masaüstünün özel ses sunucusu hazır mı (salt okuma)."""
+    from . import ses
+    d = durum_oku()
+    if d is None:
+        return False
+    d.setdefault("tur", "xvfb")
+    try:
+        return ses.soket_hazir(baglanti_denetle(d)["calisma"])
+    except Dur:
+        return False
+
+
+def ses_hazirla() -> tuple[str, str | None]:
+    """Çalışan görünmez masaüstünün özel ses sunucusu hazır değilse (açılışta kurulmadıysa) ŞİMDİ kur → (oturum çalışma
+    dizini, uyarı | None). Uyarı varsa sunucu kurulamadı (özellik kapalı). Yalnız masaüstü kapalıysa Dur(14). Durum
+    kaydı güncellenir (kapatma yeni süreçleri de bulsun). Sunucu kurulmadan ÖNCE açılmış uygulamalar onu görmez
+    (ortam/bağ başlatmada kurulur): çağıran uyarmalı."""
+    from . import ses
+    with _kilit():
+        raw = durum_oku()
+        if raw is None:
+            raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+        raw.setdefault("tur", "xvfb")
+        g = baglanti_denetle(raw)
+        cdir = g["calisma"]
+        if ses.soket_hazir(cdir) and (raw.get("pid") or {}).get("ses_pw"):
+            return cdir, None
+        uyari = ses.kur(g, cdir)
+        for k in ("pid", "pid_bas", "ses"):
+            raw[k] = g.get(k)
+        if uyari:
+            raw.setdefault("uyarilar", []).append(uyari)
+        _durum_yaz(raw)
+        if tur(raw) == "kwin":
+            from . import kwin_oturum
+            o = kwin_oturum._durum_oku(cdir)
+            if o:
+                for k in ("pid", "pid_bas", "ses"):
+                    o[k] = g.get(k)
+                kwin_oturum._durum_yaz(o)
+        return cdir, uyari
+
 
 # ---------------------------------------------------------------- openbox / dbus yapılandırması
 
@@ -727,8 +770,10 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
     except Exception:  # noqa: BLE001
         pass
 
-    # ses: arka plan uygulamaları ses sunucusuna HİÇ erişmez (bwrap + ortam); boş çıkış / ses bekçisi yok
+    # ses: arka plan uygulamaları kullanıcının ses sunucusuna HİÇ erişmez (bwrap + ortam); ayar açıksa oturuma özel
+    # ses sunucusu (ses.py: donanımsız, yalnız boş çıkış; dinleme için) kurulur, değilse hiç ses sunucusu yok
     d["ses"] = None
+    _ses_baslat(d, cdir)
 
     # özel D-Bus
     conf, adres = _dbus_yapilandir(cdir)
@@ -768,6 +813,11 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
             d["uyarilar"].append(_("openbox başlamadı: pencereler 0,0'da üst üste açılır"))
     elif openbox:
         d["uyarilar"].append(_("openbox yok (sudo pacman -S openbox): pencereler 0,0'da üst üste açılır"))
+
+
+def _ses_baslat(d: dict, cdir: str) -> None:
+    from . import ses
+    ses.ayara_gore_kur(d, cdir)
 
 
 def _bildirim_baslat(d: dict, cdir: str) -> None:
@@ -883,7 +933,8 @@ def _kapat_ic(d: dict) -> list[str]:
         cg = ""  # beklenmeyen kafes yolu: içindekilere dokunma
     haric = _atalar()
     # bayat/oynanmış kayda karşı: PID'e yalnız başlangıç zamanı kayıttakiyle aynıysa (ve kafes varsa kafesteyse) sinyal
-    cekirdek = [p for ad in ("bildirim", "ses_bekcisi", "oncelik_bekcisi", "openbox", "a11y", "dbus", "xvfb")
+    cekirdek = [p for ad in ("bildirim", "ses_pulse", "ses_wp", "ses_pw", "ses_bekcisi", "oncelik_bekcisi", "openbox",
+                             "a11y", "dbus", "xvfb")
                 if (p := pid.get(ad)) and pid_dogru(p, bas.get(ad), cg)]
 
     def surecler() -> list[int]:
@@ -1001,7 +1052,7 @@ def uygulama_baglari(g: dict) -> list[tuple[str, bool]]:
     # yaratırdı)
     a11y = a11y_bagi(os.path.join(rt, "at-spi"), a11y_kimlik_temizle(g))
     return [(rt, False), a11y, (os.path.join(c, "bus"), False),
-            (f"/tmp/.X11-unix/X{g['no']}", False), (os.path.join(c, XAUTH_DOSYA), True)]  # oturum kopyası: yalnız KENDİSİNİNKİ (korumali_baslat)
+            (f"/tmp/.X11-unix/X{g['no']}", False), (os.path.join(c, XAUTH_DOSYA), True), *ses_bagi(c)]  # oturum kopyası: yalnız KENDİSİNİNKİ (korumali_baslat)
 
 
 def _flatpak_run_mi(argv: list[str]) -> bool:

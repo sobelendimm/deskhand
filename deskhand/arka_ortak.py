@@ -973,15 +973,35 @@ def uygulama_runtime(cdir: str) -> str:
 
 
 def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
-    """Uygulama ortamının SES bölümü (iki tür için aynı): arka plan uygulamaları kullanıcının ses sunucusuna
-    (pipewire/pulse) HİÇ erişmez — çalma da kayıt (mikrofon) da yok. Uygulama bwrap ad alanında gerçek runtime
-    dizinini göremez; ortam da var olmayan bir sokete yönlendirilir (uygulamalar sessiz çalışır). `ses` yok sayılır
-    (geriye uyum: eski boş çıkış düzeneği kaldırıldı)."""
+    """Uygulama ortamının SES bölümü (iki tür için aynı). Uygulamalar kullanıcının ses sunucusuna (pipewire/pulse)
+    HİÇ erişmez — çalma da kayıt (mikrofon) da yok: bwrap ad alanında gerçek runtime dizini görünmez. İki durum:
+      - oturuma özel ses sunucusu hazırsa (ses.py; `<çalışma>/ses/native` kullanıcıya ait gerçek soket) ortam YALNIZ
+        onu gösterir (PULSE_SERVER/PIPEWIRE_REMOTE): çıkış boş (deskhand-sessiz), mikrofon yok, ses kullanıcının
+        hoparlörüne gitmez; Deskhand aynı örneğin monitöründen dinler (listen aracı);
+      - değilse ortam var olmayan bir sokete yönlendirilir (uygulamalar sessiz çalışır).
+    `ses` (durum kaydı) KULLANILMAZ: soket yolu çalışma dizininden kurulur ve varlığı gerçek dosya sisteminden denetlenir
+    (oynanmış kayıt başka bir soketi gösteremez)."""
+    from . import ses as _ses
     for k in [k for k in e if k.startswith(("PULSE_", "PIPEWIRE_"))]:
         del e[k]
+    cdir = os.path.dirname(yok_yolu)
+    if _ses.soket_hazir(cdir):
+        dz = _ses.dizin(cdir)
+        e["PULSE_SERVER"] = f"unix:{os.path.join(dz, _ses.PULSE_SOKET)}"
+        e["PIPEWIRE_REMOTE"] = os.path.join(dz, _ses.PW_SOKET)
+        e["PIPEWIRE_RUNTIME_DIR"] = dz
+        e["PULSE_RUNTIME_PATH"] = dz
+        return
     e["PULSE_SERVER"] = f"unix:{yok_yolu}"
     e["PIPEWIRE_REMOTE"] = yok_yolu
     e["PIPEWIRE_RUNTIME_DIR"] = os.path.dirname(yok_yolu)
+
+
+def ses_bagi(cdir: str) -> list[tuple[str, bool]]:
+    """Özel ses sunucusu hazırsa uygulamanın ad alanına bağlanacak TEK ses yolu: `<çalışma>/ses` (SALT OKUNUR; soketlere
+    connect salt okunur bağda çalışır, uygulama soketi/yapılandırmayı değiştiremez). Hazır değilse hiçbir şey."""
+    from . import ses as _ses
+    return [(_ses.dizin(cdir), True)] if _ses.soket_hazir(cdir) else []
 
 
 def _cikarilacak_mi(k: str) -> bool:
