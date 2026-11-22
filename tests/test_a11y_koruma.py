@@ -97,8 +97,9 @@ if ao.bwrap_var():
     kok2 = os.path.realpath(os.path.join(GECICI, "a11y2"))
     dizin2 = os.path.join(kok2, "at-spi")
     os.makedirs(dizin2, mode=0o700)
-    sunucu = ("import os,socket,sys;os.chdir(sys.argv[1]);s=socket.socket(socket.AF_UNIX);s.bind('bus_0');s.listen(4);"
-              "print('hazir',flush=True);[s.accept() for _ in range(8)]")
+    # signal.alarm: p.kill() yalnız dış süreci öldürür, ad alanındaki sunucu sahipsiz kalırdı (sızıntı) → 20 sn'de kendini bitirir
+    sunucu = ("import os,signal,socket,sys;signal.alarm(20);os.chdir(sys.argv[1]);s=socket.socket(socket.AF_UNIX);"
+              "s.bind('bus_0');s.listen(4);print('hazir',flush=True);[s.accept() for _ in range(8)]")
     argv = ao.korumali_argv([sys.executable, "-c", sunucu, dizin2], os.path.join(kok2, "rt"), [(dizin2, False)])
     p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env={"PATH": ao.GUVENLI_PATH},
                          text=True)
