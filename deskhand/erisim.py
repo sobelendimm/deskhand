@@ -1425,6 +1425,8 @@ def k_ogeye_yaz(a):
     yasak pencere, başlık/sınıf kilidi, kde'de oyun/film koruması; ödeme sayfasında Enter/Tab/boşluklu yazı onay
     ister (yaz ile aynı kural)."""
     metin = a.metin.replace("\r\n", "\n").replace("\r", "\n")
+    from .eylem import denetim_karakteri_denetle
+    denetim_karakteri_denetle(metin)  # Esc/geri silme gibi denetim karakterleri değere de yazılmaz
     o, kademe, sure = _eylem_baglami(a, "klavye")
     k = a.kimlik
     insan_dogrulama_nokta(k, o.get("cx"), o.get("cy"), [a.ad, o.get("ad")])  # CAPTCHA alanına değer yazılmaz

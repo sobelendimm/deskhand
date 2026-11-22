@@ -27,6 +27,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import unicodedata
 
 from .. import arka_ortak, hata, kwin_oturum, masaustu
 from ..hata import (AKTIF_DEGIL, ARAC_EKSIK, BASLIK_SINIF, BELIRSIZ, INSAN, KULLANICI_DUR, PENCERE_YOK,
@@ -492,6 +493,8 @@ class KwinArkaUc(ArkaUc):
         """Oturumun klavye haritasında (EIS'in verdiği xkb haritası) doğrudan yazılabilir mi; girdi GÖNDERMEZ."""
         if c in "\n\t":
             return True
+        if unicodedata.category(c) == "Cc":  # denetim karakteri (Esc, geri silme…) yazı değil, tuştur
+            return False
         d = self._d()
         imza = (d["kimlik"], d.get("baslangic"))
         if imza != self._yazilabilir_imza:

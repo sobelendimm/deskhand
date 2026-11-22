@@ -105,6 +105,15 @@ def girdi_suresi(satirlar, ayar) -> float:
     return ms / 1000 * 1.1
 
 
+_KARAKTER_UYARI = re.compile(r"^(.*\b(?:character|char)\b[^:]*:).*$", re.I)
+
+
+def uyari_maskele(satir: str) -> str:
+    """dotool uyarısındaki yazılan karakteri gizler ('impossible character for layout: é' → '…: ***'): merkez birden
+    çok istemciye hizmet eder ve hangi gönderimin gizli olduğunu bilmez; günlüğe karakter hiç yazılmaz."""
+    return _KARAKTER_UYARI.sub(r"\1 ***", satir)
+
+
 class _Baglanti:
     def __init__(self, sock: socket.socket, pid: int):
         self.sock, self.pid = sock, pid
@@ -278,7 +287,7 @@ class GirdiMerkezi:
                 with self._kilit:
                     if self._sahip is not None and len(self._sahip.uyarilar) < 50:
                         self._sahip.uyarilar.append(satir)
-                gunluk(f"girdi merkezi | dotool: {satir}")
+                gunluk(f"girdi merkezi | dotool: {uyari_maskele(satir)}")
         except (OSError, ValueError):
             pass
 

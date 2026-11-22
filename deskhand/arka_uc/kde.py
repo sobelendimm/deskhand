@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 
 from PIL import Image
 
@@ -124,7 +125,10 @@ _yazilabilir = {}
 
 
 def yazilabilir_mi(c):
-    """Karakter etkin klavye düzeninde yazılabilir mi (xkbcli how-to-type)?"""
+    """Karakter etkin klavye düzeninde yazılabilir mi (xkbcli how-to-type)? Denetim karakteri (\\n, \\t dışı C0/C1,
+    DEL) hiçbir zaman: tuş olarak giderdi (Esc, geri silme)."""
+    if c not in "\n\t" and unicodedata.category(c) == "Cc":
+        return False
     if c not in _yazilabilir:
         try:
             duzen, varyant = klavye_duzeni()
@@ -630,7 +634,7 @@ class Girdi:
         m = getattr(self, "merkez", None)
         if m is not None:
             if self.hazir:  # komut girdi bitince dönsün (kendi dotool'da stdin kapatıp beklemenin karşılığı)
-                self.uyarilar = m.bekle()
+                self.uyarilar = self._uyari_suz(m.bekle())
                 for l in self.uyarilar:
                     print(f"UYARI {l}", file=sys.stderr)
             m.kapat()  # merkez bağlantı kopunca bu bağlantının basılı kalanlarını bırakır
@@ -647,9 +651,13 @@ class Girdi:
             self.p.wait(timeout=10)
         except subprocess.TimeoutExpired:
             self.p.kill()
-        self.uyarilar = [l for l in self.p.stderr.read().splitlines() if l.strip()]
+        self.uyarilar = self._uyari_suz([l for l in self.p.stderr.read().splitlines() if l.strip()])
         for l in self.uyarilar:
             print(f"UYARI {l}", file=sys.stderr)
+
+    def _uyari_suz(self, satirlar):
+        """Gizli gönderimde dotool uyarılarındaki karakter ('impossible character …: é') iletiye taşınmaz."""
+        return [_gm.uyari_maskele(l) for l in satirlar] if getattr(self, "gizli", False) else list(satirlar)
 
 
 # ---------------------------------------------------------------- pano (wl-clipboard)

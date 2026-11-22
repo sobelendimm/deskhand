@@ -11,7 +11,7 @@ import time
 
 from . import yollar
 from .arka_uc import sec
-from .eylem import GIRDI_KOMUTLARI, adimlari_calistir
+from .eylem import GIRDI_KOMUTLARI, adim_metni, adimlari_calistir
 from .gorsel import bolge_coz, pencere_goruntusu
 from .gunluk import gunluk
 from .hata import Dur, dur_denetle
@@ -77,7 +77,7 @@ def akis_oku(yol):
         elif p[0] == "hata" and len(p) >= 2:
             ayar["hata"].append(p[-1])
         else:
-            raise Dur(1, _("{yol}:{no}: anlaşılmadı: {satir}").format(yol=yol, no=no, satir=repr(s)))
+            raise Dur(1, _("{yol}:{no}: anlaşılmadı: {satir}").format(yol=yol, no=no, satir=repr(adim_metni(s))))
     if not ekranlar and not ayar["basari"]:
         raise Dur(1, _("{yol}: hiç 'ekran' bloğu ya da 'basari' yok").format(yol=yol))
     return ayar, ekranlar
@@ -234,7 +234,7 @@ def k_akis(a):
                 hazir.append(x)
             print(_("[ekran] '{anahtar}' → {sayi} adım").format(anahtar=anahtar, sayi=len(hazir))
                   + (_(" (başlık {x},{y})").format(x=f"{m['cx']:.0f}", y=f"{m['cy']:.0f}") if m else ""))
-            gunluk(f"akis {os.path.basename(yol)} | ekran {e['ad']!r} | {' ; '.join(hazir) or '-'}")
+            gunluk(f"akis {os.path.basename(yol)} | ekran {e['ad']!r} | {' ; '.join(adim_metni(x) for x in hazir) or '-'}")
             girdili = any(x.split()[0] in GIRDI_KOMUTLARI for x in hazir)
             try:
                 if girdili:

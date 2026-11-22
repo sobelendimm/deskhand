@@ -47,15 +47,33 @@ YEDEK = {"—": "-", "–": "-", "−": "-", "‐": "-", "‑": "-", "…": "...
          "“": '"', "”": '"', "„": '"', " ": " ", " ": " ", " ": " ", "•": "*", "×": "x"}
 
 
-def yazima_hazirla(metin):
-    """Yazmadan ÖNCE: klavye düzeninde olmayan karakteri yedeğiyle değiştir; yedeği yoksa hiç yazmadan DUR."""
+def denetim_karakteri_denetle(metin):
+    """Yazıda \\n, \\t (ve \\n'e çevrilen \\r) DIŞINDA denetim karakteri (C0/C1, DEL: \\x08 geri silme, \\x1b
+    Esc, \\x7f…) varsa HİÇBİR ŞEY göndermeden Dur(1). Bu karakterler tuş olarak gidince (Esc → diyalog kapanır,
+    geri silme → yazılanı siler) yazının görünen anlamı değişir. İleti yalnız konum ve kod verir (gizli yazı da)."""
+    for i, c in enumerate(metin):
+        if c not in "\n\t\r" and unicodedata.category(c) == "Cc":
+            raise Dur(1, _("yazıda denetim karakteri var ({konum}. karakter, U+{kod}): yalnız \\n (Enter) ve \\t (Tab) "
+                           "yazılabilir; Esc/geri silme gibi tuşlar için tus/press_key kullan. Hiçbir şey yazılmadı"
+                           ).format(konum=i + 1, kod=f"{ord(c):04X}"))
+
+
+def yazima_hazirla(metin, gizli=False):
+    """Yazmadan ÖNCE: klavye düzeninde olmayan karakteri yedeğiyle değiştir; yedeği yoksa hiç yazmadan DUR.
+    gizli=True: karakter DEĞİŞTİRİLMEZ (parola 'Café' 'Cafe' olarak yazılmasın): düzende olmayan karakterde hiç yazmadan
+    DUR; iletiler karakteri değil yalnız konumu/uzunluğu verir."""
+    denetim_karakteri_denetle(metin)
     yazilabilir_mi = _istege_bagli("yazilabilir_mi", lambda c: True)
     klavye_duzeni = _istege_bagli("klavye_duzeni", lambda: ("tr", ""))
     sonuc, degisen = [], {}
-    for c in metin:
+    for i, c in enumerate(metin):
         if c in "\n\t" or " " <= c <= "~" or yazilabilir_mi(c):
             sonuc.append(c)
             continue
+        if gizli:
+            raise Dur(1, _("gizli yazının {konum}. karakteri '{duzen}' düzeninde yok (uzunluk {uzunluk}); gizli yazıda "
+                           "karakter değiştirilmez; hiçbir şey yazılmadı").format(
+                konum=i + 1, duzen=klavye_duzeni()[0], uzunluk=len(metin)))
         y = YEDEK.get(c)
         if y is None:
             sade = "".join(x for x in unicodedata.normalize("NFKD", c) if not unicodedata.combining(x))
@@ -393,14 +411,33 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
                 uyari = au.pano_geri_yukle(yedek)  # denetimsiz: DUR ya da kesintide de eski pano geri gelir
         except Exception as e:  # noqa: BLE001 - geri yükleme hatası asıl hatayı gizlemesin
             uyari = _("eski pano içeriği geri yüklenemedi: {hata}").format(hata=getattr(e, "mesaj", e))
+        if g.gizli and son_pano is not None:  # gizli yazı panoda KALMASIN (eski pano geri yüklenemediyse: temizle)
+            uyari = _gizli_pano_temizle(au, son_pano, uyari)
         if uyari:
             print(_("UYARI: {uyari}").format(uyari=uyari), file=sys.stderr)
     print(_("yazıldı: {karakter} karakter, {parca} parça (panodan yapıştırıldı)").format(karakter=len(metin), parca=adet))
     return True
 
 
+def _gizli_pano_temizle(au, son_pano, uyari):
+    """Gizli yapıştırmadan sonra pano hâlâ gizli parçayı tutuyorsa (eski pano çok büyük/geri yüklenemedi) panoyu
+    denetimsiz temizler. → (güncellenmiş) uyarı."""
+    try:
+        kalan = au.pano_oku()
+    except Exception:  # noqa: BLE001 - okunamadı: güvenli tarafta temizle
+        kalan = son_pano
+    if kalan != son_pano:
+        return uyari
+    try:
+        au.pano_geri_yukle({"bos": True})  # denetimsiz temizleme (DUR/ön plan koruması bile olsa gizli yazı kalmasın)
+    except Exception as e:  # noqa: BLE001
+        return _("gizli yazı panoda kalmış olabilir: pano temizlenemedi ({hata})").format(hata=getattr(e, "mesaj", e))
+    return (uyari + "; " if uyari else "") + _("gizli yazı panodan silindi (pano boş)")
+
+
 def yaz_ic(g, k, desen, metin, onayli=False):
     metin = metin.replace("\r\n", "\n").replace("\r", "\n")
+    denetim_karakteri_denetle(metin)  # iki arka uç + yapıştırma yolu: hiçbir şey gönderilmeden
     guvenlik.seviye_denetle(k, "klavye")  # uygulama erişim seviyesi: onay diyaloğundan ÖNCE (boşuna sormasın)
     onay = False
     if yazi_onay_ister_mi(metin) and _yazi_hassas(g, k, onayli, metin):  # yazmadan ÖNCE (bir eylem = bir onay)
@@ -422,7 +459,7 @@ def yaz_ic(g, k, desen, metin, onayli=False):
             if _yapistirarak_yaz(g, k, desen, metin, onayli):
                 tamam = True
                 return
-            metin = yazima_hazirla(metin)  # pano yok: eski yol (yedekli karakterler değişir, yedeği yoksa DUR)
+            metin = yazima_hazirla(metin, gizli=g.gizli)  # pano yok: eski yol (yedekli karakterler değişir, yedeği yoksa DUR)
         _harf_harf_yaz(g, k, desen, metin, onayli)
         tamam = True
     finally:  # uçbirim tamponu: yarıda kesilen yazıda satırın içeriği bilinmez
@@ -879,8 +916,9 @@ def _kart_alani_mi(k):
 
 def k_yaz(a):
     ham = a.metin.replace("\r\n", "\n").replace("\r", "\n")
+    denetim_karakteri_denetle(ham)
     # yapıştırılacak yazıda klavye düzeninde olmayan karakter (emoji…) sorun değil: yazima_hazirla yalnız harf harf yazılacaksa
-    metin = ham if yapistirarak_mi(ham) else yazima_hazirla(ham)
+    metin = ham if yapistirarak_mi(ham) else yazima_hazirla(ham, gizli=getattr(a, "gizli", False))
     if a.kimlik == EKRAN:  # masaüstü kipi: yazı o an etkin pencereye gider → ona kilitlen (değişirse durur)
         a.kimlik = _au().aktif()
         if not a.kimlik:
@@ -1064,6 +1102,19 @@ def k_dizi(a):
 
 
 YASAK_ADIMLAR = ("dizi", "kapat", "akis", "ac", "erisim")
+_GIZLI_ADIM = re.compile(r"(?:^|\s)['\"]?--(?:gizli|secret)['\"]?(?=\s|$)")
+
+
+def gizli_adim_mi(satir):
+    """Dizi/akış adımı gizli (--secret / --gizli) mi? Satır ayrıştırılamasa da ham metinden bakılır."""
+    return bool(_GIZLI_ADIM.search(satir or ""))
+
+
+def adim_metni(satir):
+    """Yazdırılacak/günlüğe yazılacak adım metni: gizli adımın yalnız komut adı ve uzunluğu görünür."""
+    if not gizli_adim_mi(satir):
+        return satir
+    return f"{(satir.split() or ['?'])[0]} *** ({len(satir)}, --secret)"
 
 
 def adimlari_calistir(a, satirlar, etiket="dizi", etk=None, onek=""):
@@ -1075,19 +1126,20 @@ def adimlari_calistir(a, satirlar, etiket="dizi", etk=None, onek=""):
     pg = _DIZI.g = _au().girdi(etiket, etk=etk, denetle=denetle)
     try:
         for no, satir in enumerate(satirlar, 1):
-            parca = akis_adimi(shlex.split(satir))  # İngilizce komut adı → Türkçe iç ad (sleep → uyu …)
-            argv = parca if parca[0] == "uyu" else [parca[0], a.kimlik_ham] + parca[1:]
+            gosterim = adim_metni(satir)
             try:
+                parca = akis_adimi(shlex.split(satir))  # İngilizce komut adı → Türkçe iç ad (sleep → uyu …)
+                argv = parca if parca[0] == "uyu" else [parca[0], a.kimlik_ham] + parca[1:]
                 b = p.parse_args(argv)
-            except (SystemExit, ValueError) as e:
-                ek = f" ({e})" if isinstance(e, ValueError) else ""
-                raise Dur(1, _("{etiket} {no}. satır hatalı: {satir}").format(etiket=etiket, no=no, satir=repr(satir)) + ek)
+            except (SystemExit, ValueError, IndexError) as e:
+                ek = f" ({e})" if isinstance(e, ValueError) and gosterim == satir else ""
+                raise Dur(1, _("{etiket} {no}. satır hatalı: {satir}").format(etiket=etiket, no=no, satir=repr(gosterim)) + ek)
             if b.komut in YASAK_ADIMLAR:
                 raise Dur(1, _("{etiket} içinde '{komut}' kullanılamaz").format(etiket=etiket, komut=b.komut))
             if getattr(b, "onayli", False) and not getattr(a, "onayli_izin", True):
                 # MCP: akışın önceden onaylı adımları için kullanıcı onayı alınmadı (dosya sonradan değişmiş olabilir)
                 raise Dur(10, _("{etiket} {no}. satır önceden onaylı (--onayli) ama kullanıcı onayı alınmadı: {satir}"
-                                ).format(etiket=etiket, no=no, satir=repr(satir)))
+                                ).format(etiket=etiket, no=no, satir=repr(gosterim)))
             if hasattr(b, "kimlik"):
                 b.kimlik = a.kimlik
             if getattr(b, "baslik", None) is None:
@@ -1096,7 +1148,7 @@ def adimlari_calistir(a, satirlar, etiket="dizi", etk=None, onek=""):
                 pg.insan_kontrol()
             if b.komut in GIRDI_KOMUTLARI:
                 yasak_denetle(b.kimlik)
-            print(f"{onek}[{no}/{len(satirlar)}] {satir}")
+            print(f"{onek}[{no}/{len(satirlar)}] {gosterim}")
             b.f(b)
     finally:
         _DIZI.g = None
