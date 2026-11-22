@@ -78,12 +78,81 @@ e = sahte_etk([("bosta", t - 2), ("aktif", t - 0.5)], kendi=[(t - 0.51, t - 0.2)
 t0 = time.monotonic()
 kontrol("YERLEŞME: bosta hiç gelmiyor (insan yazmayı sürdürüyor) → İNSAN", e.insan(t - 1, yerlesme=0.15))
 kontrol("… en çok yerleşme süresi beklendi", 0.13 <= time.monotonic() - t0 < 0.5, f"{time.monotonic() - t0:.3f}")
-e = sahte_etk([("bosta", t - 2), ("aktif", t - 0.5), ("bosta", t - 0.4), ("aktif", t - 0.1)], kendi=[(t - 0.51, t - 0.45)])
+# (0.9.0: penceremizden YANSIMA_PAY'den uzak olay — yakın olanlar için yerleşme beklenir, bkz. 2c)
+e = sahte_etk([("bosta", t - 2), ("aktif", t - 1.2), ("bosta", t - 1.1), ("aktif", t - 0.1)], kendi=[(t - 1.21, t - 1.15)])
 t0 = time.monotonic()
-kontrol("pencere dışı 'aktif' (gerçek insan olayı) → İNSAN, yerleşme beklemeden",
-        e.insan(t - 1, yerlesme=insan.YERLESME) and time.monotonic() - t0 < 0.05)
+kontrol("pencere dışı 'aktif' (gerçek insan olayı, penceremizden 1 sn sonra) → İNSAN, yerleşme beklemeden",
+        e.insan(t - 1.5, yerlesme=insan.YERLESME) and time.monotonic() - t0 < 0.05)
 kontrol("kendi pencere payı ≥ 0,2 sn (gecikmeli yansıma toleransı)", insan.KENDI_PAY >= 0.2, str(insan.KENDI_PAY))
 
+
+print("2c) penceremiz bittikten hemen sonra gelen TEK 'aktif' (gecikmeli yansıma, 0.9.0)")
+# BİREBİR örnek: bosta; harf t; aktif t+0,30 (pencere t+0,263'te bitti); bosta t+0,33 → insan DEĞİL
+h = time.monotonic() - 1.0
+e = sahte_etk([("bosta", h - 1)])
+e.kendi_girdi(h, h + insan.HARF_SN)
+e.olaylar += [("aktif", h + 0.30), ("bosta", h + 0.33)]
+kontrol("bosta; harf t; aktif t+0,30; bosta t+0,33 → insan DEĞİL (0.8.2: 12)", not e.insan(h - 0.5, yerlesme=insan.YERLESME))
+kontrol("… yerleşmesiz de insan değil (bosta zaten geldi)", not e.insan(h - 0.5))
+# bosta henüz gelmedi: yerleşme beklenir, 30 ms sonra gelir → insan değil
+h = time.monotonic()
+e = sahte_etk([("bosta", h - 1)])
+e.kendi_girdi(h - 0.30, h - 0.30 + insan.HARF_SN)
+e.olaylar.append(("aktif", h))
+threading.Timer(0.03 + insan.ETKINLIK_MS / 1000, lambda: e.olaylar.append(("bosta", h + 0.03))).start()
+t0 = time.monotonic()
+kontrol("aktif penceremizden hemen sonra, bosta 80 ms sonra geldi → yerleşme bekler, insan DEĞİL",
+        not e.insan(h - 0.5, yerlesme=insan.YERLESME) and time.monotonic() - t0 < 0.25, f"{time.monotonic() - t0:.3f}")
+# insanın tek tuşu: basılı tutma + bırakma 80 ms → patlama YANSIMA_SURE'den uzun → İNSAN
+h = time.monotonic() - 1.0
+e = sahte_etk([("bosta", h - 1)])
+e.kendi_girdi(h, h + insan.HARF_SN)
+e.olaylar += [("aktif", h + 0.30), ("bosta", h + 0.30 + 0.08 + insan.ETKINLIK_MS / 1000)]
+kontrol("pencere sonrası insan tuşu (80 ms basılı) → İNSAN", e.insan(h - 0.5, yerlesme=insan.YERLESME))
+# gerçek idle-notify'da basma ve bırakma (80 ms > ETKINLIK_MS) AYRI 'aktif' olur: iki kısa patlama → tek değil → İNSAN
+h = time.monotonic() - 1.0
+e = sahte_etk([("bosta", h - 1)])
+e.kendi_girdi(h, h + insan.HARF_SN)
+e.olaylar += [("aktif", h + 0.30), ("bosta", h + 0.35), ("aktif", h + 0.38), ("bosta", h + 0.43)]
+kontrol("pencere sonrası insan tuşu (basma + bırakma = iki 'aktif') → İNSAN", e.insan(h - 0.5, yerlesme=insan.YERLESME))
+# bosta hiç gelmiyor (insan yazmayı sürdürüyor) → yerleşmeden sonra İNSAN
+h = time.monotonic()
+e = sahte_etk([("bosta", h - 1)])
+e.kendi_girdi(h - 0.30, h - 0.30 + insan.HARF_SN)
+e.olaylar.append(("aktif", h))
+t0 = time.monotonic()
+kontrol("pencere sonrası 'aktif', bosta gelmiyor → yerleşme sonrası İNSAN", e.insan(h - 0.5, yerlesme=0.15)
+        and 0.13 <= time.monotonic() - t0 < 0.5, f"{time.monotonic() - t0:.3f}")
+# penceremizden YANSIMA_PAY'den sonra → yansıma sayılmaz
+h = time.monotonic() - 2.0
+e = sahte_etk([("bosta", h - 1)])
+e.kendi_girdi(h, h + insan.HARF_SN)
+e.olaylar += [("aktif", h + insan.KENDI_PAY + insan.YANSIMA_PAY + 0.1), ("bosta", h + insan.KENDI_PAY + insan.YANSIMA_PAY + 0.13)]
+kontrol("penceremizden YANSIMA_PAY sonra tek 'aktif' → İNSAN", e.insan(h - 0.5))
+# hiç kendi girdimiz yok → yansıma olamaz
+e = sahte_etk([("bosta", h - 1), ("aktif", h), ("bosta", h + 0.03)])
+kontrol("kendi girdimiz yokken tek 'aktif' → İNSAN", e.insan(h - 0.5))
+
+print("2d) Etkinlik.kapat: yardımcı beklenir, boru kapanır (zombi / fd sızıntısı yok)")
+import subprocess  # noqa: E402
+e = sahte_etk()
+e.p = subprocess.Popen(["sleep", "30"], stdout=subprocess.PIPE, text=True)
+fd_once = len(os.listdir("/proc/self/fd"))
+e.kapat()
+kontrol("kapat → süreç toplandı (returncode var, zombi yok)", e.p.returncode is not None)
+kontrol("kapat → stdout kapandı", e.p.stdout.closed)
+kontrol("kapat → fd sayısı azaldı", len(os.listdir("/proc/self/fd")) < fd_once)
+e.kapat()  # ikinci kez: hata yok
+kontrol("kapat iki kez çağrılabilir", True)
+e = insan.Etkinlik.__new__(insan.Etkinlik)
+e.olaylar, e.hata, e.hazir_an, e._hazir = [], None, None, threading.Event()
+e.p = subprocess.Popen(["sh", "-c", "echo hazir 1.0; exec sleep 30"], stdout=subprocess.PIPE, text=True)
+okuyucu = threading.Thread(target=e._oku, daemon=True)
+okuyucu.start()
+e._hazir.wait(2)
+e.kapat()
+okuyucu.join(2)
+kontrol("okuyucu iş parçacığı kapat sonrası hatasız biter", not okuyucu.is_alive())
 
 print("2b) taban_bekle: ilk girdiden önce ilk 'bosta'")
 e = sahte_etk(hazir_once=0.0)
@@ -210,7 +279,11 @@ kontrol("gecikmeli yansıma (200 ms) + yavaş kelime sınırı → kesilmez", ha
 
 
 def insan_tek_tus(sim):  # yavaş kelime sınırının ortasında (bizim girdimiz yokken) insan bir tuşa basar
-    sim.insan_girdisi(time.monotonic() + 0.35)
+    # gerçek tuş: bas + 80 ms sonra bırak (iki 'aktif'). 0.9.0: anlık TEK kısa olay penceremizden hemen sonra
+    # gelirse kendi girdimizin gecikmeli yansımasından ayrılamaz → yansıma sayılır
+    t = time.monotonic() + 0.35
+    sim.insan_girdisi(t)
+    sim.insan_girdisi(t + 0.08)
 
 
 yazilan, hata = yaz("Satın alımdan vazgeçtim.", yavas_parca=(3, 0.5), insan_plani=insan_tek_tus)

@@ -21,6 +21,10 @@ KENDI_PAY = 0.25   # kendi girdimizin compositor'a ulaşıp 'aktif' olayı üret
 SUREKLILIK_PAY = 0.05  # 'bosta' bildiriminin bize ulaşma payı (sn): ETKINLIK_MS + bu kadar girdisiz geçerse bosta gelmeli
 YERLESME = 0.3     # etkinlik sürüyor görünüyor ama son girdi bizimdi: 'bosta' için en çok bu kadar beklenir (sn; kendi
 #                    girdimizin yansıması dotool kuyruğunda / compositor'da gecikmiş olabilir; insan sürdürürse yine 12)
+YANSIMA_PAY = 0.5  # kendi penceremiz bittikten sonra bu kadar sn içinde gelen TEK kısa 'aktif' (ardından hemen 'bosta')
+#                    kendi girdimizin gecikmeli yansıması sayılır (0.9.0)
+YANSIMA_SURE = 0.04  # böyle bir yansımanın en uzun süresi ('aktif' → son girdi, sn): dotool tuşu 6 ms basılı tutar.
+#                    İnsanın tek tuşu (basma + ~80 ms sonra bırakma) İKİ 'aktif' üretir → tek değil → insan
 # YALNIZ TESTLER: bu süreç İNSANI TAKLİT ediyor (ör. yazarken fareyi oynatan ikinci süreç) → kendisi insan
 # önceliği için beklemez. Gerçek kullanımda ASLA verilmez.
 INSAN_TAKLIDI = os.environ.get("DESKHAND_INSAN_TAKLIDI") == "1" or os.environ.get("EKRAN_INSAN_TAKLIDI") == "1"
@@ -64,6 +68,15 @@ class Etkinlik:
         threading.Thread(target=self._oku, daemon=True).start()
 
     def _oku(self):
+        try:
+            self._oku_dongu()
+        except (ValueError, OSError):  # kapat() boruyu kapattı
+            pass
+        if not self._hazir.is_set():
+            self.hata = self.hata or _("yardımcı süreç kapandı")
+            self._hazir.set()
+
+    def _oku_dongu(self):
         for satir in self.p.stdout:
             t = satir.split()
             if not t:
@@ -78,9 +91,6 @@ class Etkinlik:
             elif t[0] == "hata":
                 self.hata = satir.strip()
                 self._hazir.set()
-        if not self._hazir.is_set():
-            self.hata = self.hata or _("yardımcı süreç kapandı")
-            self._hazir.set()
 
     def calisiyor(self):
         self._hazir.wait(1.0)
@@ -121,13 +131,45 @@ class Etkinlik:
             imlec = max(imlec, s)
         return bit - imlec <= esik
 
+    def _yansima(self, olaylar, i):
+        """olaylar[i] = ('aktif', ta) kendi pencerelerimizin DIŞINDA. Son kendi penceremiz biteli YANSIMA_PAY'den az
+        olduysa bu, girdimizin gecikmeli yansıması olabilir (dotool kuyruğu / meşgul compositor; 0.8.1'de pencere
+        sonrası tek 'aktif' koşulsuz insan sayılıyordu). → "bizim" (ardından 'bosta' geldi ve etkinlik ne gönderdiğimiz
+        girdiden ne YANSIMA_SURE'den uzun sürdü) | "bekle" ('bosta' henüz yok: yerleşme beklenebilir) | None (insan)."""
+        ta = olaylar[i][1]
+        onceki = None
+        for b, s in self.kendi:
+            if s < ta:
+                onceki = (b, s)
+            else:
+                break
+        if onceki is None or ta - onceki[1] > YANSIMA_PAY:
+            return None
+        # TEK olmalı: insanın bir tuşu bile iki 'aktif' üretir (basma, ≥ ETKINLIK_MS sonra bırakma; arada 'bosta')
+        if sum(1 for tur, t in olaylar if tur == "aktif" and t > onceki[1] and not self._bizim(t)) > 1:
+            return None
+        if i + 1 >= len(olaylar):
+            return "bekle"
+        tur, tb = olaylar[i + 1]
+        if tur != "bosta":
+            return None
+        gonderilen = max(0.0, (onceki[1] - KENDI_PAY) - (onceki[0] + 0.005))  # penceremizdeki girdinin süresi
+        return "bizim" if tb - ETKINLIK_MS / 1000 - ta <= min(gonderilen + 0.01, YANSIMA_SURE) else None
+
     def _insan(self, beri):
         """→ None (insan yok) | "olay" (pencerelerimiz dışında 'aktif': kesin) | "suruyor" (bosta gelmedi, etkinlik
         kendi girdimizle açıklanamıyor: yansıma gecikmesi de olabilir)."""
         simdi = time.monotonic()
         olaylar = list(self.olaylar)
-        if any(tur == "aktif" and t >= beri and not self._bizim(t) for tur, t in olaylar):
-            return "olay"
+        bekle = False
+        for i, (tur, t) in enumerate(olaylar):
+            if tur == "aktif" and t >= beri and not self._bizim(t):
+                y = self._yansima(olaylar, i)
+                if y is None:
+                    return "olay"
+                bekle = bekle or y == "bekle"
+        if bekle:
+            return "suruyor"  # pencere sonrası tek 'aktif': yerleşme ('bosta') beklenir; gelmezse insan
         if not olaylar:  # yardımcı başladığından beri hiç 'bosta' gelmedi = kesintisiz girdi (açılıştan beri)
             if simdi - self.hazir_an <= ETKINLIK_MS / 1000 + 0.15:
                 return None
@@ -167,8 +209,24 @@ class Etkinlik:
         return time.monotonic() - son_girdi >= sure
 
     def kapat(self):
-        if self.p and self.p.poll() is None:
+        """Yardımcıyı sonlandır, BEKLE (zombi kalmasın) ve boruyu kapat (fd sızmasın; uzun yaşayan MCP sunucusu her
+        komutta bir izleyici açar)."""
+        if not self.p:
+            return
+        if self.p.poll() is None:
             self.p.terminate()
+            try:
+                self.p.wait(0.5)
+            except subprocess.TimeoutExpired:
+                self.p.kill()
+                try:
+                    self.p.wait(0.5)
+                except subprocess.TimeoutExpired:
+                    pass
+        try:
+            self.p.stdout.close()
+        except (OSError, ValueError, AttributeError):
+            pass
 
 
 def taban_bekle(etk, azami=ETKINLIK_MS / 1000 + 0.15):
