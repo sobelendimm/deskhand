@@ -318,8 +318,8 @@ ZARARSIZ = [
     "curl -s u | jq .", "wget -qO- u | tar xz", "node -v", "npm run build", "cargo build --release", "pip list",
     "ssh host uptime", "echo ${HOME}", "printf '%s\\n' a b", "ls | grep -v x", "history | tail", "cd - && ls",
     "time make", "watch -n 1 date", "sort -u f", "awk '{print $1}' f", "sed -i 's/a/b/' f", "du -sh *",
-    "python3 -m http.server", "ruby -v", "perl -v", "bash script.sh",
-    "sh -c 'echo hi'", "bash -c 'ls -la'", "nohup ./run.sh &", "jobs", "fg", "kill %1",
+    "python3 -m http.server", "ruby -v", "perl -v",
+    "sh -c 'echo hi'", "bash -c 'ls -la'", "jobs", "fg", "kill %1",
     "echo reboot > notlar.txt", "echo sudo", "git log --oneline | head", "git push -u origin feature",
     "make install DESTDIR=/tmp/x", "ln -s a b", "mkdir -p a/b/c", "touch a", "less f", "vim f", "nano f",
     "htop", "df -h", "free -m", "uname -a", "whoami", "id", "date", "cal", "pwd", "true && false || echo x",
@@ -329,7 +329,7 @@ ZARARSIZ = [
 ZARARSIZ += [  # denetim 2 kurallarına yakın zararsızlar
     "git clean -n", "git clean -nd", "kill -9 1234", "kill -1 1234", "kill %2", "pkill firefox", "killall vlc",
     "crontab -l", "cp a.txt b.txt", "cp -r src dst", "mv eski.txt yeni.txt", "echo hi > out.txt", "date | tee log.txt",
-    "rsync -a src/ dst/", "rsync -a --delete build/ /srv/site/", "bash ./build.sh", "sh install.sh", "sh ./run.sh",
+    "rsync -a src/ dst/", "rsync -a --delete build/ /srv/site/",
     "truncate -s 10M disk.img", "ln -s a b", "ln -sf ../x y", "tmux ls", "tmux attach -t 0", "screen -ls",
     "awk '{print $2}' f", "history | grep git", "history", "fc-list", "printf 'a\\n' > notlar.txt",
     "git -c color.ui=always log", "export EDITOR=vim", "PS1='$ '", "echo $PATH", "cat ~/.bashrc", "grep x ~/.zshrc",
@@ -338,9 +338,11 @@ ZARARSIZ += [  # denetim 2 kurallarına yakın zararsızlar
     "[ \"$a\" != b ] && echo farkli", "rm -i ~/a.txt", "python3 -V", "node --version", "perl -v", "sed -n 1p f",
 ]
 # denetim 2 kararıyla ARTIK onay isteyenler (dolaylı yürütme): eval, alias, source/., betik dosyasını yorumlayıcıyla çalıştırma
-YENI_RISKLI = ["eval echo hi", "alias ll='ls -la'", "source ~/.bashrc", ". venv/bin/activate", "python3 manage.py runserver"]
+YENI_RISKLI = ["eval echo hi", "alias ll='ls -la'", "source ~/.bashrc", ". venv/bin/activate", "python3 manage.py runserver",
+               # denetim 3: betik DOSYASI çalıştırma "içeriği denetlenemez" uyarısı
+               "bash script.sh", "nohup ./run.sh &", "bash ./build.sh", "sh install.sh", "sh ./run.sh"]
 for m in YENI_RISKLI:
-    kontrol(f"denetim 2 kararı: artık onay ister: {m!r}", guvenlik.riskli_komut(m) is not None)
+    kontrol(f"denetim 2/3 kararı: artık uyarı/onay üretir: {m!r}", guvenlik.riskli_komut(m) is not None)
 KALIP = [l.strip().rstrip(",").strip() for l in open(os.path.join(KOK, "tests", "denetim2_kalip.py"))
          if l.startswith("    ") and l.strip().startswith(("\"", "'"))] if os.path.exists(
     os.path.join(KOK, "tests", "denetim2_kalip.py")) else []
@@ -398,49 +400,79 @@ for ad_ in ("kde", "sanal"):
                        ["tus ctrl+u", "yaz sud", "yaz 'o reboot'", "tus enter"]) == 10)
         eylem.k_tus(ns(kombinasyon="ctrl+u"))
         ISTEKLER.clear()
-        kontrol(f"[{ad_}] zararsız: 'ls -la' + Enter → sorulmaz",
-                kod_al(eylem.k_yaz, ns(metin="ls -la")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0
-                and not ISTEKLER)
-        kontrol(f"[{ad_}] zararsız: yaz 'echo merhaba\\n' (temiz satır) → sorulmaz",
-                kod_al(eylem.k_yaz, ns(metin="echo merhaba\n")) == 0 and not ISTEKLER)
+        # denetim 3 kararı: uçbirimde HER Enter onay ister (satırdan bağımsız); zararsız satırda uyarı yok
+        kontrol(f"[{ad_}] zararsız 'ls -la' + Enter → yine onay (red → 10), 'YIKICI' uyarısı YOK, satır gösterilir",
+                kod_al(eylem.k_yaz, ns(metin="ls -la")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10
+                and len(ISTEKLER) == 1 and "YIKICI" not in ISTEKLER[0]["ayrinti"] and "ls -la" in ISTEKLER[0]["ayrinti"]
+                and "Uçbirimde komut çalıştırılacak" in ISTEKLER[0]["ayrinti"], str(ISTEKLER))
+        YANIT["izin"] = True
+        ISTEKLER.clear()
+        n0 = len(au.satirlar)
+        kontrol(f"[{ad_}] izin → Enter gönderildi (tek onay)", kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0 and
+                len(ISTEKLER) == 1 and au.satirlar[n0:] == ["key enter"])
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] bir Enter = bir onay: yaz 'a\\nb\\nc' → 2 onay (her satır ayrı)",
+                kod_al(eylem.k_yaz, ns(metin="a\nb\nc")) == 0 and len(ISTEKLER) == 2, str(len(ISTEKLER)))
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] bir Enter = bir onay: tus 'l s enter p w d enter' → 2 onay",
+                kod_al(eylem.k_tus, ns(kombinasyon="l s enter p w d enter")) == 0 and len(ISTEKLER) == 2)
+        YANIT["izin"] = False
+        ISTEKLER.clear()
+        os.environ["DESKHAND_GOZETIMSIZ"] = "1"
+        kontrol(f"[{ad_}] gözetimsiz kipte uçbirime Enter → 10 (--onayli de geçmez)",
+                kod_al(eylem.k_tus, ns(kombinasyon="enter", onayli=True)) == 10)
+        del os.environ["DESKHAND_GOZETIMSIZ"]
         # okuma: tampon kirli (ok tuşu) ama satır okunuyor
         eylem.k_tus(ns(kombinasyon="up"))
         SATIR["oku"] = ["user@host:~$ sudo reboot"]
         kontrol(f"[{ad_}] geçmişten çağrılmış satır (tampon kirli) okunur: 'sudo reboot' → 10",
                 kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10)
+        ISTEKLER.clear()
         SATIR["oku"] = ["user@host:~$ ls"]
-        kontrol(f"[{ad_}] tampon kirli + okunan satır zararsız → serbest", kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0)
+        kontrol(f"[{ad_}] okunan satır zararsız → yine onay, uyarı yok",
+                kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10 and "YIKICI" not in ISTEKLER[0]["ayrinti"])
         eylem.k_tus(ns(kombinasyon="up"))
         SATIR["oku"] = None
         ISTEKLER.clear()
         e = hata_al(eylem.k_tus, ns(kombinasyon="enter"))
         kontrol(f"[{ad_}] tampon kirli + satır okunamıyor → onay, red → 10",
                 e is not None and e.kod == 10 and len(ISTEKLER) == 1 and "okunamadı" in ISTEKLER[0]["ayrinti"], str(e))
-        # onaylı satır: yazarken onaylanan komut Enter'da yeniden sorulmaz
+        # bir Enter = bir onay: yazının onayı ayrı gönderilen Enter'ı kapsamaz; Enter'ın onayı YIKICI uyarısını taşır
         eylem.k_tus(ns(kombinasyon="ctrl+u"))
         ISTEKLER.clear()
-        kontrol(f"[{ad_}] yaz 'sudo ls' --onayli, sonra Enter → yeniden sorulmaz",
+        kontrol(f"[{ad_}] yaz 'sudo ls' --onayli, sonra Enter (onaysız) → onay 'YIKICI OLABİLİR' uyarısıyla, red → 10",
                 kod_al(eylem.k_yaz, ns(metin="sudo ls", onayli=True)) == 0 and
-                kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0 and not ISTEKLER)
+                kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10 and len(ISTEKLER) == 1 and
+                "YIKICI OLABİLİR" in ISTEKLER[0]["ayrinti"], str(ISTEKLER))
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] Enter --onayli (sohbette onay) → sorulmaz",
+                kod_al(eylem.k_tus, ns(kombinasyon="enter", onayli=True)) == 0 and not ISTEKLER)
         # uçbirim olmayan pencere: kapı yok
         au.pen["{w}"][1] = "kwrite"
         guvenlik._UCBIRIM_ONBELLEK.clear()  # sahte pencerenin sınıfı değişti (gerçekte bir pencerenin sınıfı değişmez)
         eylem.k_yaz(ns(metin="sud"))
-        kontrol(f"[{ad_}] uçbirim olmayan pencere: 'o reboot' + Enter serbest",
-                kod_al(eylem.k_yaz, ns(metin="o reboot")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0)
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] uçbirim olmayan pencere: 'o reboot' + Enter, 'a\\nb\\n', tus 'x enter enter' → HİÇ onay yok",
+                kod_al(eylem.k_yaz, ns(metin="o reboot")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0
+                and kod_al(eylem.k_yaz, ns(metin="a\nb\n")) == 0 and
+                kod_al(eylem.k_tus, ns(kombinasyon="x enter enter")) == 0 and not ISTEKLER, str(ISTEKLER))
         au.pen["{w}"][1] = "org.kde.konsole"
 # ön plan süreci
 au = kur("kde")
 with arka_uc.hedef_sabit("kde"):
     au.pen["{w}"][3] = "999999"  # ata zincirinde olmayan bir PID
     onceki_onp = kendi.on_plan_surecleri
-    for on_plan, beklenen in ((["vim"], 0), (["python3"], 0), (["ssh"], 10), (["fish"], 10), (["tmux: client"], 10)):
+    for on_plan in (["vim"], ["python3"], ["ssh"], ["fish"], ["tmux: client"]):
         kendi.on_plan_surecleri = lambda pid, proc=None, x=on_plan: list(x)
         eylem.k_tus(ns(kombinasyon="ctrl+u"))
         eylem.k_yaz(ns(metin="sud"))
         eylem.k_yaz(ns(metin="o reboot"))
-        kontrol(f"ön planda {on_plan[0]} → Enter {'serbest (sıradan yazı)' if not beklenen else 'denetlenir (10)'}",
-                kod_al(eylem.k_tus, ns(kombinasyon="enter")) == beklenen)
+        ISTEKLER.clear()
+        kabuk_degil = on_plan[0] in ("vim", "python3")
+        kontrol(f"ön planda {on_plan[0]} → Enter yine onay ister (istisna yok)" +
+                (" + 'ön planda kabuk değil' notu" if kabuk_degil else ""),
+                kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10 and
+                ("kabuk değil" in ISTEKLER[0]["ayrinti"]) == kabuk_degil, str(ISTEKLER))
     kendi.on_plan_surecleri = onceki_onp
     au.pen["{w}"][3] = None
     # tampon dosyası
@@ -896,11 +928,15 @@ kendi.kabuk_torunlari = onceki_kt
 # geçmiş açılımı (Enter kapısı)
 au = kur("kde")
 with arka_uc.hedef_sabit("kde"):
-    for satir_, beklenen in (("~ $ !!", 10), ("~ $ !-2", 10), ("~ $ ^foo^bar", 10), ("~ $ fc -s", 10), ("~ $ r", 10),
-                             ("~ $ history -s 'sudo reboot'", 10), ("~ $ sudo !!", 10), ("~ $ echo merhaba", 0),
-                             ("~ $ [ a != b ] && echo x", 0), ("~ $ git log --oneline", 0)):
+    for satir_, uyari in (("~ $ !!", True), ("~ $ !-2", True), ("~ $ ^foo^bar", True), ("~ $ fc -s", True),
+                          ("~ $ r", True), ("~ $ history -s 'sudo reboot'", True), ("~ $ sudo !!", True),
+                          ("~ $ echo merhaba", False), ("~ $ [ a != b ] && echo x", False),
+                          ("~ $ git log --oneline", False)):
         SATIR["oku"] = [satir_]
-        kontrol(f"Enter kapısı: {satir_!r} → {beklenen or 'serbest'}", kod_al(eylem.k_tus, ns(kombinasyon="enter")) == beklenen)
+        ISTEKLER.clear()
+        kontrol(f"Enter kapısı: {satir_!r} → onay (10){' + YIKICI uyarısı' if uyari else ', uyarısız'}",
+                kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10 and
+                ("YIKICI" in ISTEKLER[0]["ayrinti"]) == uyari, str(ISTEKLER))
     SATIR["oku"] = None
 # menüden yapıştırma (YO3)
 for ad_ in ("kde", "sanal"):
@@ -936,6 +972,90 @@ kendi.kume = lambda tazele=False: k1
 kontrol("ad alanı yokken başka PID'li Ghostty penceresi → kendi DEĞİL (yanlış pozitif yok)",
         not kendi.kendi_mi(88888, "com.mitchellh.ghostty", "kde", guvenlik.ucbirim_mi))
 kendi.kume = onceki_kume
+kendi.sifirla()
+arka_uc._ORNEKLER.clear()
+
+# ================================================================ A11) denetim 3: yarış (YN1), yapıştırma çeşitleri (YN4), uyarılar (YN3)
+print("A11) denetim 3 (birim)")
+onceki_kt = kendi.kabuk_torunlari
+KABUK_D = {"var": False}
+kendi.kabuk_torunlari = lambda pid, proc=None, tablo=None: [5151] if KABUK_D["var"] else []
+for ad_ in ("kde", "sanal"):
+    au = kur(ad_)
+    au.pen["{w}"][1], au.pen["{w}"][3] = "org.kde.dolphin", "777777"
+    with arka_uc.hedef_sabit(ad_):
+        KABUK_D["var"] = False
+        kontrol(f"[{ad_}] YN1: 'uçbirim değil' sonucu önbelleğe ALINMAZ: kabuk doğunca hemen uçbirim",
+                not guvenlik.ucbirim_penceresi_mi("{w}") and (KABUK_D.update(var=True) or True) and
+                guvenlik.ucbirim_penceresi_mi("{w}"))
+        KABUK_D["var"] = False
+        guvenlik._UCBIRIM_ONBELLEK.clear()
+        ISTEKLER.clear()
+        n0 = len(au.satirlar)
+        kontrol(f"[{ad_}] YN1 (denetim3 b): aynı çağrıda 'f4 … enter' (kabuk henüz yok) → Enter onay ister, red → 10",
+                kod_al(eylem.k_tus, ns(kombinasyon="f4 l s enter")) == 10 and len(ISTEKLER) == 1, str(ISTEKLER))
+        ISTEKLER.clear()
+        eylem.k_tus(ns(kombinasyon="f4"))  # tek başına F4: 30 sn "uçbirim olabilir"
+        kontrol(f"[{ad_}] YN1: F4'ten sonra (kabuk görünmese de) 30 sn içinde her Enter onaylı → 10",
+                kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10 and len(ISTEKLER) == 1)
+        yol = ucbirim._isaret_yolu(au, "{w}", "ucbirim")
+        os.utime(yol)
+        with open(yol, "w") as f:
+            f.write(str(time.time() - ucbirim.ACIK_OLABILIR_SN - 1))
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] YN1: 30 sn geçince (kabuk yoksa) Enter serbest", kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0
+                and not ISTEKLER)
+        # dizinin ORTASINDA kabuk doğarsa: her Enter'dan hemen önce yeniden hesap
+        ISTEKLER.clear()
+        n0 = len(au.satirlar)
+
+        def dogur(pid, proc=None, tablo=None):  # ilk Enter gönderildikten sonra kabuk doğar
+            return [5151] if "key enter" in au.satirlar[n0:] else []
+        kendi.kabuk_torunlari = dogur
+        kod = kod_al(eylem.k_tus, ns(kombinasyon="a enter b enter"))
+        kontrol(f"[{ad_}] YN1: dizinin ortasında uçbirim oldu → ilk Enter gitti, ikinci Enter'dan HEMEN önce onay, red → 10",
+                kod == 10 and len(ISTEKLER) == 1 and au.satirlar[n0:] == ["key a", "key enter", "key b"],
+                f"{kod} {au.satirlar[n0:]} {len(ISTEKLER)}")
+        kendi.kabuk_torunlari = lambda pid, proc=None, tablo=None: [5151] if KABUK_D["var"] else []
+        # uçbirim gömemeyen sınıfta F4 işaret koymaz
+        au.pen["{w}"][1] = "firefox"
+        guvenlik._UCBIRIM_ONBELLEK.clear()
+        eylem.k_tus(ns(kombinasyon="f4"))
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] YN1: uçbirim gömemeyen pencerede (firefox) F4 + Enter → onay YOK",
+                kod_al(eylem.k_tus, ns(kombinasyon="f4 enter")) == 0 and not ISTEKLER)
+kendi.kabuk_torunlari = onceki_kt
+# YN4: yapıştırma çeşitleri
+for kom, beklenen in (("shift+kpinsert", True), ("x:XF86Paste", True), ("k:207", True), ("shift+f10 p", True),
+                      ("menu y", True), ("alt+e p", True), ("shift+F10 Down Down Return", True), ("ctrl+c", False),
+                      ("alt+e", False), ("p", False), ("shift+f10 Escape", False)):
+    kontrol(f"YN4: yapistir_tusu_mu({kom!r}) = {beklenen}", guvenlik.yapistir_tusu_mu(eylem.tus_coz(kom)
+                                                                                     if ":" not in kom else kom) == beklenen)
+for t, beklenen in (("Panodan ekle", True), ("Insert from clipboard", True), ("Paste as…", True),
+                    ("Özel yapıştır", True), ("Pa&ste", True), ("📋", True), ("Kaydet", False), ("Kopyala", False)):
+    kontrol(f"YN4: yapistirma_metni_mi({t!r}) = {beklenen}", guvenlik.yapistirma_metni_mi(t) == beklenen)
+kontrol("YN4: AT-SPI ögesi adı/eylem adı 'paste' içeriyor (simgeli düğme) → yapıştırma",
+        guvenlik.yapistirma_ogesi_mi("", "edit-paste") and guvenlik.yapistirma_ogesi_mi("Clipboard paste button") and
+        not guvenlik.yapistirma_ogesi_mi("Kaydet", "Press"))
+au = kur("kde")
+au.pen["{w}"][1] = "kwrite"
+au.pano = "kullanıcının panosu"
+with arka_uc.hedef_sabit("kde"):
+    ISTEKLER.clear()
+    eylem.k_tus(ns(kombinasyon="shift+f10"))  # klavye menüsü açıldı
+    kontrol("YN4: menü tuşundan sonra (3 sn içinde, ayrı çağrı) 'p' → yapıştırma onayı, red → 10",
+            kod_al(eylem.k_tus, ns(kombinasyon="p")) == 10 and len(ISTEKLER) == 1)
+    ISTEKLER.clear()
+    kontrol("YN4: menü açılmadan 'p' → sıradan harf, sorulmaz", kod_al(eylem.k_tus, ns(kombinasyon="q p")) == 0 and
+            not ISTEKLER)
+# YN3: uyarılar
+for m in ("dbus-send --system --print-reply --dest=org.freedesktop.login1 /org/freedesktop/login1 "
+          "org.freedesktop.login1.Manager.Reboot boolean:true", "qdbus org.kde.Shutdown /Shutdown logout",
+          "killall plasmashell", "pkill -f deskhand", "kquitapp6 plasmashell", "./x.sh", "~/x.sh", "bash x.sh",
+          "tar -cf /dev/null x --checkpoint-action=exec=reboot", "ssh -o ProxyCommand='reboot' x", "rsync -e 'sh -c x' a b:",
+          "sed -n '1e reboot' f", "man -P 'sh -c reboot' ls", "zip z f -T -TT 'reboot #'", "${0:0:0}reboot",
+          "rm -f $XDG_RUNTIME_DIR/deskhand/dur", "systemctl --user stop plasma-plasmashell"):
+    kontrol(f"YN3 uyarı üretir: {m!r}", guvenlik.riskli_komut(m) is not None, str(guvenlik.riskli_komut(m)))
 kendi.sifirla()
 arka_uc._ORNEKLER.clear()
 
@@ -1052,10 +1172,18 @@ else:
     kt = pencere("ucb", "mini-ucbirim", "xterm", (0, 560, 900, 300), kip="ucbirim")
     with api.hedef("sanal"):
         api.tus(kt, "ctrl+u")
-        r1 = hata_al(api.yaz, kt, "echo merhaba\n")
+        ISTEKLER.clear()
+        r0 = hata_al(api.yaz, kt, "echo merhaba\n")
         time.sleep(0.3)
-        kontrol("Enter kapısı (sanal): zararsız 'echo merhaba\\n' → çalıştı", r1 is None and "CALISTI:echo merhaba" in oku("ucb"),
-                f"{r1} {oku('ucb')[-3:]}")
+        kontrol("Enter kapısı (sanal): zararsız 'echo merhaba\\n' onaysız → 10, hiçbir harf gitmedi, ÇALIŞMADI",
+                r0 is not None and r0.kod == 10 and len(ISTEKLER) == 1 and
+                not any(l.startswith(("CALISTI:echo", "TUS:")) for l in oku("ucb")), f"{r0} {oku('ucb')[-3:]}")
+        YANIT["izin"] = True
+        r1 = hata_al(api.yaz, kt, "echo merhaba\n")
+        YANIT["izin"] = False
+        time.sleep(0.3)
+        kontrol("Enter kapısı (sanal): panel izin verince 'echo merhaba\\n' çalıştı",
+                r1 is None and "CALISTI:echo merhaba" in oku("ucb"), f"{r1} {oku('ucb')[-3:]}")
         api.yaz(kt, "sud")
         api.yaz(kt, "o reboot")
         time.sleep(0.4)
@@ -1066,11 +1194,13 @@ else:
         time.sleep(0.3)
         kontrol("denetim B (sanal, uçtan uca): 'sud' + 'o reboot' + Return → onay, red → 10, ÇALIŞMADI",
                 r2 is not None and r2.kod == 10 and not any(l == "CALISTI:sudo reboot" for l in oku("ucb")), str(r2))
-        api.tus(kt, "left")  # tampon kirli: yalnız OCR okuması karar verir
+        api.tus(kt, "left")  # tampon kirli: uyarıyı yalnız OCR okuması üretir
+        ISTEKLER.clear()
         r3 = hata_al(api.tus, kt, "ctrl+j")
         time.sleep(0.3)
-        kontrol("tampon kirliyken OCR okuması yakalar: ctrl+j → 10", r3 is not None and r3.kod == 10 and
-                not any(l == "CALISTI:sudo reboot" for l in oku("ucb")), str(r3))
+        kontrol("tampon kirliyken ctrl+j → 10; onay isteğindeki 'YIKICI OLABİLİR' uyarısı OCR'la okunan satırdan",
+                r3 is not None and r3.kod == 10 and ISTEKLER and "YIKICI OLABİLİR" in ISTEKLER[0]["ayrinti"] and
+                not any(l == "CALISTI:sudo reboot" for l in oku("ucb")), f"{r3} {ISTEKLER}")
         api.tus(kt, "ctrl+u")
     # ---- denetim 2 A (YB1): GÖMÜLÜ uçbirim — sınıfı org.kde.dolphin, sürecinin torununda pty'li `sh` (F4 taklidi)
     kd = pencere("dolf", "Belgeler - Dolphin", "org.kde.dolphin", (950, 560, 900, 300), -1, "ucbirim+kabuk")
@@ -1080,14 +1210,16 @@ else:
         kontrol("gömülü uçbirim süreçle tanınır (sınıf org.kde.dolphin, torunda tty'li sh)",
                 guvenlik.ucbirim_penceresi_mi(kd) and not guvenlik.ucbirim_penceresi_mi(kd2))
         api.tus(kd, "ctrl+u")
+        YANIT["izin"] = True
         r1 = hata_al(api.yaz, kd, "echo merhaba\n")
+        YANIT["izin"] = False
         api.yaz(kd, "sud")
         api.yaz(kd, "o reboot")
         ISTEKLER.clear()
         r2 = hata_al(api.tus, kd, "Return")
         r3 = hata_al(api.yaz, kd, "\n")
         time.sleep(0.4)
-        kontrol("denetim 2 A: gömülü uçbirimde zararsız komut çalışır, 'sud'+'o reboot'+Return ve '\\n' → 10, ÇALIŞMADI",
+        kontrol("denetim 2 A: gömülü uçbirimde zararsız komut izinle çalışır, 'sud'+'o reboot'+Return ve '\\n' → 10, ÇALIŞMADI",
                 r1 is None and "CALISTI:echo merhaba" in oku("dolf") and r2 is not None and r2.kod == 10 and
                 r3 is not None and r3.kod == 10 and not any(l == "CALISTI:sudo reboot" for l in oku("dolf")),
                 f"{r1} {r2} {r3} {oku('dolf')[-4:]}")

@@ -254,7 +254,7 @@ NEGATIF_KOMUT = [
     "cd ~/projects", "cd /", "cd /tmp && ls", "cat /etc/hostname", "ls /dev/sda", "cat /dev/null",
     "dd if=a.img of=b.img", "dd if=/dev/zero of=/dev/null bs=1M count=1", "dd if=x of=/dev/stdout",
     "curl https://example.com", "curl -O https://x/f.tgz", "curl u | jq .", "curl u | grep sh", "curl u | tee f",
-    "wget https://x/f", "wget -qO- u | tar xz", "bash script.sh", "sh ./run.sh", "./install.sh",
+    "wget https://x/f", "wget -qO- u | tar xz",
     "mkdir -p x", "chmod 644 f", "chmod +x run.sh", "chmod -R 755 .", "chmod -R 777 build", "chown me f",
     "chown -R me:me ./src", "chown -R me ~/proje", "mkfs-notes.txt", "systemctl status sshd",
     "systemctl restart nginx", "systemctl --user start x", "systemctl list-units", "loginctl list-sessions",
@@ -264,6 +264,9 @@ NEGATIF_KOMUT = [
     "Merhaba dünya, bugün hava nasıl?", "sudoku oyna", "halting problem", "forceful", "ls --force-color",
     "", "   ", "\n",
 ]
+# denetim 3 kararı: betik DOSYASI çalıştırmak "içeriği denetlenemez" uyarısı üretir (uyarı; güvenlik sınırı Enter onayı)
+for m in ("bash script.sh", "sh ./run.sh", "./install.sh"):
+    kontrol(f"uyarı üretir (betik içeriği denetlenemez): {m!r}", guvenlik.riskli_komut(m) is not None)
 for m in NEGATIF_KOMUT:
     r = guvenlik.riskli_komut(m)
     kontrol(f"yıkıcı kalıp DEĞİL (yanlış pozitif yok): {m!r}", r is None, str(r))
@@ -323,11 +326,11 @@ for ad_ in ("kde", "sanal"):
             ISTEKLER.clear()
             kontrol(f"[{ad_}] tus {tus!r} (riskli değil) → sorulmaz", kod_al(eylem.k_tus, ns(kombinasyon=tus)) == 0
                     and not ISTEKLER)
-        # Enter kapısı: sahte uçbirimin satırı OCR ile okunamıyor; ctrl+u satırı temizler (tampon temiz) → Enter serbest
+        # Enter kapısı (denetim 3 kararı): uçbirimde HER Enter satır içeriğinden bağımsız onay ister
         ISTEKLER.clear()
-        kontrol(f"[{ad_}] tus 'ctrl+u' sonra 'enter' (satır boş ve biliniyor) → sorulmaz",
-                kod_al(eylem.k_tus, ns(kombinasyon="ctrl+u")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 0
-                and not ISTEKLER)
+        kontrol(f"[{ad_}] tus 'ctrl+u' sonra 'enter' (satır boş) → yine onay, red → 10",
+                kod_al(eylem.k_tus, ns(kombinasyon="ctrl+u")) == 0 and kod_al(eylem.k_tus, ns(kombinasyon="enter")) == 10
+                and len(ISTEKLER) == 1)
         # ---- bas: tuşlar birlikte basılı
         ISTEKLER.clear()
         n0 = len(au.satirlar)
@@ -393,10 +396,13 @@ for ad_ in ("kde", "sanal"):
         kod = kod_al(eylem.k_yaz, ns(metin="sudo ls", onayli=True))
         kontrol(f"[{ad_}] uçbirim: yaz --onayli (sohbette onay) → sorulmaz, yazılır",
                 kod == 0 and not ISTEKLER and len(au.satirlar) > n0)
-        # Enter AYRI gönderilse bile komut yazılmadan önce yakalanmıştı; tus enter sonradan sorulmaz (sayfa hassas değil)
+        # ayrı gönderilen Enter da (uçbirimde her Enter) onay ister; --onayli (sohbette onay) sormadan geçer
         ISTEKLER.clear()
         kod = kod_al(eylem.k_tus, ns(kombinasyon="enter"))
-        kontrol(f"[{ad_}] uçbirim: ayrı 'tus enter' sorulmaz (komut metni yazılırken yakalanır)", kod == 0 and not ISTEKLER)
+        kontrol(f"[{ad_}] uçbirim: ayrı 'tus enter' onay ister (red → 10)", kod == 10 and len(ISTEKLER) == 1)
+        ISTEKLER.clear()
+        kontrol(f"[{ad_}] uçbirim: 'tus enter --onayli' → sorulmaz", kod_al(eylem.k_tus, ns(kombinasyon="enter", onayli=True))
+                == 0 and not ISTEKLER)
 
         # ---- yanlış pozitifler: zararsız komutlar uçbirimde sorulmadan yazılır
         for metin in ("ls -la", "git status", "rm komutu nedir", "echo hello world", "cd ~/projects", "rm dosya.txt",

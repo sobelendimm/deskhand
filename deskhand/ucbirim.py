@@ -41,11 +41,6 @@ _TUS_KARAKTER = {"space": " ", "minus": "-", "equal": "=", "slash": "/", "dot": 
 _ISTEM = re.compile(r"[$#>%❯»➜λ\]:]\s*")
 
 
-def ucbirim_hedefi(au, k):
-    """Pencere uçbirim mi ya da uçbirim barındırıyor mu (sınıf, süreç ağacında tty'li kabuk, AT-SPI terminal rolü)?"""
-    return bool(k) and k != EKRAN and guvenlik.ucbirim_penceresi_mi(k)
-
-
 # satırda geçmiş açılımı (!!, !n, !-n, !dizge, ^a^b) ya da geçmişi değiştiren/çalıştıran komut: çalışacak komut görünmez
 _GECMIS_ACILIMI = re.compile(r"(?:^|[\s;&|(`])(?:!(?:!|-?\d+|[A-Za-z_./][^\s=]*)|\^[^^\s]+\^)|"
                              r"(?:^|[\s;&|(])(?:fc|r)(?:\s|$)|\b(?:history|print)\s+(?:-\w*\s+)*-s\b")
@@ -249,69 +244,160 @@ def adaylar(satirlar):
 
 # ---------------------------------------------------------------- kapı
 
-def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True):
-    """Uçbirime satırı çalıştıran tuş gitmeden HEMEN ÖNCE: giriş satırı (okunan + Deskhand'in tamponu; `ek` = aynı
-    eylemde Enter'dan önce yazılacak metin) yıkıcı komutsa ya da satır okunamıyor VE bilinmiyorsa insan onayı (--onayli
-    yoksa panelden; red/gözetimsiz → Dur 10). → onay gerekti mi (onaylandı)."""
-    au = sec()
-    if not ucbirim_hedefi(au, k) or not on_plan_kabuk_mu(au, k):
+# ---------------------------------------------------------------- "uçbirim olabilir" ve klavye menüsü işaretleri
+
+ACIK_OLABILIR_SN = 30.0  # gömülü uçbirim açabilen tuştan sonra pencere bu kadar süre "uçbirim olabilir"
+MENU_SN = 3.0            # klavye menüsü tuşundan sonra p/y bu süre içinde yapıştırma sayılır
+
+
+def _akor_kumesi(akor):
+    return frozenset(guvenlik._tus_kanonik(x) for x in akor.split("+") if x)
+
+
+# Dolphin F4 / shift+F4, Kate F4, VS Code ctrl+` / ctrl+shift+`, Konsole parçası ctrl+alt+t / ctrl+shift+t, alt+F12
+ACMA_AKORLARI = {frozenset({"f4"}), frozenset({"shift", "f4"}), frozenset({"ctrl", "grave"}),
+                 frozenset({"ctrl", "shift", "grave"}), frozenset({"ctrl", "alt", "t"}), frozenset({"ctrl", "shift", "t"}),
+                 frozenset({"alt", "f12"}), frozenset({"ctrl", "apostrophe"}), frozenset({"ctrl", "shift", "apostrophe"})}
+
+
+def acma_tusu_mu(akor):
+    """Uçbirim (paneli) açabilen kısayol mu?"""
+    k = _akor_kumesi(akor)
+    return k in ACMA_AKORLARI or ({"grave", "ctrl"} <= k)
+
+
+def gomulebilir(au, k):
+    """Pencere sınıfı uçbirim gömebilen bir uygulama mı (Dolphin, Kate, IDE…)?"""
+    return bool(k) and k != EKRAN and bool(guvenlik._GOMULU.search(au.sinif(k) or ""))
+
+
+def _isaret_yolu(au, k, tur):
+    return os.path.join(_dizin(), f"{tur}-{_anahtar(au, k)}")
+
+
+def isaret_koy(au, k, tur):
+    """Pencere için zaman işareti (RUNTIME_DIR/ucbirim/<tur>-<sha1>, 0600): süreçler arası (CLI her komutta yeni süreç)."""
+    try:
+        yol = _isaret_yolu(au, k, tur)
+        fd = os.open(yol, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(str(time.time()))
+    except (OSError, Dur):
+        pass
+
+
+def isaret_taze(au, k, tur, sn):
+    try:
+        with open(_isaret_yolu(au, k, tur)) as f:
+            return time.time() - float(f.read().strip() or 0) <= sn
+    except (OSError, ValueError, Dur):
         return False
-    okunan = satir_oku(k)
-    tampon = tampon_oku(au, k)
+
+
+def ucbirim_hedefi(au, k):
+    """Pencere uçbirim mi / uçbirim barındırıyor mu (sınıf, süreç ağacında tty'li kabuk, AT-SPI terminal rolü) ya da son
+    ACIK_OLABILIR_SN içinde ona uçbirim açabilen bir tuş gönderildi mi? "Uçbirim değil" sonucu önbelleğe alınmaz: her
+    çağrıda yeniden hesaplanır (F4'ten sonra kabuk doğduğu an)."""
+    if not k or k == EKRAN:
+        return False
+    return guvenlik.ucbirim_penceresi_mi(k) or isaret_taze(au, k, "ucbirim", ACIK_OLABILIR_SN)
+
+
+def tus_sonrasi(au, k, kombinasyon):
+    """tus/bas gönderildikten sonra: gömebilen pencereye uçbirim açma tuşu gittiyse 30 sn "uçbirim olabilir";
+    klavye menüsü tuşu gittiyse 3 sn "menü açık" (ardından gelen p/y yapıştırma sayılır)."""
+    if not k or k == EKRAN:
+        return
+    akorlar = kombinasyon.split()
+    if gomulebilir(au, k) and any(acma_tusu_mu(a) for a in akorlar):
+        isaret_koy(au, k, "ucbirim")
+    if akorlar and guvenlik.menu_tusu_mu(akorlar[-1]):
+        isaret_koy(au, k, "menu")
+
+
+def menu_acik_mi(au, k):
+    return isaret_taze(au, k, "menu", MENU_SN)
+
+
+# ---------------------------------------------------------------- kapı: uçbirimde HER Enter insan onayı ister
+
+def _on_plan_notu(au, k):
+    from . import kendi
+    pid = guvenlik._pencere_pid(au, k)
+    adlar = kendi.on_plan_surecleri(pid) if pid else None
+    if adlar and not any(a in KABUK_BENZERI or a.startswith(("tmux", "ssh", "mosh")) for a in adlar):
+        return _("ön planda kabuk değil: {adlar} (vim/REPL olabilir; yine de satır çalıştırılır)").format(
+            adlar=", ".join(sorted(set(adlar))))
+    return ""
+
+
+def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True, olabilir=False, yalniz_ek=False):
+    """Uçbirim (ya da gömülü uçbirim) barındıran pencereye satırı çalıştıran tuş (enter, kpenter, ctrl+j/m/o, yazıdaki
+    \\n) gitmeden HEMEN ÖNCE: satır içeriğinden BAĞIMSIZ insan onayı — bir Enter = bir onay (önceki onay taşınmaz).
+    Onay isteği o anki satırı (okunabiliyorsa; `ek` = aynı eylemde Enter'dan önce yazılacak metin), "uçbirimde komut
+    çalıştırılacak" bilgisini ve riskli_komut uyarısını ("YIKICI OLABİLİR: …") taşır. --onayli (CLI, kullanıcı sohbette
+    onayladı) geçer; gözetimsiz kipte ret. olabilir=True: aynı çağrıda uçbirim açma tuşu önce geldi.
+    yalniz_ek=True: satır yalnız `ek` (aynı yazının önceki Enter'ından sonraki satır; ekrandaki satır henüz o değil).
+    → onay alındı mı (False = pencere uçbirim değil, kapı yok)."""
+    au = sec()
+    if not (olabilir or ucbirim_hedefi(au, k)):
+        return False
+    if guvenlik.onayli_gecerli(onayli):
+        return True
+    okunan = None if yalniz_ek else satir_oku(k)
+    tampon = {"metin": "", "kirli": False} if yalniz_ek else tampon_oku(au, k)
     aday = [a + ek for a in adaylar(okunan or [])]
     if not tampon.get("kirli"):
         aday.append(tampon.get("metin", "") + ek)
     elif ek:
         aday.append(ek)
-    onaylanan = (tampon.get("onayli") or "") if not tampon.get("kirli") and not ek else ""
-
-    def onayli_mi(a):  # yazılırken onaylanmış satırın kendisi (istem öneki zararsız)
-        a = a.rstrip()
-        return bool(onaylanan.strip()) and a.endswith(onaylanan.strip()) and \
-            guvenlik.riskli_komut(a[:len(a) - len(onaylanan.strip())]) is None
-    neden = next((r for r in (guvenlik.riskli_komut(a) for a in aday if not onayli_mi(a)) if r), None)
-    if neden is None and any(_GECMIS_ACILIMI.search(a) for a in aday if not onayli_mi(a)):
-        neden = _("satırda geçmiş açılımı/geçmiş komutu var (!!, !n, ^a^b, fc, r, history -s): çalışacak komut bilinmiyor")
-    if neden is None and okunan is None and tampon.get("kirli"):
-        neden = _("giriş satırı okunamadı ve içeriği bilinmiyor (geçmişten çağrılmış ya da düzenlenmiş olabilir)")
-    if neden is None:
-        return False
-    if guvenlik.onayli_gecerli(onayli):
-        return True
+    uyari = next((r for r in (guvenlik.riskli_komut(a) for a in aday) if r), None)
+    if uyari is None and any(_GECMIS_ACILIMI.search(a) for a in aday):
+        uyari = _("satırda geçmiş açılımı/geçmiş komutu var (!!, !n, ^a^b, fc, r, history -s): çalışacak komut görünmez")
+    satir = next((a for a in aday if guvenlik.riskli_komut(a)), None) or \
+        (aday[0] if okunan else (aday[-1] if aday else ""))
+    goster = guvenlik._yazilacak(satir, gizli) if satir else _("(satır okunamadı)")
     b = au.baslik(k)
-    satir = next((a for a in aday if guvenlik.riskli_komut(a)), aday[-1] if aday else "")
-    goster = guvenlik._yazilacak(satir, gizli) if satir else _("(okunamadı)")
-    ayrinti = neden + "\n" + _("uçbirim: {sinif}").format(sinif=au.sinif(k)) + "\n" + \
-        _("çalışacak satır: {satir}").format(satir=goster)
-    goruntu = None if getattr(guvenlik._EYLEM, "onaylandi", False) or not goruntu_al else guvenlik.hedef_goruntusu(k)
-    izin, onay_neden = guvenlik._panelden_onay(_("Uçbirimde Enter: {satir}").format(satir=goster), b, ayrinti, goruntu)
+    ayrinti = [_("Uçbirimde komut çalıştırılacak (Enter)."), _("satır: {satir}").format(satir=goster)]
+    if uyari:
+        ayrinti.append(_("YIKICI OLABİLİR: {neden}").format(neden=uyari))
+    not_ = _on_plan_notu(au, k)
+    if not_:
+        ayrinti.append(not_)
+    ayrinti.append(_("uçbirim: {sinif}").format(sinif=au.sinif(k)) +
+                   ("" if guvenlik.ucbirim_mi(au.sinif(k)) else " " + _("(gömülü uçbirim)")))
+    guvenlik._EYLEM.onaylandi = False  # bir Enter = bir onay: bu eylemdeki önceki onay bu Enter'ı kapsamaz
+    goruntu = guvenlik.hedef_goruntusu(k) if goruntu_al else None
+    izin, onay_neden = guvenlik._panelden_onay(_("Uçbirimde komut çalıştır: {satir}").format(satir=goster), b,
+                                               "\n".join(ayrinti), goruntu)
     if not izin:
-        raise Dur(10, _("UÇBİRİM ENTER KAPISI ({neden} ← {baslik}): satırı çalıştırmak kullanıcının onayını ister "
-                        "({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
-            neden=neden, baslik=repr(b), onay_neden=onay_neden), tur="hassas")
+        raise Dur(10, _("UÇBİRİM ENTER KAPISI ({baslik}): uçbirimde komut çalıştırmak (Enter) her zaman kullanıcının "
+                        "onayını ister ({onay_neden}){uyari}; kullanıcı sohbette açıkça onayladıysa --onayli ile "
+                        "tekrarla").format(baslik=repr(b), onay_neden=onay_neden,
+                                           uyari=("; " + _("YIKICI OLABİLİR: {neden}").format(neden=uyari))
+                                           if uyari else ""), tur="hassas")
     return True
 
 
 def tus_dizisi_kapisi(k, onayli, kombinasyon):
-    """tus/bas: dizideki her Enter eşdeğerinden önce. İlk Enter'da satır = okunan/tampon + önceki yazdırılabilir tuşlar;
-    sonraki Enter'larda yalnız aradaki tuşlar. → onay gerekti mi."""
+    """tus/bas: dizideki HER Enter eşdeğeri için ayrı onay (sırayla, gönderimden önce). Satır = okunan/tampon + önceki
+    yazdırılabilir tuşlar (ilk Enter), sonrakilerde aradaki tuşlar. Aynı çağrıda uçbirim gömebilen pencereye uçbirim
+    açma tuşu (F4, ctrl+`…) Enter'dan önce geliyorsa o Enter da onay ister. → Enter başına onay listesi
+    ([True, False…]; hiçbiri onaylanmadıysa False)."""
     if not guvenlik.enter_tusu_mu(kombinasyon):
         return False
     au = sec()
-    if not ucbirim_hedefi(au, k):
-        return False
+    olabilir = False
     gecici = {"metin": "", "kirli": False}
-    ilk, onay = True, False
+    ilk, onaylar = True, []
     for akor in kombinasyon.split():
+        if not olabilir and acma_tusu_mu(akor) and gomulebilir(au, k):
+            olabilir = True
         if guvenlik.enter_tusu_mu(akor):
-            if ilk:
-                onay = enter_kapisi(k, onayli or onay, ek="" if gecici["kirli"] else gecici["metin"])
-                ilk = False
-            else:
-                r = guvenlik.riskli_komut(gecici["metin"]) if not gecici["kirli"] else None
-                if r and not onay:
-                    onay = enter_kapisi(k, onayli, ek=gecici["metin"])
+            ek = "" if gecici["kirli"] else gecici["metin"]
+            onaylar.append(enter_kapisi(k, onayli, ek=ek if ilk else gecici["metin"], olabilir=olabilir))
+            ilk = False
             gecici = {"metin": "", "kirli": False}
             continue
         _tus_isle(gecici, akor)
-    return onay
+    return onaylar if any(onaylar) else False

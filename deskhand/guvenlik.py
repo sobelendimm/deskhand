@@ -112,20 +112,23 @@ _TUS_ESANLAM = {
     "super_l": "super", "super_r": "super", "meta_l": "super", "meta_r": "super",
     "del": "delete", "bksp": "backspace", "sys_req": "sysrq", "sysreq": "sysrq",
 }
-_TUS_ESANLAM.update({"return": "enter", "kp_enter": "kpenter", "iso_enter": "enter", "3270_enter": "enter",
+_TUS_ESANLAM.update({"kpinsert": "insert", "xf86paste": "paste", "apps": "menu", "multi_key": "compose",
+                     "return": "enter", "kp_enter": "kpenter", "iso_enter": "enter", "3270_enter": "enter",
                      "leftshift": "shift", "rightshift": "shift", "shift_l": "shift", "shift_r": "shift",
                      "escape": "esc", "ins": "insert", "kp_insert": "insert"})
 _EVDEV_AD = {29: "ctrl", 97: "ctrl", 56: "alt", 100: "alt", 125: "super", 126: "super", 111: "delete", 14: "backspace",
              99: "sysrq", 38: "l", **{59 + i: f"f{i + 1}" for i in range(10)}, 87: "f11", 88: "f12",
              28: "enter", 96: "kpenter", 101: "linefeed", 47: "v", 110: "insert", 36: "j", 50: "m", 24: "o",
-             42: "shift", 54: "shift", 1: "esc", 46: "c", 22: "u", 15: "tab"}
+             42: "shift", 54: "shift", 1: "esc", 46: "c", 22: "u", 15: "tab", 207: "paste", 127: "menu",
+             139: "menu", 25: "p", 21: "y", 18: "e", 41: "grave", 20: "t", 62: "f4"}
 _KEYSYM_AD = {0xffe3: "ctrl", 0xffe4: "ctrl", 0xffe9: "alt", 0xffea: "alt", 0xfe03: "alt", 0xffe7: "super",
               0xffe8: "super", 0xffeb: "super", 0xffec: "super", 0xffff: "delete", 0xff08: "backspace",
               0xff15: "sysrq", 0x6c: "l", 0x4c: "l", **{0xffbe + i: f"f{i + 1}" for i in range(12)},
               0xff0d: "enter", 0xff8d: "kpenter", 0xfe34: "enter", 0xfd1e: "enter", 0xff0a: "linefeed",
               0x76: "v", 0x56: "v", 0xff63: "insert", 0xff9e: "insert", 0x6a: "j", 0x4a: "j", 0x6d: "m", 0x4d: "m",
               0x6f: "o", 0x4f: "o", 0xffe1: "shift", 0xffe2: "shift", 0xff1b: "esc", 0x63: "c", 0x43: "c",
-              0x75: "u", 0x55: "u", 0xff09: "tab"}
+              0x75: "u", 0x55: "u", 0xff09: "tab", 0x1008ff6d: "paste", 0xff67: "menu", 0xff20: "compose",
+              0x70: "p", 0x50: "p", 0x79: "y", 0x59: "y", 0x65: "e", 0x45: "e", 0xffc7: "f10", 0x60: "grave"}
 _FTUS = re.compile(r"f([1-9]|1[0-2])")
 
 
@@ -196,10 +199,30 @@ def enter_tusu_mu(kombinasyon):
     return False
 
 
-def yapistir_tusu_mu(kombinasyon):
-    """Panodan yapıştıran kısayol var mı: ctrl+v, ctrl+shift+v, shift+insert (x:/k: biçimleri dahil)."""
-    return any(("ctrl" in kume and "v" in kume) or ("shift" in kume and "insert" in kume)
-               for kume, _b in _akor_kumeleri(kombinasyon))
+_YAPISTIR_TUSU = {"paste", "xf86paste"}  # klavyedeki Paste tuşu (KEY_PASTE = 207, XF86Paste)
+_MENU_AKORLARI = ({"shift", "f10"}, {"menu"}, {"compose"}, {"alt", "e"})  # klavye menüsü / Düzen menüsü
+
+
+def menu_tusu_mu(akor):
+    """Bağlam/Düzen menüsünü açan akor mu (shift+F10, menu/compose tuşu, alt+e)?"""
+    kume = {_tus_kanonik(t) for t in akor.split("+") if t}
+    return any(kume == m for m in _MENU_AKORLARI)
+
+
+def yapistir_tusu_mu(kombinasyon, menu_acik=False):
+    """Panodan yapıştıran tuş(lar) var mı: ctrl+v, ctrl+shift+v, shift+insert / shift+kpinsert, Paste tuşu (XF86Paste,
+    k:207), klavye menüsü (shift+F10 / menu / alt+e) ardından p ya da y (aynı çağrıda; menu_acik=True: menü az önce
+    — MENU_SN içinde — açılmıştı). x:/k: biçimleri dahil."""
+    menu = menu_acik
+    for kume, _b in _akor_kumeleri(kombinasyon):
+        if ("ctrl" in kume and "v" in kume) or ("shift" in kume and "insert" in kume) or kume & _YAPISTIR_TUSU:
+            return True
+        if menu and kume & {"p", "y"} and not kume & {"ctrl", "alt", "super"}:
+            return True
+        if menu and kume & {"enter", "kpenter", "space"}:  # menüde gezinip seçmek: seçilen öge yapıştır olabilir
+            return True
+        menu = any(kume == m for m in _MENU_AKORLARI) or (menu and kume <= {"down", "up", "shift", "left", "right"})
+    return False
 
 
 def riskli_tus(kombinasyon, birlikte=False):
@@ -255,7 +278,8 @@ def ucbirim_penceresi_mi(k):
     """Pencere bir UÇBİRİM barındırıyor mu? (1) sınıfı uçbirim öykünücüsü; (2) penceresinin sahibi sürecin torunlarında
     denetim uçbirimi (tty) olan bir kabuk var (gömülü uçbirim: Dolphin F4, Kate paneli, VS Code…); (3) PID bilinmiyor ve
     sınıf uçbirim gömebilen bir uygulama (güvenli taraf); (4) erişilebilirlik zaten açıksa pencerede rolü `terminal`
-    olan bir öge var (PID'siz ya da gömebilen sınıflarda). 2 sn önbellek."""
+    olan bir öge var (PID'siz ya da gömebilen sınıflarda). Yalnız "uçbirim" sonucu 2 sn önbellekte; "değil" sonucu
+    önbelleğe alınmaz (yarış: F4'ten hemen sonra kabuk henüz doğmamış olabilir)."""
     if not k or k == EKRAN:
         return False
     import time as _t
@@ -279,9 +303,10 @@ def ucbirim_penceresi_mi(k):
                 sonuc = erisim.erisim_acik() and erisim.imlec_satirlari(k) is not None
             except Exception:  # noqa: BLE001 - erişilebilirlik isteğe bağlı
                 sonuc = False
-    if len(_UCBIRIM_ONBELLEK) > 256:
-        _UCBIRIM_ONBELLEK.clear()
-    _UCBIRIM_ONBELLEK[anahtar] = (_t.monotonic(), bool(sonuc))
+    if sonuc:  # yalnız "uçbirim" sonucu tutulur: "değil" her çağrıda yeniden hesaplanır (F4'ten sonra kabuk doğar)
+        if len(_UCBIRIM_ONBELLEK) > 256:
+            _UCBIRIM_ONBELLEK.clear()
+        _UCBIRIM_ONBELLEK[anahtar] = (_t.monotonic(), True)
     return bool(sonuc)
 
 
@@ -682,7 +707,7 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
             a = arg[j]
             if a in ("-m", "-c", "-e", "-E", "-r", "-p", "-W", "-X", "-I", "-x") or re.fullmatch(r"-[a-zA-Z]*[ceEpr]", a):
                 break  # modül / satır içi kod (ayrıca denetlenir)
-            if not a.startswith("-"):
+            if not a.startswith("-") or a == "-":
                 n.append(_("{komut} betik dosyasını çalıştırır ({dosya}): içeriği denetlenemez").format(komut=komut, dosya=a))
                 break
             j += 1
@@ -729,6 +754,50 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
         n.append(_("flock -c: komutu kabukta çalıştırır"))
     if komut == "rm" and "xargs" in sarmalayicilar:
         n.append(_("xargs rm: listedeki her dosyayı siler"))
+    # D-Bus ile güç/oturum: login1 Reboot/PowerOff/Suspend…, org.kde.Shutdown, ksmserver çıkış
+    if komut in ("dbus-send", "gdbus", "busctl", "qdbus", "qdbus6", "qdbus-qt5", "dbus-run-session") and any(
+            re.search(r"login1|org\.kde\.Shutdown|ksmserver|LogoutPrompt|org\.freedesktop\.(?:PowerManagement|"
+                      r"ScreenSaver)", a) for a in arg) and any(
+            re.search(r"(?i)reboot|poweroff|power_off|suspend|hibernate|halt|kexec|logout|terminate|kill|shutdown|"
+                      r"lock", a) for a in arg):
+        n.append(_("D-Bus ile kapatma/yeniden başlatma/askıya alma/oturum kapatma"))
+    hedefler = " ".join(arg) + " " + " ".join(kom.ic)
+    if komut in ("killall", "pkill", "kill", "kquitapp5", "kquitapp6", "kquitapp", "kwin_x11", "xkill") and re.search(
+            r"(?i)plasmashell|kwin|deskhand|ksmserver|kded|plasma|kglobalaccel|xdg-desktop-portal", hedefler):
+        n.append(_("masaüstü kabuğunu / pencere yöneticisini / Deskhand'i sonlandırma"))
+    if komut == "systemctl" and any(a in ("stop", "kill", "mask", "disable", "restart") for a in arg) and \
+            re.search(r"(?i)plasma|kwin|deskhand|graphical|display-manager|sddm|gdm", " ".join(arg)):
+        n.append(_("systemctl ile masaüstü/oturum hizmetini durdurma"))
+    if derinlik < 3 and komut not in _KABUK and (t0 := (kom.kelimeler[0] if kom.kelimeler else "")) and \
+            not _ATAMA.fullmatch(t0) and re.match(r"(?:\./|\.\./|~/|\$HOME/)", t0):
+        n.append(_("betik/program dosyasını çalıştırma ({dosya}): içeriği denetlenemez").format(dosya=t0))
+    if komut in _KABUK and not any(re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a) for a in arg):
+        dosya = next((a for a in arg if not a.startswith(("-", "+"))), None)
+        if dosya is not None and not n:
+            n.append(_("{komut} betiği çalıştırır ({dosya}): içeriği denetlenemez").format(komut=komut, dosya=dosya))
+    # GTFOBins: seçenekle kabuk komutu çalıştırma
+    if any(a.startswith("--checkpoint-action") or a.startswith("--to-command") or a.startswith("--use-compress-program")
+           or a.startswith("--rsh-command") for a in arg):
+        n.append(_("{komut}: seçenekle kabuk komutu çalıştırır").format(komut=komut))
+    if komut in ("ssh", "scp", "sftp", "rsync") and re.search(r"(?i)proxycommand|localcommand|permitlocalcommand",
+                                                               " ".join(arg)):
+        n.append(_("{komut}: ProxyCommand/LocalCommand ile yerel komut").format(komut=komut))
+    if komut == "rsync" and any(a in ("-e", "--rsh") or a.startswith("--rsh=") for a in arg):
+        n.append(_("rsync -e: uzak kabuk yerine yerel komut çalıştırabilir"))
+    if komut == "sed" and any(re.search(r"(?:^|[;\s\d/}])e(?:\s|$)|/e\b|s(.).*\1.*\1[gpiI0-9]*e", a)
+                              for a in duz[:1] + [a for a in arg if not a.startswith("-")][:1]):
+        n.append(_("sed e: komut çalıştırır"))
+    if komut == "man" and any(a in ("-P", "--pager") or a.startswith("--pager=") or a.startswith("-P") and len(a) > 2
+                              for a in arg):
+        n.append(_("man -P: sayfalayıcı yerine komut çalıştırır"))
+    if komut == "zip" and any(a in ("-TT", "--unzip-command") or a.startswith("--unzip-command=") for a in arg):
+        n.append(_("zip -TT: komut çalıştırır"))
+    if komut in ("vim", "vi", "nvim", "view", "ex") and any(re.search(r"^[-+]c?\s*:?\s*!|^\+:?!|:\s*!", a) for a in arg):
+        n.append(_("{komut} içinden kabuk komutu").format(komut=komut))
+    if komut in ("make", "ninja", "cmake") and any(_GECICI_DIZIN.match(a) for a in arg):
+        n.append(_("{komut}: geçici dizindeki derleme dosyası komut çalıştırır").format(komut=komut))
+    if komut == "at" or (komut == "watch" and duz):
+        n.append(_("{komut}: komutu sonra/ayrık çalıştırır").format(komut=komut))
     return n
 
 
@@ -765,6 +834,8 @@ def _komut_riski(kom, degiskenler, derinlik):
         if _GECMIS.fullmatch(w):  # !!, !-2, ^a^b: geçmişteki (görünmeyen) komutu çalıştırır
             nedenler.append(_("geçmişten komut çalıştırma/ekleme ({komut}): çalışacak komut görünmez").format(komut=w))
             return nedenler, ""
+        if "${" in w or _ISARET in w:  # komut adı parametre açılımı / komut ikamesiyle gizlenmiş: ${0:0:0}reboot
+            nedenler.append(_("komut adı açılımla gizlenmiş (${{…}} / $(…)): çalışacak komut görünmez"))
         if not w or w.startswith("$") or _ISARET in w:  # bilinmeyen değer komut konumunda: sonrakine bak
             i += 1
             continue
@@ -812,6 +883,12 @@ def _komut_riski(kom, degiskenler, derinlik):
                 nedenler += _atama_riski(m.group(1), m.group(3))
         return nedenler, komut
     nedenler += _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik)
+    if sarmalayicilar and re.match(r"(?:\./|\.\./|~/|\$HOME/)", t[i]):  # nohup ./k, time ~/x.sh
+        nedenler.append(_("betik/program dosyasını çalıştırma ({dosya}): içeriği denetlenemez").format(dosya=t[i]))
+    if komut in ("rm", "mv", "cp", "ln", "chmod", "chown", "truncate", "shred", "tee", "install", "rsync", "unlink") \
+            and any(re.search(r"(?:\.config|\.local/state|\.local/share|RUNTIME_DIR|run/user/\d+)/deskhand\b", a)
+                    for a in arg):
+        nedenler.append(_("Deskhand'in kendi ayar/durum dosyalarını değiştirme (DUR, yasak listesi…)"))
     if komut in _YETKI:
         nedenler.append(_("{komut} ile yetki yükseltme").format(komut=komut))
     if komut in _GUC or (komut in ("init", "telinit") and any(a in ("0", "6") for a in arg)):
@@ -1255,12 +1332,22 @@ def hassas_mi(*metinler):
 # Menüden yapıştırma (Yapıştır / Paste / Einfügen … ya da "Ctrl+V" kısayol ipucu): kısayolla yapıştırma ile aynı kural.
 _YAPISTIR_METIN = re.compile(r"^\W{0,2}(?:yapistir|paste|einfugen|coller|pegar|incolla|plakken|wklej|vlozit|"
                              r"beillesztes|klistra in|lim inn|indsaet|liita)\b|\b(?:ctrl|strg)[\s+]*(?:shift[\s+]*)?v\b|"
-                             r"\bshift[\s+]*ins(?:ert)?\b", re.I)
+                             r"\bshift[\s+]*ins(?:ert)?\b|\bpanodan\b|\bfrom (?:the )?clipboard\b|\bozel yapistir|"
+                             r"\bpaste (?:as|special|without)\b|\baus der zwischenablage\b|\bdu presse-papiers\b", re.I)
+_YAPISTIR_OGE = re.compile(r"paste|yapistir|einfug|coller|pegar|incolla|plakken|wklej|clipboard|pano", re.I)
 
 
 def yapistirma_metni_mi(*metinler):
-    """Tıklanacak hedefin yazısı / AT-SPI öge adı bir yapıştırma eylemi mi (kısa metin)?"""
-    return any(t and len(t) <= 48 and _YAPISTIR_METIN.search(katla(t).replace("&", "")) for t in metinler)
+    """Tıklanacak hedefin yazısı (OCR) bir yapıştırma eylemi mi (kısa metin; menü ögesi, "Panodan ekle", "Paste as…",
+    "Özel yapıştır", "Ctrl+V" ipucu, 📋)?"""
+    return any(t and len(t) <= 48 and ("\U0001f4cb" in t or _YAPISTIR_METIN.search(katla(t.replace("&", ""))))
+               for t in metinler)
+
+
+def yapistirma_ogesi_mi(*adlar):
+    """AT-SPI ögesinin adı / eylem adı (simgeli düğmenin erişilebilir adı dahil) yapıştırma İÇERİYOR mu?"""
+    return any(a and len(a) <= 64 and (_YAPISTIR_OGE.search(katla(a.replace("&", ""))) or "\U0001f4cb" in a)
+               for a in adlar)
 
 
 def hassas_engel(onayli, *metinler, hedef="", k=None, nokta=None):
@@ -1310,7 +1397,10 @@ def riskli_tus_engel(k, onayli, kombinasyon, birlikte=False):
 def ucbirim_komut_engel(k, onayli, metin, gizli=False, goruntu_al=True):
     """Hedef pencere bir uçbirimse (ucbirim_mi) ve yazılacak metin yıkıcı komut kalıbına uyuyorsa (riskli_komut)
     onay ister (riskli_tus_engel ile aynı yol). Komut, yazılmadan ÖNCE yakalanır: Enter ayrı gönderilse bile.
-    Onay isteği komutu (kısaltılmış) taşır. → uçbirimde riskli komut mu (onaylandı)."""
+    Onay isteği komutu (kısaltılmış) taşır. Yazıda Enter (\n) varsa sorulmaz: her Enter zaten Enter kapısında onay
+    ister (ucbirim.enter_kapisi) ve bu uyarıyı taşır — iki diyalog açılmasın. → uçbirimde riskli komut mu (onaylandı)."""
+    if "\n" in metin:
+        return False
     neden = riskli_komut(metin)  # ucuz ön eleme: sınıf sorgusu (kde: kdotool) yalnız eşleşince
     if not neden:
         return False

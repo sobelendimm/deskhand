@@ -824,6 +824,8 @@ def k_ogeye_tikla(a):
         # öge bulunduktan SONRA tek onay: istek ögenin adını, noktadaki yazıyı ve çevresinin görüntüsünü taşır
         yakin = nokta_metni(a.kimlik, o["cx"], o["cy"])
         hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), o["cx"], o["cy"], yakin, ek_metinler=(a.ad, o["ad"]))
+        if guvenlik.yapistirma_ogesi_mi(a.ad, o["ad"]):  # simgeli "yapıştır" düğmesinin erişilebilir adı
+            guvenlik.yapistirma_engel(a.kimlik, a.onayli)
         if getattr(g, "onay_hedefi", None):  # panelden onaylandı: öge ağaçta hâlâ aynı yerde ve aynı mı
             def yeniden():
                 ogeler2, sure2 = erisim_ogeleri(a.kimlik)
@@ -1048,6 +1050,8 @@ def _web_eylem(a, w):
     sistem_istemi_engel(k, getattr(a, "onayli", False), _("erişilebilirlik eylemi"), goruntu_al=False)
     onayli = _hassas_oge(k, a.onayli, _("tıklama (erişilebilirlik eylemi)"), oz, {}, ek_metinler=(a.ad,),
                          ek_basliklar=basliklar)
+    if guvenlik.yapistirma_ogesi_mi(a.ad, o.get("ad") or "", a.eylem or "") and guvenlik.yapistirma_engel(k, a.onayli):
+        onayli = True  # erişilebilir adı/eylem adı yapıştırma (simgeli düğme dahil): kullanıcının panosu
     if onayli:
         etiket += " --onayli"
     _atspi_korumalari(k, a.baslik, "fare")  # onay beklenmiş olabilir
@@ -1097,6 +1101,9 @@ def _ogeye_eylem(a):
     eylem_adi = bilgi["eylemler"][sira]
     etiket = f"ogeye-tikla '{a.ad}' --eylem {eylem_adi}"
     onayli = _hassas_oge(k, a.onayli, _("tıklama (erişilebilirlik eylemi)"), o, bilgi, ek_metinler=(a.ad,))
+    if guvenlik.yapistirma_ogesi_mi(a.ad, o["ad"], eylem_adi, bilgi.get("aciklama", "")) and \
+            guvenlik.yapistirma_engel(k, a.onayli):
+        onayli = True  # erişilebilir adı/eylem adı yapıştırma (simgeli düğme dahil): kullanıcının panosu
     if onayli:
         etiket += " --onayli"
     _atspi_korumalari(k, a.baslik, "fare")  # onay beklenmiş olabilir: pencere/başlık/DUR/ekran korumasını yeniden doğrula
@@ -1128,8 +1135,9 @@ def k_ogeye_yaz(a):
         g = types.SimpleNamespace(gizli=gizli)
         if _yazi_hassas(g, k, onayli, metin, goruntu_al=False):
             etiket += " --onayli"
-    if "\n" in metin and ucbirim.enter_kapisi(k, onayli, ek=metin.split("\n", 1)[0], gizli=gizli, goruntu_al=False):
-        etiket += " --onayli"
+    for i, satir in enumerate(metin.split("\n")[:-1]):  # her satır sonu bir Enter: bir Enter = bir onay
+        if ucbirim.enter_kapisi(k, onayli, ek=satir, gizli=gizli, goruntu_al=False, yalniz_ek=i > 0):
+            etiket += "" if etiket.endswith(" --onayli") else " --onayli"
     _atspi_korumalari(k, a.baslik, "klavye")  # onay beklenmiş olabilir
     ucbirim.tampon_isle(sec(), k, kirli=True)  # değer doğrudan yazıldı: satırın içeriği artık bilinmez
     r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
