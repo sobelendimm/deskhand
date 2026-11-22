@@ -49,6 +49,7 @@ BOSTA_DUR_SN = 1.5      # istekten sonra bu kadar boşsa sunucu kendini dondurur
 BOSTA_KAPAN_SN = 300    # bu kadar istek yoksa kapanır (VRAM bırakılır)
 BEKCI_SN = 2.0          # bekçi bu aralıkla oyun/boşta denetler
 ISTEK_SN = 10.0         # tek istek için üst sınır (büyük görüntü sıcakta ~1,2 sn)
+ACILIS_UST_SN = 15.0    # süreç YAŞIYORSA ama kilidi/soketi henüz yoksa (yük altında yavaş içe aktarma) beklenecek üst sınır
 SOGUK_SN = 8.0          # sunucunun ilk açılışı (torch + model + ilk çekirdekler ~2,5 sn) için beklenecek en çok süre
 EN_BUYUK = 4096 * 4096  # piksel
 BELLEK = "4G"           # sunucu bellek kafesi (ölçüm: ~1,5 GB)
@@ -244,6 +245,48 @@ def _baslat_komutu(py: str) -> list[str]:
 
 
 _son_baslatma = [0.0]
+_surec: list = [None, 0, None]  # [Popen, pid, /proc başlangıç zamanı] — yalnız bu sürecin başlattığı sunucu
+
+
+def _bas_zamani(pid: int) -> str | None:
+    """/proc/PID/stat başlangıç zamanı (22. alan; PID yeniden kullanımına karşı)."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
+
+
+def _surec_kaydet(popen):
+    _surec[0], _surec[1], _surec[2] = popen, popen.pid, _bas_zamani(popen.pid)
+
+
+def _surec_yasiyor() -> bool:
+    popen, pid, bz = _surec
+    if popen is None or popen.poll() is not None:
+        return False
+    return bz is None or _bas_zamani(pid) == bz
+
+
+def _gunluk_son_satir() -> str:
+    try:
+        with open(gunluk_yolu(), errors="replace") as f:
+            satirlar = [x.strip() for x in f.read().splitlines() if x.strip()]
+        return satirlar[-1][:200] if satirlar else ""
+    except OSError:
+        return ""
+
+
+def _olum_nedeni() -> str:
+    rc = _surec[0].returncode if _surec[0] is not None else None
+    if rc is None:
+        return "çıkış kodu bilinmiyor"
+    if rc < 0:
+        try:
+            return f"sinyal {signal.Signals(-rc).name}"
+        except ValueError:
+            return f"sinyal {-rc}"
+    return f"çıkış kodu {rc}"
 
 
 def baslat() -> bool:
@@ -266,6 +309,7 @@ def baslat() -> bool:
                                      env=ortam, start_new_session=True, close_fds=True)
         # uzun yaşayan istemcide (MCP sunucusu, panel) kapanan sunucu zombi kalmasın
         threading.Thread(target=surec.wait, daemon=True).start()
+        _surec_kaydet(surec)
         return True
     except OSError:
         return False
@@ -302,12 +346,21 @@ def oku(im, bekle: float = 0.0):
             break
         except (OSError, PermissionError):
             if not calisiyor():
-                if _son_baslatma[0] and 3.0 < time.monotonic() - _son_baslatma[0] < 4 * SOGUK_SN:
-                    # bu süreç az önce başlattı, sunucu açılırken öldü (ör. bellek kafesi): bir süre yeniden deneme
-                    # (çok sonra kapanmışsa boşta kapanmadır: yeniden başlatılır)
-                    _hata_yaz("sunucu hazır olmadan kapandı (günlük: ocr-gpu.log)")
-                    return None
-                baslat()
+                gecen = time.monotonic() - _son_baslatma[0] if _son_baslatma[0] else None
+                if gecen is not None and gecen < 4 * SOGUK_SN and _surec[0] is not None:
+                    if _surec_yasiyor():
+                        if gecen > ACILIS_UST_SN:  # yaşıyor ama çok yavaş: yanlış alarm değil, gerçek takılma
+                            _hata_yaz(f"sunucu {ACILIS_UST_SN:.0f} sn içinde açılmadı (günlük: ocr-gpu.log)")
+                            return None
+                        # yavaş açılıyor (yük altında içe aktarma): bekle
+                    else:
+                        # bu süreç az önce başlattı, sunucu açılırken ÖLDÜ → hemen, nedeniyle
+                        if oyunda():
+                            return None  # oyunda: atlandı (bekçi/oyun gereği kapandı; hata değil)
+                        _hata_yaz(f"sunucu hazır olmadan kapandı ({_olum_nedeni()}; günlük: {_gunluk_son_satir() or 'boş'})")
+                        return None
+                else:
+                    baslat()
             if time.monotonic() >= bitis:
                 return None
             time.sleep(0.1)
