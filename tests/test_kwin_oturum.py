@@ -183,6 +183,15 @@ kontrol("ortam: Gecko (firefox) XWayland'den (GDK_BACKEND=x11, MOZ_ENABLE_WAYLAN
 kontrol("ortam: Gecko ipuçları yalnız Gecko programlarına (başkası yerel Wayland kalır; env ezer)",
         ko.gecko_ipuclari(["konsole"]) == {} and ko.gecko_ipuclari([]) == {} and ko.gecko_ipuclari(["firefox"])
         and {**ko.gecko_ipuclari(["firefox"]), "MOZ_ENABLE_WAYLAND": "1"}["MOZ_ENABLE_WAYLAND"] == "1")
+_chr = ["chromium", "--force-renderer-accessibility", "file:///x.html"]
+_cx, _ce = ko.chromium_x11(_chr)
+kontrol("ortam: Chromium/Electron ailesi (erişilebilirlik bayraklı) XWayland'den: bayrak bayrağın arkasına, ipucu env",
+        _cx == ["chromium", "--force-renderer-accessibility", "--ozone-platform=x11", "file:///x.html"]
+        and _ce == {"ELECTRON_OZONE_PLATFORM_HINT": "x11"} and _chr[1:] == ["--force-renderer-accessibility", "file:///x.html"])
+kontrol("ortam: Chromium X11 yönlendirmesi yalnız aileye (bayraksız komut ve açık --ozone-platform aynen)",
+        ko.chromium_x11(["konsole"]) == (["konsole"], {}) and ko.chromium_x11([]) == ([], {})
+        and ko.chromium_x11([*_chr, "--ozone-platform=wayland"])[1] == {}
+        and ko.chromium_x11([*_chr, "--ozone-platform=wayland"])[0].count("--ozone-platform=x11") == 0)
 kontrol("ortam: env ile verilen WAYLAND_DISPLAY/DISPLAY/DBUS yok sayılır",
         e2["WAYLAND_DISPLAY"] == sahte["wayland_yol"] and e2["DISPLAY"] == ":123"
         and e2["DBUS_SESSION_BUS_ADDRESS"] == sahte["dbus_adres"])

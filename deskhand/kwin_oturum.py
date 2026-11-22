@@ -64,6 +64,24 @@ GECKO_PROGRAMLAR = frozenset({"firefox", "firefox-esr", "firefox-bin", "firefox-
 GECKO_IPUCLARI = {"GDK_BACKEND": "x11", "MOZ_ENABLE_WAYLAND": "0"}
 
 
+# Chromium/Electron ailesi (uygulama.ERISIM_BAYRAGI'nı taşıyan komut) de KWin türünde XWayland'den çalışır: yerel Wayland'de
+# Chromium'un AT-SPI çerçeve sınırları pencere geometrisine uymuyor (ölçüldü: web yolu "öge konumu doğrulanamadı", Dur 2,
+# konum_coz None); X11'de mutlak ve tutarlı (tık doğru ögeye düşer).
+OZONE_X11_BAYRAGI = "--ozone-platform=x11"
+
+
+def chromium_x11(argv) -> tuple[list, dict]:
+    """Komut Chromium/Electron ailesindeyse (erişilebilirlik bayrağı eklenmiş) → (X11 bayraklı komut, X11 ipucu env);
+    değilse (komut, {}). Bayrak erişilebilirlik bayrağının hemen arkasına girer (uygulama bayraklarının yeri: Flatpak
+    sarmalayıcıda da uygulamaya gider); açıkça --ozone-platform verilmişse dokunulmaz."""
+    from .uygulama import ERISIM_BAYRAGI
+    argv = list(argv or [])
+    if ERISIM_BAYRAGI not in argv or any(str(a).startswith("--ozone-platform") for a in argv):
+        return argv, {}
+    argv.insert(argv.index(ERISIM_BAYRAGI) + 1, OZONE_X11_BAYRAGI)
+    return argv, {"ELECTRON_OZONE_PLATFORM_HINT": "x11"}
+
+
 def gecko_ipuclari(argv) -> dict:
     """Başlatılan program bir Gecko tarayıcısıysa XWayland ipuçları (açıkça verilen env bunları ezer), değilse {}."""
     ad = os.path.basename(str((argv or [""])[0]))
