@@ -4,7 +4,7 @@ onay diyaloğunun düğme mantığı (QTest tıklaması), uçtan uca onay (iste 
 + Devral girdisi, Simgeler/Ayarlar/Sağlık, kısayol çakışma okuma, tek örnek. Genel kısayol KAYDEDİLMEZ (sahte).
 
 Çalıştır:  python3 tests/test_gui.py"""
-import os, sys, threading, time
+import os, shutil, sys, threading, time
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
 os.environ.setdefault("QT_NO_GLIB", "1")
@@ -836,6 +836,31 @@ kontrol("Çık → olay döngüsü hemen biter", kod == 0 and time.monotonic() -
 y_ = onay._json_oku(onay.yanit_yolu(k))
 kontrol("Çık → açık onay isteği RED", y_ and y_["karar"] == "red")
 kontrol("Çık → panel.pid silindi", not os.path.exists(onay.panel_pid_yolu()))
+
+# panel soketi: AF_UNIX yolu 107 baytı aşınca "açılamadı" iletisi nedeni söyler (kısa yolda yalnız dizin)
+from deskhand.gui import __main__ as gm  # noqa: E402
+from deskhand.gui import panel as panel_mod  # noqa: E402
+import tempfile  # noqa: E402
+
+uzun = os.path.join(tempfile.mkdtemp(prefix="dh-uzun-"), "u" * 60, "v" * 40)
+os.makedirs(uzun)
+eski_ad, eski_kilit = panel_mod.soket_adi, panel_mod.kilit_adi
+panel_mod.soket_adi = lambda: os.path.join(uzun, "panel.sock")
+panel_mod.kilit_adi = lambda: os.path.join(os.path.dirname(os.path.dirname(uzun)), "panel.lock")  # kilit serbest
+try:
+    kontrol("uzun soket yolunda listen başarısız → tek_ornek None", panel_mod.tek_ornek() is None)
+    iletim = gm.soket_acilamadi_iletisi(panel_mod.soket_adi(), uzun)
+    kontrol("uzun yol: ileti dizini + bayt sayısı + AF_UNIX sınırı + çare içerir",
+            f"({uzun})" in iletim and f"{len(os.fsencode(panel_mod.soket_adi()))} bayt" in iletim and
+            "AF_UNIX" in iletim and "107" in iletim and "DESKHAND_RUNTIME_DIR" in iletim, iletim)
+finally:
+    panel_mod.soket_adi, panel_mod.kilit_adi = eski_ad, eski_kilit
+    shutil.rmtree(os.path.dirname(os.path.dirname(uzun)), ignore_errors=True)
+kisa = gm.soket_acilamadi_iletisi("/run/user/1000/deskhand/panel.sock", "/run/user/1000/deskhand")
+kontrol("kısa yol: yalnız dizin iletisi (ek ipucu yok)", kisa == "panel soketi açılamadı (/run/user/1000/deskhand)", kisa)
+kontrol("sınırdaki yol (107 bayt) ipucu eklemez, 108 bayt ekler",
+        "AF_UNIX" not in gm.soket_acilamadi_iletisi("/" + "a" * 106, "d") and
+        "AF_UNIX" in gm.soket_acilamadi_iletisi("/" + "a" * 107, "d"))
 
 print(f"\n{gecen}/{toplam} arayüz testi geçti")
 sys.exit(0 if gecen == toplam else 1)

@@ -940,9 +940,13 @@ def ref_oge_sec(ogeler, ref):
     return o
 
 
+YAZILABILIR_ROLLER = ("entry", "text", "password text", "spin button")  # değeri doğrudan yazılabilen roller (label DEĞİL)
+
+
 def _oge_secimi(a, ogeler, sure):
     """Ada göre ögeyi seç (fare ve eylem yolu AYNI): bulunamadı 6, birden çok 5, --sira, devre dışı 6. → (öge, kademe).
-    a.ref_oge varsa ad aranmaz: kimlikle seçilip doğrulanır (ref_oge_sec)."""
+    a.ref_oge varsa ad aranmaz: kimlikle seçilip doğrulanır (ref_oge_sec). a.yazilabilir_tercih (değer yazma): ad
+    birden çok ögeye uyup yalnız biri yazılabilirse (YAZILABILIR_ROLLER) belirsizlik sorulmadan o seçilir."""
     ref = getattr(a, "ref_oge", None)
     if ref:
         o = ref_oge_sec(ogeler, ref)
@@ -956,6 +960,11 @@ def _oge_secimi(a, ogeler, sure):
                  if web.tarayici_mi(a.kimlik) else "")
         raise Dur(6, _("'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `ekran agac {kimlik}`"
                        ).format(ad=a.ad, sayi=len(ogeler), sn=f"{sure:.2f}", kimlik=a.kimlik) + ipucu)
+    if a.sira is None and len(bulunan) > 1 and getattr(a, "yazilabilir_tercih", False):
+        # değer yazma: etiket (label) ile giriş alanı aynı adı taşırsa yalnız BİRİ yazılabilirse (entry/text…) o seçilir
+        yazilabilir = [o for o in bulunan if o["rol"] in YAZILABILIR_ROLLER]
+        if len(yazilabilir) == 1:
+            bulunan = yazilabilir
     if a.sira is None and len(bulunan) > 1:
         print(_("# '{ad}' için {sayi} öge:").format(ad=a.ad, sayi=len(bulunan)))
         for i, o in enumerate(bulunan, 1):

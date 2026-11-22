@@ -350,17 +350,27 @@ def metin_oku(k: str, sorgu: str | None = None, bolge=None, derin: bool = False,
 
 
 def agac_oku(k: str, sorgu: str | None = None, hepsi: bool = False, en_cok: int = 80) -> dict:
-    """Erişilebilirlik ağacı (AT-SPI): {items: [{text, role, box, center, enabled}]}."""
-    from .erisim import ETKILESIMLI, erisim_ara, erisim_ogeleri
+    """Erişilebilirlik ağacı (AT-SPI): {items: [{text, role, box, center, enabled, value?}]}. value: giriş/metin
+    alanının (editör dahil; KWrite'ta yazılan metin ögenin ADI değil DEĞERİdir) ilk 200 karakteri; parola alanı ASLA.
+    sorgu ad ya da değerde aranır."""
+    from .erisim import DEGERLI_ROLLER, ETKILESIMLI, erisim_ara, erisim_ogeleri
+    from .ocr import norm
     if yasak_mi(k):
         raise Dur(10, _("YASAK pencere: ağacı okunmaz"))
-    ogeler, sure = erisim_ogeleri(k)
+    ogeler, sure = erisim_ogeleri(k, ayrinti=True)
     if sorgu:
         secili, _kademe = erisim_ara(ogeler, sorgu)
+        q = norm(sorgu)
+        secili += [o for o in ogeler if o not in secili and o.get("deger") and q in norm(o["deger"])]
     else:
         secili = [o for o in ogeler if hepsi or o["rol"] in ETKILESIMLI or (o["ad"] and o["rol"] == "label")]
-    sonuc = [{"text": o["ad"], "role": o["rol"], "box": [round(o["x"]), round(o["y"]), round(o["w"]), round(o["h"])],
-              "center": [round(o["cx"]), round(o["cy"])], "enabled": bool(o["etkin"])} for o in secili]
+    sonuc = []
+    for o in secili:
+        e = {"text": o["ad"], "role": o["rol"], "box": [round(o["x"]), round(o["y"]), round(o["w"]), round(o["h"])],
+             "center": [round(o["cx"]), round(o["cy"])], "enabled": bool(o["etkin"])}
+        if o.get("deger") and o["rol"] in DEGERLI_ROLLER:  # parola alanının değeri zaten okunmaz (erisim._ayrinti)
+            e["value"] = o["deger"]
+        sonuc.append(e)
     return {"items": sonuc[:en_cok], "truncated": len(sonuc) > en_cok, "seconds": round(sure, 2)}
 
 
@@ -456,11 +466,12 @@ def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False, mod=N
                                       onayli=onayli, mod=_mod(mod), eylem=eylem, ref_oge=ref))
 
 
-def ogeye_yaz(k, ad, metin, sira=None, baslik=None, gizli=False, onayli=False) -> str:
-    """Ögenin değerini AT-SPI ile yaz (fare/klavye/odak yok)."""
+def ogeye_yaz(k, ad, metin, sira=None, baslik=None, gizli=False, onayli=False, rol=None) -> str:
+    """Ögenin değerini AT-SPI ile yaz (fare/klavye/odak yok). rol: yalnız bu rolde ara; ad birden çok ögeye uyup yalnız
+    biri yazılabilirse (entry/text…) o seçilir (etiket + giriş alanı aynı adı taşıyabilir)."""
     from .erisim import k_ogeye_yaz
-    return calistir(k_ogeye_yaz, ns(kimlik=k, ad=ad, metin=metin, rol=None, sira=sira, baslik=baslik, gizli=gizli,
-                                    onayli=onayli))
+    return calistir(k_ogeye_yaz, ns(kimlik=k, ad=ad, metin=metin, rol=rol, sira=sira, baslik=baslik, gizli=gizli,
+                                    onayli=onayli, yazilabilir_tercih=True))
 
 
 def yaz(k, metin, baslik=None, gizli=False, onayli=False) -> str:

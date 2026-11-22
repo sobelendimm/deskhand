@@ -770,6 +770,24 @@ def girdi_kopyasi_bagi(yol: str | None) -> list[tuple[str, bool]]:
     return [(os.path.realpath(yol), True)]
 
 
+def chromium_ortami(argv: list[str], env: dict) -> dict:
+    """Chromium/Electron ailesi için yazılabilir XDG_CONFIG_HOME (ölçüldü: ad alanında gizlenen ~/.config/chromium —
+    profile-sync-daemon'da /run/user/UID altına giden sembolik bağ, ad alanında BOŞ tmpfs'in altında kalır ve boşta
+    asılı bağ olur — varsayılan yapılandırma dizini kullanılamaz; crashpad veritabanı yolunu oradan türetir ve
+    `chrome_crashpad_handler: --database is required` ile 133 (SIGTRAP) çıkışı verir. --user-data-dir /
+    --crash-dumps-dir / --disable-crash-reporter bunu ÇÖZMEZ). Çözüm yalıtımı gevşetmez: uygulamanın KENDİ
+    XDG_RUNTIME_DIR'inin (masaüstü klasörü, zaten yazılabilir bağ) altında boş bir dizin; kullanıcının gerçek
+    ~/.config/chromium'una hâlâ erişilmez. Flatpak sandbox'ı kendi XDG_*'ini kurar (dokunulmaz). → env (yeni sözlük)."""
+    from .uygulama import chromium_ailesi_mi
+    rt = env.get("XDG_RUNTIME_DIR")
+    if not rt or not argv or not chromium_ailesi_mi(argv) or \
+            any(os.path.basename(x) in ("flatpak", "flatpak_ornek.py") for x in argv[:4]):
+        return env
+    yol = os.path.join(rt, "xdg-yapilandirma")
+    os.makedirs(yol, mode=0o700, exist_ok=True)
+    return {**env, "XDG_CONFIG_HOME": yol}
+
+
 def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str, bool]], kopya: str | None = None,
                     girdi: str | None = None, **popen) -> subprocess.Popen:
     """Arka plan UYGULAMASINI başlatmanın TEK yolu (iki tür): bwrap ad alanı (korumali_argv) + bellek kafesi + düşük
@@ -783,6 +801,7 @@ def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str,
     from .oturum import politika
     baglar = [*baglar, *kopya_bagi(kopya, politika.kopya_dizini()), *girdi_kopyasi_bagi(girdi)]
     popen.setdefault("stdin", subprocess.DEVNULL)
+    env = chromium_ortami(argv, env)
     dis = {k: v for k, v in env.items() if k not in SON_KOMUT_ORTAMI}
     dis["PATH"] = GUVENLI_PATH
     return kafeste_baslat(d, korumali_argv(list(argv), yollar.runtime_dir(), baglar, env), dis, **popen)

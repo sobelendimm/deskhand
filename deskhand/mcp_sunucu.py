@@ -1404,7 +1404,8 @@ def read_text(
 ) -> dict[str, Any]:
     """Text of a window by OCR (Turkish+English), the accessibility tree or a browser page's elements. Prefer observe
     (merged, with refs); use read_text for OCR of a region, a deep multi-pass read, or page items outside the view
-    (source="web", hidden=true). Boxes/centres are window pixels; the returned shot_id lets click use x,y. Forbidden
+    (source="web", hidden=true). source="tree" items of input/editor fields carry value (first 200 characters; never a
+    password field) and query also matches it. Boxes/centres are window pixels; the returned shot_id lets click use x,y. Forbidden
     windows are excluded. Read-only."""
     with baglam(desktop, _("metin okuma: {pencere}").format(pencere=window or _("tüm ekran"))) as bilgi:
         k = api.pencere(window)
@@ -1583,6 +1584,9 @@ def type_text(
                                                  "typed into")] = None,
     element: Annotated[str | None, Field(description="Accessibility element name: set ITS value directly (no "
                                                      "keyboard, no focus change; replaces the content)")] = None,
+    role: Annotated[str | None, Field(description="With element: only this role (entry, text...)")] = None,
+    nth: Annotated[int | None, Field(ge=1, description="With element: which match when the name appears several "
+                                                       "times (default: the only writable one, if exactly one)")] = None,
     submit: Annotated[bool, Field(description="Press Enter afterwards")] = False,
     clear_first: Annotated[bool, Field(description="Select all (ctrl+a) first so the text replaces it")] = False,
     secret: Annotated[bool, Field(description="Keep the text out of the log and the result")] = False,
@@ -1591,11 +1595,13 @@ def type_text(
 ) -> dict[str, Any]:
     """Type text into a window: into the focused field, or into the field given by ref (clicked first). element= sets
     the named field's value through the accessibility tree instead (no keyboard; submit not available). Not for
-    shortcuts (press_key). Stops if the window/title changes or the user starts typing. Enter on a payment page,
+    shortcuts (press_key); a label and its input sharing a name resolve to the writable one, else pass role/nth. Stops if the window/title changes or the user starts typing. Enter on a payment page,
     typing into a password field and destructive shell commands in a terminal (rm -r, sudo, curl | sh, mkfs...) need
     the user's approval. Returns effect (confirmed = the typed text is visible where the window changed)."""
     if ref and element:
         raise ToolError("[1] " + _("ref ile element birlikte verilmez: tek hedef"))
+    if (role or nth) and not element:
+        raise ToolError("[1] " + _("role/nth yalnız element hedefiyle kullanılır"))
     if not window and not ref:
         raise ToolError("[1] " + _("window ya da ref gerekli"))
     with baglam(desktop, _("yazı: {pencere}").format(pencere=window or ref)) as bilgi:
@@ -1616,7 +1622,7 @@ def type_text(
             olc = verify and (not element or api.arka().ad == "sanal")  # kde'de görüntü pencereyi öne getirir
             once["ozet"] = _once(k) if olc else None
             if element:
-                return api.ogeye_yaz(k, element, metin_, None, desen, secret, onayli)
+                return api.ogeye_yaz(k, element, metin_, nth, desen, secret, onayli, rol=role)
             parcalar = []
             if ref_o is not None:  # alanı odakla: ref tıklaması (tüm kapılar), sonra klavye yolu (tüm kapılar)
                 parcalar.append(_ref_tikla(k, ref_o, "left", desen, onayli))
