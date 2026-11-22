@@ -832,7 +832,22 @@ if gercek0 is not None:
         print(f"NOT: gerçek fare {gercek0[0]} → {gercek1[0]} (kullanıcı oynattı; gönderdiğimiz noktalarla eşleşme: "
               f"{'VAR' if sizdi else 'yok'})")
     kontrol("GERÇEK oturum: fare bizim gönderdiğimiz bir noktaya gitmedi", not sizdi, f"{gercek0[0]} → {gercek1[0]}")
-    kontrol("GERÇEK oturum: etkin pencere değişmedi", gercek0[1] == gercek1[1], f"{gercek0[1]} → {gercek1[1]}")
+    # Etkin pencere kullanıcının kendi işiyle değişebilir (test sürerken pencere değiştirdi): yalnız YENİ etkin pencere
+    # bu testin başlattığı bir sürece aitse (test dizini / ad alanı izi) sızıntıdır.
+    def _bizim_pencere(wid):
+        pid = subprocess.run(["kdotool", "getwindowpid", wid], capture_output=True, text=True).stdout.strip()
+        if not pid.isdigit():
+            return False
+        try:
+            iz = open(f"/proc/{pid}/cmdline", "rb").read() + open(f"/proc/{pid}/environ", "rb").read()
+        except OSError:
+            return False
+        return b"deskhand-test-" in iz or b"DESKHAND_AD_ALANI=1" in iz or b"tests/yardimci" in iz
+    degisti = gercek0[1] != gercek1[1]
+    if degisti:
+        print(f"NOT: gerçek etkin pencere {gercek0[1]} → {gercek1[1]} (kullanıcı değiştirmiş olabilir)")
+    kontrol("GERÇEK oturum: etkin pencere bu testin bir penceresine geçmedi",
+            not (degisti and gercek1[1] and _bizim_pencere(gercek1[1])), f"{gercek0[1]} → {gercek1[1]}")
 for y in GERCEK_YOLLAR:
     kontrol(f"gerçek yol yazılmadı: {y}", agac_ozeti(y) == ozet0[y])
 anahtarlik1 = {a: pidler(a) for a in ANAHTARLIK}
