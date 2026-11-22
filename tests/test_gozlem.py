@@ -26,6 +26,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 import time
 
 import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; Deskhand'den ÖNCE)
@@ -860,6 +861,26 @@ async def duzeltme_a_testleri():
                                            "timeout_s": 1, **F})
         kontrol("wait_for(gone) etkin değil: öge ağaçta duruyor → satisfied=false, öne getirme yok",
                 (r.structured_content or {}).get("satisfied") is False and say["n"] == 0)
+        # gone + ağaç kipi: yalnız OCR'la görünen metin ağaçta hiç yoktur → ilk yoklamada sahte "kayboldu" olmaz
+        r = await c.call_tool("wait_for", {"condition": "gone", "value": "Yalnız boyalı yazı", "window": "KWrite",
+                                           "timeout_s": 1.2, **F})
+        sy = r.structured_content or {}
+        kontrol("wait_for(gone) etkin değil: metin ağaçta hiç görülmedi → satisfied=false + not, öne getirme yok",
+                sy.get("satisfied") is False and sy.get("note") and say["n"] == 0 and sy.get("polls", 0) > 1,
+                f"{say} {sy}")
+        kay_oge = next((o for o in sm.AGAC["Belge — KWrite"] if o["ad"] == "Kaydet"), None)
+        kontrol("ön koşul: sahte ağaçta 'Kaydet' ögesi var", kay_oge is not None)
+        if kay_oge is not None:
+            zamanlayici = threading.Timer(0.6, lambda: sm.AGAC["Belge — KWrite"].remove(kay_oge))
+            zamanlayici.start()
+            r = await c.call_tool("wait_for", {"condition": "gone", "value": "Kaydet", "window": "KWrite",
+                                               "timeout_s": 5, **F})
+            zamanlayici.join()
+            sy = r.structured_content or {}
+            kontrol("wait_for(gone) etkin değil: metin önce ağaçta görüldü, sonra kayboldu → satisfied, not yok, "
+                    "öne getirme yok", sy.get("satisfied") is True and not sy.get("note") and say["n"] == 0,
+                    f"{say} {sy}")
+            sm.AGAC["Belge — KWrite"].append(kay_oge)
         r = await c.call_tool("wait_for", {"condition": "stable", "window": "KWrite", "timeout_s": 3,
                                            "stable_ms": 300, **F})
         kontrol("wait_for(stable) etkin değil: ağaç imzası durgun → satisfied, öne getirme yok",
@@ -903,6 +924,58 @@ async def duzeltme_a_testleri():
             s.masaustu_coz = asil
         kontrol("batch desktop='auto': başta bir kez çözüldü, adımlara somut masaüstü gitti",
                 not r.is_error and cagri.count("auto") == 1 and set(cagri) <= {"auto", "foreground"}, str(cagri))
+
+        # --- 3b) batch: "sonra" kararı yapılandırılmış stopped (tur6 gibi); masaüstü notu sonuca note olarak eklenir
+        au = sm.sifirla()
+        import deskhand.mesgul as mesgul
+        asil_karar, asil_mesgul = mesgul.karar, s._mesgul
+        mesgul.karar = lambda ozet: "sonra"
+        try:
+            n0 = len(sm.eylemler())
+            r = await c.call_tool("batch", {"steps": [{"tool": "press_key", "args": {"window": "KWrite", "keys": "a"}},
+                                                      {"tool": "wait", "args": {"seconds": 0}}]})
+        finally:
+            mesgul.karar = asil_karar
+        sy = yapi(r)
+        kontrol("batch 'sonra' kararı: çıplak hata değil, yapılandırılmış stopped (failed_step=1, not_sent=[2], "
+                "nothing_sent), girdi yok", r.is_error and sy.get("status") == "stopped" and sy.get("failed_step") == 1
+                and sy.get("not_sent") == [2] and sy.get("sent") == "nothing_sent" and sy.get("effect") == "refused"
+                and sy.get("steps") and sy["steps"][0].get("ok") is False and len(sm.eylemler()) == n0
+                and not [x for x in au.satirlar if x.startswith("key")], f"{metin(r)[:300]} {sy}")
+        au = sm.sifirla()
+        s._mesgul = lambda: None
+        try:
+            r = await c.call_tool("batch", {"steps": [{"tool": "wait", "args": {"seconds": 0}}]})
+        finally:
+            s._mesgul = asil_mesgul
+        sy = yapi(r)
+        kontrol("batch auto: masaüstü notu ('meşgul modülü yok…') sonuca note olarak eklenir",
+                not r.is_error and "note: " in metin(r) and "batch ok" in metin(r),
+                f"{metin(r)[:300]} {sy}")
+
+        # --- 4) tüm ekran anlık görüntüsü: ref başlık denetimi (başlık pencere_bilgi'den; au.baslik(EKRAN) ≠ "")
+        au = sm.sifirla()
+        r = await c.call_tool("observe", {**F})
+        st = yapi(r)
+        kay = next((e for e in st.get("elements", []) if e.get("source") == "ocr" and e.get("name") == "Kaydet"), None)
+        kontrol("tüm ekran observe (pencere yok): OCR 'Kaydet' ögesi + ref", not r.is_error and kay is not None,
+                metin(r)[:300])
+        if kay:
+            n0 = len(au.satirlar)
+            r = await c.call_tool("click", {"ref": kay["ref"], **F})
+            kontrol("tüm ekran ref ile click: [8] YOK, tık gitti (başlık pencere_bilgi'den, EKRAN başlığı '')",
+                    not r.is_error and "[8]" not in metin(r) and "click left" in au.satirlar[n0:], metin(r)[:300])
+        au = sm.sifirla()
+        r = await c.call_tool("observe", {"window": "KWrite", **F})
+        m = re.search(r"\[(\d+)\] push button \"Kaydet\"", metin(r))
+        sid = re.search(r"snapshot ([0-9a-f]{4}-\d+)", metin(r))
+        if m and sid:
+            au.pen[sm.PENCERE][0] = "Başka başlık — KWrite"
+            n0 = len(au.satirlar)
+            r = await c.call_tool("click", {"ref": f"{sid.group(1)}:{m.group(1)}", **F})
+            kontrol("pencere ref'i: başlık değişince yine [8] + ipucu (window deseni + text/koordinat), tık yok",
+                    r.is_error and "[8]" in metin(r) and "window" in metin(r) and "click left" not in au.satirlar[n0:],
+                    metin(r)[:300])
 
 
 async def tur5_kapi_testleri():
