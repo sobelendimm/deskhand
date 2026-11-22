@@ -187,6 +187,27 @@ with arka_uc.hedef_sabit("kde"):
     hepsi_ve_kart("uçbirime yıkıcı komut yazma", eylem.k_yaz, ns(kimlik="{t}", metin="rm -rf build"))
     hepsi_ve_kart("riskli tuş ctrl+alt+f3", eylem.k_tus, ns(kimlik="{n}", kombinasyon="ctrl+alt+f3"))
     hepsi_ve_kart("parola alanına yazma (parola_alani_engel)", guvenlik.parola_alani_engel, "{n}", False, 5, "yazı")
+    from deskhand import erisim as _erisim  # noqa: E402
+    _onceki_parola = _erisim.odakli_parola_mi
+    _erisim.odakli_parola_mi = lambda k: True  # odak parola alanında
+    try:
+        hepsi_ve_kart("parola alanı odakta tek karakterli tuş 'a' (eylem.k_tus)", eylem.k_tus, ns(kimlik="{n}", kombinasyon="a"))
+        hepsi_ve_kart("parola alanı odakta 'shift+q 7' (eylem.k_tus)", eylem.k_tus, ns(kimlik="{n}", kombinasyon="shift+q 7"))
+        kod, n, g = sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon="tab"))
+        kontrol("parola alanı odakta Tab (yazı değil): parola onayı sorulmaz", kod == 0 and n == 0, f"{kod} {n}")
+        kod, n, g = sorar(eylem.k_tus, ns(kimlik="{n}", kombinasyon="ctrl+a"))
+        kontrol("parola alanı odakta ctrl+a (yazı değil): parola onayı sorulmaz", kod == 0 and n == 0, f"{kod} {n}")
+        assert kapsam("hepsi")
+        GIRDILER.clear()
+        temiz()
+        YANIT["izin"] = True
+        kod = kod_al(eylem.k_tus, ns(kimlik="{n}", kombinasyon="a"))
+        kontrol("parola alanı odakta 'a': panel onayı → tuş gönderildi, girdi günlükte gizli",
+                kod == 0 and len(ISTEKLER) == 1 and len(au.satirlar) == 1 and GIRDILER[-1].gizli is True,
+                f"{kod} {len(ISTEKLER)} {au.satirlar}")
+    finally:
+        _erisim.odakli_parola_mi = _onceki_parola
+        YANIT["izin"] = False
     hepsi_ve_kart("yapıştırma ctrl+v (pano okuma)", eylem.k_tus, ns(kimlik="{n}", kombinasyon="ctrl+v"))
     hepsi_ve_kart("ac --komut yıkıcı komut", guvenlik.baslatma_komut_engel, "rm -rf build")
     hepsi_ve_kart("menüden yapıştırma (hassas_engel → yapistirma_engel)", guvenlik.hassas_engel, False, "Yapıştır",

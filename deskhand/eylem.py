@@ -709,6 +709,11 @@ def _tus_onaylari(g, k, onayli, kombinasyon, birlikte=False):
     if (guvenlik.yapistir_tusu_mu(birlesik, menu_acik=menu) or guvenlik.yapistir_tusu_mu(kombinasyon, menu_acik=menu)) \
             and guvenlik.yapistirma_engel(k, onayli):
         _onayli_etiket(g)
+    yazi_n = guvenlik.yazi_tusu_sayisi(kombinasyon)  # parola alanı kapısı: tek karakterli tuşlar yazıdır (k_yaz ile tutarlı)
+    if yazi_n and _parola_alani_mi(k):
+        g.gizli = True  # parola tuşları günlüğe yazılmaz
+        if guvenlik.parola_alani_engel(k, onayli, yazi_n, _("tuş")):  # hepsi: onay · kart: onaysız (k_yaz ile aynı kural)
+            _onayli_etiket(g)
     if guvenlik.onay_kapsami() == "kart":  # tek tuşla kart numarası: rakam tuşları pencere başına tamponda birleştirilir
         tus_yazisi = guvenlik.tus_metni(kombinasyon)
         son4 = guvenlik.kart_tampon_denetle(k, tus_yazisi)
