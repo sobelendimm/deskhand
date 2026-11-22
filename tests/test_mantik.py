@@ -318,7 +318,8 @@ for kok_, _, dosyalar in os.walk(os.path.join(KOK, "deskhand")):
     for f in dosyalar:
         if f.endswith(".py"):
             for no, satir in enumerate(open(os.path.join(kok_, f)), 1):
-                if re.search(r"[\"'](kdotool|dotool|xdotool|spectacle|kscreen-doctor)[\"']", satir):
+                if re.search(r"[\"'](kdotool|dotool|xdotool|spectacle|kscreen-doctor)[\"']", satir) and \
+                        "ad listesi, çağrı değil" not in satir:  # ör. görev kipinin ad alanında örttüğü ikililer
                     ham.append(f"{f}:{no}")
 kontrol("ham kdotool/dotool/spectacle çağrısı yalnız arka_uc/ içinde", not ham, str(ham))
 

@@ -331,7 +331,7 @@ def _luhn(r: str) -> bool:
 
 # Görev uygulama ad alanında boş dosyayla örtülen ikililer (ORTA-2 iii): tarayıcıdan bir kabuk açılsa bile girdi
 # enjeksiyonu (xdotool/kdotool/ydotool/wtype), X anahtarı dökümü (xauth) ve dış uygulama açıcı (xdg-open) yok.
-MASKELI_IKILILER = ("xdotool", "kdotool", "ydotool", "wtype", "xauth", "xdg-open", "gio", "kioclient", "kioclient5",
+MASKELI_IKILILER = ("xdotool", "kdotool", "ydotool", "wtype", "xauth", "xdg-open", "gio", "kioclient", "kioclient5",  # ad listesi, çağrı değil
                     "kde-open", "kde-open5")
 
 

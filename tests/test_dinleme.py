@@ -172,14 +172,22 @@ def bizim_akislar(tur="sink-inputs"):
     return [b.splitlines()[0] for b in bloklar if b.strip() and any(iz in b for iz in BIZIM_IZ)]
 
 
+def _kimlikler(t):
+    """Çıkış/kaynak listesinin KİMLİK özeti (numara + ad): anlık durum (RUNNING/IDLE/SUSPENDED) kullanıcının kendi sesiyle
+    değişir, karşılaştırmaya girmez."""
+    return sorted(tuple(l.split("\t")[:2]) for l in gercek("list", "short", t).splitlines() if l.strip())
+
+
 def gercek_ozet():
-    """(f) kullanıcının GERÇEK sunucusunun özeti (YALNIZ salt okunur list sorguları)."""
-    return {t: gercek("list", "short", t) for t in ("modules", "sinks", "sources", "sink-inputs", "source-outputs")}
+    """(f) kullanıcının GERÇEK sunucusunun özeti (YALNIZ salt okunur list sorguları): modüller tam; çıkış/kaynaklar kimlikle;
+    akışlar yalnız BU testin izini taşıyanlar (kullanıcının kendi sesleri — video, hoparlör uyanık tutma — sayılmaz)."""
+    return {"modules": gercek("list", "short", "modules"), "sinks": _kimlikler("sinks"), "sources": _kimlikler("sources"),
+            "sink-inputs": bizim_akislar("sink-inputs"), "source-outputs": bizim_akislar("source-outputs")}
 
 
 once_akis = akis_idleri()
 once_varsayilan = gercek("get-default-sink").strip()
-once_cikislar = gercek("list", "short", "sinks")
+once_cikislar = _kimlikler("sinks")
 once_modul = gercek("list", "short", "modules")
 once_ozet = gercek_ozet()
 
@@ -361,7 +369,7 @@ kontrol("GÜVENLİK: uygulama özel sunucuda yalnız deskhand-sessiz çıkışı
         and not any(x in "".join(s_cik + s_kay) for x in ("alsa_", "bluez", "oto_eq", "hdmi", "usb-")), str((s_cik, s_kay)))
 kontrol("GÜVENLİK: ses dizini uygulamaya SALT OKUNUR", o.get("ses_dizini_yazilabilir") is False, str(o.get("ses_dizini_yazilabilir")))
 kontrol("ölçüm: kullanıcının gerçek ses sunucusunda yeni çıkış/modül yok (uygulama başladıktan sonra)",
-        gercek("list", "short", "sinks") == once_cikislar and gercek("list", "short", "modules") == once_modul)
+        _kimlikler("sinks") == once_cikislar and gercek("list", "short", "modules") == once_modul)
 
 # ---------------------------------------------------------------- 3) gerçek uçtan uca
 
@@ -420,7 +428,7 @@ else:
 
 kontrol("ölçüm: varsayılan çıkış değişmedi", gercek("get-default-sink").strip() == once_varsayilan)
 kontrol("ölçüm: kullanıcının gerçek çıkış listesi/modülleri değişmedi",
-        gercek("list", "short", "sinks") == once_cikislar and gercek("list", "short", "modules") == once_modul)
+        _kimlikler("sinks") == once_cikislar and gercek("list", "short", "modules") == once_modul)
 sonra_ozet = gercek_ozet()
 kontrol("(f) kullanıcının GERÇEK sunucusunda yeni modül/çıkış/kaynak/akış YOK (önce/sonra, salt okunur sorgu)",
         sonra_ozet == once_ozet, str({k: (once_ozet[k], sonra_ozet[k]) for k in once_ozet if once_ozet[k] != sonra_ozet[k]}))
