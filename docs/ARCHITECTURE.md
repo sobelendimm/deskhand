@@ -136,8 +136,9 @@ denetimsiz, kesintide bile), `ham(satir)`, `izle(k, desen)` / `izle_bitir()` (g�
 dahil: xkb düzeni `tr` ya da keysym eşleme). KWin türü kalıcı `deskhand-eis` yardımcısına (libei, KWin EIS) verir:
 süreç başına TEK bağlantı (kilitli paylaşılır), `type` HEP YA DA HİÇ (oturumun klavye haritasında olmayan karakter →
 `hata yazilamaz` → Dur 1; `yazilabilir_mi` aynı haritadan, girdi göndermeden yanıtlar, üst katman bu karakterlerde
-pano yoluna düşer). Yardımcı: hareketten sonraki ilk düğme/kaydırma olayı 20 ms bekler (KWin işaretçi odağını
-eşzamansız uygular), imleç zaten hedefteyse önce 1 px komşuya gider ("park edilmiş imleç"), kaydırma ayrık 120'lik
+pano yoluna düşer). Yardımcı: hareketten sonraki ilk düğme/kaydırma öncesi bekleme `hareketbekle MS` ile açılabilir
+(varsayılan 0: KWin 6.8.3'te 50 hızlı iki-pencere tıkında yanlış yüzey yok, bekleme tık başına +20 ms ekliyordu), imleç
+zaten hedefteyse önce 1 px komşuya gider ("park edilmiş imleç"; ucuz önlem), kaydırma ayrık 120'lik
 birim + `scroll_stop`, klavye aygıtı değişince (düzen değişimi) eskisiyle basılı kalanları yeni aygıttan bas+bırak ile
 temizler, kapanışta ei_ping eşitlemesi + `disconnect(çerez)`.
 

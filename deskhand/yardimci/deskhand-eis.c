@@ -25,6 +25,7 @@
  *   yazilabilir METİN        girdi göndermez; "tamam" (hepsi yazılabilir) | "yazilamaz <karakterler>"
  *   wheel N / hwheel N       kaydır; N artı = yukarı / sağ (dotool gibi), N çentik
  *   typedelay MS typehold MS keydelay MS keyhold MS    (varsayılan 2 8 2 8, dotool gibi)
+ *   hareketbekle MS          hareketten sonraki ilk düğme/kaydırma öncesi bekleme (varsayılan 0)
  *   birak                    basılı tutulan HER ŞEYİ hemen bırak
  *   basili                   (tanılama) "tamam tus=KOD,… dugme=KOD,…": bu bağlantının basılı tuttukları
  *   bilgi                    "tamam GENİŞLİK YÜKSEKLİK DÜZEN"
@@ -35,8 +36,8 @@
  * AYGIT DEĞİŞİMİ: KWin düzen değişince klavye aygıtını kaldırıp yenisini verir: kaldırılan aygıtla basılı kalanlar yeni
  * aygıt RESUMED olunca ondan bas+bırak ile temizlenir; aygıt yokken olay gönderilmez (en çok AYGIT_YEDEK_MS beklenir);
  * tuş haritası her zaman yeni aygıtın EIS keymap'inden okunur.
- * İŞARETÇİ: hareketten sonraki ilk düğme/kaydırma olayı HAREKET_DUGME_MS bekler (KWin işaretçi odağını eşzamansız
- * uygular); imleç zaten hedefteyse önce 1 px komşuya gidilir ("park edilmiş imleç": altına yeni pencere geldiyse aynı
+ * İŞARETÇİ: hareketten sonraki ilk düğme/kaydırma olayı `hareketbekle` kadar bekler (varsayılan 0: KWin 6.8.3'te
+ * gereksiz ölçüldü); imleç zaten hedefteyse önce 1 px komşuya gidilir ("park edilmiş imleç": altına yeni pencere geldiyse aynı
  * konuma hareket olay üretmezdi). Kaydırma: ayrık 120'lik birim + sonda scroll_stop.
  * KAPANIŞ: bırakmalar → ei_ping/PONG eşitlemesi → ei_unref → RemoteDesktop.disconnect(çerez).
  * Çıkış kodları: 0 normal (EOF / cik / sinyal) · 1 kullanım · 2 --bus yok/yasak · 3 D-Bus/EIS bağlantı hatası ·
@@ -75,7 +76,10 @@
 #define BASILI_AZAMI 64
 #define EVDEV_SHIFT KEY_LEFTSHIFT
 #define EVDEV_ALTGR KEY_RIGHTALT
-#define HAREKET_DUGME_MS 20  /* KWin işaretçi odağını eşzamansız uygular: hareketten sonra ilk düğme/kaydırma öncesi */
+/* hareketten sonraki ilk düğme/kaydırma öncesi bekleme (ms; `hareketbekle MS` ile değişir). Bir rakip KWin'in işaretçi
+ * odağını eşzamansız uyguladığını bildiriyor; KWin 6.8.3'te ölçüldü: 50 hızlı iki-pencere tıkında 0 yanlış yüzey,
+ * bekleme her tıka +20 ms ekliyordu → varsayılan 0 (gerekirse açılır) */
+static int hareket_dugme_ms = 0;
 #define AYGIT_YEDEK_MS 600   /* aygıt değişiminde (kaldırıldı → yenisi RESUMED) olay göndermeden önce en çok bekleme */
 
 struct tus_ad { const char *ad; int kod; };
@@ -388,7 +392,7 @@ static struct ei_device *aygit_bekle(struct ei_device *(*bul)(void)) {
  * ESKİ yüzeye gidebilir */
 static void hareket_sonrasi_bekle(void) {
     long gecen = simdi_ms() - son_hareket_ms;
-    if (gecen >= 0 && gecen < HAREKET_DUGME_MS) bekle_ms((int)(HAREKET_DUGME_MS - gecen));
+    if (gecen >= 0 && gecen < hareket_dugme_ms) bekle_ms((int)(hareket_dugme_ms - gecen));
     son_hareket_ms = -1000000; /* yalnız ilk olay bekler */
 }
 
@@ -773,6 +777,7 @@ static void satir_isle(char *satir) {
     else if (!strcmp(c, "typehold")) h = komut_ms(arg, &typehold);
     else if (!strcmp(c, "keydelay")) h = komut_ms(arg, &keydelay);
     else if (!strcmp(c, "keyhold")) h = komut_ms(arg, &keyhold);
+    else if (!strcmp(c, "hareketbekle")) h = komut_ms(arg, &hareket_dugme_ms);
     else if (!strcmp(c, "birak")) hepsini_birak();
     else if (!strcmp(c, "basili")) { /* tanılama: bu bağlantının basılı tuttuğu evdev tuş / düğme kodları */
         char t[BASILI_AZAMI * 8 + 16] = "", b[8 * 8 + 16] = "";
