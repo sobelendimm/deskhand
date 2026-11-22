@@ -1,6 +1,5 @@
 {
  "       --background (--arka)        görünmez ikinci masaüstünde çalış (sanal arka uç; ortam: DESKHAND_HEDEF=arka).": "       --background (--arka)        run on an invisible second desktop (virtual background backend; env: DESKHAND_HEDEF=arka).",
- "       --desktop-name AD            (komuttan ÖNCE) adlı görünmez masaüstünü kullan (ortam: DESKHAND_MASAUSTU; boş = varsayılan).": "       --desktop-name NAME          (BEFORE the command) use the named invisible desktop (env: DESKHAND_MASAUSTU; empty = default).",
  "       --on-my-screen (--ekranimda) kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı açıkça izin verdiyse).": "       --on-my-screen (--ekranimda) run on the user's screen even while they are playing a game or watching a video (ONLY if the user explicitly allowed it).",
  "       -s/--class (--sinif) DESEN   pencere sınıfı (ör. krunner, vivaldi-stable) uymazsa DUR (başlıksız pencereler için).": "       -s/--class (--sinif) PATTERN   STOP if the window class (e.g. krunner, vivaldi-stable) does not match (for windows without a title).",
  "  adım durdu ({kod}): {mesaj}": "  step stopped ({kod}): {mesaj}",
@@ -29,7 +28,6 @@
  "  ekran read (metin) <kimlik> [desen] [--region ..] [--precise] [--all] [--deep]   yazılar + koordinatlar": "  deskhand read (metin) <id> [pattern] [--region ..] [--precise] [--all] [--deep]   texts + coordinates",
  "  ekran save-icon (simge-kaydet) <kimlik> <ad> --region x,y,g,y   yazısız simgeyi kaydet (~/.local/share/deskhand/simgeler)": "  deskhand save-icon (simge-kaydet) <id> <name> --region x,y,w,h   save an icon that has no text (~/.local/share/deskhand/simgeler)",
  "  ekran screenshot (foto) [kimlik] [png] [--out DOSYA] [--region x,y,g,y] [--width N] [--grid [ADIM]]\n                                          kimliksiz: --background ise tüm görünmez masaüstü, değilse etkin pencere;\n                                          --width N: küçültülmüş görüntü (yapay zekâ bağlamı için)": "  deskhand screenshot (foto) [id] [png] [--out FILE] [--region x,y,w,h] [--width N] [--grid [STEP]]\n                                          without id: with --background the whole invisible desktop, otherwise the active window;\n                                          --width N: downscaled image (for AI context)",
- "  ekran scroll (kaydir) <kimlik> [down|up|left|right] [ADIM] [--point x,y]": "  deskhand scroll (kaydir) <id> [down|up|left|right] [STEP] [--point x,y]",
  "  ekran sessions (oturum) status|policy|clear   arka plan oturum aktarımı (hangi uygulama girişli açılır)": "  deskhand sessions (oturum) status|policy|clear   background session sharing (which apps open already signed in)",
  "  ekran sleep (uyu) SN                    (dizi içinde) bekle": "  deskhand sleep (uyu) SEC                    wait (inside a batch)",
  "  ekran stop | resume | status (dur | devam | durum)   DUR anahtarı: aç (hiçbir girdi gönderilmez) / kaldır / göster": "  deskhand stop | resume | status (dur | devam | durum)   STOP switch: turn on (no input is sent) / remove / show",
@@ -634,7 +632,6 @@
  "oturum veri yolu açılamadı": "session data path could not be opened",
  "oturum çıkışı bulunamadı (kscreen-doctor): {hata}": "session output not found (kscreen-doctor): {hata}",
  "oturum: Flatpak örnekleri kapatılırken uyarı (ayrıntı günlükte)": "session: warning while closing Flatpak instances (details in the log)",
- "oturum: {ad} kopyasında şu sitelerin oturum çerezleri yenilendi; asıl tarayıcıda yeniden giriş gerekebilir: {siteler}": "session: session cookies of these sites were refreshed in the {ad} copy; you may need to log in again in the main browser: {siteler}",
  "oturum: {karar}": "session: {karar}",
  "oturum: {sayi} Flatpak örneği kapatılamadı ({uygulamalar}); kopyaları silinmedi": "session: {sayi} Flatpak instance(s) could not be closed ({uygulamalar}); snapshot copies were not deleted",
  "oyun sınıfı ({sinif})": "game class ({sinif})",
@@ -843,5 +840,13 @@
  "İptal": "Cancel",
  "İsteyen süreç": "Requesting process",
  "İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.": "Permission covers this single action only. If you are not sure, deny.",
- "‘{hedef}’ tıklanıyor": "Clicking ‘{hedef}’"
+ "‘{hedef}’ tıklanıyor": "Clicking ‘{hedef}’",
+ "       --desktop-name AD            (komuttan önce ya da sonra) adlı görünmez masaüstünü kullan (ortam: DESKHAND_MASAUSTU; boş = varsayılan).": "       --desktop-name NAME          (before or after the command) use the named invisible desktop (env: DESKHAND_MASAUSTU; empty = default).",
+ "  ekran scroll (kaydir) <kimlik> [down|up|left|right] [ADIM] [--point x,y]   (ADIM varsayılan 3; nokta:\n                                          scroll <kimlik> X Y [yön] [ADIM] ya da --at x,y)": "  deskhand scroll (kaydir) <id> [down|up|left|right] [STEP] [--point x,y]   (STEP defaults to 3; point:\n                                          scroll <id> X Y [direction] [STEP] or --at x,y)",
+ "adlı görünmez masaüstü (ortam: DESKHAND_MASAUSTU)": "named invisible desktop (env: DESKHAND_MASAUSTU)",
+ "açık oturum kopyaları sınırı aşıyor ({sayi} kopya, {mb} MB; sınır {azami_sayi} kopya / {azami_mb} MB): kullanılmayan arka plan tarayıcılarını kapatın": "open session copies exceed the limit ({sayi} copies, {mb} MB; limit {azami_sayi} copies / {azami_mb} MB): close background browsers you no longer use",
+ "ikinci argüman yön olmalı (down|up|left|right); nokta için: scroll KİMLİK X Y [yön] ya da --point X,Y; adım için: scroll KİMLİK down {adim}": "the second argument must be a direction (down|up|left|right); for a point: scroll ID X Y [direction] or --point X,Y; for a step count: scroll ID down {adim}",
+ "oturum: {ad} kopyasında kimlik oturumu çerezleri yenilendi ({siteler}); asıl profil değiştirilmedi, ama sağlayıcı eski oturumu kapattıysa asıl tarayıcıda yeniden giriş gerekebilir": "session: sign-in cookies were refreshed in the {ad} copy ({siteler}); the main profile was not changed, but if the provider ended the old session you may need to sign in again in the main browser",
+ "'{ad}' adlı görünmez masaüstü açık değil (açık olanlar: {acik}); açmak için: deskhand desktop start --name {ad}": "invisible desktop '{ad}' is not running (running: {acik}); to start it: deskhand desktop start --name {ad}",
+ "pencere/erişilebilirlik listesi": "window/accessibility list"
 }

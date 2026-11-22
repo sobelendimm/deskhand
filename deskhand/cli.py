@@ -65,7 +65,8 @@ YARDIM_KOMUTLAR = (
     N_("  ekran key (tus) <kimlik> <kombinasyon> [--approved]   ör. ctrl+s, Return, alt+F4"),
     N_("  ekran type (yaz) <kimlik> <metin> [--secret]   \\n → Return, \\t → Tab, \\\\ → \\; --secret günlüğe metni yazmaz;\n"
        "                                          '-' ile başlayan metin: ekran type <kimlik> -- \"-5 derece\""),
-    N_("  ekran scroll (kaydir) <kimlik> [down|up|left|right] [ADIM] [--point x,y]"),
+    N_("  ekran scroll (kaydir) <kimlik> [down|up|left|right] [ADIM] [--point x,y]   (ADIM varsayılan 3; nokta:\n"
+       "                                          scroll <kimlik> X Y [yön] [ADIM] ya da --at x,y)"),
     N_("  ekran read (metin) <kimlik> [desen] [--region ..] [--precise] [--all] [--deep]   yazılar + koordinatlar"),
     N_("  ekran click-text (metne-tikla) <kimlik> <metin> [right|double] [--nth N] [--wait SN] [--offset dx,dy]\n"
        "                    [--region ..] [--scroll-search [N]] [--approved]"),
@@ -136,7 +137,7 @@ YARDIM_ORTAK = (
        "pencereler için)."),
     N_("       --background (--arka)        görünmez ikinci masaüstünde çalış (sanal arka uç; ortam: "
        "DESKHAND_HEDEF=arka)."),
-    N_("       --desktop-name AD            (komuttan ÖNCE) adlı görünmez masaüstünü kullan (ortam: "
+    N_("       --desktop-name AD            (komuttan önce ya da sonra) adlı görünmez masaüstünü kullan (ortam: "
        "DESKHAND_MASAUSTU; boş = varsayılan)."),
     N_("       --on-my-screen (--ekranimda) kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı "
        "açıkça izin verdiyse)."),
@@ -405,6 +406,10 @@ def ayristirici(prog=None, sessiz=False):
     alt = p.add_subparsers(dest="komut", required=True, metavar=_("KOMUT"))
     secenek(ortak, "--arka", action="store_true", default=argparse.SUPPRESS,
             help=h_("görünmez ikinci masaüstünde (sanal arka uç)"))
+    for ap_ in (p, ortak):  # komuttan önce de sonra da: `--desktop-name X windows`, `windows --desktop-name X`
+        ap_.add_argument("--desktop-name", dest="masa", metavar="AD",
+                         default=None if ap_ is p else argparse.SUPPRESS,
+                         help=h_("adlı görünmez masaüstü (ortam: DESKHAND_MASAUSTU)"))
     secenek(p, "--arka", action="store_true", default=False, help=h_("görünmez ikinci masaüstünde (sanal arka uç)"))
     secenek(p, "--ekranimda", action="store_true", default=False,
             help=h_("kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı açıkça izin verdiyse)"))
@@ -476,8 +481,9 @@ def ayristirici(prog=None, sessiz=False):
     s = komut("kaydir", k_kaydir, parents=[ortak]); s.add_argument("kimlik")
     s.add_argument("yon", nargs="?", default="asagi", type=cevirici(YON), choices=secimler(YON, KAYDIR_YON),
                    metavar="{" + ",".join(YON) + "}")
-    s.add_argument("adim", nargs="?", type=int, default=5)
-    secenek(s, "--nokta", help=h_("x,y (varsayılan: pencere ortası)"))
+    s.add_argument("adim", nargs="?", type=int, default=KAYDIR_ADIM)
+    secenek(s, "--nokta", "--at", help=h_("x,y (varsayılan: pencere ortası)"))
+    _kaydir_bicimi(s)
     s = komut("metin", k_metin, parents=[ortak, okuma]); s.add_argument("kimlik"); s.add_argument("desen", nargs="?")
     secenek(s, "--bolge"); secenek(s, "--hassas", action="store_true")
     secenek(s, "--hepsi", action="store_true", help=h_("gürültü süzgeci kapalı"))
@@ -572,21 +578,66 @@ def varsayilan_foto_hedefi(au):
     return ak
 
 
+# Komuttan önce gelebilen, DEĞER alan genel seçenekler (_masa_secenegi değerlerini atlar)
+_DEGERLI_GENEL = frozenset({"-b", "--baslik", "--title", "-s", "--sinif", "--class"})
+KAYDIR_ADIM = 3  # MCP scroll(amount) varsayılanıyla aynı
+
+
 def _masa_secenegi(argv: list) -> list:
-    """Komuttan ÖNCEKİ genel `--desktop-name AD` (ya da `--desktop-name=AD`) → ortam DESKHAND_MASAUSTU: bu süreç ve
-    başlattıkları o görünmez masaüstüne bağlanır (masalar.secili). Komuttan sonraki argümanlara dokunulmaz (metin)."""
+    """Komut adına kadar HER KONUMDAKİ genel `--desktop-name AD` (ya da `--desktop-name=AD`) → ortam
+    DESKHAND_MASAUSTU: bu süreç ve başlattıkları o görünmez masaüstüne bağlanır (masalar.secili). Ör. `--background
+    --desktop-name X windows`, `-b DESEN --desktop-name X click …`. Komuttan sonrakiler ayrıştırıcıda (`windows
+    --desktop-name X`); kendi ayrıştırıcısı olan komutlar (desktop/sessions/panel) da önceki biçimi kullanır."""
     from . import masalar
     argv = list(argv)
-    while argv and (argv[0] == "--desktop-name" or argv[0].startswith("--desktop-name=")):
-        if "=" in argv[0]:
-            ad = argv.pop(0).split("=", 1)[1]
-        else:
-            if len(argv) < 2:
-                raise Dur(1, _("--desktop-name bir ad ister"))
-            ad = argv[1]
-            del argv[:2]
-        os.environ[masalar.ORTAM] = masalar.dogrula(ad)
+    i = 0
+    while i < len(argv):
+        t = argv[i]
+        if t == "--desktop-name" or t.startswith("--desktop-name="):
+            if "=" in t:
+                ad = t.split("=", 1)[1]
+                del argv[i]
+            else:
+                if i + 1 >= len(argv):
+                    raise Dur(1, _("--desktop-name bir ad ister"))
+                ad = argv[i + 1]
+                del argv[i:i + 2]
+            os.environ[masalar.ORTAM] = masalar.dogrula(ad)
+            continue
+        if t == "--" or not t.startswith("-"):
+            break  # komut adı (ya da seçeneklerin sonu): sonrası komutun argümanları
+        i += 2 if t in _DEGERLI_GENEL else 1
     return argv
+
+
+def _sayi_mi(t) -> bool:
+    return bool(re.fullmatch(r"-?\d+", str(t)))
+
+
+def _kaydir_bicimi(s) -> None:
+    """scroll ayrıştırıcısı: `scroll KİMLİK X Y [yön] [ADIM]` → `scroll KİMLİK [yön] [ADIM] --point X,Y`; tek sayısal
+    ikinci argüman (`scroll KİMLİK 300`) → yön/adım/nokta ipucuyla hata (çıkış 1)."""
+    degerli = _DEGERLI_GENEL | {"--nokta", "--point", "--at"}
+    asil = s.parse_known_args
+
+    def parse_known_args(args=None, namespace=None):
+        args = list(args or [])
+        poz, i = [], 0
+        while i < len(args):
+            t = args[i]
+            if t.startswith("-") and not _sayi_mi(t):
+                i += 1 if "=" in t or t not in degerli else 2
+                continue
+            poz.append(i)
+            i += 1
+        if len(poz) >= 3 and _sayi_mi(args[poz[1]]) and _sayi_mi(args[poz[2]]):
+            nokta = f"{args[poz[1]]},{args[poz[2]]}"
+            args = [a for j, a in enumerate(args) if j not in (poz[1], poz[2])] + ["--point", nokta]
+        elif len(poz) >= 2 and _sayi_mi(args[poz[1]]):
+            s.error(_("ikinci argüman yön olmalı (down|up|left|right); nokta için: scroll KİMLİK X Y [yön] ya da "
+                      "--point X,Y; adım için: scroll KİMLİK down {adim}").format(adim=args[poz[1]]))
+        return asil(args, namespace)
+    s.parse_known_args = parse_known_args
 
 
 def main(argv=None):
@@ -611,7 +662,16 @@ def main(argv=None):
     if ilk in gecis:
         gecis[ilk](argparse.Namespace(arg=argv[1:]))
     a = ayristirici().parse_args(argv)
-    if a.arka or str(getattr(a, "kimlik", "") or "").startswith(ARKA_ONEK):
+    if getattr(a, "masa", None) is not None:  # komuttan sonra verilen --desktop-name (arka uç seçilmeden ÖNCE)
+        from . import masalar
+        try:
+            os.environ[masalar.ORTAM] = masalar.dogrula(a.masa)
+        except Dur as e:
+            print(_("DURDURULDU ({kod}): {mesaj}").format(kod=e.kod, mesaj=e.mesaj), file=sys.stderr)
+            sys.exit(e.kod)
+    if a.arka or str(getattr(a, "kimlik", "") or "").startswith(ARKA_ONEK) or os.environ.get("DESKHAND_MASAUSTU"):
+        # --desktop-name / DESKHAND_MASAUSTU da arka plan demek: adlı masaüstü yalnız görünmez masaüstünde vardır
+        # (eskiden --background'sız `--desktop-name X windows` kullanıcının GERÇEK pencerelerini listeliyordu)
         os.environ["DESKHAND_HEDEF"] = "arka"  # bu süreç ve başlattıkları aynı arka ucu seçsin
     if a.ekranimda:
         os.environ["DESKHAND_EKRANIMDA"] = "1"  # kullanıcı açıkça izin verdi: oyun/film sırasında da ön plan
@@ -627,6 +687,8 @@ def main(argv=None):
             dur_denetle()  # DUR anahtarı açıkken hiçbir şeye başlama
         if a.komut not in KOMUTSUZ_ARKA_UC:
             au = arka_al()
+            if au.ad != "sanal" and a.komut in ("bul", "erisim"):  # gerçek oturumun pencere/uygulama listesi = okuma
+                hata.gercek_ekran_denetle(_("pencere/erişilebilirlik listesi"), okuma=True)
         if a.komut == "foto":
             if getattr(a, "cikti_dosya", None):
                 if a.cikti:
