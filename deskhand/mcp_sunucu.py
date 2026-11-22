@@ -1805,6 +1805,7 @@ def open_app(
                                         "başlatılmadı. desktop='foreground' (kullanıcının ekranı) kullan ya da "
                                         "kullanıcıya bildir.").format(uygulama=app))
         env = None
+        kopya = None
         notlar = []
         if api.arka().ad == "sanal":
             if masaustu.durum() is None:
@@ -1838,8 +1839,10 @@ def open_app(
                         argv = [*h.argv, *belgeler]
                         yasak_metin = [*yasak_metin, " ".join(argv)]
                     env = dict(getattr(h, "env_ek", None) or {}) or None  # yalnız politikanın ortamı; ajandan değil
-                    if karar == "kopya" and hasattr(ot, "parmak_kaydet"):
-                        ot.parmak_kaydet(getattr(h, "kopya_yolu", None))
+                    if karar == "kopya":
+                        kopya = getattr(h, "kopya_yolu", None)  # ad alanına YALNIZ bu kopya bağlanır
+                        if hasattr(ot, "parmak_kaydet"):
+                            ot.parmak_kaydet(kopya)
                     notlar.append(_("oturum politikası: {karar}").format(karar=karar)
                                   + (f" ({aciklama})" if aciklama else ""))
                 elif karar:
@@ -1847,7 +1850,7 @@ def open_app(
         with kilitli(girdi=True):  # onay bekleyen masaüstüne uygulama açılmaz (yalnız kapı denetimi; başlatma
             pass                   # ve pencere beklemesi kilidi tutmaz)
         gonderim.artir()  # başlatma isteği gitti: sonraki hata "belki başladı"
-        r = api.uygulama_ac(argv, ad, yasak_metin, env, title, wait_s)
+        r = api.uygulama_ac(argv, ad, yasak_metin, env, title, wait_s, kopya=kopya)
         if notlar:
             r["notes"] = notlar
         r["effect"] = "confirmed" if r.get("status") == "opened" else "unverifiable"

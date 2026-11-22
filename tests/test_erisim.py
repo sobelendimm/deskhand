@@ -798,7 +798,7 @@ if not sanal_mumkun():
 else:
     gercek0 = gercek_a11y()  # kullanıcının GERÇEK oturumu: baştan sona dokunulmaz
     BASLIK = "a11y-deneme"
-    LOG = os.path.join(_yalitim.GECICI, "a11y.log")
+    LOG = os.path.join(_yalitim.PAYLASIM, "a11y.log")
 
     def log():
         try:
@@ -857,14 +857,28 @@ else:
         olay("kaydırgaç", ["set-element", BASLIK, "Ses", "4"], "deger:Ses:4")
         olay("sekme", ["click-element", BASLIK, "Gelişmiş", "--action"], "sekme:Gelişmiş")
         olay("liste ögesi (Toggle seçer)", ["click-element", BASLIK, "İkinci", "--action"], "liste-secim:İkinci")
-        olay("menü aç (Show Menu, adı elle)", ["click-element", BASLIK, "Dosya", "--action", "Show Menu"], None)
+        if masaustu.tur(d) == "kwin":
+            # Wayland: açılır menü (xdg_popup) yalnız GERÇEK bir girdi olayının seri numarasıyla açılır; AT-SPI
+            # "Show Menu" eylemi (girdi yok) menüyü açamaz → KWin türünde menü fare yoluyla (aynı komut, --action'sız)
+            # açılır, öge yine AT-SPI eylemiyle seçilir. Bilinen sınır: raporda.
+            olay("menü aç (KWin: fare yoluyla, Wayland popup sınırı)", ["click-element", BASLIK, "Dosya"], None)
+        else:
+            olay("menü aç (Show Menu, adı elle)", ["click-element", BASLIK, "Dosya", "--action", "Show Menu"], None)
         time.sleep(0.4)
         olay("menü ögesi", ["click-element", BASLIK, "Aç", "--action"], "menu:Aç")
-        olay("açılır liste aç (Press)", ["click-element", BASLIK, "Kırmızı", "--role", "combo", "--action"], None)
+        olay("açılır liste aç (Press)", ["click-element", BASLIK, "Kırmızı", "--role", "combo",
+                                         *([] if masaustu.tur(d) == "kwin" else ["--action"])], None)
         # BİLİNEN SINIR: açılır listenin ögesi Toggle ile seçilmez (combobox etkinleşmez); ölçüm raporunda
         kod, cikti = cli_("click-element", BASLIK, "Yeşil", "--action")
-        kontrol("sanal: açılır liste ögesi eylemi çalıştırılır (ancak combobox seçimi değişmez: bilinen sınır)", kod == 0
-                and "secim:Renk:Yeşil" not in log(), cikti[-200:])
+        if masaustu.tur(d) == "kwin":
+            # Wayland: açılır listenin açılan ögeleri (xdg_popup) erişilebilirlik ağacında görünmüyor → 6 (bilinen
+            # sınır; KWin türünde liste ögesi fare/klavyeyle seçilir). Combobox seçimi değişmez, eylem yok.
+            kontrol("sanal (KWin): açılır liste ögesi ağaçta yok → 6, seçim değişmedi (bilinen Wayland sınırı)",
+                    kod in (0, 6) and "secim:Renk:Yeşil" not in log(), cikti[-200:])
+            cli_("key", BASLIK, "esc")  # fareyle açılan açılır listeyi kapat (girdi yakalaması sonraki adımları etkilemesin)
+        else:
+            kontrol("sanal: açılır liste ögesi eylemi çalıştırılır (ancak combobox seçimi değişmez: bilinen sınır)",
+                    kod == 0 and "secim:Renk:Yeşil" not in log(), cikti[-200:])
         olay("pasif düğme → 6", ["click-element", BASLIK, "Pasif düğme", "--action"], None, 6)
         olay("olmayan öge → 6", ["click-element", BASLIK, "Yokyok", "--action"], None, 6)
 
@@ -896,7 +910,8 @@ else:
         # günlük: eylem satırları, gizli yazı düşmedi
         gun = "\n".join(gunluk_satirlari())
         kontrol("sanal günlük: eylem satırı sanal biçimde (arka :N [başlık]) ve --onayli işareti",
-                re.search(r"ogeye-tikla 'Kaydet' --eylem Press \| arka :\d+ \[a11y-deneme\] \| atspi action Press", gun)
+                re.search(r"ogeye-tikla 'Kaydet' --eylem Press \| arka (:\d+|deskhand-[0-9a-f]+) \[a11y-deneme\] \| atspi action "
+                          r"Press", gun)
                 is not None and "--eylem Press --onayli | arka" in gun, gun[-500:])
         kontrol("sanal günlük: parola yazısı günlüğe DÜŞMEDİ (password text + --secret)", "sir-123-xyz" not in gun and
                 "***(11)" in gun)

@@ -468,6 +468,7 @@ def takili_birak(ekran: str) -> tuple[int, int]:
 
 class SanalArkaUc(ArkaUc):
     ad = "sanal"
+    tur = "xvfb"
 
     def __init__(self):
         self._kilit = threading.RLock()
@@ -477,9 +478,9 @@ class SanalArkaUc(ArkaUc):
     # -------- bağlantı
     def _durum(self) -> dict:
         d = masaustu.durum_oku()
-        if d is None:
+        if d is None or masaustu.tur(d) != "xvfb":  # KWin türündeki masaüstü bu arka uca ait değil (arka_uc.sec)
             raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
-        return d
+        return masaustu.guvenli_kayit(d)  # yollar/adresler kayıttan değil, ekran numarasından (Dur 14)
 
     def _x(self) -> _X:
         d = self._durum()
@@ -489,6 +490,7 @@ class SanalArkaUc(ArkaUc):
                 self._x_.kapat()
             if masaustu.durum(saglik=False) is None:
                 raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+            masaustu.xvfb_karsi_denetle(d)
             self._x_, self._imza = _X(d["ekran"]), imza
         return self._x_
 
@@ -496,8 +498,9 @@ class SanalArkaUc(ArkaUc):
         """DOĞRULANMIŞ sanal ekran adı: durum dosyasındaki Xvfb yaşıyor (PID + komut satırı + soket). Bayat
         sanal.json + aynı numarada başka bir X sunucusu → girdi oraya gitmesin: Dur 14."""
         d = masaustu.durum(saglik=False)
-        if d is None:
+        if d is None or masaustu.tur(d) != "xvfb":
             raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+        masaustu.xvfb_karsi_denetle(d)  # X / veri yolu soketinin karşı tarafı bu masaüstünün süreçleri (sert bağa karşı)
         return d["ekran"]
 
     def _cagir(self, f, *a):
@@ -686,12 +689,13 @@ class SanalArkaUc(ArkaUc):
         return _devral_var()
 
     # -------- uygulama
-    def baslat(self, argv: list[str], env: dict | None = None, cikti=None):
+    def baslat(self, argv: list[str], env: dict | None = None, cikti=None, kopya: str | None = None):
         """Sanal masaüstünde (kafes + sanal ortam) başlat. env: os.environ'a eklenecek/değişecek değişkenler;
-        cikti: açık dosya (stdout+stderr), yoksa masaüstünün uygulamalar.log'u."""
+        cikti: açık dosya (stdout+stderr), yoksa masaüstünün uygulamalar.log'u; kopya: oturum politikasının kopyası
+        (ad alanına yalnız o bağlanır)."""
         if cikti is not None:
-            return masaustu.baslat(argv, env, stdout=cikti, stderr=cikti)
-        return masaustu.baslat(argv, env)
+            return masaustu.baslat(argv, env, kopya=kopya, stdout=cikti, stderr=cikti)
+        return masaustu.baslat(argv, env, kopya=kopya)
 
     # -------- CHANGE 1 isteğe bağlı yöntemler
     def kimlikler(self) -> list[str]:
@@ -712,6 +716,17 @@ class SanalArkaUc(ArkaUc):
         wid = kimlik_coz(k)
 
         def f(x: _X):
+            # Önce X sunucusunun bildiği PID (X-Resource, SO_PEERCRED: ana makine PID'i). _NET_WM_PID'i istemci
+            # kendisi yazar: bwrap PID ad alanındaki uygulama orada ad alanı içindeki PID'ini (ör. 2) yazar.
+            try:
+                if x.d.has_extension("X-Resource"):
+                    from Xlib.ext import res
+                    r = x.d.res_query_client_ids([{"client": wid, "mask": res.LocalClientPIDMask}])
+                    for c in r.ids:
+                        if c.spec.mask == res.LocalClientPIDMask and len(c.value):
+                            return int(c.value[0])
+            except Exception:  # noqa: BLE001 - eklenti yok / eski python-xlib: istemcinin yazdığına düş
+                pass
             p = x._ozellik(x.pencere(wid), "_NET_WM_PID")
             return int(p.value[0]) if p is not None and len(p.value) else None
         return self._cagir(f)
@@ -755,7 +770,7 @@ class SanalArkaUc(ArkaUc):
                 return s
             from .. import pano_sahibi
             with masaustu._gunluk_dosyasi(d["calisma"], "pano") as log:
-                p = masaustu.kafeste_baslat(d, [sys.executable, "-I", pano_sahibi.__file__, d["ekran"], yol],
+                p = masaustu.kafeste_baslat(d, [masaustu.python_yolu(), "-I", pano_sahibi.__file__, d["ekran"], yol],
                                             masaustu.uygulama_ortami(d), stdin=subprocess.DEVNULL,
                                             stdout=subprocess.PIPE, stderr=log)
             satir = masaustu._satir_bekle(p, 5)

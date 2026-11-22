@@ -14,6 +14,11 @@ GECICI = tempfile.mkdtemp(prefix="deskhand-test-")
 DIZINLER = {ad: os.path.join(GECICI, ad.split("_")[1].lower())
             for ad in ("DESKHAND_CONFIG_DIR", "DESKHAND_STATE_DIR", "DESKHAND_CACHE_DIR", "DESKHAND_DATA_DIR", "DESKHAND_RUNTIME_DIR")}
 os.environ.update(DIZINLER)
+# Arka plan uygulamaları bwrap ad alanında (/tmp boş tmpfs): test pencerelerinin olay günlükleri (LOG) ve teste
+# okunacak çıktıları YALNIZ bu dizine yazılır (arka_ortak.test_paylasimi ad alanına bağlar; dar: yalnız bu dizin).
+PAYLASIM = os.path.join(GECICI, "paylasim")
+os.mkdir(PAYLASIM, 0o700)
+os.environ["DESKHAND_TEST_PAYLASIM"] = PAYLASIM
 os.environ.pop("DESKHAND_HEDEF", None)
 # ajanın kendi istemcisi ipuçları (deskhand/kendi.py): testleri çalıştıran uçbirimin türü sonuçları değiştirmesin
 for _ad in ("KONSOLE_DBUS_WINDOW", "WINDOWID", "TERM_PROGRAM", "GHOSTTY_RESOURCES_DIR", "KITTY_PID",

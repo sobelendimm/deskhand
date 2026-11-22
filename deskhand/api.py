@@ -538,9 +538,10 @@ def uygulama_komutu(uygulama: str, argumanlar: list[str] | None = None) -> tuple
 
 
 def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict | None = None,
-                baslik: str | None = None, sure: float = 15.0) -> dict:
+                baslik: str | None = None, sure: float = 15.0, kopya: str | None = None) -> dict:
     """Uygulamayı GEÇERLİ hedefte başlat, YENİ penceresini bekle (uygulama.k_ac ile aynı döngü; ek: env).
-    Yasak uygulama başlatılmaz (10)."""
+    kopya: oturum politikasının hazırladığı kopya (arka planda yalnız o ad alanına bağlanır). Yasak uygulama
+    başlatılmaz (10)."""
     from .gunluk import gunluk
     from .guvenlik import baslatma_komut_engel, baslatma_yasak_denetle
     from .uygulama import onayli_program_denetle, tum_pencereler
@@ -555,10 +556,8 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     log = os.path.join(yollar.cikti(), f"ac-{time.strftime('%H%M%S')}-{os.getpid()}.log")
     with open(log, "w") as fp:
         onayli_program_denetle()  # onaylı kullanıcı girdisinin programı onaydan sonra değiştiyse başlatılmaz (10)
-        try:
-            au.baslat(argv, env=env, cikti=fp)
-        except TypeError:  # cikti desteklemeyen arka uç
-            au.baslat(argv, env=env)
+        from .uygulama import _baslat
+        _baslat(au, argv, fp, env, kopya)  # arka planda: masaustu.baslat → arka_ortak.korumali_baslat (bwrap)
     gunluk(f"ac | {ad} | {shlex.join(argv)}" + (f" | env {sorted(env)}" if env else ""))
     t0 = time.monotonic()
     while time.monotonic() - t0 < sure:

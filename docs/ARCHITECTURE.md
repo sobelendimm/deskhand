@@ -44,8 +44,18 @@ deskhand/
                         X-KDE-DBUS-Restricted-Interfaces'te arayüzü arar → install.sh
                         ~/.local/share/applications/deskhand-goruntu.desktop kurar (KWin 6.8 denetimi kaldırdı).
                         Yardımcı derlenmemiş/yetkisizse iç kurtarma: spectacle (günlüğe yazılır).
-  arka_uc/sanal.py      Xvfb + python-xlib
-  masaustu.py      sanal masaüstü yaşam döngüsü
+  arka_uc/sanal.py      arka plan masaüstünün Xvfb türü: Xvfb + python-xlib
+  arka_uc/kwin.py       arka plan masaüstünün KWin türü: kdotool (+ KWin betikleri) + yardimci/deskhand-eis (EIS girdi)
+                        + deskhand-goruntu + wl-copy/wl-paste, hepsi oturumun özel veri yolu / Wayland soketiyle
+  masaustu.py      arka plan masaüstü yaşam döngüsü (TEK giriş noktası, iki tür): tür seçimi, başlat/durdur/durum,
+                   uygulama başlatma; durum RUNTIME_DIR/sanal.json ("tur": "kwin" | "xvfb")
+  kwin_oturum.py   KWin türünün yapı taşları: kwin_wayland --virtual + özel D-Bus + özel Wayland soketi + XWayland,
+                   güvenlik kapıları (guvenlik_kapilari, baglanti_denetle), GPU seçimi, hazır olma denetimi, Eis sınıfı
+  arka_ortak.py    iki türün ORTAK iç yapı taşları: bellek kafesi, öncelik, boş ses çıkışı, uygulama ortamı tabanı
+                   (ortam_tabani), özel D-Bus yapılandırması, Xauthority, öncelik bekçisi başlatma
+  oncelik_bekcisi.py  kafesteki her iş parçacığını nice >= 10 / gerçek zamanlı olmayan / idle G/Ç'de tutan bekçi;
+                   ekran sunucusu (KWin/Xvfb) SIGKILL/OOM ile ölürse oturumu kapatır (kafes, X soket/kilit, dizin)
+  ses_bekcisi.py   (artık başlatılmıyor: arka plan uygulamaları ses sunucusuna hiç erişmez)
   pano_sahibi.py   sanal masaüstünün CLIPBOARD seçimini sunan yardımcı süreç (kafeste, ilk pano yazımında başlar)
   oturum/          oturum köprüsü (bkz. docs/SESSIONS.md)
   mesgul.py        kullanıcı meşgul mü (oyun / film) koruması
@@ -69,12 +79,19 @@ tests/             ekransız testler: test_ocr.py, test_mantik.py ...; ekranlı:
 Koordinatlar: `geometri()` ve `goruntu()` EKRAN pikseli (arka ucun kendi ekranı). Üst katman pencere
 koordinatını `geometri()` ile ekrana çevirir.
 
-Pencere kimliği: arka uca özgü dize. kde: `{uuid}`; sanal: `arka:0x1a00007` (her zaman `arka:` önekli, böylece
-bir kimlik yanlış arka uca gidemez). Özel kimlik `EKRAN` = masaüstü kipi (tüm ekran).
+Pencere kimliği: arka uca özgü dize. kde: `{uuid}`; sanal: Xvfb türünde `arka:0x1a00007`, KWin türünde
+`arka:{uuid}` (her zaman `arka:` önekli, böylece bir kimlik yanlış arka uca gidemez). Özel kimlik `EKRAN` = masaüstü
+kipi (tüm ekran).
+
+**Arka plan masaüstünün iki türü.** `sanal` hedefinin arkasında iki arka uç vardır: yalıtık KWin oturumu
+(`arka_uc/kwin.py`, `KwinArkaUc`) ve Xvfb + openbox (`arka_uc/sanal.py`, `SanalArkaUc`). İkisinin de `ad`ı `"sanal"`dır;
+tür `tur` özniteliğindedir ("kwin" | "xvfb"). Üst katman (eylem, guvenlik, erisim, MCP, CLI) türü bilmez; komutlar, MCP
+araçları, kimlik öneki ve çıkış kodları aynıdır. Geometri iki türde de İSTEMCİ alanıdır (başlık çubuğu/çerçeve hariç;
+KWin türünde KWin betiğiyle `clientGeometry`); `tasi`/`boyutlandir` istemci alanının köşesini/boyutunu verir.
 
 | Yöntem | Döner | Not |
 |---|---|---|
-| `ad` | "kde" \| "sanal" | |
+| `ad` | "kde" \| "sanal" | `sanal` arka uçlarında ayrıca `tur`: "kwin" \| "xvfb" |
 | `pencere_coz(arg)` | kimlik | ad deseni tek pencereye uymalı (yoksa Dur 8, çoksa Dur 5) |
 | `pencereler(desen=None)` | [(kimlik, başlık, (x,y,g,y))] | `bul` komutu |
 | `geometri(k)` | (x, y, g, y) | yoksa Dur 8 |
@@ -97,6 +114,8 @@ oturumu), `ekran_korumasi(ne)` (kde: oyun/film → 15; girdi göndermeyen ama uy
 
 Pencere yönetimi (isteğe bağlı; varsayılan = desteklenmiyor → Dur 9): `tasi(k, x, y)`, `boyutlandir(k, g, y)`,
 `kucult(k)`, `buyut(k)` (çalışma alanını kapla), `geri_yukle(k)` (küçültülmüş/büyütülmüşten normale); dönüş None.
+KWin türü: KWin betikleri (`kdotool kwinscript`, özel veri yolu) — istemci alanı ölçüsünde taşı/boyutlandır, durum
+(`pencere_durumu`: hidden/maximized) doğrulanır (Xvfb türü gibi en çok ~1 sn, olmazsa Dur 9).
 Koordinatlar ekran pikseli. Denetimler üst katmanda (`eylem.pencere_yonet`: DUR 13, yasak 10, -s/-b kilidi 4, hedef
 konum/boyut ekran alanı dışında 2); kde arka ucu ayrıca `one_getir` ile aynı ekran korumasını (15/12) uygular.
 kde: kdotool `windowmove`/`windowsize`/`windowminimize`/`windowstate`; sanal: EWMH (`_NET_MOVERESIZE_WINDOW`,
@@ -109,7 +128,9 @@ yazar) ve `pano_geri_yukle(yedek) -> uyarı | None` (DENETİMSİZ: DUR/kesintide
 `wl-paste`/`wl-copy` (`--sensitive`; metin dışı pano birincil MIME türüyle geri yüklenir). sanal: X11 seçimi sahibinde
 yaşar → masaüstünün kafesinde ilk kullanımda başlatılan `deskhand/pano_sahibi.py` yardımcısı (python-xlib, ICCCM +
 INCR; çalışma klasöründe 0600 `pano.sock`; bağlantı başına TOPLAM 5 sn süre, başlık ≤ 64 bayt, `YAZ n` n > AZAMI_VERI
-ise veri okunmadan "hata cok-buyuk"); okuma süreç içinde. İki arka uç birbirinin panosuna dokunmaz.
+ise veri okunmadan "hata cok-buyuk"); okuma süreç içinde. KWin türü: `wl-copy`/`wl-paste` oturumun MUTLAK
+Wayland soketiyle ve asgari ortamla (kullanıcının değişkenleri yok); `wl-copy`'nin sunucu çocuğu masaüstünün kafesinde
+yaşar; okuma en çok 32 MB, yazma en çok 64 MB. Üç arka uç birbirinin panosuna dokunmaz.
 
 `baslat(argv, env, cikti)`: `env`, her iki arka uçta da `os.environ`'a EKLENECEK/değişecek değişkenlerdir (tam ortam
 değil). Sanalda masaüstü değerleri (DISPLAY, özel D-Bus, ses...) her zaman üstün gelir.
@@ -122,8 +143,15 @@ denetimsiz, kesintide bile), `ham(satir)`, `izle(k, desen)` / `izle_bitir()` (g�
 **Girdi dili = dotool satır dili** (her iki arka uç da aynı satırları anlar):
 `mouseto FX FY` (0..1 kesir, tüm ekran), `buttondown|buttonup|click left|right|middle`, `key K`,
 `keydown K`, `keyup K` (K: `ctrl+s`, `enter`, `leftshift`…), `type METİN`, `wheel N` (artı=yukarı),
-`hwheel N` (artı=sağ), `typedelay MS`, `typehold MS`. Sanal arka uç bunları XTEST'e çevirir (Türkçe karakterler
-dahil: xkb düzeni `tr` ya da keysym eşleme).
+`hwheel N` (artı=sağ), `typedelay MS`, `typehold MS`. Xvfb türü bunları XTEST'e çevirir (Türkçe karakterler
+dahil: xkb düzeni `tr` ya da keysym eşleme). KWin türü kalıcı `deskhand-eis` yardımcısına (libei, KWin EIS) verir:
+süreç başına TEK bağlantı (kilitli paylaşılır), `type` HEP YA DA HİÇ (oturumun klavye haritasında olmayan karakter →
+`hata yazilamaz` → Dur 1; `yazilabilir_mi` aynı haritadan, girdi göndermeden yanıtlar, üst katman bu karakterlerde
+pano yoluna düşer). Yardımcı: hareketten sonraki ilk düğme/kaydırma öncesi bekleme `hareketbekle MS` ile açılabilir
+(varsayılan 0: KWin 6.8.3'te 50 hızlı iki-pencere tıkında yanlış yüzey yok, bekleme tık başına +20 ms ekliyordu), imleç
+zaten hedefteyse önce 1 px komşuya gider ("park edilmiş imleç"; ucuz önlem), kaydırma ayrık 120'lik
+birim + `scroll_stop`, klavye aygıtı değişince (düzen değişimi) eskisiyle basılı kalanları yeni aygıttan bas+bırak ile
+temizler, kapanışta ei_ping eşitlemesi + `disconnect(çerez)`.
 
 **Atomiklik.** DUR denetimi satır başına değil `gonder()` çağrısı başına yapılır: bir çağrıdaki satırlar
 ATOMİKTİR (çift tıklamanın iki click'i bölünmez). Harf harf yazıda (`ham`) her harften önce denetlenir.
@@ -143,7 +171,17 @@ sonra 12 ile durulur; sonraki çağrılar beklemeden 12. Bildirimler `STATE_DIR/
 (2 MB'ı aşınca son 1 MB tutulur, `gunluk.temizle`).
 
 ## 3. Hedef seçimi
-`--arka` genel bayrağı / `DESKHAND_HEDEF=arka|on|oto` / kimlik `arka:` öneki → `arka_uc.sec()`.
+`--arka` genel bayrağı / `DESKHAND_HEDEF=arka|on|oto` / kimlik `arka:` öneki → `arka_uc.sec()`. `sanal` hedefinde
+`sec()` durum kaydının türüne bakar (`arka_tur()`): KWin → `KwinArkaUc`, Xvfb (ya da kayıt yok) → `SanalArkaUc`.
+
+**Tür seçimi (tek yol, seçenek sunulmaz).** `masaustu.secilen_tur()`: `kwin_oturum.kullanilabilir()` (KWin >= 6.8,
+erişilebilir render aygıtı, `deskhand-eis` + `deskhand-goruntu` derli, kdotool, dbus-daemon…) ise KWin; değilse Xvfb.
+Kendiliğinden seçilen KWin AÇILAMAZSA Xvfb'ye düşülür (uyarı + günlük). Yalnız test/tanılama için
+`DESKHAND_ARKA_TUR=kwin|xvfb` (zorlanan kwin kullanılamıyorsa Dur 9, sessiz düşme yok). Aynı anda TEK arka plan
+masaüstü (durum kaydı + kilit). GPU: birden çok render aygıtı varsa boot_vga=0 + tümleşik aygıt ("bağlı çıkış"
+bilgisine güvenilmez) (`KWIN_RENDER_NODES`); o aygıtla açılamazsa bir kez varsayılanla. Oturum "hazır" sayılmadan önce: Wayland soketi,
+`org.kde.KWin` adı, ScreenShot2 arayüzü, oturum boyutunda (ölçek 1) bir kare, aynı boyutta EIS aygıtları; KWin
+beklerken ölürse hemen hata.
 Varsayılan `on` (kullanıcının gerçek masaüstü). `oto`, `deskhand decide` (karar) komutuna bağlanır: kullanıcı
 ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 
@@ -337,7 +375,8 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   bırakılır (başka bağlantının da tuttuğu tuş hariç); kopan bağlantının girdisi kuyrukta sürüyorsa dotool yeniden
   başlatılır (denetimsiz girdi sürmez). DUR açılınca tüm bağlantıların basılıları bırakılır, kuyrukta girdi varsa
   dotool yeniden başlatılır (kuyruk düşer). Panel ölürse dotool'un girişi kapanır, dotool çıkar, aygıt yok olur.
-- İnsan önceliği (12): kde arka ucunda kullanıcı klavye/fareyi kullanıyorsa; sanalda yalnız "Devral" açıkken.
+- İnsan önceliği (12): kde arka ucunda kullanıcı klavye/fareyi kullanıyorsa; sanalda (iki tür) yalnız "Devral" açıkken.
+  Paneldeki Devral iki türde de çalışır (önizleme `goruntu()`, girdi `Girdi.insan_ham`; KWin türünde EIS üzerinden).
 - Pencere yönetimi, pencere kapatma ve (kde) pano yazma da insan önceliğine (12) uyar (`guvenlik.insan_onceligi`;
   pano: CLI `pano yaz` ve MCP `clipboard(write)` → `api.pano_yaz`); kapatma DUR'a (13) bakar. Deskhand'in panoya yazdığı
   metinlerin özeti TEK kaynaktadır (`guvenlik.kendi_pano_ekle/kendi_pano_mu`): CLI, MCP `clipboard(read)` ve yapıştırma
@@ -370,6 +409,145 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 - Sanal X bağlantısı yalnız `masaustu.guvenli_ekran()` ile açılır: boş ad Xlib'de `$DISPLAY`'e (kullanıcının gerçek
   XWayland'i) düşer ve XTEST girdisi gerçek masaüstüne gidebilirdi. Yalnız `:N` biçiminde ve gerçek `DISPLAY`'den
   farklı ekran kabul edilir.
+- **Durum kaydı güvenilmez (iki tür).** Kayıttan YALNIZ tür + kimlik/ekran numarası alınır; bütün yollar ve
+  adresler çalışma dizininden KURULUR (`kwin_oturum.guvenli_kayit`, `masaustu.guvenli_kayit`; `masaustu.durum()` bunu
+  uygular): KWin `RUNTIME_DIR/kwin-<8 hex>` (sembolik bağ değil, kullanıcının, 0700) → `unix:path=<dizin>/bus`,
+  `<dizin>/deskhand-<kimlik>`, Xauthority, XWayland `:120+`; Xvfb `RUNTIME_DIR/sanal-<no>`. Veri yolu adresinin katı
+  biçimi `unix:path=/yol[,guid=<32 hex>]` (Python `arka_ortak.bus_yolu_kati`, C `adres_coz`): `;` ile çoklu adres
+  (sd-bus/libdbus ilki olmazsa SONRAKİNE geçer) reddedilir. RUNTIME_DIR var olan dizinse sahibi kullanıcı, sembolik bağ
+  değil ve 0700 olmalı; gevşek izinli dizin sessizce sıkılaştırılMAZ (arada başkası dosya/soket bırakmış olabilir):
+  Dur 14, `deskhand doctor` "Çalışma dizini" satırında nedeni ve `chmod 700` önerisini gösterir.
+- **Karşı taraf doğrulaması (sert bağ / yer değiştirme).** Bağlanmadan önce (`kwin_oturum.baglanti_denetle`,
+  `masaustu.xvfb_karsi_denetle`): oturum soketlerinin SO_PEERCRED PID'i kayıttaki süreç (başlangıç zamanı aynı) —
+  veri yolu için dbus-daemon (komut satırında `--config-file=<dizin>/bus.conf`), Wayland için KWin, X için Xvfb;
+  soketin (st_dev, st_ino)'su kullanıcının gerçek soketlerinden biriyse ret. `deskhand-eis` bağlandıktan sonra aynısını
+  kendisi yapar (`--dbus-pid` + bus.conf; yoksa `hata bus-karsi`, çıkış 2).
+- **KWin türü kapıları.** `kwin_oturum.guvenlik_kapilari` (süreç başlamadan): veri yolu adresi kullanıcının gerçek
+  adresi (aynı inode dahil), Wayland soket adı kullanıcınınki, yapılandırma dizini gerçek `~/.config`, HOME/çalışma
+  dizini gerçek, XWayland ekranı gerçek `DISPLAY` ise Dur 14. `arka_uc/kwin.py` HER bağlantıdan önce
+  `baglanti_denetle`'nin döndürdüğü GÜVENLİ kaydı kullanır; `deskhand-eis` yalnız `--bus <özel adres>` ile bağlanır,
+  ortamdan devralmaz. KWin `env -i` eşdeğeri asgari ortamla, geçici HOME/XDG_*_HOME ile açılır (KWin kendi kwinrc /
+  kwinoutputconfig.json / kglobalshortcutsrc / kxkbrc dosyalarını buraya yazar); KDE_FULL_SESSION/KDE_SESSION_VERSION
+  KWin'e verilmez.
+- **Uygulama ad alanı (iki tür, TEK başlatma yolu: `arka_ortak.korumali_baslat` → `korumali_argv`).** Arka plan
+  uygulaması (KWin/Xvfb, dbus-daemon ve Deskhand'in kendi yardımcıları DIŞINDAKİ her şey: `ac --arka`, `open_app`, oturum
+  köprüsü komutları) `bwrap` ile başlar (denetim 12c sonrası model):
+  - **Ayrı kullanıcı + PID ad alanı** (`--unshare-user --unshare-pid`, kendi `/proc`): kullanıcının başka süreçleri
+    (gerçek KWin, oyun, terminal) görünmez; onlara sinyal, ptrace, `/proc/<pid>/root|environ|mem` erişimi yok (ESRCH).
+  - **Kök salt okunur** (`--ro-bind / /`); `/dev` bwrap'in asgari /dev'i (`null`, `zero`, `random`, `tty`, `pts`, `shm`…)
+    + yalnız `/dev/dri` (GPU; WebGL/GL donanımda). `/dev/uinput` (sanal klavye/fare), `/dev/input/event*` (tuş kaydı),
+    `/dev/snd` (doğrudan ALSA mikrofon/hoparlör), `hidraw`, `/dev/bus/usb`, kamera düğümleri YOK. `/dev/udmabuf`
+    verilmez (KWin kafes dışında zaten).
+  - **Boş tmpfs:** `/tmp` (kullanıcının /tmp'deki Steam/Chromium SingletonSocket'ları, `.ICE-unix` ksmserver, Kulak Kesil
+    soketleri, başka X soketleri görünmez), `/run/user/<UID>` (Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh,
+    xauth, at-spi, portal, systemd soketleri) ve (başka yerdeyse) Deskhand'in RUNTIME_DIR'i (girdi.sock, sanal.json,
+    diğer oturumlar).
+  - **Ev dizini GEÇİCİ katman** (`arka_ortak.ev_baglari`: `--overlay-src ~ --tmp-overlay ~`, kullanıcı ad alanında
+    overlayfs; ölçüldü ~15 ms): uygulama gerçek dosyaları OKUR, yazdıkları (`~/.config/autostart`, `~/.bashrc`,
+    `~/.config/systemd/user`, `~/.local/share/applications`, `~/.local/bin`, `~/.config/kwinrc`…) oturumla birlikte
+    ATILIR → bir sonraki girişte yalıtım dışında kod çalıştırma (kalıcılık kaçışı) yok. Katman kurulamayan sistemde ev
+    dizini salt okunur (+ `~/.cache` tmpfs). Yazılabilir GERÇEK bağlar yalnız: kullanıcının XDG veri klasörleri
+    (`~/.config/user-dirs.dirs`; yalnız ev dizininin İÇİNDE, ev kökü değil, yolunda nokta ile başlayan bileşen yok — ev
+    kökünü, gizli dizini, `/`'ı ya da dışarıyı gösteren girdi yok sayılır) ve uygulamanın kendi oturum kopyası. Veri
+    klasörlerinin İÇİNDEKİ var olan gizli dizin/dosyalar (`.git` — hooks/config, `.vscode`, `.envrc`, `.venv`…;
+    derinlik 6, en dıştakiler) salt okunur örtülür; bu sayı 3000'i aşan klasör bütünüyle salt okunur bağlanır. Ev
+    dizinindeki (derinlik 4) ve veri klasörlerindeki soket/FIFO'lar + bilinenler (`~/.steam/steam.pipe`) `/dev/null` ile
+    maskelenir (ölçüldü: katman üstünden gerçek sokete/FIFO'ya zaten bağlanılamıyor; maske ikinci hat).
+  - **Sır yolları OKUNAMAZ** (`arka_ortak.SIR_YOLLARI`, tek sabit liste; glob olabilir): `~/.ssh`, `~/.gnupg`,
+    `~/.local/share/keyrings`, `~/.local/share/kwalletd`, `~/.password-store`, gerçek Firefox profilleri
+    (`~/.config/mozilla`, `~/.mozilla`), Chromium ailesi profil kökleri (`~/.config/chromium`, `google-chrome*`,
+    `vivaldi*`, `BraveSoftware`, `microsoft-edge*`), ajan/bulut/depo kimlik bilgileri (`~/.claude`, `~/.claude.json`,
+    `~/.config/gh`, `~/.git-credentials`, `~/.netrc`, `~/.aws`, `~/.docker/config.json`, `~/.config/rclone`, `~/.kube`),
+    Deskhand'in kendi ayar/günlüğü (`~/.config/deskhand`, `~/.local/state/deskhand`) ve Flatpak uygulama verileri
+    (`~/.var/app`). Dizin → boş tmpfs (uygulama yazabilir, atılır), dosya → `/dev/null`; sembolik bağsa (ör.
+    profile-sync-daemon) HEDEFİ örtülür (hedef ad alanında zaten boş olan /run/user ya da /tmp'deyse gerek yok). Örtü
+    veri klasörü bağlarından SONRA, oturum kopyası ondan da SONRA bağlanır: arka plan Firefox'u kendi kopyasıyla
+    (`--profile <kopya>`, `XDG_CONFIG_HOME=<kopya>/.xdg-config`), Flatpak Electron kopyası `--filesystem=<kopya>` + XDG_*
+    ile çalışır (ölçüldü: Firefox iki türde açılıyor/indiriyor; Flatpak çalışma zamanı ad alanında açılıyor).
+  - **Geri bağlananlar** yalnız oturumun kendi yolları (`uygulama_baglari`: kendi runtime dizini, özel veri yolu ve
+    Wayland soketi, erişilebilirlik veri yolu, kendi X soketi + Xauthority salt okunur) ve oturum kopyalarından YALNIZ
+    politikanın bu uygulamaya verdiği kopya (`Hazirlik.kopya_yolu` → `baslat(..., kopya=)` → `arka_ortak.kopya_bagi`:
+    kopya kökünün doğrudan alt dizini olmalı, değilse Dur 14). Kopya komut satırından/ortamdan ÇIKARILMAZ: komutta
+    başka kopyanın yolu geçse de o kopya görünmez.
+  - Uygulamanın `PATH`'i ve `LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT`'i yalnız son komuta (`--setenv`) gider; yardımcı zincir
+    (sh, nice, ionice, bwrap) güvenli PATH ile ve mutlak yollarla çalışır (aşağıda "Güvenli yardımcı ikililer").
+  - `--new-session` (TIOCSTI yok). `--die-with-parent` YOK (masaüstü CLI'den uzun yaşar); kafes ve PID temizliği aynen;
+    ad alanının ilk süreci ölünce çekirdek içindekilerin hepsini öldürür. bwrap yoksa ya da güvenli yolda değilse
+    uygulama başlatılmaz (Dur 9).
+  - **Flatpak:** `flatpak run` ad alanında çalışır (iç içe bwrap; ölçüldü) ama kullanıcının systemd kullanıcı
+    yöneticisine giden veri yolu olmadığından kendi scope'una GEÇEMEZ: örnek masaüstünün bellek kafesinde ve PID ad
+    alanında kalır, masaüstü kapanınca kapanır (ölçüldü). Sarmalayıcı (`oturum/flatpak_ornek.py`) ad alanında bunu
+    doğrular ve ana makine kaydını yazmaz (`DESKHAND_AD_ALANI=1`); örnek kafesten çıkmışsa kapatır. Flatpak'in yazdıkları
+    (`~/.var/app`) ev katmanında kalır (atılır).
+  - **Ölçüldü:** Firefox (boş geçici profil + oturum kopyası benzeri kopya) iki türde açılıyor, sayfa yüklüyor, WebGL
+    KWin türünde donanımda (tümleşik GPU), erişilebilirlik ağacı sunuyor, indirdiği dosya gerçekten `~/İndirilenler`'e
+    yazılıyor; Qt test penceresi; tık/yazı süreleri değişmedi. Ayrıntı `tests/test_denetim12c.py`.
+
+  **Neyi korumaz (bilerek / kalan riskler):**
+  - **Okuma:** uygulama kullanıcının dosyalarını OKUYABİLİR (belgeler, veri klasörleri, SIR_YOLLARI dışındaki her
+    şey: listede olmayan uygulamaların ayar/oturum dosyaları, ör. Telegram/Discord yerel verisi, `~/.config` altındaki
+    diğer jetonlar). Sır listesi bilinen yerleri örter; tam liste değildir. Ad alanı yazmayı ve oturumlara/süreçlere/
+    aygıtlara erişimi keser; hangi uygulamanın arka planda açılacağı oturum politikasının (kopya/bekle/kapali/on)
+    işidir.
+  - **Veri klasörleri yazılabilir:** uygulama `~/İndirilenler`, `~/Belgeler`, `~/Projeler`… içindeki NORMAL dosyaları
+    değiştirebilir/silebilir; YENİ gizli girdi oluşturabilir (ör. `.git`'i olmayan bir alt dizinde yeni `.git/` ya da
+    `.envrc`: kullanıcı o dizinde git/direnv çalıştırırsa yalıtım dışında kod çalışabilir) ve `Makefile`, `*.desktop`
+    (Masaüstü klasöründe kullanıcının masaüstünde görünür) gibi kullanıcının sonradan çalıştırabileceği dosyalar
+    yazabilir. Var olan gizli girdiler salt okunurdur; açılıştan sonra oluşan yeni gizli girdiler ve derinlik 6'dan
+    aşağısı örtülmez.
+  - **Ağ:** ağ ad alanı paylaşılır (tarayıcı ağa çıkabilsin; `--unshare-net` yok): uygulama yerel ağ hizmetlerine
+    (127.0.0.1'deki portlar: ör. qBittorrent WebUI, geliştirme sunucuları) ve SOYUT (abstract) unix soketlerine
+    bağlanabilir. Bu makinede soyut soketler yalnız ICE ve X (`:0`, anahtarlı: Xauthority görünmediğinden bağlantı
+    REDDEDİLİR, ölçüldü) olarak bulundu; ICE (ksmserver) soyut soketi ICE kimlik doğrulaması ister.
+  - **IPC ad alanı paylaşılır** (X MIT-SHM için): SysV paylaşımlı bellek/semafor/ileti kuyrukları aynı kullanıcının
+    diğer süreçleriyle ortak.
+  - `/dev/dri` (GPU) açık: GPU sürücüsü saldırı yüzeyi.
+  - Açılıştan SONRA ev dizininde oluşan soket/FIFO'lar maskelenmez (katman üstünden bağlanılamıyor; veri klasörlerinde
+    ise gerçek dizin olduğundan bağlanılabilir).
+- **Ses (iki tür).** Arka plan uygulamaları kullanıcının ses sunucusuna (pipewire/pulse) HİÇ erişmez: çalma da kayıt
+  (mikrofon) da yok, uygulamalar sessiz çalışır. Soketler ad alanında görünmez; ortam da var olmayan bir sokete
+  yönlendirilir (`ses_ortami_uygula`). Boş çıkış (null sink) ve ses bekçisi artık kurulmaz (eski kayıtların
+  `deskhand-sessiz-*` modülü kapanışta yine kaldırılır); ses yönlendiricilerinde (ör. Kulak Kesil) arka plan akışı
+  dışlaması gerekmez.
+- **Uygulama ortamı (iki tür).** `arka_ortak.ortam_tabani`: kullanıcının oturumuna ait değişkenler (gerçek veri yolu,
+  WAYLAND_DISPLAY/DISPLAY/XAUTHORITY, AT_SPI_BUS_ADDRESS, SSH_AUTH_SOCK/SSH_AGENT_PID, GNOME_KEYRING_CONTROL,
+  LIBEI_SOCKET/EIS_SOCKET, SESSION_MANAGER, KDE_FULL_SESSION, PULSE_*/PIPEWIRE_*/IBUS_*) birleştirmeden ÖNCE ve SONRA
+  silinir; `GSETTINGS_BACKEND=memory` (gerçek dconf'a yazılmaz), `ATSPI_DBUS_IMPLEMENTATION=dbus-daemon` (erişilebilirlik
+  başlatıcısı `dbus-broker --scope user` ile kullanıcının gerçek a11y veri yolunu yeniden kullanamasın).
+  `XDG_RUNTIME_DIR` masaüstünün kendi klasörüdür (`<çalışma>/run`, 0700). HOME değişkeni kullanıcınındır; dizinin
+  kendisi ad alanında geçici katmandır (yukarıda).
+- **Güvenli yardımcı ikililer (iki tür).** Deskhand'in çalıştırdığı her yardımcı (bwrap, nice, ionice, sh,
+  systemd-run, busctl, env, dbus-daemon, Xvfb, openbox, kwin_wayland, Xwayland, prlimit, setpriv, kdotool, wl-copy/
+  wl-paste, find, pactl, at-spi2-registryd, bekçileri/pano sahibini/bildirim yakalayıcıyı çalıştıran python3)
+  `arka_ortak.arac()` ile PATH'ten DEĞİL yalnız `/usr/bin`, `/bin`'den mutlak yolla bulunur; yol bileşen bileşen
+  çözülür ve her bileşen (zincirdeki her sembolik bağ dahil) root'a ait, dizinler grup/diğerleri tarafından yazılamaz,
+  son dosya root'a ait, başkası yazamaz, çalıştırılabilir olmalı; değilse Dur 9. Kafes kapısı `/usr/bin/sh` ile;
+  uygulamanın PATH'i yalnız son komuta. (Denetim 12c Y2: PATH'in başı yazılabilir `~/.local/bin` idi; oraya bırakılan
+  sahte `bwrap` sonraki bütün başlatmaları yalıtımsız yapıyordu.) Python yorumlayıcısı çalışan yorumlayıcı güvenliyse o,
+  değilse `/usr/bin/python3`. Flatpak sarmalayıcısı `flatpak`/`systemctl`'i yalnız `/usr/bin`, `/bin`'de arar.
+- **Test paylaşımı (yalnız test takımı).** `DESKHAND_TEST_PAYLASIM` (tests/_yalitim.py kurar) ad alanına yazılabilir
+  bağlanır — test pencerelerinin olay günlükleri teste ulaşsın (ad alanında /tmp boş). Yalnız geçici dizindeki
+  `deskhand-test-*/paylasim` adlı, kullanıcıya ait, 0700, sembolik bağ olmayan dizin kabul edilir; başka değer yok
+  sayılır (ev dizini, soketler bu yolla açılamaz).
+- **Bayat / oynanmış kayıtla kapatma (iki tür).** Bir PID'e yalnız başlangıç zamanı kayıttakiyle aynıysa
+  (`arka_ortak.pid_kaydet` / `pid_dogru`) ve kafes varsa kafesteyse sinyal gider; kafes yalnız
+  `deskhand-kwin-<kimlik>-N.scope` / `deskhand-sanal-<no>-N.scope` biçimindeyse boşaltılır; silinen dizin kayıttaki yol
+  değil `RUNTIME_DIR/kwin-<kimlik>` / `sanal-<no>`; X kilit/soketi yalnız :120+ (Xvfb :90+) ve kilit ölü ya da kayıttaki
+  sunucuya aitse.
+- **Ölü sunucu.** Öncelik bekçisi ekran sunucusunu (KWin/Xvfb; PID + başlangıç zamanı) izler: SIGKILL/OOM ile ölürse
+  kafesi boşaltır (SIGTERM, 2 sn, SIGKILL), kendi X soket/kilitlerini ve çalışma dizinini siler, çıkar. Yalnız "kesin
+  ölü"de (`oncelik_bekcisi.kesin_olu`: süreç yok/ESRCH, zombi, ya da başlangıç zamanı farklı); `/proc/<pid>/stat`
+  GEÇİCİ okunamıyorsa (EACCES, bellek baskısı…) canlı oturum kapatılmaz.
+- **Karşı taraf doğrulaması önbelleği (KWin).** `_karsi_denetle`'nin başarılı sonucu (soket inode'ları, PID'ler,
+  başlangıç zamanları) anahtarıyla ~1 sn geçerli: sık komutlarda her bağlantıda yeniden soket açılmaz; soket değişirse
+  ya da süreç yeniden doğarsa anahtar değişir, yeniden doğrulanır.
+- **Özel D-Bus sertleştirmesi (iki tür).** `UpdateActivationEnvironment` ve `ReloadConfig` reddedilir; standart
+  servis dizinleri yoktur, yalnız org.a11y.Bus etkinleştirilebilir.
+- **Düşük öncelik (iki tür).** Kafes nice 10 + ionice idle ile başlar; KWin `no_new_privs` (dosya yeteneği
+  cap_sys_nice VERİLMEZ), RLIMIT_RTPRIO=0 ve RLIMIT_NICE (en düşük nice 10) ile açılır; ad tabanlı sistem kurallarına
+  (ananicy: `kwin_wayland` → nice -12) karşı kafesin öncelik bekçisi (`oncelik_bekcisi.py`) her iş parçacığını ~0,5 sn
+  içinde nice >= 10, gerçek zamanlı olmayan zamanlama ve idle G/Ç'ye geri düşürür. XWayland takma adla
+  (`deskhand-xwayland`) çalışır.
 
 ## 5. Çıkış kodları
 0 tamam · 1 kullanım hatası · 2 nokta pencere/ekran dışında · 3 aktif değil/başka pencere · 4 başlık/sınıf kilidi
@@ -424,6 +602,11 @@ Arayüz sözleşmesine zamanla giren kararların özeti (ayrıntılar ilgili bö
   durum dizininde tutulur (§2).
 - **Girdi merkezi.** kde arka ucu girdiyi panelin hazır dotool'u üzerinden gönderir (kurulum beklemesi yok); güvenlik
   denetimleri istemcide aynen kalır, merkez DUR'u ayrıca denetler ve kopan bağlantının basılılarını bırakır (§2, §4).
+- **Arka plan masaüstü KWin türü (Faz 12b).** Koşullar uygunsa arka plan masaüstü yalıtık KWin oturumudur (Wayland
+  yerel uygulamalar, GPU hızlandırma, X11 isteyenler oturumun XWayland'ine); değilse Xvfb. Dış yüzey değişmez (§2, §3,
+  §4). Bilinen sınırlar: Wayland açılır menü/açılır liste (xdg_popup) yalnız gerçek girdi olayıyla açılır → AT-SPI
+  "Show Menu" eylemi menü açamaz (fare yolu çalışır), açılır listenin ögeleri ağaçta görünmez; Wayland istemcisi panoyu
+  yalnız bir girdi olayından sonra ayarlayabilir; kök zemin KWin'in (gri değil).
 - **Oturum köprüsü.** Arka plandaki uygulamaların kullanıcının hesap oturumlarını kullanabilmesi, uygulama başına
   bir politikayla (kopya / paylas / bekle / on / kapali) yönetilir; uygulama kullanıcı oturumunda açık ve
   arka planda açılamıyorsa kod 16 döner (bkz. docs/SESSIONS.md).

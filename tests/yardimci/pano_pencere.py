@@ -20,13 +20,39 @@ def log(satir):
 app = QApplication(sys.argv)
 if os.environ.get("SINIF"):  # WM_CLASS sınıfı (xcb: uygulama adı): örn. SINIF=xterm → uçbirim sınıflı pencere
     app.setApplicationName(os.environ["SINIF"])
+    app.setDesktopFileName(os.environ["SINIF"])  # Wayland (KWin oturumu): sınıf = xdg app_id
 kutu = QPlainTextEdit()
 kutu.setWindowTitle(os.environ.get("BASLIK", "pano-test"))
 kutu.resize(700, 400)
 kutu.textChanged.connect(lambda: log(json.dumps({"metin": kutu.toPlainText()}, ensure_ascii=False)))
+if os.environ.get("SINIF") in ("xterm", "konsole", "kitty", "alacritty", "foot"):
+    # uçbirim taklidi: gerçek uçbirimler gibi ctrl+shift+v yapıştırır (Deskhand uçbirim sınıfında bu tuşu kullanır)
+    from PyQt6.QtGui import QKeySequence, QShortcut
+    QShortcut(QKeySequence("Ctrl+Shift+V"), kutu, activated=kutu.paste)
 kutu.show()
 buyuk = int(os.environ.get("PANO_BUYUK", "0"))
-if buyuk:
+
+
+def pano_doldur():
     app.clipboard().setText(("büyük ğüş İÇ 😀 " * (buyuk // 14 + 1))[:buyuk])
     log("pano hazir")
+
+
+if buyuk:
+    if app.platformName() == "wayland":
+        # Wayland: istemci panoyu yalnız GERÇEK bir girdi olayının seri numarasıyla ayarlayabilir → ilk fare
+        # tıklamasından sonra doldur (test pencereye bir kez tıklar)
+        from PyQt6.QtCore import QEvent, QObject, QTimer
+
+        class IlkTik(QObject):
+            def eventFilter(self, o, e):
+                if e.type() == QEvent.Type.MouseButtonRelease and not getattr(self, "oldu", False):
+                    self.oldu = True
+                    QTimer.singleShot(50, pano_doldur)
+                return False
+        suzgec = IlkTik()
+        app.installEventFilter(suzgec)
+        log("pano tik bekliyor")
+    else:
+        pano_doldur()
 sys.exit(app.exec())

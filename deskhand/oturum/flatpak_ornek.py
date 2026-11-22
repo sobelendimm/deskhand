@@ -16,6 +16,13 @@ bellek kafesinden çıkar (sınır yok), `masaustu durdur` onu görmez, kopya uy
 Bu dosya sarmalayıcı olarak `python3 -I <bu dosya> …` ile ÇALIŞTIRILIR: üst düzeyde yalnız standart kitaplık.
 Kullanıcının kendi Flatpak örneklerine DOKUNULMAZ: yalnız kayıttaki (örnek no + PID + kimlik üçü birden uyan)
 örnekler kapatılır.
+
+ARKA PLAN AD ALANI (denetim 12c Y5): arka plan uygulamaları artık bwrap ad alanında başlar (arka_ortak.korumali_argv;
+ortamda DESKHAND_AD_ALANI=1). Orada kullanıcının systemd kullanıcı yöneticisine giden veri yolu YOK: `flatpak run`
+kendi scope'una geçemez, örnek masaüstünün bellek kafesinde ve PID ad alanında kalır; kafes/ad alanı kapanınca kapanır.
+Sarmalayıcı ad alanında bunu DOĞRULAR (örneğin cgroup'u = kendi cgroup'u) ve kayıt YAZMAZ (ana makinenin kaydı ad
+alanında görünmez; örneğin PID'i de yalnız ad alanında anlamlı). Örnek beklenmedik biçimde kafesten çıkmışsa kapatılır
+(kapalı kalarak güvenli). Kayıt / scope sınırı / `kapat_hepsi` yalnız ad alanı DIŞI eski yol içindir.
 """
 from __future__ import annotations
 
@@ -31,6 +38,30 @@ import time
 
 KAYIT_AD = "flatpak.json"
 _KILIT_AD = "flatpak.lock"
+# flatpak/systemctl yalnız bu dizinlerden (kullanıcının PATH'inden DEĞİL; denetim 12c Y2). sarmala() sarmalayıcıya da
+# aynı listeyi verir (testler başa sahte dizin ekler).
+ARAC_DIZINLERI = ["/usr/bin", "/bin"]
+AD_ALANI_ISARETI = "DESKHAND_AD_ALANI"
+
+
+def _arac(ad: str) -> str | None:
+    return shutil.which(ad, path=os.pathsep.join(ARAC_DIZINLERI))
+
+
+def ad_alaninda() -> bool:
+    """Deskhand'in arka plan ad alanında mı çalışıyoruz (korumali_argv --setenv DESKHAND_AD_ALANI 1)."""
+    return os.environ.get(AD_ALANI_ISARETI) == "1"
+
+
+def _cgroup(pid) -> str | None:
+    try:
+        with open(f"/proc/{int(pid)}/cgroup") as f:
+            for satir in f:
+                if satir.startswith("0::"):
+                    return satir[3:].strip()
+    except (OSError, ValueError):
+        pass
+    return None
 
 
 def _gercek_ortam() -> dict:
@@ -59,10 +90,11 @@ def _uyar(metin: str) -> None:
 
 def ornekler(timeout: float = 5) -> list[dict] | None:
     """Çalışan Flatpak örnekleri [{instance, pid, application}]; flatpak yok → []; sorgu başarısız → None."""
-    if not shutil.which("flatpak"):
+    flatpak = _arac("flatpak")
+    if not flatpak:
         return []
     try:
-        r = subprocess.run(["flatpak", "ps", "--columns=instance,pid,application"], capture_output=True,
+        r = subprocess.run([flatpak, "ps", "--columns=instance,pid,application"], capture_output=True,
                            text=True, timeout=timeout, env=_gercek_ortam(), stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -144,10 +176,11 @@ def scope_bul(pid: int, uygulama: str, proc_koku: str = "/proc") -> str | None:
 
 def bellek_uygula(scope: str, bellek: str) -> str | None:
     """Scope'a MemoryMax + takassız sınır (geçici: --runtime, ~/.config'e yazmaz). → uyarı metni ya da None."""
-    if not shutil.which("systemctl"):
+    systemctl = _arac("systemctl")
+    if not systemctl:
         return f"systemctl yok: {scope} bellek sınırı uygulanamadı"
     try:
-        r = subprocess.run(["systemctl", "--user", "--runtime", "set-property", scope, f"MemoryMax={bellek}",
+        r = subprocess.run([systemctl, "--user", "--runtime", "set-property", scope, f"MemoryMax={bellek}",
                             "MemorySwapMax=0"], capture_output=True, text=True, timeout=10, env=_gercek_ortam(),
                            stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as e:
@@ -170,8 +203,11 @@ def _canli(pid: int) -> bool:
 
 
 def _flatpak_kill(ornek: str) -> str | None:
+    flatpak = _arac("flatpak")
+    if not flatpak:
+        return "flatpak yok"
     try:
-        r = subprocess.run(["flatpak", "kill", ornek], capture_output=True, text=True, timeout=10,
+        r = subprocess.run([flatpak, "kill", ornek], capture_output=True, text=True, timeout=10,
                            env=_gercek_ortam(), stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as e:
         return str(e)
@@ -220,7 +256,8 @@ def kapat_hepsi(kayit: str, sure: float = 5.0) -> tuple[list[dict], list[dict], 
 def sarmala(argv: list[str], uygulama: str, kayit: str, bellek: str | None, kopya_yolu: str | None = None,
             sure: float = 20.0) -> list[str]:
     """Flatpak komutunu kayıt sarmalayıcısıyla çalıştıracak argv (BAŞLATMAZ)."""
-    ek = ["--kayit", kayit, "--uygulama", uygulama, "--sure", f"{sure:g}"]
+    ek = ["--kayit", kayit, "--uygulama", uygulama, "--sure", f"{sure:g}", "--arac-dizinleri",
+          os.pathsep.join(ARAC_DIZINLERI)]
     if bellek:
         ek += ["--bellek", bellek]
     if kopya_yolu:
@@ -247,8 +284,11 @@ def ana(argv: list[str]) -> int:
     p.add_argument("--bellek")
     p.add_argument("--kopya")
     p.add_argument("--sure", type=float, default=20.0)
+    p.add_argument("--arac-dizinleri")
     p.add_argument("komut", nargs=argparse.REMAINDER)
     a = p.parse_args(argv)
+    if a.arac_dizinleri:
+        ARAC_DIZINLERI[:] = [d for d in a.arac_dizinleri.split(os.pathsep) if d]
     komut = a.komut[1:] if a.komut[:1] == ["--"] else a.komut
     if not komut:
         print("deskhand flatpak: komut yok", file=sys.stderr)
@@ -286,7 +326,19 @@ def ana(argv: list[str]) -> int:
         if kod is not None and kod != 0:
             break  # komut hata verdi; örnek gelmeyecek
         time.sleep(0.2)
-    if bulunan:
+    if bulunan and ad_alaninda():
+        # ad alanında: örnek kafeste kalmalı (kullanıcının systemd'sine yol yok) → kayıt/sınır gerekmez
+        if _cgroup(bulunan["pid"]) != _cgroup(os.getpid()):
+            _uyar(f"{bulunan['application']} örneği arka plan masaüstünün kafesinden çıktı "
+                  f"({_cgroup(bulunan['pid'])}); kapatılıyor")
+            _flatpak_kill(bulunan["instance"])
+            try:
+                cocuk.terminate()
+            except OSError:
+                pass
+            return 1
+        bulunan.clear()  # kafeste: SIGTERM'de flatpak kill gerekmez (kafes/ad alanı kapatır)
+    elif bulunan:
         scope = scope_bul(bulunan["pid"], bulunan["application"])
         girdi = {**bulunan, "scope": scope, "kopya": a.kopya, "sarmalayici": os.getpid(), "zaman": int(time.time())}
         kaydet(a.kayit, girdi)
@@ -296,7 +348,7 @@ def ana(argv: list[str]) -> int:
                 _uyar(u)
         elif a.bellek:
             _uyar(f"{bulunan['application']} örneğinin Flatpak scope'u bulunamadı; bellek sınırı uygulanmadı")
-    else:
+    elif not ad_alaninda():
         _uyar(f"{a.uygulama}: {a.sure:g} sn içinde Flatpak örneği bulunamadı; kayıt/bellek sınırı yok")
     try:
         return cocuk.wait()

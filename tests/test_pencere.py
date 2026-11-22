@@ -394,12 +394,25 @@ t = time.monotonic()
 d = masaustu.masaustu_baslat()
 au = arka_uc.sec("arka:0x1")
 sw, sh = au.ekran_alani()[2:]
-print(f"sanal masaüstü {d['ekran']} {sw}x{sh} ({(time.monotonic() - t) * 1000:.0f} ms)")
+print(f"sanal masaüstü ({masaustu.tur(d)}) {d['ekran']} {sw}x{sh} ({(time.monotonic() - t) * 1000:.0f} ms)")
 BAGLANTILAR = []
+KW = masaustu.tur(d) == "kwin"
+# KWin türünde test penceresi: en küçük Qt penceresi (Wayland; konumu KWin seçer, sonra taşınır)
+QT_PENCERE = ("import sys\nfrom PyQt6.QtWidgets import QApplication, QWidget\napp = QApplication(sys.argv)\n"
+              "w = QWidget(); w.setWindowTitle(sys.argv[1]); w.setMinimumSize(100, 80); w.resize(int(sys.argv[2]), "
+              "int(sys.argv[3])); w.show(); app.exec()")
 
 
 def x_pencere(baslik, x, y, g, h):
-    """Kendi bağlantısıyla sanal ekranda bir pencere (kapatma XKillClient'ı yalnız bu bağlantıyı öldürür)."""
+    """Kendi bağlantısıyla sanal ekranda bir pencere (kapatma XKillClient'ı yalnız bu bağlantıyı öldürür). KWin türünde
+    Wayland Qt penceresi (aynı başlık/boyut), sonra arka ucun taşı yöntemiyle (x, y)'ye."""
+    if KW:
+        au.baslat([sys.executable, "-c", QT_PENCERE, baslik, str(g), str(h)])
+        k = bekle(lambda: next((k for k, b, _ in au.pencereler(re.escape(baslik))), None), 15, 0.05)
+        if k:
+            au.tasi(k, x, y)
+            bekle(lambda: au.geometri(k)[:2] == (x, y), 3, 0.05)
+        return None, None, k
     from Xlib import X
     dpy = masaustu.x_ac(d["ekran"])
     ek = dpy.screen()
@@ -418,7 +431,8 @@ _, _, KA = x_pencere("pencere-test A", 60, 70, 300, 200)
 _, _, KB = x_pencere("pencere-test GIZLI", 400, 70, 300, 200)
 kontrol("sanal: iki test penceresi açıldı", bool(KA) and bool(KB), f"{KA} {KB}")
 G0 = au.geometri(KA)
-st = lambda k: au._cagir(lambda x: x.wm_durumu(int(k.split("0x")[1], 16)))  # noqa: E731
+st = (au.pencere_durumu if KW else  # noqa: E731
+      lambda k: au._cagir(lambda x: x.wm_durumu(int(k.split("0x")[1], 16))))
 
 
 def geo_bekle(k, tut, sure=3.0):

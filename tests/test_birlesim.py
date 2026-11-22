@@ -188,7 +188,7 @@ d = masaustu.masaustu_baslat()
 au = arka_uc.sec(arka_bayragi=True)
 kontrol("sanal masaüstü açıldı, pano uygulanıyor", au.ad == "sanal" and
         type(au).pano_yaz is not arka_uc.ArkaUc.pano_yaz)
-LOGT, LOGW = os.path.join(GECICI, "birlesim-term.log"), os.path.join(GECICI, "birlesim-web.log")
+LOGT, LOGW = os.path.join(_yalitim.PAYLASIM, "birlesim-term.log"), os.path.join(_yalitim.PAYLASIM, "birlesim-web.log")
 pt = au.baslat([sys.executable, PANO_PENCERE], env={"LOG": LOGT, "BASLIK": "birlesim TERM", "SINIF": "xterm"})
 pw = au.baslat([sys.executable, PANO_PENCERE], env={"LOG": LOGW, "BASLIK": "birlesim WEB", "SINIF": "navigator"})
 
