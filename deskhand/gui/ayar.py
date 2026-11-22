@@ -147,8 +147,8 @@ def onay_kapsami_oku() -> str:
 def onay_kapsami_yaz(deger: str) -> None:
     if deger not in ONAY_KAPSAMLARI:
         raise ValueError(deger)
-    from .. import ayarlar, guvenlik
-    ayarlar.ayarla("guvenlik", "onaylar", deger)
+    from .. import guvenlik, liste_koruma
+    liste_koruma.panel_kapsam_kaydet(deger)  # panel: tek yetkili yazar (bellek + ayarlar.toml + işaret)
     guvenlik.onay_kapsami_sifirla()
 
 

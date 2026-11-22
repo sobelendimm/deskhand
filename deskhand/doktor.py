@@ -105,6 +105,15 @@ def satir_onay_kapsami():
         return _satir(_("Onay kapsamı"), "tamam",
                       _("kart: yalnız kartla ödeme (para düğmesi/ödeme sayfası, kart bilgisi yazma) onay ister; "
                         "diğer onaylar kapalı"))
+    from . import ayarlar
+    try:
+        dosyada = ayarlar.al("guvenlik", "onaylar")
+    except Exception:  # noqa: BLE001
+        dosyada = None
+    if dosyada == "kart":  # dosyada kart ama panel teyit etmiyor (kapalı / panel dışında yazılmış)
+        return _satir(_("Onay kapsamı"), "uyari",
+                      _("hepsi: ayar dosyasında 'kart' var ama panel teyit etmiyor (panel kapalı ya da panel dışında "
+                        "yazılmış); tüm onaylar açık"), "deskhand panel")
     return _satir(_("Onay kapsamı"), "tamam", _("hepsi: tüm onaylar açık (varsayılan)"))
 
 

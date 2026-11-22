@@ -19,7 +19,7 @@ import time
 
 from PIL import Image
 
-from deskhand import arka_uc, ayarlar, cli, doktor, eylem, guvenlik, hata, masaustu, onay, uygulama, yollar
+from deskhand import arka_uc, ayarlar, cli, doktor, eylem, guvenlik, hata, liste_koruma, masaustu, onay, uygulama, yollar
 from deskhand.arka_uc import EKRAN
 from deskhand.hata import Dur
 
@@ -46,8 +46,11 @@ def kod_al(f, *a, **k):
         return e.kod
 
 
+liste_koruma.panel_baslat()  # bu süreç panel gibi: kapsam panel yetkili (yetki modeli: test_kapsam_koruma.py)
+
+
 def kapsam(deger):
-    ayarlar.ayarla("guvenlik", "onaylar", deger)
+    liste_koruma.panel_kapsam_kaydet(deger)  # panelin Ayarlar'ı (tek yetkili yazar)
     guvenlik.onay_kapsami_sifirla()
     return guvenlik.onay_kapsami() == deger
 

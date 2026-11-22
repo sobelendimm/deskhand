@@ -13,6 +13,16 @@ ya da uygulama-seviyeleri.txt dosyasını silip/değiştirip kısıtları kaldı
   ayar dosyası kayıp ya da panel dışında değişti; paneli açın"): hiçbir girdi gönderilmez. İşaret yoksa (ilk kurulum,
   panel hiç açılmadı) eski davranış: yasak dosyası yoksa varsayılanla oluşturulur, seviye dosyası yoksa kısıt yok.
 
+Onay kapsamı (`ayarlar.toml` [guvenlik] onaylar = hepsi | kart) da panel yetkilidir (KAPSAM; ARCHITECTURE §4 "Onay
+kapsamı"); `kart` onayların çoğunu kapattığından model GEVŞETMEYE karşı tek yönlüdür:
+- Panel açılışta dosyadaki değeri okur. `kart` YALNIZ panelin kendi yazdığı işaret (liste-onaylar.isaret) de `kart`
+  diyorsa kabul edilir; işaretsiz/uyuşmayan `kart` (panel dışında yazılmış) → bellekte `hepsi`, dosya `hepsi`ye geri
+  yazılır, uyarılır. `hepsi` her zaman kabul (daha sıkı taraf).
+- `kart`'ı yalnız panelin Ayarlar'ı yazar (`panel_kapsam_kaydet`); panel açıkken dosyaya elle `kart` yazılırsa panelin
+  `hepsi`si korunur ve dosya geri yazılır (`denetle`). Dosyada `hepsi` / dosya silindi → `hepsi` kabul (sıkılaştırma).
+- CLI/MCP değeri dosyadan OKUMAZ: panelden onay kanalıyla alır (`liste onaylar`). Panel kapalı / kanal
+  doğrulanamıyor / eski panel → `hepsi` (Dur 10 değil: onay sorulur, panel yoksa zaten ret).
+
 Qt'siz (CLI/MCP hafif kalsın); panel tarafının Qt izleyicisi deskhand/gui/panel.py'de.
 """
 from __future__ import annotations
@@ -28,6 +38,8 @@ from .hata import Dur
 from .i18n import N_, _
 
 TURLER = ("yasak", "seviye")
+KAPSAM = "onaylar"  # kanal türü + işaret adı (liste-onaylar.isaret); dosya: ayarlar.toml [guvenlik] onaylar
+KAPSAMLAR = ("hepsi", "kart")
 ONBELLEK_SN = 0.3  # istemci: panelden alınan listeyi bu kadar süre yeniden sormaz (pencere listesinde her pencere
 #                   için denetim); panelin Kaydet'i en geç bu kadar sonra geçerli. Dosya yolu önbelleksiz.
 MESAJ_KAYIP = N_("Deskhand ayar dosyası ({dosya}) kayıp ya da panel dışında değişti; güvenli tarafta hiçbir girdi "
@@ -95,6 +107,7 @@ class Koruyucu:
         self.bellek: dict[str, str | None] = {}
         for tur in TURLER:
             self._ac(tur)
+        self._kapsam_ac()
 
     def _ac(self, tur: str) -> None:
         mevcut = _oku(dosya(tur))
@@ -115,6 +128,35 @@ class Koruyucu:
             _yaz_atomik(dosya(tur), mevcut)
         self.bellek[tur] = mevcut
         _isaret_yaz(tur, mevcut)
+
+    def _kapsam_ac(self) -> None:
+        d = _kapsam_dosyadan()
+        isaret = isaret_oku(KAPSAM)
+        if d == "kart" and not (isaret is not None and isaret.get("icerik") == "kart"
+                                and isaret["sha256"] == _ozet("kart")):
+            self.bellek[KAPSAM] = "hepsi"
+            self._kapsam_dosyaya()
+            self.uyari(_("Onay kapsamı 'kart' (Yalnız kartla ödeme) panel dışında yazılmış; geçerli sayılmadı, tüm "
+                         "onaylar açık kaldı ('hepsi'). Değiştirmek için panelde Ayarlar → Onay soruları."))
+            return
+        self.bellek[KAPSAM] = d
+        _isaret_yaz(KAPSAM, d)
+
+    def _kapsam_dosyaya(self) -> None:
+        from . import ayarlar
+        try:
+            ayarlar.ayarla("guvenlik", "onaylar", self.bellek[KAPSAM])
+        except Exception:  # noqa: BLE001 - dosya yazılamadı: yetkili değer bellekte (istemciler panelden alır)
+            pass
+        _isaret_yaz(KAPSAM, self.bellek[KAPSAM])
+
+    def kapsam_kaydet(self, deger: str) -> None:
+        """Panelin Ayarlar'ı: onay kapsamı (tek yetkili yazar)."""
+        if deger not in KAPSAMLAR:
+            raise ValueError(deger)
+        with self._kilit:
+            self.bellek[KAPSAM] = deger
+            self._kapsam_dosyaya()
 
     def _dosyaya(self, tur: str) -> None:
         icerik = self.bellek.get(tur)
@@ -146,6 +188,18 @@ class Koruyucu:
                     self._dosyaya(tur)
                     uyarilar.append(_("{dosya} panel dışında silindi ya da değiştirildi; panelin kaydı korundu ve dosya "
                                       "geri yazıldı (değişiklikleri Ayarlar'dan yapın).").format(dosya=dosya(tur)))
+            dosyada = _kapsam_dosyadan()
+            if dosyada == "hepsi" and self.bellek.get(KAPSAM) != "hepsi":
+                # dosyada hepsi / dosya ya da anahtar silindi: daha SIKI taraf, kabul (gevşetme değil)
+                self.bellek[KAPSAM] = "hepsi"
+                _isaret_yaz(KAPSAM, "hepsi")
+                uyarilar.append(_("Onay kapsamı ayar dosyasında panel dışında 'hepsi' yapıldı ya da silindi; tüm "
+                                  "onaylar yeniden açık."))
+            elif dosyada != self.bellek.get(KAPSAM):
+                self._kapsam_dosyaya()
+                uyarilar.append(_("Onay kapsamı ayar dosyasında panel dışında değiştirildi; panelin değeri ('{deger}') "
+                                  "korundu ve dosya geri yazıldı (değişiklikleri Ayarlar'dan yapın).").format(
+                                      deger=self.bellek.get(KAPSAM)))
         for u in uyarilar:
             self.uyari(u)
         return uyarilar
@@ -176,6 +230,38 @@ def panel_kaydet(tur: str, metin: str) -> None:
     else:
         _yaz_atomik(dosya(tur), metin)
         _isaret_yaz(tur, metin)
+
+
+def panel_kapsam_kaydet(deger: str) -> None:
+    """gui/ayar.py onay kapsamı seçimi: panel koruyucusu varsa onun üzerinden (yoksa dosya + işaret)."""
+    if AKTIF is not None:
+        AKTIF.kapsam_kaydet(deger)
+        return
+    if deger not in KAPSAMLAR:
+        raise ValueError(deger)
+    from . import ayarlar
+    ayarlar.ayarla("guvenlik", "onaylar", deger)
+    _isaret_yaz(KAPSAM, deger)
+
+
+def _kapsam_dosyadan() -> str:
+    from . import ayarlar
+    try:
+        d = ayarlar.al("guvenlik", "onaylar")
+    except Exception:  # noqa: BLE001 - okunamadı: güvenli taraf
+        return "hepsi"
+    return d if d in KAPSAMLAR else "hepsi"
+
+
+def kapsam() -> str:
+    """Geçerli onay kapsamı. Panel sürecinde bellekteki yetkili değer; başka süreçte YALNIZ panelin doğrulanmış
+    kanalından (`liste onaylar`). Panel kapalı / doğrulanamadı / eski panel / tanınmayan yanıt → "hepsi".
+    Dosyaya bakılmaz: dosya yazabilen bir süreç kapsamı gevşetemez. (Önbellek çağıranda: guvenlik.onay_kapsami.)"""
+    if AKTIF is not None:
+        d = AKTIF.metin(KAPSAM)
+        return d if d in KAPSAMLAR else "hepsi"
+    d = _panelden(KAPSAM)
+    return d if isinstance(d, str) and d in KAPSAMLAR else "hepsi"
 
 
 # ---------------------------------------------------------------- istemci tarafı (guvenlik)
