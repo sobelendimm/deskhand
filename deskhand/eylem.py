@@ -27,7 +27,7 @@ from .ocr import KAYDIR_BEKLE, YEDEK_OKUMALAR, ara, ayni_konum, bul_dongu, dogru
     yazdir_eslesme
 
 GIRDI_KOMUTLARI = {"tikla", "tus", "yaz", "kaydir", "metne-tikla", "kapat", "simgeye-tikla", "bas", "fare",
-                   "surukle", "dizi", "renge-tikla", "akis", "ogeye-tikla", "pencere", "ogeye-yaz"}
+                   "surukle", "dizi", "renge-tikla", "akis", "ogeye-tikla", "pencere", "ogeye-yaz", "git"}
 OKUMA_KOMUTLARI = {"foto", "metin", "bekle", "simge-bul", "simge-kaydet", "renk-bul"}
 
 

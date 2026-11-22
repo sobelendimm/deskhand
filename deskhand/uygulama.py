@@ -317,6 +317,38 @@ def belge_argumanlari(args) -> list[str]:
     return sonuc
 
 
+WEB_ADRES_UZUNLUK = 2048
+
+
+def web_adresi_denetle(adres) -> str:
+    """CLI `open APP --url` / `goto`: YALNIZ http/https adresi (host zorunlu, boşluk/denetim karakteri yok, en çok
+    2048 karakter). file:, about:, javascript:, data:, şemasız ya da `-` ile başlayan değer → Dur(10). Dönen adres
+    argv'ye komutun SONUNA (seçenek konumunda olamaz: http(s):// ile başlar) tek argüman olarak eklenir."""
+    from urllib.parse import urlsplit
+    a = adres.strip() if isinstance(adres, str) else ""
+    neden = None
+    if not a:
+        neden = _("boş adres")
+    elif len(a) > WEB_ADRES_UZUNLUK or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in a):
+        neden = _("çok uzun ya da boşluk/denetim karakteri içeriyor")
+    elif a.startswith("-"):
+        neden = _("seçenek (- ile başlıyor) verilemez")
+    else:
+        try:
+            u = urlsplit(a)
+            sema = u.scheme.lower()
+            if sema not in URL_SEMALARI:
+                neden = (_("yalnız http ya da https adresi ('{sema}:' değil)").format(sema=sema) if sema
+                         else _("adres http:// ya da https:// ile başlamalı"))
+            elif not u.hostname:
+                neden = _("geçersiz URL")
+        except ValueError:
+            neden = _("geçersiz URL")
+    if neden:
+        raise Dur(10, _("adres reddedildi {adres}: {neden}").format(adres=repr(a)[:200], neden=neden))
+    return a
+
+
 # İzin listesi: ROOT sahipli, kullanıcının yazamadığı sistem dizinleri. Buradaki girdi + root sahipli ikili program =
 # onaysız. Kullanıcının yazabildiği dizinlerdeki (~/.local/share/applications, kullanıcı Flatpak'ı) girdiler ya da
 # programı kullanıcıya ait / betik olan girdiler insan onayı ister (bir eylem = bir onay; gözetimsiz kipte ret).
@@ -717,24 +749,47 @@ def k_ac(a):
     (açılış ekranı / Steam ara pencereleri atlanır). Tek örnekli uygulama yeni pencere açmayıp mevcut
     penceresini öne getirirse o döner."""
     import shlex
+    from . import gorev_kipi
+    adres = None
+    verilen = [x for x in (getattr(a, "url", None), getattr(a, "adres", None)) if x]
+    if len(set(verilen)) > 1:
+        raise Dur(1, _("adres iki kez ve farklı verildi (--url ile konumsal adres)"))
+    if verilen:
+        if a.komut_satiri:
+            raise Dur(1, _("--komut ile adres verilemez: uygulama adıyla aç (open firefox --url https://…)"))
+        adres = web_adresi_denetle(verilen[0])  # masaüstü başlatılmadan / kopya hazırlanmadan ÖNCE
     if a.komut_satiri:
+        if gorev_kipi.etkin():  # GÖREV KİPİ: ham komut yok (MCP open_app gibi yalnız tarayıcı + http(s) adresi)
+            raise Dur(10, _("görev kipi: ham komut açılmaz; uygulama adıyla aç"))
         komut, ad = shlex.split(a.komut_satiri), a.komut_satiri
         baslatma_yasak_denetle(a.komut_satiri)
         baslatma_komut_engel(a.komut_satiri, getattr(a, "onayli", False))  # rm -r / sudo / curl | sh…: insan onayı
     elif a.uygulama:
         g = uygulama_bul(a.uygulama)
         baslatma_yasak_denetle(g["ad"], g["ad_en"], g["exec"], g["kimlik"])
-        komut, ad = ["gio", "launch", g["yol"]], f"{g['ad']} ({g['kimlik']})"
+        if gorev_kipi.etkin():  # GÖREV KİPİ: yalnız tarayıcı, yalnız http(s) belge (MCP open_app ile aynı kural)
+            neden = gorev_kipi.open_app_denetle(str(g.get("kimlik") or a.uygulama), [adres] if adres else [])
+            if neden:
+                raise Dur(10, _("görev kipi: {uygulama} açılmadı: {neden}").format(uygulama=a.uygulama, neden=_(neden)))
+        komut, ad = ["gio", "launch", g["yol"], *([adres] if adres else [])], f"{g['ad']} ({g['kimlik']})"
     else:
         raise Dur(1, _("uygulama adı ya da --komut gerekli"))
     au = sec()
+    if au.ad == "sanal":
+        # MCP open_app ile aynı: görünmez masaüstü kapalıysa kendiliğinden başlat (aynı masaustu_baslat: kafes, kilit,
+        # görev kipi kapısı). Oturum kopyası hazırlanmadan ÖNCE: masaüstü açılamazsa boşuna kopya yapılmaz.
+        from . import masaustu
+        if masaustu.durum() is None:
+            masaustu.masaustu_baslat()
+            print(_("görünmez masaüstü başlatıldı"), file=sys.stderr)
+            au = sec()  # masaüstü türü (KWin | Xvfb) şimdi belli: arka ucu yeniden seç
     env = None
     kopya = None
     ev = ()
     if au.ad == "sanal" and a.uygulama and not a.komut_satiri:
         yeni, env, notu, kopya, ev = oturum_hazirla(a.uygulama, getattr(a, "site", None))
         if yeni:
-            komut = yeni
+            komut = [*yeni, *([adres] if adres else [])]  # adres: politikanın komutunun sonuna tek argüman
         print(notu, file=sys.stderr)
     elif au.ad == "sanal" and a.komut_satiri and komut:
         # ham komut da politikadan geçer: /usr/bin/telegram-desktop, flatpak run org.telegram.desktop … (bilinen
