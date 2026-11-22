@@ -56,6 +56,9 @@ deskhand/
   gui/             panel, tepsi, onay diyaloğu
   fark.py          eylem öncesi/sonrası ekran farkı (changed, changed_region, changed_ratio; NumPy, imleç dayanıklı)
   dongu.py         döngü kesici: aynı eylem 3. sonuçsuzda uyarı, 5'ten sonra ret (MCP, oturum başına bellek)
+  gozlem.py        MCP observe: ögeleri tek biçime getirme, sorgu/atalar, OCR ayıklama, anlık görüntü önbelleği
+                   (snapshot_id, ref), fark (since), numaralı görüntü (§10)
+  gonderim.py      eylem sırasında gerçekten gönderilen girdinin sayacı (iş parçacığına özgü; MCP `sent`, §10)
   mcp_sunucu.py    MCP yüzeyi
 bin/ekran          uyumluluk: `python3 -m deskhand "$@"` (Türkçe komutlar aynen)
 tests/             ekransız testler: test_ocr.py, test_mantik.py ...; ekranlı: tests/ekranli/ (yalnız elle)
@@ -424,6 +427,9 @@ Arayüz sözleşmesine zamanla giren kararların özeti (ayrıntılar ilgili bö
 - **Oturum köprüsü.** Arka plandaki uygulamaların kullanıcının hesap oturumlarını kullanabilmesi, uygulama başına
   bir politikayla (kopya / paylas / bekle / on / kapali) yönetilir; uygulama kullanıcı oturumunda açık ve
   arka planda açılamıyorsa kod 16 döner (bkz. docs/SESSIONS.md).
+- **Gözlem + ref + toplu adım (Faz 10).** MCP ajanı `observe` ile numaralı ögeler ve `ref` alır; `ref` ile eylemde öge
+  güncel ağaçta KİMLİĞİYLE yeniden doğrulanır, sonra MEVCUT güvenli yoldan gider. `batch` aynı araç çekirdeklerini
+  sırayla çağırır; paralel kapı yazılmaz. Her girdi sonucu `effect` taşır, her hata `sent` + `next` (§10).
 
 ## 8. Onay protokolü (arayüz + MCP + CLI ortak)
 Hassas eylem (hassas düğme, ödeme sayfası, yasak dışı ama riskli `ac`, oturum aktarımı) için onay YALNIZ insandan:
@@ -496,3 +502,57 @@ yazdığı için `ac --arka` ile açılan Firefox ek ortam değişkeni (GNOME_AC
 pencere düzeyindedir. Gerçek (kde, Wayland) ekranda koordinat çerçevesi henüz gerçek ekranda doğrulanmadı: `konum_coz`
 varsayımları (üç çerçeve, ±1 px, dekorasyon payı sınırları) elle denenmelidir. Pencere sınıfı bilinen tarayıcı listesinde
 değilse `click-element` sayfaya bakmaz (`web` okuması ve koordinatlı tık yine çalışır). `ogeye-yaz` web alanlarında yoktur.
+
+## 10. MCP gözlem yüzeyi: observe, ref, batch, wait_for, sonuç sözleşmesi
+**`observe` (salt okunur, `deskhand/gozlem.py` + `mcp_sunucu.observe`).** Tek çağrıda pencerenin ögeleri: tarayıcıda
+sayfa (`web.oku`, `yol_ver=True`), değilse genel ağaç (`erisim.erisim_ogeleri(ayrinti=True)`: durumlar, eylem adları,
+değer), ağaç yoksa/çok küçükse (adı olan < 3 öge) ya da `include_ocr=true` ise OCR satırları (`api.metin_oku`; ağaçtaki
+ögenin kutusunda aynı yazı atılır). Yeni okuma yolu YOKTUR: çerçeve seçimi ve denetimi (§4, §9: süreç ağacı, panel/yasak
+10) aynen; yasak pencere 10; parola alanının (`password text`) değeri hiçbir yolda okunmaz. Pencere verilmezse tüm ekranın
+OCR'ı. Çıktı: başlık satırı (`snapshot <id> | window … | sources tree+ocr | N items`), web'de sayfa satırı (ödeme sayfası
+uyarısı, konum doğrulanmadıysa "element clicks are refused"), her öge `[N] rol "ad" durum = "değer" !sensitive (ocr)`;
+yapılandırılmış alanlar `ref`, `role`, `name`, `value`, `states`, `frame` (pencere pikseli), `actions`, `sensitive`,
+`href`, `source`; boş/varsayılan alanlar atılır, U+FFFC ve yalnız boşluk metinler atılır. `query="a|b"`: adı/değeri/rolü
+eşleşen ögeler + ADI OLAN ataları (çocuk-sıra yolu öneki). `max_elements` (150, ≤1000) + `offset` → `next_offset`.
+`since=<snapshot_id>` (aynı pencere): yalnız `+` eklenen, `~` değişen (ad, değer, durum, kutu > 3 px), `-` kaybolan.
+`include_screenshot`: maskeli pencere görüntüsüne öge kutuları + numaraları çizilir (Set-of-Marks) ve `shot_id` kaydedilir.
+**Anlık görüntü önbelleği.** `snapshot_id` = sunucu (süreç) başına rastgele 4 hex önek + sayaç; pencere başına en çok 4,
+toplam 16, ömür 120 sn. Öge kimliği: erişilebilirlik ögesinde veri yolu adı + nesne yolu (BİRLİKTE; `_tara` libatspi
+nesnesinin alanlarından okur, okunamazsa çocuk-sıra yolu) + pencere; OCR satırında metin + kutu.
+**`ref` ile eylem.** `click(ref)`, `type_text(ref)` (önce alan tıklanır, sonra klavye yolu), `scroll(ref)`,
+`drag(from_ref, to_ref)`. Bayatlık üç ayrı nedenle, HİÇBİR girdi gönderilmeden reddedilir (`[8]`, `error.reason`):
+`snapshot` (bilinmiyor / süresi doldu / önbellekten düştü), `window` (başka masaüstü ya da pencere, pencere kapandı,
+boyutu değişti), `element` (öge yok, adı/rolü değişti, kutusu ±3 px'ten fazla oynadı, numara yok). Öge düzeyi doğrulama
+ÇEKİRDEKTE ve güncel ağaçtan yapılır (TOCTOU): `erisim.ref_oge_sec` ögeyi ADLA ARAMAZ, kimliğiyle bulur ve ad/rol/kutuyu
+karşılaştırır (aynı adlı başka düğmeye düşülmez); `k_ogeye_tikla` / `_ogeye_eylem` / `_web_sec` (`a.ref_oge`) bu
+seçimle MEVCUT yoldan devam eder: fare → `hassas_nokta` (öğe adı hedef metinde) + `_onay_sonrasi_oge` + `tikla_ic`
+(`Girdi.gonder`: DUR, `denetle`, seviye, kendi istemci, sistem istemi, imleç altı, insan önceliği, kde oyun/film);
+`via="action"` → `_atspi_korumalari` + `_hassas_oge` + sistem istemi onayı; web → `_web_tikla` / `_web_eylem` (onay sonrası
+kimlikle yeniden bulma `_web_yeniden`). OCR satırı ref'i → `k_metne_tikla` (yazı ref kutusunun ±12 px çevresinde yeniden
+okunur; yoksa `[8] element`). `scroll`/`drag` ref'in GÜNCEL merkezini kilit altında yeniden doğrular (`_ref_nokta`), sonra
+`kaydir_ic` / `k_surukle`. `ref` yolunda onay parametresi YOKTUR; bekleyen onay kapısı (`kilitli(girdi=True)`), döngü
+kesici (hedef = öge kimliği) ve onay sonrası hedef doğrulaması (§8) aynen.
+**`batch` (en çok 20 adım).** Araçlar yalnız `click`, `type_text`, `press_key`, `scroll`, `drag`, `wait` (`{"seconds":
+0-10}`, DUR'u 0,1 sn'de denetler). Tüm adımlar HİÇBİR şey gönderilmeden doğrulanır (aracın kendi argüman modeli, desktop
+batch'inkiyle aynı, wait süresi). Her adım modüldeki ÇEKİRDEK araç işlevini çağırır (`arac()` MCP'ye yalnız sarmalayıcıyı
+kaydeder; çekirdek aynı kilit/kapı/onay/döngü kesicidir). İkinci adımdan itibaren her adımdan önce DUR, bekleyen onay ve
+insan önceliği (`guvenlik.insan_onceligi`, en çok 8 sn) yeniden denetlenir. İlk hatada durulur: `failed_step`,
+`not_sent`, adımın ve batch'in `sent` değeri. Bir adım onay isterse batch o adımda bekler; red = dur. `observe_after`
+son adımın penceresini gözler.
+**`wait_for` (salt okunur).** `text` (ağaçta ad/değer, yoksa OCR), `gone`, `element` (ad + isteğe bağlı rol), `window`
+(başlık deseni, yasak pencere sayılmaz), `stable` (pencere görüntüsü `stable_ms` boyunca aynı, fark.py). Kilit her
+yoklamada alınıp bırakılır; zaman aşımı hata değil `satisfied:false`.
+**Sonuç sözleşmesi.** Girdi araçlarının sonucu `effect`: `confirmed` (beklenen değişim görüldü: tıklanan ref ögesinin
+checked/selected/expanded durumu değişti, yazılan metin değişen bölgenin OCR'ında görüldü ya da değer geri okundu,
+kaydırmada görünüm değişti, pencere geometrisi değişti), `changed`, `no_change` (döngü kesiciyle uyumlu), `unverifiable`
+(ölçülemedi: kde'de `via=action`, `verify=false`), `refused` (hata ve hiçbir şey gönderilmedi). Hata sonucu (`isError`)
+metni: `[kod] ne oldu` + `sent: nothing_sent | maybe_partial` + `next: ne yapmalı (araç adıyla)`; aynısı
+`structuredContent.error` {code, message, reason, next}, `sent`, `effect` alanlarında. `sent` sayacı (`gonderim.py`)
+`api.arka()` girdi nesnesinin `gonder()`/`ham()` dönüşünde ve erişilebilirlik eylemi/değer yazma çağrısından hemen önce
+artar; bırakma (`zorla`) sayılmaz. outputSchema: `observe`, `batch`, `wait_for`, `click` için alanlı TypedDict, diğer girdi
+araçlarında genel nesne; şemalardaki otomatik `title` metinleri tools/list'i küçültmek için silinir.
+**Sınırlar.** Tarayıcı penceresinde observe yalnız sayfayı (belge) listeler: adres çubuğu/sekmeler için `press_key`
+(ctrl+l) ya da `read_text(source="tree")`. Web ögeleri yalnız görünenler (kaydırma alanı dışındakiler `read_text(source=
+"web", hidden=true)`). Sistem istemi penceresinde ref/text/element tıklaması pencere denetiminde onaysız istem olarak
+reddedilir (10; koordinatlı tık onay sorar). `structuredContent` metinden büyüktür (href, eylem adları): istemci ikisini
+de modele veriyorsa token maliyeti artar.

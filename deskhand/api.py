@@ -133,10 +133,31 @@ def arka():
                     acik_girdiler.add(g)
                 except TypeError:  # zayıf başvuru desteklemeyen nesne: kaydedilemez
                     pass
+                _sayacli(g)
                 return g
             au.girdi = girdi
             au._api_sarili = True
     return au
+
+
+def _sayacli(g) -> None:
+    """Girdi nesnesinin gonder()/ham() çağrıları başarıyla dönünce gönderim sayacı artar (MCP `sent`: hata anında
+    "bir şey gitti mi"). Denetimler değişmez: asıl yöntem aynen çağrılır."""
+    from . import gonderim
+    for ad in ("gonder", "ham"):
+        asil = getattr(g, ad, None)
+        if asil is None or getattr(asil, "_sayacli", False):
+            continue
+
+        def sarili(*a, _asil=asil, **k):
+            r = _asil(*a, **k)
+            gonderim.artir()
+            return r
+        sarili._sayacli = True
+        try:
+            setattr(g, ad, sarili)
+        except (AttributeError, TypeError):  # yöntemi değiştirilemeyen nesne: bu nesnede sayaç yok
+            pass
 
 
 def hepsini_birak(sure: float = 0.4) -> int:
@@ -425,11 +446,14 @@ def simgeye_tikla(k, ad, dugme="left", sira=None, esik=0.9, baslik=None, onayli=
                                         onayli=onayli, mod=_mod(mod)))
 
 
-def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False, mod=None, eylem=None, rol=None) -> str:
-    """eylem None = gerçek fare tıklaması; "" = AT-SPI birincil eylemi (fare/odak yok); başka = o AT-SPI eylemi."""
+def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False, mod=None, eylem=None, rol=None,
+                ref=None) -> str:
+    """eylem None = gerçek fare tıklaması; "" = AT-SPI birincil eylemi (fare/odak yok); başka = o AT-SPI eylemi.
+    ref: MCP `observe` ögesinin beklenen kimliği {kaynak, kimlik, yol, ad, rol, kutu} → öge ADLA aranmaz, güncel
+    ağaçta KİMLİĞİYLE bulunur ve ad/rol/kutu (±3 px) doğrulanır (erisim.ref_oge_sec); sonrası aynı güvenli yol."""
     from .erisim import k_ogeye_tikla
     return calistir(k_ogeye_tikla, ns(kimlik=k, ad=ad, dugme=DUGME[dugme], rol=rol, sira=sira, baslik=baslik,
-                                      onayli=onayli, mod=_mod(mod), eylem=eylem))
+                                      onayli=onayli, mod=_mod(mod), eylem=eylem, ref_oge=ref))
 
 
 def ogeye_yaz(k, ad, metin, sira=None, baslik=None, gizli=False, onayli=False) -> str:

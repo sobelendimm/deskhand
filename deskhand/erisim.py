@@ -325,9 +325,67 @@ def _cerceve_denetle(app_pid, app_ad, cerceve_ad, islem):
                         ).format(baslik=repr(cerceve_ad), uygulama=repr(app_ad)))
 
 
-def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri):
+# observe (MCP) için ögenin durum belirteçleri: AT-SPI durum adı → API belirteci (çevrilmez)
+GOZLEM_DURUMLARI = (("FOCUSED", "focused"), ("CHECKED", "checked"), ("INDETERMINATE", "mixed"),
+                    ("SELECTED", "selected"), ("PRESSED", "pressed"), ("EXPANDED", "expanded"),
+                    ("READ_ONLY", "readonly"), ("REQUIRED", "required"), ("INVALID_ENTRY", "invalid"),
+                    ("VISITED", "visited"))
+DEGERLI_ROLLER = {"entry", "text", "spin button", "slider", "combo box"}  # değeri okunan roller (parola alanı ASLA)
+DEGER_SINIRI = 200
+
+
+def _hizli_kimlik(o):
+    """Ögenin (veri yolu adı, nesne yolu) kimliği; önce libatspi nesnesinin kendi alanları (çağrısız), yoksa
+    _nesne_kimligi. Okunamazsa None."""
+    try:
+        yol = getattr(o, "path", None)
+        ad = getattr(getattr(o, "app", None), "bus_name", None)
+        if ad and yol:
+            return [str(ad), str(yol)]
+    except Exception:  # noqa: BLE001
+        pass
+    k = _nesne_kimligi(o)
+    return list(k) if k else None
+
+
+def _ayrinti(Atspi, o, rol, ss, S):
+    """observe ayrıntısı: durum belirteçleri, eylem adları (etkileşimli rollerde), değer (parola alanı ASLA)."""
+    durumlar = [ad for at, ad in GOZLEM_DURUMLARI if getattr(S, at, None) is not None and ss.contains(getattr(S, at))
+                and (ad != "readonly" or rol in DEGERLI_ROLLER or rol == "password text")]  # etiket hep salt okunur
+    if (getattr(S, "EXPANDABLE", None) is not None and ss.contains(S.EXPANDABLE) and "expanded" not in durumlar):
+        durumlar.append("collapsed")
+    if "readonly" not in durumlar and rol in ("entry", "text") and getattr(S, "EDITABLE", None) is not None \
+            and not ss.contains(S.EDITABLE):
+        durumlar.append("readonly")
+    e = {"durumlar": durumlar}
+    if rol in ETKILESIMLI:
+        try:
+            e["eylemler"] = eylem_listesi(o)[1]
+        except Exception:  # noqa: BLE001
+            pass
+    if rol in DEGERLI_ROLLER and rol != "password text":
+        deger = None
+        try:
+            vi = o.get_value_iface() if rol in ("spin button", "slider") else None
+            if vi is not None:
+                v = vi.get_current_value()
+                deger = str(int(v)) if float(v).is_integer() else f"{v:g}"
+            elif rol in ("entry", "text", "spin button"):
+                ti = o.get_text_iface()
+                if ti is not None:
+                    deger = Atspi.Text.get_text(ti, 0, DEGER_SINIRI + 1)
+        except Exception:  # noqa: BLE001
+            deger = None
+        if deger:
+            e["deger"] = deger if len(deger) <= DEGER_SINIRI else deger[:DEGER_SINIRI - 1] + "…"
+    return e
+
+
+def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayrinti=False):
     """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi, çerçeveden çocuk-sıra yolu. Wayland'de
-    ekran koordinatı yok → çerçeveye göre (WINDOW) konum + pencere dekorasyonu payı (pencere boyutu − AT-SPI boyutu)."""
+    ekran koordinatı yok → çerçeveye göre (WINDOW) konum + pencere dekorasyonu payı (pencere boyutu − AT-SPI boyutu).
+    kimlik_ver: her ögeye `kimlik` = [veri yolu adı, nesne yolu] (MCP ref doğrulaması); ayrinti: + durumlar, eylemler,
+    değer (observe). Parola alanının (`password text`) değeri hiçbir koşulda okunmaz."""
     X, Y, W, H = geo
     WIN = Atspi.CoordType.WINDOW
     fe = cerceve.get_extents(WIN)
@@ -353,9 +411,14 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri):
         except Exception:
             kutu_ = None
         if d > 0 and kutu_ and kutu_[2] > 0 and kutu_[3] > 0:
-            sonuc.append({"rol": rol, "ad": ad, "x": kutu_[0], "y": kutu_[1], "w": kutu_[2], "h": kutu_[3],
-                          "cx": kutu_[0] + kutu_[2] / 2, "cy": kutu_[1] + kutu_[3] / 2,
-                          "etkin": ss.contains(S.ENABLED) and ss.contains(S.SENSITIVE), "derinlik": d, "yol": yol})
+            oge = {"rol": rol, "ad": ad, "x": kutu_[0], "y": kutu_[1], "w": kutu_[2], "h": kutu_[3],
+                   "cx": kutu_[0] + kutu_[2] / 2, "cy": kutu_[1] + kutu_[3] / 2,
+                   "etkin": ss.contains(S.ENABLED) and ss.contains(S.SENSITIVE), "derinlik": d, "yol": yol}
+            if kimlik_ver or ayrinti:
+                oge["kimlik"] = _hizli_kimlik(o)
+            if ayrinti:
+                oge.update(_ayrinti(Atspi, o, rol, ss, S))
+            sonuc.append(oge)
         for i in range(n - 1, -1, -1):
             try:
                 c = o.get_child_at_index(i)
@@ -512,7 +575,8 @@ def _atspi_is(istek):
     if islem == "odak_parola":
         return _odakli_parola(Atspi, cerceve)
     if islem == "tara":
-        r = _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"])
+        r = _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"],
+                  bool(istek.get("kimlik_ver")), bool(istek.get("ayrinti")))
         r["cerceve_kimlik"] = _nesne_kimligi(cerceve)
         return r
     oge = _yoldan_bul(Atspi, cerceve, istek["yol"], istek["rol"], istek["ad"])
@@ -675,11 +739,18 @@ def _pencere_istegi(k, islem, **ek):
     return {"a11y": _a11y_adresi(), "pid": str(pid or ""), "baslik": au.baslik(k), "islem": islem, **ek}
 
 
-def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400):
-    """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi (+ `yol`). Erişilebilirlik kapalıysa
-    kendiliğinden açılır (kullanıcıdan komut beklenmez). → (ögeler, süre)."""
+def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400, kimlik_ver=False, ayrinti=False):
+    """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi (+ `yol`; kimlik_ver: `kimlik`;
+    ayrinti: + durumlar/eylemler/değer). Erişilebilirlik kapalıysa kendiliğinden açılır (kullanıcıdan komut
+    beklenmez). → (ögeler, süre)."""
     yeni = erisim_ac_garanti()
-    istek = _pencere_istegi(k, "tara", geo=list(sec().geometri(k)), en_cok=en_cok, sure=sure, cocuk_siniri=cocuk_siniri)
+    ek = {}
+    if kimlik_ver:
+        ek["kimlik_ver"] = True
+    if ayrinti:
+        ek["ayrinti"] = True
+    istek = _pencere_istegi(k, "tara", geo=list(sec().geometri(k)), en_cok=en_cok, sure=sure, cocuk_siniri=cocuk_siniri,
+                            **ek)
     bitis = time.monotonic() + (4.0 if yeni else 0.0)  # az önce açıldı: çalışan uygulamalar ağaca kısa sürede girer
     while True:
         try:
@@ -776,8 +847,63 @@ def k_agac(a):
         oge_yaz(o)
 
 
+REF_PAYI = 3  # px: observe'daki kutu ile güncel kutu arasındaki en çok fark (her kenar/boyut)
+REF_YOK, REF_FARKLI = "ref-yok", "ref-farkli"  # Dur.tur: ref ögesi artık yok / başka öge (MCP: "observe çağır")
+
+
+def _kutu(o):
+    if o.get("kutu"):
+        return [float(v) for v in o["kutu"]]
+    if o.get("x") is not None:
+        return [float(o["x"]), float(o["y"]), float(o["w"]), float(o["h"])]
+    return None
+
+
+def _oge_kimligi(o):
+    if o.get("kimlik"):
+        return list(o["kimlik"])
+    if o.get("_bus") and o.get("_yol"):
+        return [o["_bus"], o["_yol"]]
+    return None
+
+
+def ref_oge_sec(ogeler, ref):
+    """MCP `ref` (observe ögesi) → güncel ağaçtaki AYNI öge. Kimlik (veri yolu adı + nesne yolu, BİRLİKTE; okunamamışsa
+    çocuk-sıra yolu) ile bulunur, sonra adı, rolü ve kutusu (±REF_PAYI px) beklenenle karşılaştırılır. Ad ARANMAZ
+    (başka "Kaydet" düğmesine düşülmez). Yoksa Dur 8 (tur REF_YOK), farklıysa Dur 8 (tur REF_FARKLI): eylem yok."""
+    kimlik = ref.get("kimlik")
+    if kimlik:
+        aday = [o for o in ogeler if _oge_kimligi(o) == list(kimlik)]
+    else:
+        aday = [o for o in ogeler if o.get("yol") is not None and list(o["yol"]) == list(ref.get("yol") or [None])]
+    if not aday:
+        raise Dur(8, _("ref'teki öge artık yok (arayüz değişti): eylem yapılmadı; observe çağırıp yeni ref kullan"),
+                  tur=REF_YOK)
+    o = aday[0]
+    k1 = _kutu(o)
+    k2 = [float(v) for v in ref["kutu"]] if ref.get("kutu") else None
+    neden = None
+    if (o.get("ad") or "") != (ref.get("ad") or ""):
+        neden = _("adı değişti")
+    elif o.get("rol") != ref.get("rol"):
+        neden = _("rolü değişti")
+    elif k2 is not None and (k1 is None or any(abs(a_ - b_) > REF_PAYI for a_, b_ in zip(k1, k2))):
+        neden = _("yeri/boyutu değişti")
+    if neden:
+        raise Dur(8, _("ref'teki öge farklı ({neden}): eylem yapılmadı; observe çağırıp yeni ref kullan").format(
+            neden=neden), tur=REF_FARKLI)
+    return o
+
+
 def _oge_secimi(a, ogeler, sure):
-    """Ada göre ögeyi seç (fare ve eylem yolu AYNI): bulunamadı 6, birden çok 5, --sira, devre dışı 6. → (öge, kademe)."""
+    """Ada göre ögeyi seç (fare ve eylem yolu AYNI): bulunamadı 6, birden çok 5, --sira, devre dışı 6. → (öge, kademe).
+    a.ref_oge varsa ad aranmaz: kimlikle seçilip doğrulanır (ref_oge_sec)."""
+    ref = getattr(a, "ref_oge", None)
+    if ref:
+        o = ref_oge_sec(ogeler, ref)
+        if not o["etkin"]:
+            raise Dur(6, _("'{ad}' devre dışı (tıklanamaz)").format(ad=o["ad"]))
+        return o, "ref"
     bulunan, kademe = erisim_ara(ogeler, a.ad, a.rol)
     if not bulunan:
         from . import web
@@ -819,7 +945,8 @@ def k_ogeye_tikla(a):
         w = _web_sec(a, "fare")  # tarayıcı penceresi: önce sayfa ögeleri (tarayıcının erişilebilirlik ağacı)
         if w is not None:
             return _web_tikla(g, a, w, mod)
-        ogeler, sure = erisim_ogeleri(a.kimlik)
+        ref = bool(getattr(a, "ref_oge", None))
+        ogeler, sure = erisim_ogeleri(a.kimlik, kimlik_ver=ref)
         o, kademe = _oge_secimi(a, ogeler, sure)
         # öge bulunduktan SONRA tek onay: istek ögenin adını, noktadaki yazıyı ve çevresinin görüntüsünü taşır
         yakin = nokta_metni(a.kimlik, o["cx"], o["cy"])
@@ -828,7 +955,7 @@ def k_ogeye_tikla(a):
             guvenlik.yapistirma_engel(a.kimlik, a.onayli)
         if getattr(g, "onay_hedefi", None):  # panelden onaylandı: öge ağaçta hâlâ aynı yerde ve aynı mı
             def yeniden():
-                ogeler2, sure2 = erisim_ogeleri(a.kimlik)
+                ogeler2, sure2 = erisim_ogeleri(a.kimlik, kimlik_ver=ref)
                 return _oge_secimi(a, ogeler2, sure2)[0]
             _onay_sonrasi_oge(g, o, yeniden, yakin)
         print(_("bulundu: {rol} '{ad}' ({x},{y}) {kademe} eşleşme, {sn} sn").format(
@@ -895,7 +1022,7 @@ def _eylem_baglami(a, tur="fare"):
     sistem_istemi_engel(a.kimlik, getattr(a, "onayli", False),
                         _("erişilebilirlik eylemi") if tur == "fare" else _("değer yazma"), goruntu_al=False)
     _atspi_korumalari(a.kimlik, a.baslik, tur)  # ağaca bile bakmadan: yasak/kilitli pencerede hiçbir şey
-    ogeler, sure = erisim_ogeleri(a.kimlik)
+    ogeler, sure = erisim_ogeleri(a.kimlik, kimlik_ver=bool(getattr(a, "ref_oge", None)))
     o, kademe = _oge_secimi(a, ogeler, sure)
     return o, kademe, sure
 
@@ -914,27 +1041,54 @@ def _web_sec(a, tur):
     from . import web
     from .hata import ARAC_EKSIK
     k = a.kimlik
-    if not web.tarayici_mi(k):
+    ref = getattr(a, "ref_oge", None)
+    if ref and ref.get("kaynak") != "web":
+        return None  # ref genel ağaçtan: sayfaya bakılmaz (aynı kaynaktan doğrulanır)
+    if not ref and not web.tarayici_mi(k):
         return None
     web.hazirla(k)  # yasak pencere 10 + erişilebilirlik veri yolu
     rol = getattr(a, "rol", None)
-    try:
+    if ref:  # kimlikle bul + ad/rol/kutu doğrula; hiçbir hata yutulmaz (genel ağaca düşülmez)
+        oge, sayfa, sure, idx = _web_ref(k, ref)
+        if not oge["gorunur"]:
+            raise Dur(8, _("ref'teki öge artık görüş alanında değil: eylem yapılmadı; observe çağırıp yeni ref kullan"),
+                      tur=REF_FARKLI)
+    else:
         try:
-            oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, rol, a.sira, True, yol_ver=True)
+            try:
+                oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, rol, a.sira, True, yol_ver=True)
+            except Dur as e:
+                if e.kod != 6:
+                    raise
+                oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, rol, a.sira, False, yol_ver=True)
         except Dur as e:
-            if e.kod != 6:
-                raise
-            oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, rol, a.sira, False, yol_ver=True)
-    except Dur as e:
-        if e.kod in (6, ARAC_EKSIK):
-            return None
-        raise
+            if e.kod in (6, ARAC_EKSIK):
+                return None
+            raise
     if tur == "fare" and not sayfa.get("konum_dogrulandi"):
         raise Dur(2, _("öge konumu doğrulanamadı (erişilebilirlik çerçeve sınırı pencere geometrisine uymuyor); "
                        "tıklanmadı. OCR ile metne tıklamayı dene (click-text)"), tur=web.KONUM_HATA_TURU)
     if "devre_disi" in oge["durum"]:
         raise Dur(6, _("'{ad}' devre dışı (tıklanamaz)").format(ad=oge["ad"]))
     return {"oge": oge, "sayfa": sayfa, "idx": idx, "sure": sure}
+
+
+def _web_ref(k, ref, gorunur=False):
+    """Web ref'i: sayfada kimliğiyle (_bus + _yol) bul ve doğrula → (öge, sayfa, süre, sıra)."""
+    from . import web
+    s = web.oku(k, roller=[ref["rol"]] if ref.get("rol") else None, gorunur=gorunur, en_cok=0, ad_siniri=0,
+                ayrinti=False, yol_ver=True)
+    o = ref_oge_sec(s["ogeler"], ref)
+    return o, s["sayfa"], s["sure"], s["ogeler"].index(o)
+
+
+def _web_yeniden(a, w, gorunur):
+    """Onaydan/kaydırmadan sonra aynı web ögesini yeniden oku: ref varsa kimlikle, yoksa ad + sıra ile."""
+    from . import web
+    ref = getattr(a, "ref_oge", None)
+    if ref:
+        return _web_ref(a.kimlik, ref, gorunur)
+    return web.oge_ve_sayfa(a.kimlik, a.ad, getattr(a, "rol", None), w["idx"] + 1, gorunur, yol_ver=True)
 
 
 def _web_gorunur_yap(g, a, w):
@@ -969,7 +1123,7 @@ def _web_gorunur_yap(g, a, w):
         kaydir_ic(g, k, a.baslik, yon, adim, (int(gx + gw / 2), int(gy + gh / 2)))
         tur += 1
         time.sleep(0.4)  # yumuşak kaydırma bitsin
-        oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, getattr(a, "rol", None), idx + 1, False, yol_ver=True)
+        oge, sayfa, sure, idx = _web_yeniden(a, {**w, "idx": idx}, False)
         if not sayfa.get("konum_dogrulandi"):
             raise Dur(2, _("öge konumu doğrulanamadı; tıklanmadı"), tur=web.KONUM_HATA_TURU)
         o, w = oge, {**w, "oge": oge, "sayfa": sayfa, "idx": idx}
@@ -1029,9 +1183,7 @@ def _web_tikla(g, a, w, mod):
     yakin = nokta_metni(k, cx, cy)
     hassas_nokta(g, k, a.onayli, _("tıklama"), cx, cy, yakin, ek_metinler=(a.ad, o["ad"]), ek_basliklar=basliklar)
     if getattr(g, "onay_hedefi", None):  # panelden onaylandı: sayfadaki öge hâlâ aynı mı (yazısız düğme dahil)
-        from . import web
-        _onay_sonrasi_oge(g, o, lambda: web.oge_ve_sayfa(k, a.ad, getattr(a, "rol", None), w["idx"] + 1, True,
-                                                         yol_ver=True)[0], yakin)
+        _onay_sonrasi_oge(g, o, lambda: _web_yeniden(a, w, True)[0], yakin)
     print(_("bulundu: web {rol} '{ad}' ({x},{y}) {konum}, {sn} sn").format(
         rol=o["rol"], ad=o["ad"], x=cx, y=cy, konum=sayfa.get("konum"), sn=f"{w['sure']:.2f}"))
     tikla_ic(g, k, a.baslik, cx, cy, a.dugme, sec().geometri(k), mod=mod)
@@ -1057,7 +1209,7 @@ def _web_eylem(a, w):
     _atspi_korumalari(k, a.baslik, "fare")  # onay beklenmiş olabilir
     if onayli:  # onay beklenirken sayfa değişmiş olabilir: aynı öge (ad, rol, nesne adresi, konum) değilse eylem yok
         try:
-            o2 = web.oge_ve_sayfa(k, a.ad, getattr(a, "rol", None), w["idx"] + 1, False, yol_ver=True)[0]
+            o2 = _web_yeniden(a, w, False)[0]
         except Dur as e:
             if e.kod in (10, 12, 13, 15):
                 raise
@@ -1065,6 +1217,8 @@ def _web_eylem(a, w):
         if not _ayni_oge(o, o2):
             raise Dur(10, _("onay verilen hedef değişti: öge '{ad}' artık aynı yerde/aynı değil; eylem yapılmadı"
                             ).format(ad=o["ad"]), tur="hedef-degisti")
+    from . import gonderim
+    gonderim.artir()  # eylem çağrısı yarıda kalsa da "belki gitti" (MCP sent)
     r = web.eylem_yap(k, o, a.eylem or None)
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']} (web)" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:
@@ -1107,6 +1261,8 @@ def _ogeye_eylem(a):
     if onayli:
         etiket += " --onayli"
     _atspi_korumalari(k, a.baslik, "fare")  # onay beklenmiş olabilir: pencere/başlık/DUR/ekran korumasını yeniden doğrula
+    from . import gonderim
+    gonderim.artir()  # eylem çağrısı yarıda kalsa da "belki gitti" (MCP sent)
     r = _atspi_calistir(_oge_istegi(k, o, "eylem", eylem=eylem_adi))
     _atspi_gunluk(k, etiket, f"atspi action {r['eylem']}" + ("" if r["tamam"] else " (reddedildi)"))
     if not r["tamam"]:
@@ -1140,7 +1296,10 @@ def k_ogeye_yaz(a):
             etiket += "" if etiket.endswith(" --onayli") else " --onayli"
     _atspi_korumalari(k, a.baslik, "klavye")  # onay beklenmiş olabilir
     ucbirim.tampon_isle(sec(), k, kirli=True)  # değer doğrudan yazıldı: satırın içeriği artık bilinmez
+    from . import gonderim
+    gonderim.artir()  # değer yazma yarıda kalsa da "belki gitti" (MCP sent)
     r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
+    gonderim.not_yaz("dogrulandi", r.get("dogrulandi"))
     goster = f"***({len(metin)})" if gizli else repr(metin if len(metin) <= 200 else metin[:197] + "…")
     _atspi_gunluk(k, etiket, f"atspi set-text {goster}")
     print(_("yazıldı: {rol} '{ad}' ← {karakter} karakter ({yontem}){dogrulandi}, {kademe} eşleşme").format(

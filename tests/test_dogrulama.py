@@ -257,9 +257,9 @@ alanlar = list(cs)
 kontrol("şema: modifiers imzada button'ın HEMEN ardında", alanlar.index("modifiers") == alanlar.index("button") + 1,
         str(alanlar))
 dr = araclar.get("drag")
-kontrol("şema: drag aracı var; window/from/to/shot_id zorunlu", dr is not None and
-        set(dr.input_schema.get("required", [])) >= {"window", "from_x", "from_y", "to_x", "to_y", "shot_id"} and
-        {"hold_s", "button", "desktop"} <= set(dr.input_schema["properties"]), str(dr and dr.input_schema))
+kontrol("şema: drag aracı var; uçlar from_ref/to_ref YA DA from_x/from_y/to_x/to_y + shot_id (Faz 10: ref)",
+        dr is not None and {"window", "from_ref", "to_ref", "from_x", "from_y", "to_x", "to_y", "shot_id", "hold_s",
+                            "button", "desktop"} <= set(dr.input_schema["properties"]), str(dr and dr.input_schema))
 adlar = list(araclar)
 kontrol("şema: drag, scroll'dan hemen sonra", adlar.index("drag") == adlar.index("scroll") + 1, str(adlar))
 kontrol("yönerge: changed_region, warning, drag, modifiers, triple anlatılıyor",
