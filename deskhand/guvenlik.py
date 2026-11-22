@@ -633,7 +633,8 @@ def _komut_riski(kom, degiskenler, derinlik):
                 if komut == "eval" or re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a):
                     nedenler += _metin_riskleri(" ".join(arg[j + (0 if komut == "eval" else 1):]), derinlik + 1)
                     break
-            if any("curl" in x or "wget" in x for x in kom.ic):  # bash <(curl …), sh -c "$(curl …)"
+            if any(_yol_adi(w) in ("curl", "wget") for x in kom.ic for hat in _ayristir(x) for k_ in hat
+                   for w in k_.kelimeler):  # bash <(curl …), sh -c "$(curl …)" (tırnaklı/kaçışlı yazım dahil)
                 nedenler.append(_("indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)"))
         if _YORUMLAYICI.fullmatch(komut):  # python3 -c KOD, perl -e KOD …
             for j, a in enumerate(arg):
@@ -974,14 +975,17 @@ def hedef_goruntusu(k, nokta=None):
 
         from .gorsel import pencere_goruntusu
         if nokta is None:
-            im, _geo, _kok = pencere_goruntusu(k)
+            im, _geo, kok = pencere_goruntusu(k)
+            bolge = (kok[0], kok[1], im.width, im.height)
             im = im.copy()
             im.thumbnail((640, 400))
+            im.info["deskhand_bolge"] = bolge  # kırpılan bölge (pencere pikseli): onay sonrası doğrulama için
             return im
         x, y = round(nokta[0]), round(nokta[1])
         gw, gh = ONAY_GORUNTU
         im, _geo, (bx, by) = pencere_goruntusu(k, (x - gw // 2, y - gh // 2, gw, gh))
         im = im.convert("RGB")
+        im.info["deskhand_bolge"] = (bx, by, im.width, im.height)
         d = ImageDraw.Draw(im)
         px, py = x - bx, y - by
         d.rectangle([px - 14, py - 14, px + 14, py + 14], outline=(230, 30, 30), width=3)

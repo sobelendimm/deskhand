@@ -82,9 +82,25 @@ def _paylasilan():
     return getattr(_DIZI, "g", None)
 
 
+def _bekleyen_onay_kapisi():
+    """Başka bir süreç (ör. MCP sunucusu) bu masaüstü için insan onayı beklerken bu süreç girdi göndermesin: onay
+    diyaloğundaki hedef araya giren girdiyle değişebilirdi → Dur 7. `onay.bekleyen_var` yoksa (eski onay modülü) yok."""
+    try:
+        from . import onay
+    except Exception:  # noqa: BLE001
+        return
+    f = getattr(onay, "bekleyen_var", None)
+    if f is None:
+        return
+    import os
+    if f(_au().ad, haric_pid=os.getpid()):
+        raise Dur(7, _("onay bekleniyor: başka bir Deskhand sürecinin insan onayı sürerken girdi gönderilmez"))
+
+
 def girdi_al(etiket="", gizli=False):
     """Girdi nesnesi: arka ucun girdisi, üst katmanın güvenlik denetimi (guvenlik.denetle) bağlı."""
     guvenlik.eylem_basladi()
+    _bekleyen_onay_kapisi()
     pg = _paylasilan()
     if pg is not None:
         pg.etiket, pg.gizli = f"dizi: {etiket}", gizli
