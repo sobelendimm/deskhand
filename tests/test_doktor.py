@@ -98,8 +98,13 @@ class Sonuc:
         self.stdout, self.returncode = cikti, kod
 
 
+_qpa0 = os.environ.get("QT_QPA_PLATFORM")
+ortamlar = []
+
+
 def sahte_run(cmd, **k):
     cagrilar.append(list(cmd))
+    ortamlar.append((os.path.basename(cmd[0]), (k.get("env") or {}).get("QT_QPA_PLATFORM")))
     ad = os.path.basename(cmd[0])
     if ad == "kwin_wayland":
         return Sonuc("kwin 6.9.1\n")
@@ -119,6 +124,10 @@ doktor.shutil.which = lambda a: "/usr/bin/" + a
 s = doktor.satir_kwin()
 kontrol("KWin/Plasma: sürümler tek satırda", s["durum"] == "tamam" and "kwin 6.9.1" in s["ayrinti"] and
         "plasmashell 6.9.1" in s["ayrinti"], str(s))
+kontrol("KWin/Plasma yoklaması alt sürece QT_QPA_PLATFORM=offscreen verir (ekransız çökme/coredump yok)",
+        ("plasmashell", "offscreen") in ortamlar and ("kwin_wayland", "offscreen") in ortamlar, str(ortamlar))
+kontrol("offscreen YALNIZ alt sürece: süreç ortamı değişmedi", os.environ.get("QT_QPA_PLATFORM") != "offscreen" or
+        os.environ.get("QT_QPA_PLATFORM") == _qpa0)
 s = doktor.satir_erisim()
 kontrol("erişilebilirlik: IsEnabled true → tamam", s["durum"] == "tamam", str(s))
 sahte_a11y["durum"] = "b false"

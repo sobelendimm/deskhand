@@ -5,6 +5,8 @@ import argparse
 import os
 import sys
 
+from ..i18n import _
+
 
 def _sinyal_kur(app, cik) -> None:
     """SIGTERM/SIGINT/SIGHUP → düzgün çıkış (bekleyen onaylar reddedilir, panel.pid silinir). Yoklama yok:
@@ -31,6 +33,20 @@ def _sinyal_kur(app, cik) -> None:
     app._sinyal = (okur, yazar, bildirici)  # çöpe gitmesin
 
 
+AF_UNIX_SINIR = 107  # sockaddr_un.sun_path 108 bayt (sonlandırıcı NUL dahil): yol en çok 107 bayt
+
+
+def soket_acilamadi_iletisi(ad: str, dizin: str) -> str:
+    """"Panel soketi açılamadı" iletisi; soket yolu AF_UNIX sınırını aşıyorsa (çok uzun RUNTIME_DIR/XDG_RUNTIME_DIR)
+    nedeni ve çaresi (daha kısa bir çalışma dizini) iletiye eklenir."""
+    ileti = _("panel soketi açılamadı ({dizin})").format(dizin=dizin)
+    uzunluk = len(os.fsencode(ad))
+    if uzunluk > AF_UNIX_SINIR:
+        ileti += _(": soket yolu {uzunluk} bayt, AF_UNIX sınırı {sinir}; DESKHAND_RUNTIME_DIR'i daha kısa bir "
+                   "dizine ayarla").format(uzunluk=uzunluk, sinir=AF_UNIX_SINIR)
+    return ileti
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="deskhand panel", description="Deskhand izleme/yönetme paneli")
     ap.add_argument("--tepsi", action="store_true", help="pencereyi açma, yalnız tepsi simgesi (oturum açılışı)")
@@ -52,7 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         from .panel import baska_panel_var
         if onay.panel_canli() or baska_panel_var():
             return 0  # çalışan panel öne getirildi
-        print(f"panel soketi açılamadı ({yollar.runtime_dir()})", file=sys.stderr)
+        from .panel import soket_adi
+        print(soket_acilamadi_iletisi(soket_adi(), yollar.runtime_dir()), file=sys.stderr)
         return 1
     p = Panel(app, sunucu, girdi_merkezi=True)
     _sinyal_kur(app, p.cik)
