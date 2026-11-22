@@ -330,6 +330,7 @@ def ayristirici(prog=None, sessiz=False):
               allow_abbrev=False)
     secenek(p, "-b", "--baslik", default=None, help=h_("başlık kilidi (regex)"))
     secenek(p, "-s", "--sinif", default=None, help=h_("pencere sınıfı kilidi (regex), ör. krunner"))
+    p.add_argument("--version", action="version", version=f"deskhand {__version__}", help=h_("sürümü yaz ve çık"))
     alt = p.add_subparsers(dest="komut", required=True, metavar=_("KOMUT"))
     secenek(ortak, "--arka", action="store_true", default=argparse.SUPPRESS,
             help=h_("görünmez ikinci masaüstünde (sanal arka uç)"))
