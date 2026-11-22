@@ -29,6 +29,32 @@ def temizle():
                 except OSError:
                     pass
     _kirp(os.path.join(yollar.state_dir(), "bildirimler.jsonl"))
+    _yarim_yazim_supur()
+
+
+def _yarim_yazim_supur(azami_yas: float = 60.0) -> None:
+    """RUNTIME_DIR'da yarıda kalmış atomik yazımlar (`insan-dogrulama.json.<pid>.tmp`; yazan süreç çökünce kalır):
+    yazanı ölmüş ya da azami_yas sn'den eski olanlar silinir. Canlı sürecin taze geçici dosyasına dokunulmaz."""
+    import re
+    from .hata import calisma_dizini
+    try:
+        kok = calisma_dizini()
+        adlar = os.listdir(kok)
+    except OSError:
+        return
+    simdi = time.time()
+    for ad in adlar:
+        m = re.fullmatch(r"insan-dogrulama\.json\.(\d+)\.tmp", ad)
+        if not m:
+            continue
+        yol = os.path.join(kok, ad)
+        try:
+            st = os.lstat(yol)
+            canli = os.path.exists(f"/proc/{int(m.group(1))}")
+            if not canli or simdi - st.st_mtime > azami_yas:
+                os.remove(yol)
+        except (OSError, ValueError):
+            pass
 
 
 def _kirp(yol, azami=2 * 1024 * 1024, kalan=1024 * 1024):

@@ -171,6 +171,19 @@ def _agac_kopyala(kaynak: str, hedef: str, disla: set) -> int:
     return sayac
 
 
+def izinleri_daralt(kok: str) -> None:
+    """Kopyadaki her dosyayı 0600, her dizini 0700 yap (shutil.copyfile umask'la 0644 bırakıyordu: çerez/anahtar
+    deposu kopyaları başka kullanıcıya açık olmasın; üst dizin zaten 0700). Sembolik bağlara dokunulmaz."""
+    for k, dizinler, dosyalar in os.walk(kok):
+        for ad, kip in [(d, 0o700) for d in dizinler] + [(f, 0o600) for f in dosyalar]:
+            y = os.path.join(k, ad)
+            try:
+                if not os.path.islink(y):
+                    os.chmod(y, kip)
+            except OSError:
+                pass
+
+
 def _dizin_boyutu(yol: str) -> int:
     toplam = 0
     for kok, _, dosyalar in os.walk(yol):
@@ -335,7 +348,25 @@ def sinir_uygula(azami_sayi: int = KOPYA_AZAMI_SAYI, azami_bayt: int = KOPYA_AZA
                 not _bekci.kullanilanlar([g["yol"]]) and _sil(g):
             silinen.append(g["yol"])
             kalan.remove(g)
+    global _SON_UYARI
+    _SON_UYARI = None
+    if asildi():  # canlılar silinmez: yalnız uyar (tarayıcı önbelleği/indirmeler RUNTIME_DIR'ı doldurabilir)
+        from ..gunluk import gunluk
+        from ..i18n import _
+        mb, sayi = sum(g["boyut"] for g in kalan) // (1024 * 1024), len(kalan)
+        _SON_UYARI = _("açık oturum kopyaları sınırı aşıyor ({sayi} kopya, {mb} MB; sınır {azami_sayi} kopya / "
+                       "{azami_mb} MB): kullanılmayan arka plan tarayıcılarını kapatın").format(
+            sayi=sayi, mb=mb, azami_sayi=azami_sayi, azami_mb=azami_bayt // (1024 * 1024))
+        gunluk(f"oturum: kopya sınırı aşıldı ({sayi} kopya, {mb} MB); canlı kopyalar silinmedi")
     return silinen
+
+
+_SON_UYARI: str | None = None
+
+
+def son_uyari() -> str | None:
+    """Son sinir_uygula çağrısının uyarısı (canlı kopyalar sınırı aşıyorsa) ya da None."""
+    return _SON_UYARI
 
 
 def bos_alan_denetle(kok: str, en_az: int = EN_AZ_BOS_BAYT) -> None:

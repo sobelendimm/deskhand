@@ -607,8 +607,18 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     doğrular ve ana makine kaydını yazmaz (`DESKHAND_AD_ALANI=1`); örnek kafesten çıkmışsa kapatır. Flatpak'in yazdıkları
     (`~/.var/app`) boş ev tmpfs'inde kalır (atılır); kullanıcı kurulumu (`~/.local/share/flatpak`) salt okunur.
   - **Ölçüldü:** Firefox (boş geçici profil + oturum kopyası benzeri kopya) iki türde açılıyor, sayfa yüklüyor, WebGL
-    KWin türünde donanımda (tümleşik GPU), erişilebilirlik ağacı sunuyor, indirdiği dosya gerçekten `~/İndirilenler`'e
-    yazılıyor; Qt test penceresi; tık/yazı süreleri değişmedi. Ayrıntı `tests/test_denetim12c.py`.
+    KWin türünde donanımda (tümleşik GPU), erişilebilirlik ağacı sunuyor; Qt test penceresi; tık/yazı süreleri
+    değişmedi. Ayrıntı `tests/test_denetim12c.py`. İndirme: oturum KOPYASI Firefox'u kendi `XDG_CONFIG_HOME`'uyla
+    (`<kopya>/.xdg-config`) çalışır; oraya kullanıcının `user-dirs.dirs`/`user-dirs.locale`/`mimeapps.list` ve
+    GTK/fontconfig görünümü (0600) kopyalanır ve user.js `browser.download.dir` = XDG İndirilenler (görev kipinde görev
+    klasörü) yazar. 0.9.0'dan önce bu dosyalar yoktu ve indirmeler ad alanının geçici `~/Downloads`'ına gidip tarayıcı
+    kapanınca kayboluyordu (gerçek olay; ad alanında GLib sınaması `tests/test_oturum_tamir.py`).
+  - **Arka planda görünmeyenler:** `/tmp` (boş tmpfs: `/tmp/claude-*`, scratchpad dahil), XDG dışı ev klasörleri ve
+    kullanıcı `~/Downloads` (XDG adı başkaysa) uygulamaya GÖRÜNMEZ. Dosya seçiciye/yüklemeye verilecek dosyayı
+    `~/İndirilenler` gibi bir XDG klasörüne koyun ve tam yolu dosya iletişim kutusunda Ctrl+L ile yazın.
+  - **Önbellek:** kopyalar RUNTIME_DIR'da (bellek) durur; Firefox disk önbelleği 64 MB (user.js
+    `browser.cache.disk.capacity`), Chromium `--disk-cache-size`. Canlı kopyalar sayı/boyut sınırını aşınca silinmez,
+    açıklamaya uyarı eklenir.
 
   **Neyi korumaz (bilerek / kalan riskler):**
   - **Okuma:** uygulama XDG veri klasörlerini (belgeler, indirilenler, masaüstü…) ve beyaz listedeki görünüm
@@ -810,6 +820,19 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   çevirir (`[9]`); `mcp_adlari` CLI seçeneklerini MCP parametre adlarına çevirir.
 - **İnsan önceliği**: pencere sonrası tek kısa 'aktif' (`YANSIMA_PAY` 0,5 sn, `YANSIMA_SURE` 0,04 sn) için yerleşme
   beklenir; etkinlik yardımcısı v1 bildirirse izleyici yok sayılır.
+### Masaüstü sahipliği (CLI) ve masaüstü seçimi (0.9.0)
+- `desktop start` ve `open --background`'ın kendiliğinden açtığı masaüstü, çağıranın ata zincirindeki en yakın
+  `claude` sürecine yazılır (`masalar.cli_sahiplen`; sahip dosyası türü `cli`; insan/görev kipi/panel hariç). Başka
+  Claude oturumu → 14; sahibi ölen adlı `cli` masaüstü `oto` gibi süpürülür (`masaustu.oto_temizle`). `desktop stop`
+  adlı masaüstünün `masa/<ad>` dizinini siler (canlı MCP sahibi yoksa).
+- MCP otomatik bağlanma: varsayılan masaüstü sahipsiz ama canlı ve kafesinde uygulama (en üst `bwrap` süreci,
+  `masaustu.uygulama_pidleri`) varsa DOLU sayılır → `oturum-N` (masaüstünü aynı Claude oturumu açtıysa — durum
+  kaydındaki `baslatan_ajan` ata zincirinde — paylaşılır).
+- CLI: `--desktop-name AD` komut adına kadar her konumda ve komuttan sonra kabul; verilmişse (ya da
+  `DESKHAND_MASAUSTU`) hedef kendiliğinden arka plandır. zsh notu: boşluklu değişken bölünmez —
+  `export DESKHAND_HEDEF=arka DESKHAND_MASAUSTU=ad` ya da dizi kullanın (`ENV="A=1 B=2"; $ENV komut` çalışmaz).
+- Kimlik oturumu kopyasında Microsoft/Google ÇIKIŞ adreslerine gitme henüz onay istemiyor (açık iş; kopyadan çıkış
+  sağlayıcıda asıl oturumu da kapatabilir — kimlik izni açıkken kopyada çıkış yapmayın).
 
 ## 5. Çıkış kodları
 0 tamam · 1 kullanım hatası · 2 nokta pencere/ekran dışında · 3 aktif değil/başka pencere · 4 başlık/sınıf kilidi

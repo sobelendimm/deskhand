@@ -48,6 +48,35 @@
   sızıntısı yok); öncelik bekçisi kafesin geçici okunamamasını "boş" sanmaz.
 - **Düzeltme: KDE.** Kapalı monitör ekran alanını büyütmez; klavye düzeni önbelleği kxkbrc değişince yenilenir;
   ext-idle-notify v1'e düşülürse klavye izleyicisi yok sayılır (yalnız fare izlenir).
+- **Düzeltme: arka plan Firefox'unda indirilenler kayboluyordu.** Kopyanın kendi `XDG_CONFIG_HOME`'unda
+  `user-dirs.dirs` yoktu: GTK "Masaüstü" var olmayan `~/Desktop`'u gösteriyor, İndirilenler çözülmüyor, Firefox ad
+  alanındaki geçici `~/Downloads`'a indiriyordu (tarayıcı kapanınca siliniyordu). Artık kopyaya kullanıcının
+  `user-dirs.dirs` / `user-dirs.locale` / `mimeapps.list` ve GTK/fontconfig görünümü (0600) alınır; user.js indirme
+  klasörünü (`browser.download.dir`, `folderList=2`) XDG İndirilenler'e sabitler; görev kipinde görevin indirme
+  klasörü. Flatpak Electron kopyasında da aynı.
+- **Düzeltme: oturum çerezleri arka plan kopyasına gerçekten taşınıyor.** recovery.jsonlz4'ten eklenen çerezler
+  `expiry=0` ile yazılıyordu (Firefox açılışta "süresi geçmiş" diye atıyordu) ve bölümlenmiş/kapsayıcı bağlamları
+  (`partitionKey`, `userContextId`) kayboluyordu. Artık bitiş = şimdi + 1 gün (birim mevcut satırlardan), bağlam
+  Firefox sonek biçiminde; çevrilemeyen bağlam (gizli pencere) atlanır.
+- Kopya kapanış uyarısı yalnız kimlik sağlayıcılarını (Google/Microsoft/e-Devlet) gösterir ve "asıl profil
+  değiştirilmedi" der; diğer sitelerin değişen çerezleri yalnız günlükte.
+- **Masaüstü sahipliği komut satırında da.** `desktop start` ve `open --background`'ın kendiliğinden açtığı masaüstü,
+  çağıranın ata zincirinde claude varsa o Claude oturumuna yazılır: başka Claude oturumları ona erişemez/kapatamaz
+  (14); sahibi ölen adlı masaüstü kendiliğinden kapatılır (sızan masaüstleri 3'lük sınırı yemesin). MCP otomatik
+  bağlanırken sahipsiz ama içinde uygulama çalışan varsayılan masaüstünü dolu sayar ve `oturum-N` açar.
+  `desktop stop` adlı masaüstünün dizinini de siler.
+- **`--desktop-name` her yerde.** Komuttan önce herhangi bir konumda (`--background --desktop-name X windows`,
+  `-b DESEN --desktop-name X …`) ve komuttan sonra (`windows --desktop-name X`); `desktop … --desktop-name X`
+  (`--name` takma adı). `--desktop-name` / `DESKHAND_MASAUSTU` artık kendiliğinden arka plan demek (`--background`
+  olmadan kullanıcının gerçek pencereleri listeleniyordu). Kapalı/yanlış adlı masaüstü: "'X' adlı görünmez masaüstü
+  açık değil (açık olanlar: …)". `DESKHAND_GERCEK_EKRAN=kapali` iken gerçek oturumun `windows` / `a11y` listesi 17.
+- `desktop` kullanım hatasında çıkış kodu 1 (argparse'ın 2'si Deskhand'de "nokta pencere dışında" demek); açık
+  masaüstü farklı ölçekle istenince çıkış 1 + JSON `olcek_uyusmaz`.
+- `scroll KİMLİK X Y [yön] [ADIM]` biçimi ve `--at x,y` takma adı; tek sayısal ikinci argümanda ipuçlu hata.
+  **Varsayılan kaydırma adımı 5 → 3** (MCP `scroll(amount)` ile aynı).
+- Arka plan tarayıcı önbelleği 64 MB ile sınırlı (Firefox user.js, Chromium `--disk-cache-size`): kopyalar
+  RUNTIME_DIR'ı (bellek) doldurmasın; canlı kopyalar sınırı aşınca uyarı. Kopya dosyaları 0600.
+- Yarıda kalmış `insan-dogrulama.json.<pid>.tmp` dosyaları açılış temizliğinde silinir.
 
 ## 0.8.2 (22 Kasım 2026)
 

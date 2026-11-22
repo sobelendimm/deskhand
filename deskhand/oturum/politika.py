@@ -41,6 +41,20 @@ KIMLIK_ALANLARI = {
 KIMLIK_ADLARI = {"microsoft": "Microsoft", "google": "Google", "edevlet": "e-Devlet"}  # özel ad: çevrilmez
 _VARSAYILAN_AD = "_varsayilan"
 
+
+def kimlik_alani_mi(alan: str) -> bool:
+    """Alan (çerez alanı, baştaki nokta önemsiz) bir kimlik sağlayıcısının merkezi kimlik alanı ya da onun üst alanı mı
+    (".google.com" çerezi accounts.google.com'a da gider). Kapanış uyarısı yalnız bunları kullanıcıya gösterir."""
+    alan = (alan or "").strip().lower().lstrip(".").rstrip(".")
+    if not alan:
+        return False
+    for kaliplar in KIMLIK_ALANLARI.values():
+        if _alan_eslesir(alan, kaliplar):
+            return True
+        if any("*" not in k and (k == alan or k.endswith("." + alan)) and "." in alan for k in kaliplar):
+            return True
+    return False
+
 # Paket içindeki varsayılan politika (yollar.PAKET_DIZIN = .../deskhand)
 _PAKET_TOML = os.path.join(yollar.PAKET_DIZIN, "data", "oturum.toml")
 

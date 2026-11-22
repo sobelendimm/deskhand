@@ -146,7 +146,8 @@ def hazirla(uygulama: str, gorev_siteleri=None, ham_komut: bool = False) -> Hazi
     return Hazirlik(karar="kopya", argv=b.get("argv", []), env_ek=b.get("env_ek", {}),
                     kopya_yolu=b.get("kopya_yolu"), gerekli_keyring=pol.keyring,
                     aciklama=_("{ad} kopyası hazır").format(ad=ad) + (f"; {b['kimlik_metni']}" if b.get("kimlik_metni")
-                                                                     else ""), ayrinti=ayrinti, ev=pol.ev)
+                                                                     else "")
+                    + (f"; {kopya.son_uyari()}" if kopya.son_uyari() else ""), ayrinti=ayrinti, ev=pol.ev)
 
 
 def temizle(kopya_yolu: str) -> None:
@@ -278,10 +279,13 @@ def _kapanis_ic() -> list[str]:
             degisen = degisim_bildir(once, cerez_parmak(yol))
         except (OSError, ValueError):
             degisen = []
-        if degisen:
-            u = N_("oturum: {ad} kopyasında şu sitelerin oturum çerezleri yenilendi; asıl tarayıcıda yeniden giriş "
-                   "gerekebilir: {siteler}")
-            uyarilar.append(_(u).format(ad=ad, siteler=", ".join(degisen[:10])))
-            gunluk(u.format(ad=ad, siteler=", ".join(degisen[:10])))  # günlük Türkçe kalır
+        if degisen:  # günlüğe hepsi (Türkçe kalır); kullanıcıya yalnız kimlik sağlayıcıları (gürültü azaltma)
+            gunluk(f"oturum: {ad} kopyasında oturum çerezleri değişti (asıl profil değiştirilmedi): "
+                   f"{', '.join(degisen[:20])}")
+            kimlik = [a for a in degisen if politika.kimlik_alani_mi(a)]
+            if kimlik:
+                uyarilar.append(_("oturum: {ad} kopyasında kimlik oturumu çerezleri yenilendi ({siteler}); asıl profil "
+                                  "değiştirilmedi, ama sağlayıcı eski oturumu kapattıysa asıl tarayıcıda yeniden giriş "
+                                  "gerekebilir").format(ad=ad, siteler=", ".join(kimlik[:10])))
         temizle(yol)
     return uyarilar

@@ -184,7 +184,7 @@ class KwinArkaUc(ArkaUc):
         """Çalışan KWin oturumunun kaydı (PID + soket doğrulamalı) + bağlantı kapısı. Kapalı / başka tür → Dur 14."""
         d = masaustu.durum(saglik=False)
         if d is None or masaustu.tur(d) != "kwin":
-            raise Dur(SANAL_KAPALI, _("sanal masaüstü kapalı (deskhand masaustu baslat)"))
+            raise _kapali_hatasi()
         from .. import gorev_kipi
         gorev_kipi.masaustu_kapisi(d)  # görev masaüstü ↔ kipsiz istemci ayrımı (Dur 14)
         return kwin_oturum.baglanti_denetle(d)  # GÜVENLİ kayıt: yollar oturum dizininden, karşı taraf doğrulanmış
@@ -883,3 +883,7 @@ class KwinGirdi:
         self.izle_bitir()
         self._hepsini_birak()
 
+
+def _kapali_hatasi():
+    from .. import masaustu
+    return masaustu.kapali_hatasi()
