@@ -1,4 +1,4 @@
-"""İnsan doğrulaması (CAPTCHA) sınamalarını ALGILAR; ÇÖZMEZ, atlatmaz (docs/ARCHITECTURE.md §13).
+"""İnsan doğrulaması (CAPTCHA) sınamalarını ALGILAR; ÇÖZMEZ, atlatmaz (docs/ARCHITECTURE.md §12).
 
 Politika (değişmez): "insan olduğunuzu doğrulayın" sınamaları görsel, sesli ya da başka yolla çözülmez. Bu modül yalnız
 ALGILAR; araç katmanı (mcp_sunucu) algılanınca ajan girdisini REDDEDER (kod 18), `request_human` kullanıcıya DEVRETTİĞİNDE
@@ -647,7 +647,7 @@ def tara(k: str, baslik: str | None = None, kapi: bool = False) -> tuple[dict | 
     → (sonuç | None, okundu). Pencere tarayıcı değilse ya da sayfa okunamazsa okundu=False (mevcut durum KORUNUR: iki
     geçici zaman aşımı yanlış 'kayboldu' üretmesin); okunamayan pencere OKUNAMADI_TTL sn tekrar denenmez. Yasak (10) ve DUR
     (13) yükselir. kapi=True (girdi kapısı): erişilebilirlik KAPALIYSA tarayıcı penceresi için süreç başına BİR kez açılır
-    (erisim_ac_garanti; kde'de oturum geneli yan etki: docs/ARCHITECTURE.md §13); yine kapalıysa sayfa OKUNAMADI sayılır
+    (erisim_ac_garanti; kde'de oturum geneli yan etki: docs/ARCHITECTURE.md §12); yine kapalıysa sayfa OKUNAMADI sayılır
     (klavye_engeli: Tab sonrası girdi / tek başına Boşluk-Enter reddedilir) ve toplam süre TARAMA_SURESI ile sınırlı."""
     import contextlib
     from . import gozlem, web
@@ -701,7 +701,7 @@ _ERISIM_DENENDI = threading.Event()  # erişilebilirlik kapı için bu süreçte
 def _erisim_bir_kez_ac() -> None:
     """Kapı taramasında erişilebilirlik KAPALI: tarayıcıda sınama kutuları ancak ağaçtan okunur; bu yüzden süreç başına BİR kez
     açılır (erisim_ac_garanti). kde'de bu kullanıcının oturumunda erişilebilirliği açar (oturum geneli yan etki; `deskhand
-    a11y off` geri alır, docs/ARCHITECTURE.md §13); sanal masaüstünde yalnız özel veri yolu."""
+    a11y off` geri alır, docs/ARCHITECTURE.md §12); sanal masaüstünde yalnız özel veri yolu."""
     if _ERISIM_DENENDI.is_set():
         return
     _ERISIM_DENENDI.set()

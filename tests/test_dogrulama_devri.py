@@ -1,4 +1,4 @@
-"""İnsan doğrulaması (CAPTCHA) devri testleri (docs/ARCHITECTURE.md §13). CAPTCHA ÇÖZÜLMEZ: algıla → girdiyi reddet [18] →
+"""İnsan doğrulaması (CAPTCHA) devri testleri (docs/ARCHITECTURE.md §12). CAPTCHA ÇÖZÜLMEZ: algıla → girdiyi reddet [18] →
 kullanıcıya devret (request_human) → çözülünce devam.
 
 A) Saf birim: algı kalıpları/adresleri/başlıkları, yanlış pozitif örnekleri, girdi kapısı mantığı.

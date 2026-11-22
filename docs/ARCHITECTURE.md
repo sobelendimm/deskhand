@@ -968,7 +968,7 @@ sızıntısını sınırlar. `gorev.mcp_ortami()` → mcp.json `env` YALNIZ `{"D
   araçları örtülü) ve ilke (`forbid_open_with`) bu yolu zaten kapatır. `about:preferences` sayfası açılabilir ama
   okunamaz/girdi alamaz.
 
-## 13. İnsan doğrulaması (CAPTCHA) devri: algıla, reddet, devret, devam et
+## 12. İnsan doğrulaması (CAPTCHA) devri: algıla, reddet, devret, devam et
 
 **Politika (değişmez):** CAPTCHA / "insan olduğunuzu doğrulayın" sınamaları ÇÖZÜLMEZ ve atlatılmaz (görsel, sesli ya da
 başka yolla). Deskhand yalnız algılar, ajan girdisini reddeder, kullanıcıya devreder, çözülünce devam eder.
