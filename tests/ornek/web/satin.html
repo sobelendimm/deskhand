@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Deskhand Mağaza Testi</title>
+<style>
+  body { font: 15px sans-serif; margin: 16px; }
+  .urun { border: 1px solid #aaa; padding: 12px; width: 420px; }
+  .fiyat { font-size: 22px; margin: 8px 0; }
+  button { margin: 4px 6px 4px 0; padding: 6px 12px; }
+  .renkli { background: #2a7; color: #fff; border: 0; }
+</style>
+<script src="ortak.js"></script>
+</head>
+<body>
+<h1>Örnek ürün</h1>
+<div class="urun">
+  <p>Hayali bir ürün: Test Kupası (sentetik veri).</p>
+  <div class="fiyat">149,90 TL</div>
+  <label for="adet">Adet</label> <input id="adet" type="number" value="1" min="1" data-ad="Adet">
+  <div>
+    <button type="button" data-ad="Sepete ekle">Sepete ekle</button>
+    <button type="button" class="renkli" data-ad="Satın al">Satın al</button>
+    <button type="button" class="renkli" aria-label="Öde" data-ad="Öde">₺</button>
+    <button type="button" data-ad="Siparişi onayla">Siparişi onayla</button>
+    <button type="button" data-ad="Favorilere ekle">Favorilere ekle</button>
+  </div>
+  <p><a href="#iade" data-ad="İade koşulları">İade koşulları</a></p>
+</div>
+</body>
+</html>

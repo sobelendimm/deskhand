@@ -132,7 +132,7 @@ ORNEK = {  # komut → kimliksiz argümanlar
     "metin": [K], "metne-tikla": [K, "a"], "bekle": [K, "a"], "kapat": [K], "bas": [K, "w", "1"],
     "surukle": [K, "1", "2", "3", "4"], "fare": [K, "1", "2"], "dizi": [K], "uyu": ["0"], "renk-bul": [K, "yesil"],
     "renge-tikla": [K, "yesil"], "simge-kaydet": [K, "ad"], "simge-bul": [K, "ad"], "simgeye-tikla": [K, "ad"],
-    "ac": ["x"], "akis": [K, "ad"], "erisim": [], "agac": [K], "ogeye-tikla": [K, "ad"], "ogeye-yaz": [K, "ad", "metin"],
+    "ac": ["x"], "akis": [K, "ad"], "erisim": [], "agac": [K], "web": [K], "ogeye-tikla": [K, "ad"], "ogeye-yaz": [K, "ad", "metin"],
     "dur": [], "devam": [],
     "durum": [], "mesgul": [], "karar": ["görev"], "panel": [], "masaustu": ["durum"], "oturum": ["durum"],
     "mcp": [], "pano": ["read"], "pencere": [K, "move", "1", "2"], "doktor": [], "yardım": [],
@@ -191,6 +191,7 @@ CIFTLER = [
     (("find-icon", K, "ad", "--threshold", "0.8"), ("simge-bul", K, "ad", "--esik", "0.8")),
     (("scroll", K, "--point", "1,2"), ("kaydir", K, "--nokta", "1,2")),
     (("tree", K, "--role", "push button", "--all"), ("agac", K, "--rol", "push button", "--hepsi")),
+    (("web", K, "ad", "--role", "link", "--all", "--page", "2"), ("web", K, "ad", "--rol", "link", "--hepsi", "--sayfa", "2")),
     (("find-color", K, "green", "--min-pixels", "9"), ("renk-bul", K, "yesil", "--en-az", "9")),
 ]
 farkli = [(e[0], ayr(*e), ayr(*t)) for e, t in CIFTLER if ayr(*e) != ayr(*t)]

@@ -343,6 +343,34 @@ def agac_oku(k: str, sorgu: str | None = None, hepsi: bool = False, en_cok: int 
     return {"items": sonuc[:en_cok], "truncated": len(sonuc) > en_cok, "seconds": round(sure, 2)}
 
 
+def web_oku(k: str, sorgu: str | None = None, rol: str | None = None, gizliler: bool = False, en_cok: int = 80,
+            atla: int = 0, bekle: float = 0.0) -> dict:
+    """Tarayıcı penceresindeki web sayfası ögeleri (erişilebilirlik ağacı; OCR yok): {items: [{no, role, text, center,
+    state?, visible?, href?, value?, frame?, sensitive?}], total, next, page: {title, url, loading, sensitive_page?,
+    frames, position_verified}, seconds}. center PENCERE pikseli."""
+    from . import web
+    s = web.oku_korumali(k, sorgu, rol, not gizliler, en_cok, atla, bekle)
+    ogeler = []
+    for o in s["ogeler"]:
+        e = {"no": o["no"], "role": o["rol"], "text": o["ad"], "center": o["merkez"]}
+        if o["durum"]:
+            e["state"] = o["durum"]
+        if not o["gorunur"]:
+            e["visible"] = False
+        for src, dst in (("href", "href"), ("deger", "value"), ("cerceve", "frame")):
+            if o.get(src):
+                e[dst] = o[src]
+        if o.get("hassas"):
+            e["sensitive"] = True
+        ogeler.append(e)
+    sf = s["sayfa"]
+    sayfa = {"title": sf["baslik"], "url": sf["adres"], "loading": sf["yukleniyor"], "frames": sf["belge"],
+             "position_verified": bool(sf.get("konum_dogrulandi"))}
+    if sf.get("hassas_sayfa"):
+        sayfa["sensitive_page"] = True
+    return {"items": ogeler, "total": s["toplam"], "next": s["sonraki"], "page": sayfa, "seconds": s["sure"]}
+
+
 def simge_bul(k: str, ad: str, esik: float = 0.9, bolge=None) -> dict:
     from .gorsel import simge_bul_ic
     if yasak_mi(k):
@@ -397,10 +425,10 @@ def simgeye_tikla(k, ad, dugme="left", sira=None, esik=0.9, baslik=None, onayli=
                                         onayli=onayli, mod=_mod(mod)))
 
 
-def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False, mod=None, eylem=None) -> str:
+def ogeye_tikla(k, ad, dugme="left", sira=None, baslik=None, onayli=False, mod=None, eylem=None, rol=None) -> str:
     """eylem None = gerçek fare tıklaması; "" = AT-SPI birincil eylemi (fare/odak yok); başka = o AT-SPI eylemi."""
     from .erisim import k_ogeye_tikla
-    return calistir(k_ogeye_tikla, ns(kimlik=k, ad=ad, dugme=DUGME[dugme], rol=None, sira=sira, baslik=baslik,
+    return calistir(k_ogeye_tikla, ns(kimlik=k, ad=ad, dugme=DUGME[dugme], rol=rol, sira=sira, baslik=baslik,
                                       onayli=onayli, mod=_mod(mod), eylem=eylem))
 
 

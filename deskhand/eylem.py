@@ -531,9 +531,10 @@ def _onayli_etiket(g):
         g.etiket += " --onayli"
 
 
-def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=()):
+def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=(), ek_basliklar=()):
     """Tıklanacak nokta ve oradaki yazı belli olduktan SONRA tek onay (bir eylem = bir onay): ödeme sayfası ve/veya
-    hassas düğme. Onay isteği noktadaki yazıyı + hassas düğme metnini + çevresinin küçük görüntüsünü taşır."""
+    hassas düğme. Onay isteği noktadaki yazıyı + hassas düğme metnini + çevresinin küçük görüntüsünü taşır.
+    ek_basliklar: pencere başlığına ek denetlenen sayfa başlıkları (web belge başlığı)."""
     guvenlik.seviye_denetle(k, "fare")  # erişim seviyesi: onay diyaloğundan ÖNCE
     g.onayli = onayli
     if k != EKRAN and guvenlik.sistem_istemi_engel(k, onayli, ne):  # polkit/KWallet/parola sorucusu: onay
@@ -541,7 +542,7 @@ def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=()):
     metinler = [*ek_metinler, *yakin]
     once = getattr(guvenlik._EYLEM, "onaylandi", False)
     panelden = not guvenlik.onayli_gecerli(onayli)
-    if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=(x, y)):  # True = hassas sayfa VE onaylandı
+    if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=(x, y), ek_basliklar=ek_basliklar):  # True = hassas sayfa VE onaylandı
         _onayli_etiket(g)
         onayli = True
     if hassas_engel(onayli, *metinler, hedef=_au().baslik(k), k=k, nokta=(x, y)):

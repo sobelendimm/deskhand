@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Deskhand Liste Testi</title>
+<style>
+  body { font: 15px sans-serif; margin: 16px; }
+  ol { columns: 4; }
+  li { margin: 2px 0; }
+</style>
+<script src="ortak.js"></script>
+</head>
+<body>
+<h1>Uzun bağlantı listesi</h1>
+<p><button type="button" data-ad="Listeyi yenile">Listeyi yenile</button></p>
+<ol id="liste"></ol>
+<script>
+  // ?n=200 ile kısa liste; varsayılan 1000 bağlantı (dört sütun, sayfa aşağı uzar)
+  (function () {
+    var n = parseInt(new URLSearchParams(location.search).get("n") || "1000", 10);
+    var ol = document.getElementById("liste");
+    var parca = document.createDocumentFragment();
+    for (var i = 1; i <= n; i++) {
+      var ad = "Bağlantı " + String(i).padStart(4, "0");
+      var li = document.createElement("li");
+      var a = document.createElement("a");
+      a.href = "#b" + i;
+      a.textContent = ad;
+      a.dataset.ad = ad;
+      li.appendChild(a);
+      parca.appendChild(li);
+    }
+    ol.appendChild(parca);
+    document.documentElement.dataset.hazir = "1";
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Deskhand Bileşen Testi</title>
+<style>
+  body { font: 15px sans-serif; margin: 16px; }
+  [role=tablist] { display: flex; gap: 4px; }
+  [role=tab] { padding: 6px 14px; border: 1px solid #888; background: #eee; cursor: pointer; }
+  [role=tab][aria-selected=true] { background: #fff; border-bottom-color: #fff; font-weight: bold; }
+  [role=tabpanel] { border: 1px solid #888; padding: 10px; min-height: 40px; }
+  #menu { position: relative; display: inline-block; margin: 12px 0; }
+  [role=menu] { position: absolute; left: 0; top: 30px; background: #fff; border: 1px solid #555; margin: 0;
+                padding: 4px 0; list-style: none; min-width: 140px; z-index: 2; }
+  [role=menuitem] { padding: 4px 12px; cursor: pointer; }
+  iframe { width: 420px; height: 150px; border: 1px solid #666; margin: 6px 8px 0 0; }
+  #sonradan { min-height: 40px; }
+</style>
+<script src="ortak.js"></script>
+</head>
+<body>
+<h1>Sekmeler, menü ve çerçeveler</h1>
+
+<div role="tablist" aria-label="Hesap bölümleri">
+  <button type="button" role="tab" id="s1" aria-selected="true" aria-controls="p1" data-ad="Genel">Genel</button>
+  <button type="button" role="tab" id="s2" aria-selected="false" aria-controls="p2" data-ad="Ayrıntılar">Ayrıntılar</button>
+  <button type="button" role="tab" id="s3" aria-selected="false" aria-controls="p3" data-ad="Geçmiş">Geçmiş</button>
+</div>
+<div role="tabpanel" id="p1" aria-labelledby="s1"><button type="button" data-ad="Genel ayarı">Genel ayarı</button></div>
+<div role="tabpanel" id="p2" aria-labelledby="s2" hidden><button type="button" data-ad="Ayrıntı ayarı">Ayrıntı ayarı</button></div>
+<div role="tabpanel" id="p3" aria-labelledby="s3" hidden><button type="button" data-ad="Geçmişi temizle">Geçmişi temizle</button></div>
+
+<div id="menu">
+  <button type="button" id="menudugme" aria-haspopup="menu" aria-expanded="false" aria-controls="menuliste"
+          data-ad="Düzen menüsü">Düzen</button>
+  <ul role="menu" id="menuliste" aria-label="Düzen" hidden>
+    <li role="menuitem" tabindex="-1" data-ad="Kopyala">Kopyala</li>
+    <li role="menuitem" tabindex="-1" data-ad="Yapıştır">Yapıştır</li>
+    <li role="menuitem" tabindex="-1" data-ad="Tümünü seç">Tümünü seç</li>
+  </ul>
+</div>
+
+<div>
+  <iframe id="cerceve1" title="Aynı kökenli çerçeve" src="cerceve.html?k=1"></iframe>
+  <iframe id="cerceve2" title="Başka kökenli çerçeve"></iframe>
+</div>
+
+<div id="sonradan"></div>
+
+<script>
+  (function () {
+    var sekmeler = document.querySelectorAll("[role=tab]");
+    sekmeler.forEach(function (s) {
+      s.addEventListener("click", function () {
+        sekmeler.forEach(function (x) {
+          var secili = x === s;
+          x.setAttribute("aria-selected", secili ? "true" : "false");
+          document.getElementById(x.getAttribute("aria-controls")).hidden = !secili;
+        });
+      });
+    });
+    var md = document.getElementById("menudugme"), ml = document.getElementById("menuliste");
+    md.addEventListener("click", function () {
+      var acik = ml.hidden;
+      ml.hidden = !acik;
+      md.setAttribute("aria-expanded", acik ? "true" : "false");
+    });
+    ml.addEventListener("click", function () { ml.hidden = true; md.setAttribute("aria-expanded", "false"); });
+    // ikinci çerçeve başka KÖKENDEN (127.0.0.1 ↔ localhost): Firefox'ta ayrı süreçte (Fission) çalışır
+    var c2 = document.getElementById("cerceve2");
+    if (location.protocol === "http:") {
+      var konak = location.hostname === "127.0.0.1" ? "localhost" : "127.0.0.1";
+      c2.src = "http://" + konak + ":" + location.port + "/cerceve.html?k=2";
+    } else {
+      c2.src = "cerceve.html?k=2";
+    }
+    // 1 sn sonra eklenen içerik
+    setTimeout(function () {
+      var kutu = document.getElementById("sonradan");
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "Sonradan eklenen düğme";
+      b.dataset.ad = "Sonradan eklenen düğme";
+      var a = document.createElement("a");
+      a.href = "#yeni";
+      a.textContent = "Yeni bağlantı";
+      a.dataset.ad = "Yeni bağlantı";
+      a.style.marginLeft = "12px";
+      kutu.appendChild(b);
+      kutu.appendChild(a);
+      document.documentElement.dataset.sonradan = "1";
+    }, 1000);
+  })();
+</script>
+</body>
+</html>
