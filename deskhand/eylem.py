@@ -342,6 +342,8 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
                     mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
             try:
                 if p in "\n\t":
+                    if p == "\n":
+                        _enter_oncesi(g, k, desen, onayli)
                     g.gonder(k, desen, "key enter" if p == "\n" else "key tab")
                 else:
                     au.pano_yaz(p, hassas=True)  # pano yöneticisi (Klipper) geçmişine yazılmasın
@@ -379,7 +381,12 @@ def yaz_ic(g, k, desen, metin, onayli=False):
     if yazi_onay_ister_mi(metin) and _yazi_hassas(g, k, onayli, metin):  # yazmadan ÖNCE (bir eylem = bir onay)
         onay = True
     # uçbirim ENTER KAPISI: yazının ilk satırı mevcut giriş satırına eklenip çalışacak (parça parça yazılmış komut)
-    if "\n" in metin and ucbirim.enter_kapisi(k, onayli, ek=metin.split("\n", 1)[0], gizli=g.gizli):
+    g._enter_satirlar = metin.split("\n")
+    g._enter_onaylar = []
+    for i, satir in enumerate(g._enter_satirlar[:-1]):  # bir Enter = bir onay; ilk satır mevcut satıra eklenir
+        g._enter_onaylar.append(ucbirim.enter_kapisi(k, onayli, ek=satir, gizli=g.gizli, yalniz_ek=i > 0))
+    g._enter_sira = 0
+    if any(g._enter_onaylar):
         onay = True
     if onay:
         _onayli_etiket(g)
@@ -395,6 +402,23 @@ def yaz_ic(g, k, desen, metin, onayli=False):
         tamam = True
     finally:  # uçbirim tamponu: yarıda kesilen yazıda satırın içeriği bilinmez
         ucbirim.tampon_isle(_au(), k, yazi=metin if tamam else None, kirli=not tamam, onayli=onay and tamam)
+
+
+def _enter_oncesi(g, k, desen, onayli):
+    """Yazının içindeki bir Enter gönderilmeden HEMEN önce: önceden onaylanmadıysa pencere yeniden hesaplanır ve
+    uçbirimse (bu arada gömülü uçbirim açılmış olabilir) şimdi onay sorulur. Onay diyaloğu odağı aldıysa gözcü
+    yeniden kurulur."""
+    i = getattr(g, "_enter_sira", 0)
+    g._enter_sira = i + 1
+    onaylar = getattr(g, "_enter_onaylar", [])
+    if i < len(onaylar) and onaylar[i]:
+        return
+    satirlar = getattr(g, "_enter_satirlar", [""])
+    if ucbirim.enter_kapisi(k, onayli, ek=satirlar[i] if i < len(satirlar) else "", gizli=g.gizli, yalniz_ek=i > 0):
+        _onayli_etiket(g)
+        g.izle_bitir()
+        _au().one_getir(k)
+        g.izle(k, desen)
 
 
 def _harf_harf_yaz(g, k, desen, metin, onayli):
@@ -426,6 +450,8 @@ def _harf_harf_yaz(g, k, desen, metin, onayli):
                     raise Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
                                        "({son}) yeni yere gitmiş olabilir, oraya bak").format(
                         mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin), son=repr(metin[max(0, yazilan - 2):yazilan])))
+                if c == "\n":
+                    _enter_oncesi(g, k, desen, onayli)
                 try:
                     g.ham({"\n": "key enter", "\t": "key tab", " ": "key space"}.get(c, f"type {c}"))
                 except Dur as e:
@@ -660,14 +686,44 @@ def _tus_onaylari(g, k, onayli, kombinasyon, birlikte=False):
     if guvenlik.riskli_tus_engel(k, onayli, kombinasyon, birlikte=birlikte):  # ctrl+alt+del, meta+l…
         _onayli_etiket(g)
     birlesik = "+".join(kombinasyon.split()) if birlikte else kombinasyon  # bas: tuşlar aynı anda basılı
-    if guvenlik.yapistir_tusu_mu(birlesik) and guvenlik.yapistirma_engel(k, onayli):
+    menu = ucbirim.menu_acik_mi(_au(), k)  # klavye menüsü az önce (3 sn) açıldıysa p/y yapıştırmadır
+    if (guvenlik.yapistir_tusu_mu(birlesik, menu_acik=menu) or guvenlik.yapistir_tusu_mu(kombinasyon, menu_acik=menu)) \
+            and guvenlik.yapistirma_engel(k, onayli):
         _onayli_etiket(g)
     # Enter/boşluk ÇÖZÜLMÜŞ tuşa göre (x:Return, k:28, kpenter… dahil); onay öne getirmeden önce sorulur
     if onay_tusu_mu(kombinasyon) and hassas_sayfa_engel(
             k, onayli, _("Enter/boşluk"), ek=_("tuş: {kombinasyon}").format(kombinasyon=kombinasyon)):
         _onayli_etiket(g)
-    if ucbirim.tus_dizisi_kapisi(k, onayli, birlesik):
+    onaylar = ucbirim.tus_dizisi_kapisi(k, onayli, birlesik)  # her Enter ayrı onay (uçbirimse)
+    if onaylar:
         _onayli_etiket(g)
+    return onaylar or []
+
+
+def _tus_gonder(g, k, desen, kombinasyon, onayli, onaylar):
+    """Tuş dizisini gönder. Enter içeriyorsa Enter'larda bölünür: her Enter'dan HEMEN önce pencere yeniden hesaplanır
+    (dizinin ortasında da: F4 ile açılan gömülü uçbirimin kabuğu bu arada doğmuş olabilir) ve önceden onaylanmamış Enter
+    uçbirime gidecekse şimdi onay sorulur."""
+    akorlar = kombinasyon.split()
+    if not any(guvenlik.enter_tusu_mu(a) for a in akorlar):
+        g.gonder(k, desen, f"key {kombinasyon}")
+        return
+    bekleyen, sira = [], 0
+    for akor in akorlar:
+        if not guvenlik.enter_tusu_mu(akor):
+            bekleyen.append(akor)
+            continue
+        if bekleyen:
+            g.gonder(k, desen, "key " + " ".join(bekleyen))
+            ucbirim.tus_sonrasi(_au(), k, " ".join(bekleyen))
+            bekleyen = []
+        if not (sira < len(onaylar) and onaylar[sira]) and ucbirim.enter_kapisi(k, onayli):
+            _onayli_etiket(g)
+            _au().one_getir(k)  # onay diyaloğu odağı almış olabilir
+        sira += 1
+        g.gonder(k, desen, f"key {akor}")
+    if bekleyen:
+        g.gonder(k, desen, "key " + " ".join(bekleyen))
 
 
 def k_tus(a):
@@ -680,13 +736,15 @@ def k_tus(a):
     g = girdi_al(f"tus {kombinasyon}")
     try:
         guvenlik.seviye_denetle(a.kimlik, "klavye")  # erişim seviyesi: onay diyaloğundan ÖNCE
-        _tus_onaylari(g, a.kimlik, getattr(a, "onayli", False), kombinasyon)
+        onaylar = _tus_onaylari(g, a.kimlik, getattr(a, "onayli", False), kombinasyon)
         _au().one_getir(a.kimlik)
         try:
-            g.gonder(a.kimlik, a.baslik, f"key {kombinasyon}")
+            _tus_gonder(g, a.kimlik, a.baslik, kombinasyon, getattr(a, "onayli", False), onaylar)
         except Dur:
             ucbirim.tampon_isle(_au(), a.kimlik, kirli=True)
             raise
+        finally:
+            ucbirim.tus_sonrasi(_au(), a.kimlik, kombinasyon)  # uçbirim açma tuşu / klavye menüsü işareti
         ucbirim.tampon_isle(_au(), a.kimlik, tus=kombinasyon)
     finally:
         girdi_birak(g)
@@ -756,6 +814,7 @@ def k_bas(a):
         ucbirim.tampon_isle(_au(), a.kimlik, kirli=True)  # basılı tuş tekrarlar: satırın içeriği bilinmez
         _au().one_getir(a.kimlik)
         g.gonder(a.kimlik, a.baslik, f"keydown {kombinasyon}")
+        ucbirim.tus_sonrasi(_au(), a.kimlik, kombinasyon)
         if g.etk is not None:  # ölçüm: basılı tuş ~0,57 sn sonra otomatik TEKRARLANIR ve bırakılana dek etkinlik
             g.etk.kendi_girdi(time.monotonic(), time.monotonic() + a.sure)  # kesintisizdir → tutuş süresi bizim girdimiz;
             g.son_etk = time.monotonic()  # bu sırada insanı fare gözcüsü yakalar (fare düğmesi tutuşunda tekrar yok)

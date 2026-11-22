@@ -153,49 +153,47 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   alt+sysrq+tuş. `k_tus` / `k_bas` hassas-eylem yolunu kullanır (`riskli_tus_engel`): `--onayli` yoksa panelden onay,
   panel kapalıysa 10; `dizi`/akış adımları aynı işlevlerden geçtiği için aynen kapsanır. Pencere sınıfından bağımsız.
   `k_bas` tuşları aynı anda basılı tuttuğundan boşlukla ayrılmış tuşlar tek küme sayılır (`birlikte=True`).
-- **Uçbirime yıkıcı komut yazma → insan onayı.** Hedef pencerenin sınıfı uçbirim öykünücüsüyse (`UCBIRIM_SINIFLARI`,
-  tek sabit liste) ve yazılacak metin dar bir yıkıcı kalıba uyuyorsa (`riskli_komut`: rm -r, sudo/doas/pkexec/run0,
-  curl|wget … | sh, mkfs, dd of=/dev/…, > /dev/disk, çatal bombası, kökte chmod/chown -R, shutdown/reboot/poweroff/halt,
-  systemctl/loginctl poweroff/reboot/suspend, git push --force/-f, :w !sudo) onay istenir. Denetim `eylem._yazi_hassas`
-  (imza değişmez) ve `guvenlik.yazi_onay_ister_mi` üzerinden akar: yazmadan ÖNCE yapılır (Enter ayrı gönderilse bile
-  komut metni yakalanır), parça parça/yapıştırarak yazan her yol aynı işlevi kullanmalıdır. Onay isteği komutu
-  (kısaltılmış; `--gizli` ise yalnız uzunluğu), nedeni ve sınıfı taşır. Uçbirim olmayan pencerede metin sıradan yazıdır.
-  `riskli_komut` metni kabuk kurallarıyla sözcüklere ayırır (tırnak/ters bölü kaldırılır, `$'…'` açılır, `$(…)`/`` `…` ``/
-  `<(…)` içi ayrıca denetlenir); kabuk anahtar sözcükleri (`{ } ! if then do else elif while until time`), atamalar ve
-  bilinmeyen `$DEĞİŞKEN` komut adı atlanır, aynı metindeki atama çözülür (`S=sudo; $S reboot`), küme açılımı
-  (`{sudo,reboot}`), `busybox`/`toybox X` → X, sarmalayıcıların argümanlı seçenekleri (`env -u AD`, `nice -n 5`,
-  `timeout -s 9 5`), `env -S`, `find … -delete` / `-exec rm`, `sh/bash -c` (ve `-lc` gibi kümeler), `eval`, `python -c` /
-  `perl -e` / `ruby -e` / `node -e` kodunda dosya silme, komut çalıştırma ya da dinamik kod (`__import__`, `eval`…).
-  Kabuğa DOLAYLI girdi de onay ister (komut metni görünmeden çalışır): `… | sh` (komutunu stdin'den okuyan kabuk),
-  `base64 -d | …`, kabuğa `<`/`<<`/`<<<`, `source`/`.`, geçici ya da uzantısız betiği `sh`/`bash` ile çalıştırma, betik
-  DOSYASINI yorumlayıcıyla çalıştırma (`python3 x.py`), `eval`, `alias`/`trap`, `PROMPT_COMMAND`/`PS0`/`BASH_ENV`/
-  `LD_PRELOAD` ataması, geçmiş açılımı (`!!`, `!n`, `^a^b`) ve `fc`/`r`/`history -s`/`print -s`, geçici dizinden program,
-  yetki/kabuk programına `ln`. Kalıcılık ve geniş yıkım: kabuk/oturum başlangıç dosyalarına, otomatik başlatmaya,
-  `~/.config/deskhand`'e, `~/.ssh`'e, `~/.local/bin`'e yazma (yönlendirme, tee, cp/mv/install/ln/rsync hedefi, dd of=,
-  truncate, `sed -i`), yıkıcı komut metnini çalıştırılabilecek dosyaya yazma (`printf 'sudo reboot' > /tmp/a`),
-  `kill -1`, `pkill/killall -u`, `crontab` (-l dışı), `git clean -f`, `git -c alias.x=!…`/komut kancası ayarları, `shred`,
-  `truncate -s 0`, `mv ~`, `rsync --delete` kök/ev dizininde, `xargs rm`, `awk` içinde `system()`/boru, ayrık başlatıcılar
-  (`systemd-run`, `at`, `tmux new … 'komut'`, `screen -dm`, `flock -c`).
-- **Uçbirim tanıma** (`guvenlik.ucbirim_penceresi_mi`, 2 sn önbellek): pencere sınıfı uçbirim öykünücüsüyse; YA DA
-  pencerenin sahibi sürecin TORUNLARINDA denetim uçbirimi (tty) olan bir kabuk varsa (GÖMÜLÜ uçbirim: Dolphin F4, Kate
-  uçbirim paneli, VS Code/IDE uçbirimi — pencerenin tamamı uçbirim sayılır); PID bilinmiyorsa ve sınıf uçbirim gömebilen
-  bir uygulamaysa (`GOMULU_UCBIRIM_SINIFLARI`) güvenli tarafta; erişilebilirlik zaten açıksa (PID'siz ya da gömebilen
-  sınıfta) pencerede rolü `terminal` olan öge varsa. Yıkıcı komut yazma onayı ve Enter kapısı bu tanımı kullanır; ön plan
-  süreci gömülü uçbirimin kabuklarının tpgid'inden okunur. Uçbirimsiz Dolphin/Kate'te yazı sıradan yazıdır.
-- **Uçbirim ENTER KAPISI** (`deskhand/ucbirim.py`; parça parça yazılmış komut: `sud` + `o reboot` + Enter). Uçbirim
-  barındıran pencereye satırı çalıştıran bir tuş (enter, kpenter, linefeed, `x:Return`, `k:28`, ctrl+j/ctrl+m/ctrl+o; yazının
-  içindeki `\n`) gitmeden HEMEN önce o anki giriş satırı okunur — erişilebilirlik ZATEN açıksa AT-SPI (rolü `terminal` olan
-  ögenin imleç satırı + önceki iki satır; erişilebilirlik bunun için açılmaz), yoksa pencerenin OCR'ı (en alttaki üç yazılı
-  satır; istem işaretinden sonrası ve sarılmış satırların birleşimi aday) — ve `riskli_komut`'tan geçer; yıkıcıysa onay
-  (yoksa 10). Yazının içindeki Enter'lar için kapı yazmadan ÖNCE sorulur (satır = okunan/tampon + ilk satır). Yedek TAMPON:
-  `RUNTIME_DIR/ucbirim/<sha1(arka uç:pencere:pid)>.json` (0600, dizin 0700, flock): yazdırılabilir tuşlar ve `type`
-  eklenir, BackSpace siler; Enter/ctrl+c/ctrl+u/Esc temizler; ok tuşları, ctrl+a/e/r/w, Tab, tık, orta tık, yapıştırma
-  "kirli" yapar. Yeni pencere, başka uçbirim penceresine geçiş ve 120 sn hareketsizlik de "kirli" yapar (bilinçli: temiz
-  saymak aradaki insan düzenlemesini ve parçalı yazmayı gözden kaçırırdı). Kirliyken satır okunamıyorsa Enter onay ister.
-  Yazılırken onaylanmış komut (`--onayli` ya da panel) aynı satırda Enter'da yeniden sorulmaz. Ön plandaki süreç kabuk
-  değilse (pencere PID → uçbirimin çocukları → `/proc/<kabuk>/stat` tpgid; vim, less, REPL) kapı uygulanmaz; ssh, tmux,
-  kapsayıcı kabuğu (docker/podman/distrobox…) ise uygulanır; PID bilinmiyorsa uygulanır. Kapsanan yollar: `tus`/`bas`,
-  `yaz` (harf harf + yapıştırarak), `dizi`/akış adımları, AT-SPI değer yazma.
+- **UÇBİRİMDE KOMUT ÇALIŞTIRMAK HER ZAMAN İNSAN ONAYI İSTER; kara liste (`riskli_komut`) yalnız UYARI içindir.**
+  Uçbirim (ya da gömülü uçbirim) barındıran pencereye giden HER Enter — enter, kpenter, linefeed, `x:Return`, `k:28`,
+  ctrl+j/ctrl+m/ctrl+o, yazının içindeki `\n`, AT-SPI değer yazmadaki satır sonları — satır içeriğinden BAĞIMSIZ panel
+  onayı ister (`ucbirim.enter_kapisi`): bir Enter = bir onay (aynı eylemdeki önceki onay taşınmaz; `yaz "a\nb\n"` iki onay,
+  `tus "l s enter p w d enter"` iki onay); gözetimsiz kipte ret (10); CLI'de `--onayli` (kullanıcı sohbette onayladı) geçer.
+  İstisna YOK: ön planda vim/less/REPL olsa da sorulur (tpgid ile bulunan ön plan süreci yalnız onay metnine "ön planda
+  kabuk değil: …" notu olarak girer). Onay isteği: "Uçbirimde komut çalıştırılacak (Enter)", o anki satır (okunabiliyorsa;
+  `--gizli`/parola ise yalnız uzunluk; okunamıyorsa "satır okunamadı"), `riskli_komut` ya da geçmiş açılımı (`!!`, `!n`,
+  `^a^b`, `fc`, `r`, `history -s`) eşleşirse "YIKICI OLABİLİR: <neden>", uçbirim türü (gömülü mü). Satır okuma: erişilebilirlik
+  ZATEN açıksa AT-SPI (rolü `terminal` olan ögenin imleç satırı + önceki iki satır; erişilebilirlik bunun için açılmaz),
+  yoksa pencerenin OCR'ı (en alttaki dört yazılı satır; istem işaretinden sonrası, sarılmış satırların birleşimi ve tek tek
+  satırlar aday); Deskhand'in yazdıklarının TAMPONU (`RUNTIME_DIR/ucbirim/<sha1(arka uç:pencere:pid)>.json`, 0600, dizin
+  0700, flock; yazdırılabilir tuş/`type` eklenir, BackSpace siler, Enter/ctrl+c/ctrl+u/Esc temizler; ok tuşları, ctrl+a/e/r/w,
+  Tab, tık, yapıştırma, başka uçbirime geçiş ve 120 sn hareketsizlik "kirli" yapar) uyarı adayına eklenir. Zamanlama:
+  `tus`/`bas` dizisi Enter'larda bölünerek gönderilir ve HER Enter'dan HEMEN önce pencere yeniden hesaplanır (dizinin
+  ortasında da); yazının içindeki Enter'lar yazmadan önce sırayla onaylanır, önceden onaylanmamış bir Enter gönderimden
+  hemen önce yeniden hesaplanıp gerekiyorsa o an sorulur. Kapsanan yollar: `tus`/`bas`, `yaz` (harf harf + yapıştırarak),
+  `dizi`/akış adımları, AT-SPI değer yazma. Uçbirim barındırmayan pencerede Enter'a dokunulmaz (onay sayısı değişmez).
+- **Uçbirime yıkıcı komut YAZMA** (Enter'sız): hedef uçbirim barındırıyorsa ve metin `riskli_komut` uyarısı üretiyorsa onay
+  istenir (`guvenlik.ucbirim_komut_engel`, `eylem._yazi_hassas`); yazıda Enter varsa bu ayrı sorulmaz (Enter onayı aynı
+  uyarıyı taşır: iki diyalog açılmaz). `riskli_komut` (uyarı) metni kabuk kurallarıyla sözcüklere ayırır (tırnak/ters bölü
+  kaldırılır, `$'…'` açılır, `$(…)`/`` `…` ``/`<(…)` içi ayrıca denetlenir; kabuk anahtar sözcükleri, atamalar atlanır;
+  aynı metindeki atama çözülür; küme açılımı; `busybox X` → X; sarmalayıcı seçenekleri; `env -S`); uyarı kalıpları: yıkım
+  (rm -r, find -delete/-exec, mkfs, dd, shred, truncate -s 0, git clean -f, rsync --delete ~, mv ~), yetki (sudo/doas/
+  pkexec/run0), güç/oturum (shutdown/reboot…, systemctl/loginctl, D-Bus `login1 … Reboot/PowerOff/Suspend`,
+  `org.kde.Shutdown`, ksmserver), masaüstünü/Deskhand'i sonlandırma (`killall`/`pkill`/`kquitapp*` plasmashell/kwin/
+  deskhand, `systemctl stop plasma-*`), Deskhand'in ayar/durum dosyalarına dokunma, dolaylı yürütme (`… | sh`, `base64 -d |
+  …`, kabuğa `<`/`<<`/`<<<`, `source`/`.`, `eval`, `alias`/`trap`, `PROMPT_COMMAND`/`PS0`/`BASH_ENV`/`LD_PRELOAD`, geçmiş,
+  komut adında `${…}`/`$(…)`), içeriği denetlenemeyen betik/program (`./x.sh`, `~/x.sh`, `bash x.sh`, `python3 x.py`, geçici
+  dizinden program), GTFOBins seçenekleri (`--checkpoint-action`, `ProxyCommand`, `rsync -e`, sed `e`, `man -P`, `zip -TT`,
+  vim `:!`), kalıcılık (başlangıç dosyaları, autostart, `~/.ssh`, `~/.local/bin`, crontab), ayrık başlatıcılar
+  (`systemd-run`, `at`, `tmux new`, `screen -dm`, `flock -c`, `watch`), indirileni kabuğa verme, çatal bombası, zorla git
+  push, `:w !sudo`. Uyarı listesi eksik olabilir: güvenlik sınırı yukarıdaki Enter onayıdır.
+- **Uçbirim tanıma** (`guvenlik.ucbirim_penceresi_mi`): pencere sınıfı uçbirim öykünücüsüyse; YA DA pencerenin sahibi
+  sürecin TORUNLARINDA denetim uçbirimi (tty) olan bir kabuk varsa (GÖMÜLÜ uçbirim: Dolphin F4, Kate uçbirim paneli,
+  VS Code/IDE — pencerenin tamamı uçbirim sayılır); PID bilinmiyorsa ve sınıf uçbirim gömebilen bir uygulamaysa
+  (`GOMULU_UCBIRIM_SINIFLARI`) güvenli tarafta; erişilebilirlik zaten açıksa pencerede rolü `terminal` olan öge varsa.
+  Yalnız "uçbirim" sonucu 2 sn önbellekte tutulur; "uçbirim DEĞİL" sonucu önbelleğe alınmaz (her Enter'dan önce yeniden
+  hesap). Gömebilen sınıftaki pencereye uçbirim açabilen bir tuş (F4, shift+F4, ctrl+`, ctrl+shift+`, ctrl+alt+t,
+  ctrl+shift+t, alt+F12) gönderildikten sonra pencere 30 sn "uçbirim olabilir" sayılır (`RUNTIME_DIR/ucbirim/ucbirim-<sha1>`;
+  o sürede her Enter onaylı); aynı çağrıda uçbirim açma tuşu Enter'dan önce geliyorsa o Enter da onay ister.
 - **Ajanın kendi istemcisi** (`deskhand/kendi.py`): Deskhand süreci (CLI ve MCP sunucusu) `/proc/<pid>/stat` ppid ile
   1'e kadar yürür (oturum altyapısı — systemd, kwin, plasmashell, krunner… — hariç); MCP sunucusunda küme 15 sn'de bir
   tazelenir. Penceresinin sahibi PID'i (kde: `kdotool getwindowpid`; sanal: `_NET_WM_PID`) bu kümedeyse o pencereye HER
@@ -221,13 +219,18 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   hemen önce `sistem_istemi_denetle` onaysız istemde 10 verir — girdinin DÜŞTÜĞÜ ekran noktasındaki pencere için de
   (`imlec_alti_denetle`: başka pencere hedeflenip noktada istem açıksa izin olsa bile ret; masaüstü kipindeki tıkta noktadaki
   isteme onay sorulur).
-- **Yapıştırma = pano okuma** (kde): `ctrl+v`, `ctrl+shift+v`, `shift+insert`, orta tık (birincil seçim) ve MENÜDEN
-  yapıştırma (tıklanan yazı ya da AT-SPI öge adı Yapıştır/Paste/Einfügen/Coller/Pegar… ya da "Ctrl+V" ipucu; kısa metin;
+- **Yapıştırma = pano okuma** (kde): `ctrl+v`, `ctrl+shift+v`, `shift+insert`/`shift+kpinsert`, Paste tuşu (`XF86Paste`, `k:207`),
+  klavye menüsüyle yapıştırma (`shift+F10` / `menu` / `alt+e` ardından `p`/`y` ya da menüde gezinip Enter — aynı çağrıda
+  ya da 3 sn içinde ayrı çağrıda), orta tık (birincil seçim), AT-SPI ögesinin adı/eylem adı "paste/yapıştır" İÇERİYORSA
+  (simgeli düğmenin erişilebilir adı) ve MENÜDEN
+  yapıştırma (tıklanan yazı ya da AT-SPI öge adı Yapıştır/Paste/Einfügen/Coller/Pegar…, "Panodan ekle", "Insert from
+  clipboard", "Paste as…", "Özel yapıştır", 📋 ya da "Ctrl+V" ipucu; kısa metin;
   `guvenlik.hassas_engel` içinde — fare, AT-SPI eylemi ve aynı işlevi çağıran web yolları) kullanıcının
   panosunu ajanın görebileceği yere taşır: pano boş değilse ve Deskhand'in bu oturumda yazdığı metin değilse
   (`guvenlik.kendi_pano_ekle/kendi_pano_mu`: süreç belleği + `RUNTIME_DIR/pano-ozetleri`, 0600, yalnız sha256) onay ister
   (okunamıyorsa da). Deskhand'in kendi yapıştırarak yazma yolu (`eylem._yapistirarak_yaz`) muaftır. Sanal masaüstünün
-  panosu ayrıdır: denetim yok.
+  panosu ayrıdır: denetim yok. BİLİNEN SINIR: yazısı OCR'la okunamayan VE erişilebilir adı olmayan simgeli bir "yapıştır"
+  düğmesine fareyle tıklama tanınamaz (koordinatla tık; onay sorulmaz).
 - **Parola alanı** (AT-SPI rolü `password text`, değer yazmada hedef öge, klavyeyle yazmada odaklı öge — erişilebilirlik
   açıksa): yazı / yapıştırma / değer yazma onay ister (CLI `--onayli`); değeri ASLA okunmaz (doğrulama için bile); metin
   günlüğe, hata iletisine, onay isteğine yazılmaz (yalnız uzunluk), `--gizli` verilmemiş olsa bile kendiliğinden gizlidir.

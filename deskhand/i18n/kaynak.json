@@ -174,7 +174,7 @@
   "erisim.py:764"
  ],
  "# '{metin}' için {sayi} eşleşme:": [
-  "eylem.py:1126"
+  "eylem.py:1185"
  ],
  "# '{renk}': {sayi} alan (en az {en_az} piksel)": [
   "gorsel.py:268"
@@ -189,19 +189,19 @@
   "web.py:686"
  ],
  "# Uygulama erişim seviyeleri: DESEN = goruntule | tikla | tam\n#   DESEN: pencere BAŞLIĞI ya da SINIFI için regex (büyük/küçük harf duyarsız), yasak pencereler gibi.\n#   goruntule: hiçbir girdi gönderilmez (okuma ve ekran görüntüsü serbest)\n#   tikla:     fare serbest, klavye girdisi (yaz/tuş/bas) gönderilmez\n#   tam:       kısıt yok (varsayılan; İngilizce eş adlar: view, click, full)\n# Birden çok satır uyarsa en kısıtlayıcı olan geçerlidir. Varsayılan: boş (hiçbir kısıt yok).\n# Örnekler (başındaki # işaretini kaldırarak açın):\n# KeePassXC = goruntule\n# konsole = tikla\n": [
-  "guvenlik.py:971"
+  "guvenlik.py:1048"
  ],
  "# devamı: --sayfa {n}": [
   "web.py:692"
  ],
  "# sayfa sonu ({adim}. kaydırmada görüntü değişmedi)": [
-  "eylem.py:474"
+  "eylem.py:500"
  ],
  "# simge '{ad}': {sayi} eşleşme ({sn} sn)": [
   "gorsel.py:255"
  ],
  "# {adim} kez kaydırıldı ({sn} sn)": [
-  "eylem.py:1121"
+  "eylem.py:1180"
  ],
  "# {baslik} | {adres} | {sayi} öge gösterildi / {toplam} toplam{sayfa}, {sn} sn": [
   "web.py:680"
@@ -235,7 +235,7 @@
  ],
  "'{ad}' devre dışı (tıklanamaz)": [
   "erisim.py:798",
-  "erisim.py:934"
+  "erisim.py:936"
  ],
  "'{ad}' doğrulanmamış bir girdi ({neden}); başlatmak kullanıcının onayını ister ({onay}). Başlatılmadı; kullanıcıya bildir.": [
   "uygulama.py:542"
@@ -244,7 +244,7 @@
   "erisim.py:786"
  ],
  "'{ad}' görüş alanında ama görünmüyor (gizli ya da üstü örtülü)": [
-  "erisim.py:965"
+  "erisim.py:967"
  ],
  "'{ad}' için {sayi} öge; sira ile seç (CLI --sira, MCP nth):\n{liste}": [
   "web.py:536"
@@ -253,10 +253,10 @@
   "web.py:533"
  ],
  "'{ad}' sayfada var ama görünmüyor (kutusu yok: gizli ya da kapalı bir bölümde)": [
-  "erisim.py:949"
+  "erisim.py:951"
  ],
  "'{ad}' sayfada var ama görüş alanına getirilemedi ({tur} kaydırma)": [
-  "erisim.py:976"
+  "erisim.py:978"
  ],
  "'{ad}' {sayi} pencereye uyuyor; kimlik ver:\n{liste}": [
   "arka_uc/kde.py:181",
@@ -266,7 +266,7 @@
   "uygulama.py:90"
  ],
  "'{akor}' geçersiz: '+' yalnız ctrl/alt/shift/super/altgr ile kullanılır; aynı anda basılı tutmak için: ekran bas <k> {akor} <sn>": [
-  "eylem.py:645"
+  "eylem.py:671"
  ],
  "'{arka_uc}' arka ucu pencere işlemini desteklemiyor: {ne}": [
   "arka_uc/__init__.py:129"
@@ -279,17 +279,17 @@
  ],
  "'{eylem}' eylemi yok; ögenin eylemleri: {liste}": [
   "erisim.py:433",
-  "erisim.py:1090",
+  "erisim.py:1094",
   "web.py:653"
  ],
  "'{metin}' artık ({x},{y}) noktasında değil (ekran değişti); tıklanmadı": [
-  "eylem.py:1144"
+  "eylem.py:1203"
  ],
  "'{metin}' artık yok": [
   "akis.py:199"
  ],
  "'{metin}' bulunamadı ({sn} sn). İpucu: `ekran metin {kimlik}` ile satırlara bak": [
-  "eylem.py:1123"
+  "eylem.py:1182"
  ],
  "'{metin}' {sure} sn içinde görünmedi": [
   "ocr.py:610"
@@ -301,7 +301,7 @@
   "api.py:172"
  ],
  "'{renk}' renkli alan yok (en az {en_az} piksel)": [
-  "eylem.py:1093"
+  "eylem.py:1152"
  ],
  "(--arka) oturum kopyasına bu sitenin yerel deposunu da al; tekrarlanabilir": [
   "cli.py:437"
@@ -315,16 +315,21 @@
  "(boş komut)": [
   "masaustu.py:1074"
  ],
+ "(gömülü uçbirim)": [
+  "ucbirim.py:368"
+ ],
  "(görünmüyor)": [
   "web.py:556"
  ],
  "(okunamadı)": [
-  "guvenlik.py:1205",
-  "ucbirim.py:283"
+  "guvenlik.py:1282"
+ ],
+ "(satır okunamadı)": [
+  "ucbirim.py:359"
  ],
  "(yok)": [
-  "eylem.py:582",
-  "eylem.py:583"
+  "eylem.py:608",
+  "eylem.py:609"
  ],
  "({x},{y}) görüntünün dışında ({genislik}x{yukseklik})": [
   "mcp_sunucu.py:503"
@@ -336,10 +341,10 @@
   "web.py:560"
  ],
  ", benzerlik {benzerlik}": [
-  "eylem.py:1146"
+  "eylem.py:1205"
  ],
  ", doğrulandı": [
-  "erisim.py:1140"
+  "erisim.py:1148"
  ],
  ", sayfa {n}/{t}": [
   "web.py:682"
@@ -363,24 +368,24 @@
   "erisim.py:811"
  ],
  "--foto: pencere fotoğraftan sonra taşındı/boyut değişti; yeniden foto al": [
-  "eylem.py:598"
+  "eylem.py:624"
  ],
  "--foto: son foto başka pencereye ait ({kimlik})": [
-  "eylem.py:595"
+  "eylem.py:621"
  ],
  "--foto: önce `ekran foto` alınmalı": [
-  "eylem.py:593"
+  "eylem.py:619"
  ],
  "--komut yıkıcı bir kalıba uyuyorsa: kullanıcı AÇIKÇA onayladı": [
   "cli.py:435"
  ],
  "--sira 1..{en_cok}": [
-  "eylem.py:1096"
+  "eylem.py:1155"
  ],
  "--sira 1..{en_cok} olmalı": [
   "erisim.py:795",
-  "eylem.py:1072",
-  "eylem.py:1131"
+  "eylem.py:1131",
+  "eylem.py:1190"
  ],
  "./install.sh derler (make -C deskhand/yardimci)": [
   "doktor.py:129"
@@ -398,16 +403,16 @@
   "cli.py:406"
  ],
  ":w !sudo: dosyayı yetkiyle yazar": [
-  "guvenlik.py:881"
+  "guvenlik.py:958"
  ],
  "; açılan başka pencereler: {pencereler}": [
   "uygulama.py:766"
  ],
  "; en yakın aday benzerliği {benzerlik}": [
-  "eylem.py:1061"
+  "eylem.py:1120"
  ],
  "; hedef kök/ev dizini ya da *": [
-  "guvenlik.py:870"
+  "guvenlik.py:947"
  ],
  "; {sayi} gürültü satırı gizli (--hepsi)": [
   "ocr.py:597"
@@ -419,14 +424,14 @@
   "uygulama.py:767"
  ],
  "> /dev/diskaygıtı: diskin üzerine yazar": [
-  "guvenlik.py:751",
-  "guvenlik.py:879"
+  "guvenlik.py:820",
+  "guvenlik.py:956"
  ],
  "AJANIN KENDİ İSTEMCİSİ: erişilebilirlik çerçevesi ({baslik}) bu ajanı çalıştıran süreç zincirindeki bir sürece ait; girdi gönderilmez": [
   "erisim.py:320"
  ],
  "AJANIN KENDİ İSTEMCİSİ: {baslik} (sınıf {sinif}): {neden}; ajan kendi izin istemini onaylayamasın diye bu pencereye hiçbir girdi gönderilmez (okuma serbest)": [
-  "guvenlik.py:1385"
+  "guvenlik.py:1475"
  ],
  "AT-SPI kullanılamıyor (python-gobject + at-spi2-core): {hata}": [
   "erisim.py:177"
@@ -435,10 +440,10 @@
   "doktor.py:59"
  ],
  "Ajan bir parola alanına {n} karakter yazmak istiyor ({ne}).": [
-  "guvenlik.py:1552"
+  "guvenlik.py:1642"
  ],
  "Ajan kullanıcının panosundaki metni ({n} karakter) bu pencereye yapıştırmak istiyor ({ne}).": [
-  "guvenlik.py:1536"
+  "guvenlik.py:1626"
  ],
  "Ajan panonun metnini okumak istiyor ({n} karakter)": [
   "mcp_sunucu.py:1055"
@@ -447,7 +452,7 @@
   "gui/metinler.py:40"
  ],
  "Alt+SysRq+tuş: çekirdek müdahale (SysRq) kısayolu; sistemi yeniden başlatabilir/kapatabilir": [
-  "guvenlik.py:166"
+  "guvenlik.py:169"
  ],
  "Arayüzün dili. Panel ve tepsi menüsü hemen değişir; komut satırı ve ajanın (MCP) iletileri yeni başlatılan süreçlerde geçerli olur. Etkinlik günlüğü Türkçe kaydedilir.": [
   "gui/metinler.py:146"
@@ -541,7 +546,7 @@
   "gui/metinler.py:132"
  ],
  "Bu pencere bir sistem yetki/parola/izin istemi ({ad}). Ajan ona {ne} göndermek istiyor.": [
-  "guvenlik.py:1451"
+  "guvenlik.py:1541"
  ],
  "Bırak": [
   "gui/metinler.py:84"
@@ -560,19 +565,22 @@
   "gui/metinler.py:15"
  ],
  "Ctrl+Alt+Backspace: grafik oturumunu sonlandırır": [
-  "guvenlik.py:157"
+  "guvenlik.py:160"
  ],
  "Ctrl+Alt+Delete: oturum/güç menüsünü açar": [
-  "guvenlik.py:155"
+  "guvenlik.py:158"
  ],
  "Ctrl+Alt+L: ekranı kilitler": [
-  "guvenlik.py:162"
+  "guvenlik.py:165"
  ],
  "Ctrl+Alt+{tus}: sanal uçbirime geçer (masaüstü oturumundan çıkar)": [
-  "guvenlik.py:160"
+  "guvenlik.py:163"
  ],
  "D-Bus (python-jeepney)": [
   "gui/saglik.py:20"
+ ],
+ "D-Bus ile kapatma/yeniden başlatma/askıya alma/oturum kapatma": [
+  "guvenlik.py:763"
  ],
  "DESEN = goruntule | tikla | tam biçiminde olmalı": [
   "gui/ayar.py:119"
@@ -630,8 +638,8 @@
   "gui/metinler.py:41"
  ],
  "DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir": [
-  "guvenlik.py:1655",
-  "guvenlik.py:1675"
+  "guvenlik.py:1745",
+  "guvenlik.py:1765"
  ],
  "DUR: açık ({yol}); hiçbir girdi gönderilmez. Kaldırmak için: {prog} devam": [
   "cli.py:234"
@@ -669,6 +677,9 @@
  "Deskhand {surum}: yapay zekâ ajanları için güvenli masaüstü kontrolü (KDE Plasma Wayland) — senin ekranında\nya da görünmez ikinci bir masaüstünde. kdotool pencere bulur, dotool fare/klavye sürer, spectacle görüntü\nalır, tesseract (tur+eng) metin okur (OCR). 'ekran' komutu eski adıdır, aynı şekilde çalışır.": [
   "cli.py:33"
  ],
+ "Deskhand'in kendi ayar/durum dosyalarını değiştirme (DUR, yasak listesi…)": [
+  "guvenlik.py:891"
+ ],
  "Devam et": [
   "gui/metinler.py:39"
  ],
@@ -704,7 +715,7 @@
   "gui/metinler.py:171"
  ],
  "Düğmeye tıkla: “{dugme}”": [
-  "guvenlik.py:1274"
+  "guvenlik.py:1361"
  ],
  "EasyOCR/torch yok": [
   "doktor.py:174"
@@ -722,7 +733,7 @@
   "gui/metinler.py:20"
  ],
  "Enter/boşluk": [
-  "eylem.py:667"
+  "eylem.py:695"
  ],
  "Erişilebilirlik (AT-SPI)": [
   "doktor.py:135"
@@ -795,25 +806,25 @@
   "web.py:557"
  ],
  "HASSAS düğme ('{eslesen}' ← {yakin}): ödeme/yetki/hesap silme kullanıcının kararı ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1277"
+  "guvenlik.py:1364"
  ],
  "HASSAS pano okuma: panonun içeriği kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
   "cli.py:223"
  ],
  "HASSAS pano: {ne} kullanıcının panosunu ajanın görebileceği yere taşır; kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1539"
+  "guvenlik.py:1629"
  ],
  "HASSAS sayfa ({eslesen} ← {baslik}): bu sayfada {eylem} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1237"
+  "guvenlik.py:1314"
  ],
  "HASSAS: parola alanına {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1555"
+  "guvenlik.py:1645"
  ],
  "Hassas düğme: “{dugme}”": [
-  "guvenlik.py:1230"
+  "guvenlik.py:1307"
  ],
  "Hassas sayfada {eylem}": [
-  "guvenlik.py:1235"
+  "guvenlik.py:1312"
  ],
  "Hayır": [
   "gui/metinler.py:179"
@@ -874,7 +885,7 @@
   "gui/metinler.py:152"
  ],
  "Komut başlat: {komut}": [
-  "guvenlik.py:1341"
+  "guvenlik.py:1431"
  ],
  "Komutlar (koordinatlar pencereye göre, piksel; <kimlik> yerine tek pencereye uyan ad da verilebilir;\n<kimlik> = \"ekran\" (masaüstü kipi): tüm ekran — panel, masaüstü, menüler, başlatıcı; okuma odağı çalmaz,\nklavye o an etkin pencereye gider ve ona kilitlenir, fare imlecin altındaki pencereyi denetler).\nParantezdeki Türkçe komut adları ve Türkçe seçenekler (--baslik, --bolge, --sure …) de çalışır:": [
   "cli.py:53"
@@ -899,7 +910,7 @@
   "doktor.py:78"
  ],
  "Meta+L: ekranı kilitler": [
-  "guvenlik.py:164"
+  "guvenlik.py:167"
  ],
  "Meşgul algılama ayarları bu kurulumda bulunamadı (deskhand.ayarlar yüklenemedi).": [
   "gui/metinler.py:120"
@@ -942,7 +953,7 @@
   "oturum/cli.py:53"
  ],
  "PID'i bilinmeyen uçbirim penceresi, ajanın uçbirimiyle aynı türde": [
-  "guvenlik.py:1384"
+  "guvenlik.py:1474"
  ],
  "Panel": [
   "doktor.py:96",
@@ -955,10 +966,10 @@
   "cli.py:221"
  ],
  "Panoyu yapıştır": [
-  "guvenlik.py:1536"
+  "guvenlik.py:1626"
  ],
  "Parola alanına yaz": [
-  "guvenlik.py:1552"
+  "guvenlik.py:1642"
  ],
  "Pencere": [
   "gui/metinler.py:56"
@@ -979,19 +990,19 @@
   "gui/metinler.py:114"
  ],
  "Riskli tuş: {kombinasyon}": [
-  "guvenlik.py:1297"
+  "guvenlik.py:1384"
  ],
  "RİSKLİ KOMUT BAŞLATMA ({neden}): yıkıcı olabilecek komutu başlatmak kullanıcının onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1345"
+  "guvenlik.py:1435"
  ],
  "RİSKLİ TUŞ ({kombinasyon}): {neden}; kullanıcının onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1300"
+  "guvenlik.py:1387"
  ],
  "Sanal masaüstü modülü yüklenemedi: {hata}": [
   "gui/metinler.py:77"
  ],
  "Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}": [
-  "guvenlik.py:1226"
+  "guvenlik.py:1303"
  ],
  "Sağlık": [
   "gui/metinler.py:53"
@@ -1006,7 +1017,7 @@
   "gui/metinler.py:166"
  ],
  "Sistem istemine girdi: {ad}": [
-  "guvenlik.py:1450"
+  "guvenlik.py:1540"
  ],
  "Sonra": [
   "mesgul.py:48"
@@ -1024,10 +1035,10 @@
   "gui/metinler.py:58"
  ],
  "SİSTEM İSTEMİ ({ad} ← {baslik}): yetki/parola/izin istemine {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1454"
+  "guvenlik.py:1544"
  ],
  "SİSTEM İSTEMİ: {baslik} ({ad}) bir yetki/parola/izin istemi; girdi kullanıcının onayını ister (bu eylem için onay alınmadı)": [
-  "guvenlik.py:1433"
+  "guvenlik.py:1523"
  ],
  "Tam ekranda da sor": [
   "gui/metinler.py:129"
@@ -1051,8 +1062,8 @@
   "eylem.py:318"
  ],
  "UYARI: {uyari}": [
-  "eylem.py:370",
-  "eylem.py:1050",
+  "eylem.py:372",
+  "eylem.py:1109",
   "masaustu.py:1116",
   "masaustu.py:1143"
  ],
@@ -1060,7 +1071,7 @@
   "erisim.py:324"
  ],
  "UYGULAMA SEVİYESİ: {baslik} (sınıf {sinif}) '{seviye}' seviyesinde; {tur} girdisi gönderilmez ({dosya})": [
-  "guvenlik.py:1037"
+  "guvenlik.py:1114"
  ],
  "Uygulama başlat: {ad}": [
   "uygulama.py:540"
@@ -1068,17 +1079,20 @@
  "Uygulama erişim seviyeleri": [
   "gui/metinler.py:134"
  ],
- "UÇBİRİM ENTER KAPISI ({neden} ← {baslik}): satırı çalıştırmak kullanıcının onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "ucbirim.py:289"
+ "UÇBİRİM ENTER KAPISI ({baslik}): uçbirimde komut çalıştırmak (Enter) her zaman kullanıcının onayını ister ({onay_neden}){uyari}; kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
+  "ucbirim.py:374"
  ],
  "UÇBİRİM KOMUTU ({neden} ← {baslik}): yıkıcı olabilecek komutu uçbirime yazmak kullanıcının onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1326"
+  "guvenlik.py:1416"
  ],
- "Uçbirimde Enter: {satir}": [
-  "ucbirim.py:287"
+ "Uçbirimde komut çalıştır: {satir}": [
+  "ucbirim.py:371"
+ ],
+ "Uçbirimde komut çalıştırılacak (Enter).": [
+  "ucbirim.py:361"
  ],
  "Uçbirime komut yaz: {komut}": [
-  "guvenlik.py:1323"
+  "guvenlik.py:1413"
  ],
  "Varsayılan kapalıdır. Açınca kısayol KDE'ye bu uygulama adına kaydedilir; kapatınca kaydı silinir. Çalışmazsa tepsi simgesindeki DUR yeterlidir.": [
   "gui/metinler.py:154"
@@ -1115,13 +1129,17 @@
   "api.py:377"
  ],
  "YASAK pencere: {baslik} (sınıf {sinif}) /{desen}/ ile eşleşti; hiçbir girdi gönderilmez ({dosya})": [
-  "guvenlik.py:950"
+  "guvenlik.py:1027"
  ],
  "YASAK uygulama: {uygulama} /{desen}/ ile eşleşti; başlatılmadı ({dosya})": [
-  "guvenlik.py:961"
+  "guvenlik.py:1038"
  ],
  "YASAK: erişilebilirlik çerçevesi Deskhand panelinin/onay diyaloğunun sürecine ait": [
   "erisim.py:311"
+ ],
+ "YIKICI OLABİLİR: {neden}": [
+  "ucbirim.py:363",
+  "ucbirim.py:377"
  ],
  "YOK": [
   "masaustu.py:1108"
@@ -1160,7 +1178,7 @@
   "arka_uc/sanal.py:1205"
  ],
  "aktif pencere değişti → {baslik}; girdi gönderilmedi": [
-  "guvenlik.py:1105"
+  "guvenlik.py:1182"
  ],
  "akış '{ad}' önceden onaylı (--onayli) adımlar içeriyor": [
   "mcp_sunucu.py:1323"
@@ -1247,7 +1265,7 @@
   "eylem.py:219"
  ],
  "basılı tutuldu: {kombinasyon} {sn} sn": [
-  "eylem.py:768"
+  "eylem.py:827"
  ],
  "basılıyken aktif pencere değişti → {baslik}; bırakıldı": [
   "eylem.py:128"
@@ -1293,22 +1311,22 @@
   "cli.py:330"
  ],
  "başlık uymadı: {baslik} (beklenen /{desen}/); girdi gönderilmedi": [
-  "guvenlik.py:1118"
+  "guvenlik.py:1195"
  ],
  "başlık uymadı: {baslik} (beklenen /{desen}/); kapatılmadı": [
-  "eylem.py:937"
+  "eylem.py:996"
  ],
  "başlık uymadı: {baslik} (beklenen /{desen}/); pencere işlemi yapılmadı": [
-  "eylem.py:985"
+  "eylem.py:1044"
  ],
  "başlık/sınıf kilidi uymadı (pencere değişti)": [
   "mcp_sunucu.py:128"
  ],
  "beklendi: {sn} sn": [
-  "eylem.py:860"
+  "eylem.py:919"
  ],
  "bekleniyor: kullanıcı bilgisayarı kullanıyor…": [
-  "guvenlik.py:1574"
+  "guvenlik.py:1664"
  ],
  "bekleniyor: kullanıcı fareyi kullanıyor…": [
   "insan.py:158"
@@ -1331,6 +1349,10 @@
  ],
  "betik okunamadı: {p}": [
   "uygulama.py:384"
+ ],
+ "betik/program dosyasını çalıştırma ({dosya}): içeriği denetlenemez": [
+  "guvenlik.py:773",
+  "guvenlik.py:887"
  ],
  "betiğin env hedefi root sahipli/yazılamaz bir ikili değil: {h}": [
   "uygulama.py:396"
@@ -1390,7 +1412,7 @@
   "mcp_sunucu.py:1247"
  ],
  "bilinmeyen pencere işlemi: {islem}": [
-  "eylem.py:975"
+  "eylem.py:1034"
  ],
  "bilinmeyen seviye {sev}; goruntule, tikla ya da tam olmalı": [
   "gui/ayar.py:121"
@@ -1400,23 +1422,23 @@
   "arka_uc/sanal.py:994"
  ],
  "bilinmeyen tuş: {tus} (dotool --list-keys)": [
-  "eylem.py:641"
+  "eylem.py:667"
  ],
  "birden çok (ya da eşiğe yakın) eşleşme; --sira N ile seç ya da --bolge ile daralt": [
-  "eylem.py:1069"
+  "eylem.py:1128"
  ],
  "birden çok eşleşme (nth ile seç)": [
   "mcp_sunucu.py:128"
  ],
  "birden çok eşleşme; --sira N ile seç": [
-  "eylem.py:1128"
+  "eylem.py:1187"
  ],
  "birden çok öge; --sira N ile seç": [
   "erisim.py:792"
  ],
  "birincil eylem yok (click/press/activate/toggle); ögenin eylemleri: {liste}; --eylem ADI ile seç": [
   "erisim.py:437",
-  "erisim.py:1095"
+  "erisim.py:1099"
  ],
  "birincil eylem yok; ögenin eylemleri: {liste}": [
   "web.py:658"
@@ -1428,14 +1450,14 @@
   "akis.py:116"
  ],
  "boru ile kabuğa komut verme (… | sh): çalışacak komut görünmez": [
-  "guvenlik.py:900"
+  "guvenlik.py:977"
  ],
  "boyutlandırma": [
   "arka_uc/__init__.py:138",
-  "eylem.py:954"
+  "eylem.py:1013"
  ],
  "boyutlandırma için genişlik ve yükseklik gerekli": [
-  "eylem.py:996"
+  "eylem.py:1055"
  ],
  "boş X ekran numarası bulunamadı": [
   "masaustu.py:257"
@@ -1454,7 +1476,7 @@
   "mcp_sunucu.py:525"
  ],
  "bu eylem için zaten onaylandı": [
-  "guvenlik.py:1161"
+  "guvenlik.py:1238"
  ],
  "bu kimlik sanal masaüstüne ait değil: {kimlik} (sanal kimlikler '{onek}0x…')": [
   "arka_uc/sanal.py:111"
@@ -1480,16 +1502,16 @@
   "cli.py:412"
  ],
  "bulundu: '{metin}' ({x},{y}) güven {guven}{benzerlik}, {sn} sn": [
-  "eylem.py:1147"
+  "eylem.py:1206"
  ],
  "bulundu: simge '{ad}' ({x},{y}) benzerlik {benzerlik}": [
-  "eylem.py:1076"
+  "eylem.py:1135"
  ],
  "bulundu: web {rol} '{ad}' ({x},{y}) {konum}, {sn} sn": [
-  "erisim.py:1033"
+  "erisim.py:1035"
  ],
  "bulundu: {rol} '{ad}' ({x},{y}) {kademe} eşleşme, {sn} sn": [
-  "erisim.py:832"
+  "erisim.py:834"
  ],
  "bölge kökü +{x}+{y}": [
   "gorsel.py:232"
@@ -1497,16 +1519,16 @@
  "büyütme": [
   "arka_uc/__init__.py:146",
   "arka_uc/sanal.py:660",
-  "eylem.py:955"
+  "eylem.py:1014"
  ],
  "cetvel payı sol {sol}, üst {ust}": [
   "gorsel.py:236"
  ],
  "crontab: zamanlanmış görevleri siler/değiştirir": [
-  "guvenlik.py:713"
+  "guvenlik.py:738"
  ],
  "dd of=/dev/…: aygıtın üzerine yazar": [
-  "guvenlik.py:825"
+  "guvenlik.py:902"
  ],
  "denetlenemedi: {hata}": [
   "doktor.py:191",
@@ -1534,8 +1556,8 @@
   "erisim.py:468"
  ],
  "değer yazma": [
-  "erisim.py:894",
-  "erisim.py:1125"
+  "erisim.py:896",
+  "erisim.py:1132"
  ],
  "değer yazılamadı (öge salt okunur ya da devre dışı)": [
   "erisim.py:470"
@@ -1544,10 +1566,10 @@
   "eylem.py:233"
  ],
  "dizi boş": [
-  "eylem.py:870"
+  "eylem.py:929"
  ],
  "dizi tamam: {adim} adım, {sn} sn": [
-  "eylem.py:873"
+  "eylem.py:932"
  ],
  "dosya/klasör yok": [
   "uygulama.py:257"
@@ -1651,14 +1673,14 @@
   "web.py:113"
  ],
  "erişilebilirlik eylemi": [
-  "erisim.py:848",
-  "erisim.py:860",
-  "erisim.py:894",
-  "erisim.py:1048"
+  "erisim.py:850",
+  "erisim.py:862",
+  "erisim.py:896",
+  "erisim.py:1050"
  ],
  "erişilebilirlik eylemi pencere ister (masaüstü kipi değil)": [
-  "erisim.py:891",
-  "erisim.py:1076"
+  "erisim.py:893",
+  "erisim.py:1080"
  ],
  "erişilebilirlik görünmez masaüstünde hazırlanamadı (at-spi2-core): `agac` / `ogeye-tikla` / `--eylem` arka planda çalışmaz": [
   "masaustu.py:954"
@@ -1696,7 +1718,7 @@
  "eski pano içeriği geri yüklenemedi: {hata}": [
   "arka_uc/kde.py:739",
   "arka_uc/sanal.py:821",
-  "eylem.py:368"
+  "eylem.py:370"
  ],
  "eski pano içeriği metin değildi; birincil türü ({tur}) geri yüklendi, diğer biçimler kaybolmuş olabilir": [
   "arka_uc/kde.py:741"
@@ -1708,39 +1730,39 @@
   "cli.py:446"
  ],
  "etkin pencere başlığı uymadı: {baslik} (beklenen /{desen}/)": [
-  "guvenlik.py:1099"
+  "guvenlik.py:1176"
  ],
  "etkin pencere belirlenemedi; girdi gönderilmedi": [
-  "guvenlik.py:1096"
+  "guvenlik.py:1173"
  ],
  "etkin pencere belirlenemedi; tuş gönderilmedi": [
-  "eylem.py:678",
-  "eylem.py:748"
+  "eylem.py:734",
+  "eylem.py:806"
  ],
  "etkin pencere belirlenemedi; yazı gönderilmedi": [
-  "eylem.py:714"
+  "eylem.py:772"
  ],
  "eval: metni komut olarak çalıştırır (dolaylı yürütme)": [
-  "guvenlik.py:666"
+  "guvenlik.py:691"
  ],
  "evet": [
   "mesgul.py:632"
  ],
  "eylem yapıldı: web {rol} '{ad}' → {eylem} (eylemler: {liste}), {sn} sn": [
-  "erisim.py:1068"
+  "erisim.py:1072"
  ],
  "eylem yapıldı: {rol} '{ad}' → {eylem} (eylemler: {liste}), {kademe} eşleşme, {sn} sn": [
-  "erisim.py:1107"
+  "erisim.py:1114"
  ],
  "eylem çalışmadı: '{eylem}' (öge reddetti)": [
-  "erisim.py:1067",
-  "erisim.py:1106"
+  "erisim.py:1071",
+  "erisim.py:1113"
  ],
  "fare": [
-  "guvenlik.py:1039"
+  "guvenlik.py:1116"
  ],
  "fare hareketi": [
-  "eylem.py:776"
+  "eylem.py:835"
  ],
  "fare/klavye (AUR: dotool)": [
   "gui/saglik.py:14"
@@ -1749,28 +1771,28 @@
   "cli.py:456"
  ],
  "fare: pencere ({x},{y}) = ekran ({ex},{ey})": [
-  "eylem.py:786"
+  "eylem.py:845"
  ],
  "find -delete: bulunan her şeyi siler (geri alınamaz)": [
-  "guvenlik.py:850"
+  "guvenlik.py:927"
  ],
  "find -exec rm: bulunan her şeyi siler (geri alınamaz)": [
-  "guvenlik.py:856"
+  "guvenlik.py:933"
  ],
  "flatpak yalnız 'run' ile başlatılabilir ('{alt}')": [
   "uygulama.py:229"
  ],
  "flock -c: komutu kabukta çalıştırır": [
-  "guvenlik.py:729",
-  "guvenlik.py:776"
+  "guvenlik.py:754",
+  "guvenlik.py:847"
  ],
  "genişlik ve yükseklik en az 1 olmalı": [
-  "eylem.py:998"
+  "eylem.py:1057"
  ],
  "geri yükleme": [
   "arka_uc/__init__.py:150",
   "arka_uc/sanal.py:664",
-  "eylem.py:955"
+  "eylem.py:1014"
  ],
  "geçersiz URL": [
   "uygulama.py:302"
@@ -1791,11 +1813,11 @@
   "arka_uc/sanal.py:115"
  ],
  "geçici dizinden program çalıştırma": [
-  "guvenlik.py:701"
+  "guvenlik.py:726"
  ],
  "geçmişten komut çalıştırma/ekleme ({komut}): çalışacak komut görünmez": [
-  "guvenlik.py:694",
-  "guvenlik.py:766"
+  "guvenlik.py:719",
+  "guvenlik.py:835"
  ],
  "girdi": [
   "arka_uc/kde.py:525",
@@ -1853,20 +1875,17 @@
  "girdi: {yol}": [
   "uygulama.py:537"
  ],
- "giriş satırı okunamadı ve içeriği bilinmiyor (geçmişten çağrılmış ya da düzenlenmiş olabilir)": [
-  "ucbirim.py:276"
- ],
  "git -c ile kabuk komutu çalıştıran ayar (takma ad / komut kancası)": [
-  "guvenlik.py:717"
+  "guvenlik.py:742"
  ],
  "git clean -f: izlenmeyen dosyaları siler (geri alınamaz)": [
-  "guvenlik.py:715"
+  "guvenlik.py:740"
  ],
  "git push +ref: zorla itme (uzak geçmişi ezer)": [
-  "guvenlik.py:830"
+  "guvenlik.py:907"
  ],
  "git push --force: uzak geçmişi ezer": [
-  "guvenlik.py:828"
+  "guvenlik.py:905"
  ],
  "görev özeti (bildirimde gösterilir)": [
   "cli.py:469"
@@ -1946,7 +1965,7 @@
   "arka_uc/sanal.py:612"
  ],
  "hedef pencere ekran alanının dışına taşıyor: konum {x},{y} boyut {g}x{h}; ekran alanı {x0},{y0}..{x1},{y1}": [
-  "eylem.py:1004"
+  "eylem.py:1063"
  ],
  "hedef pencere etkin değil (başka pencere öne geçti)": [
   "mcp_sunucu.py:127"
@@ -1964,18 +1983,18 @@
   "akis.py:260"
  ],
  "imlecin altında başka pencere var: {baslik}; tıklanmadı": [
-  "guvenlik.py:1142"
+  "guvenlik.py:1219"
  ],
  "imlecin altındaki pencere doğrulanamadı; tıklanmadı": [
-  "guvenlik.py:1134"
+  "guvenlik.py:1211"
  ],
  "imleç hedefte değil ({fx},{fy} ≠ {px},{py}): kullanıcı fareyi oynattı (insan önceliği); tıklanmadı": [
-  "guvenlik.py:1131"
+  "guvenlik.py:1208"
  ],
  "indirilen betiği doğrudan kabuğa verme (curl/wget … | sh)": [
-  "guvenlik.py:841",
-  "guvenlik.py:885",
-  "guvenlik.py:898"
+  "guvenlik.py:918",
+  "guvenlik.py:962",
+  "guvenlik.py:975"
  ],
  "istek geri çekildi": [
   "gui/metinler.py:102"
@@ -1984,11 +2003,11 @@
   "gui/metinler.py:100"
  ],
  "kabuk/oturum başlangıç, otomatik başlatma ya da güvenlik dosyasına yazma ({hedef})": [
-  "guvenlik.py:655",
-  "guvenlik.py:802"
+  "guvenlik.py:680",
+  "guvenlik.py:873"
  ],
  "kabuğa yönlendirilmiş girdi (<, <<, <<<): komut metni görünmeden çalışır": [
-  "guvenlik.py:673"
+  "guvenlik.py:698"
  ],
  "kalıcı klavye eşlemesi yapılamadı: {hata}": [
   "masaustu.py:834"
@@ -2008,10 +2027,10 @@
   "masaustu.py:1028"
  ],
  "kapat için -b <başlık deseni> zorunlu (yanlış pencere kapanmasın)": [
-  "eylem.py:930"
+  "eylem.py:989"
  ],
  "kapatıldı: {baslik}": [
-  "eylem.py:947"
+  "eylem.py:1006"
  ],
  "karar alınamadı ({hata}); görünmez masaüstü seçildi": [
   "mcp_sunucu.py:184"
@@ -2035,19 +2054,19 @@
   "mcp_sunucu.py:1114"
  ],
  "kaydırıldı: {yon} ({adim} adım)": [
-  "erisim.py:974"
+  "erisim.py:976"
  ],
  "kaydırıldı: {yon} {adim}": [
-  "eylem.py:739"
+  "eylem.py:797"
  ],
  "keysym 0x{keysym} için boş tuş kodu yok": [
   "arka_uc/sanal.py:953"
  ],
  "kill -1: kullanıcının TÜM süreçlerini sonlandırır": [
-  "guvenlik.py:703"
+  "guvenlik.py:728"
  ],
  "killall5: tüm süreçlere sinyal gönderir": [
-  "guvenlik.py:707"
+  "guvenlik.py:732"
  ],
  "kind=color için color gerekli": [
   "mcp_sunucu.py:879"
@@ -2056,7 +2075,7 @@
   "mcp_sunucu.py:875"
  ],
  "klavye": [
-  "guvenlik.py:1039"
+  "guvenlik.py:1116"
  ],
  "klavye düzeni farklı ve merkez kullanımda": [
   "girdi_merkezi.py:446"
@@ -2068,11 +2087,14 @@
   "uygulama.py:454"
  ],
  "kodlanmış metni çözüp başka komuta verme (base64 -d | …)": [
-  "guvenlik.py:904"
+  "guvenlik.py:981"
+ ],
+ "komut adı açılımla gizlenmiş (${{…}} / $(…)): çalışacak komut görünmez": [
+  "guvenlik.py:838"
  ],
  "komut: {komut}": [
   "akis.py:181",
-  "guvenlik.py:1342"
+  "guvenlik.py:1432"
  ],
  "koordinat": [
   "mcp_sunucu.py:929"
@@ -2165,7 +2187,7 @@
   "arka_uc/kde.py:323"
  ],
  "kullanıcı {sn} sn boyunca bilgisayarı kullandı (insan önceliği); {ne} yapılmadı": [
-  "guvenlik.py:1577"
+  "guvenlik.py:1667"
  ],
  "kullanıcı {sn} sn boyunca fareyi kullandı (insan önceliği); girdi gönderilmedi": [
   "insan.py:169"
@@ -2194,13 +2216,19 @@
  "küçültme": [
   "arka_uc/__init__.py:142",
   "arka_uc/sanal.py:657",
-  "eylem.py:954"
+  "eylem.py:1013"
+ ],
+ "man -P: sayfalayıcı yerine komut çalıştırır": [
+  "guvenlik.py:792"
  ],
  "masaustu_baslat işlevi yok": [
   "gui/metinler.py:78"
  ],
+ "masaüstü kabuğunu / pencere yöneticisini / Deskhand'i sonlandırma": [
+  "guvenlik.py:767"
+ ],
  "masaüstü kapatılamaz; pencere kimliği/adı ver": [
-  "eylem.py:928"
+  "eylem.py:987"
  ],
  "masaüstü kipi kapatılamaz": [
   "arka_uc/sanal.py:617"
@@ -2208,7 +2236,7 @@
  "masaüstü kipi taşınamaz/boyutlandırılamaz; pencere kimliği/adı ver": [
   "arka_uc/kde.py:822",
   "arka_uc/sanal.py:638",
-  "eylem.py:977"
+  "eylem.py:1036"
  ],
  "metin okuma (tesseract)": [
   "gui/saglik.py:15"
@@ -2245,7 +2273,7 @@
   "mesgul.py:637"
  ],
  "mkfs: disk bölümünü biçimlendirir (veri siler)": [
-  "guvenlik.py:823"
+  "guvenlik.py:900"
  ],
  "modeller indirilmemiş": [
   "doktor.py:174"
@@ -2260,7 +2288,7 @@
   "cli.py:393"
  ],
  "mv kök/ev dizinini taşır": [
-  "guvenlik.py:709"
+  "guvenlik.py:734"
  ],
  "neden: {neden}": [
   "mesgul.py:676"
@@ -2269,8 +2297,8 @@
   "mcp_sunucu.py:126"
  ],
  "noktadaki yazı: {yazi}": [
-  "eylem.py:607",
-  "eylem.py:1101"
+  "eylem.py:633",
+  "eylem.py:1160"
  ],
  "not: Firefox ve Chromium/Electron çalışırken ağaca girmez; yeniden başlat": [
   "erisim.py:757"
@@ -2301,19 +2329,19 @@
   "mcp_sunucu.py:377"
  ],
  "onay modülü yüklenemedi: {hata}": [
-  "guvenlik.py:1165"
+  "guvenlik.py:1242"
  ],
  "onay süresi doldu (yanıt yok → red)": [
   "onay.py:60"
  ],
  "onay verilen hedef değişti: noktadaki yazı artık {simdi} (onaylanan: {onaylanan}); tıklanmadı": [
-  "eylem.py:581"
+  "eylem.py:607"
  ],
  "onay verilen hedef değişti: öge '{ad}' artık aynı yerde/aynı değil; eylem yapılmadı": [
-  "erisim.py:1062"
+  "erisim.py:1066"
  ],
  "onay verilen hedef değişti: öge '{ad}' artık aynı yerde/aynı değil; tıklanmadı": [
-  "erisim.py:1009"
+  "erisim.py:1011"
  ],
  "onay verilen hedef değişti; yeniden onay gerekir ({neden}). Eylem yapılmadı.": [
   "onay_hedef.py:105"
@@ -2334,7 +2362,7 @@
   "masaustu.py:907"
  ],
  "orta tıkla seçimi yapıştırma": [
-  "guvenlik.py:1535"
+  "guvenlik.py:1625"
  ],
  "oturum hazırlanamadı: {hata}": [
   "mcp_sunucu.py:1221"
@@ -2426,7 +2454,7 @@
   "mcp_sunucu.py:1038"
  ],
  "panodan yapıştırma": [
-  "guvenlik.py:1535"
+  "guvenlik.py:1625"
  ],
  "panoya yazıldı: {karakter} karakter": [
   "cli.py:212"
@@ -2464,18 +2492,18 @@
   "arka_uc/kde.py:839"
  ],
  "pencere işlemi": [
-  "eylem.py:1007"
+  "eylem.py:1066"
  ],
  "pencere kapandı ya da taşındı": [
   "onay_hedef.py:78"
  ],
  "pencere kapanmadı (kaydedilmemiş iş sorusu açık olabilir): {baslik}": [
-  "eylem.py:950"
+  "eylem.py:1009"
  ],
  "pencere kapatma": [
   "arka_uc/kde.py:815",
-  "eylem.py:933",
-  "eylem.py:938"
+  "eylem.py:992",
+  "eylem.py:997"
  ],
  "pencere kapatma isteğini desteklemiyor (WM_DELETE_WINDOW yok): {kimlik}": [
   "arka_uc/sanal.py:630"
@@ -2492,7 +2520,7 @@
   "cli.py:331"
  ],
  "pencere sınıfı uymadı: {sinif} (beklenen /{desen}/); girdi gönderilmedi": [
-  "guvenlik.py:1077"
+  "guvenlik.py:1154"
  ],
  "pencere taşıma": [
   "arka_uc/kde.py:827"
@@ -2510,19 +2538,19 @@
   "masaustu.py:1127"
  ],
  "pencere yöneticisi istenenden farklı bir geometri verdi: istenen {istenen}, olan {olan}": [
-  "eylem.py:1023"
+  "eylem.py:1082"
  ],
  "pencere yöneticisi isteği yerine getirmedi: {ne}": [
   "arka_uc/sanal.py:648"
  ],
  "pencere yönetimi": [
-  "eylem.py:980"
+  "eylem.py:1039"
  ],
  "pencere {islem}: değerler tam sayı (piksel) olmalı: {deger}": [
-  "eylem.py:1041"
+  "eylem.py:1100"
  ],
  "pencere {islem}: {gerekli} sayı gerekli (verilen {verilen})": [
-  "eylem.py:1036"
+  "eylem.py:1095"
  ],
  "pencere {islem}: {pencere}": [
   "mcp_sunucu.py:1269"
@@ -2534,7 +2562,7 @@
   "web.py:615"
  ],
  "pencerenin sahibi süreç ({pid}) bu ajanı çalıştıran süreç zincirinde": [
-  "guvenlik.py:1382"
+  "guvenlik.py:1472"
  ],
  "pencerenin süreç kimliği (PID) bilinmiyor: erişilebilirlik çerçevesi güvenle eşlenemez ({baslik})": [
   "erisim.py:260"
@@ -2569,19 +2597,22 @@
   "gui/metinler.py:100"
  ],
  "renk alanı: {renk} ({x},{y}) {alan} piksel": [
-  "eylem.py:1103"
+  "eylem.py:1162"
  ],
  "resize için width ve height gerekli": [
   "mcp_sunucu.py:1285"
  ],
  "rm -r: özyinelemeli silme (geri alınamaz)": [
-  "guvenlik.py:869"
+  "guvenlik.py:946"
  ],
  "role yalnız element hedefiyle kullanılır": [
   "mcp_sunucu.py:928"
  ],
  "rsync --delete kök/ev dizininde: eşleşmeyen her şeyi siler": [
-  "guvenlik.py:711"
+  "guvenlik.py:736"
+ ],
+ "rsync -e: uzak kabuk yerine yerel komut çalıştırabilir": [
+  "guvenlik.py:786"
  ],
  "run için name gerekli (action=list ile adlar)": [
   "mcp_sunucu.py:1310"
@@ -2628,17 +2659,23 @@
  "sanal masaüstünde pencere yöneticisi yok: pencere durumu değiştirilemez": [
   "arka_uc/sanal.py:329"
  ],
- "satırda geçmiş açılımı/geçmiş komutu var (!!, !n, ^a^b, fc, r, history -s): çalışacak komut bilinmiyor": [
-  "ucbirim.py:274"
+ "satır: {satir}": [
+  "ucbirim.py:361"
+ ],
+ "satırda geçmiş açılımı/geçmiş komutu var (!!, !n, ^a^b, fc, r, history -s): çalışacak komut görünmez": [
+  "ucbirim.py:356"
  ],
  "sayfa numarası (her sayfada 60 öge)": [
   "cli.py:450"
  ],
  "screen ile ayrık oturumda komut çalıştırma": [
-  "guvenlik.py:727"
+  "guvenlik.py:752"
  ],
  "screenshot/read/wait bitince önceki pencere geri öne gelir (--stay: gelmesin).": [
   "cli.py:137"
+ ],
+ "sed e: komut çalıştırır": [
+  "guvenlik.py:789"
  ],
  "ses bekçisi hazır olmadı ({yanit})": [
   "masaustu.py:856"
@@ -2662,10 +2699,10 @@
   "mcp_sunucu.py:492"
  ],
  "shred: dosyayı geri alınamaz biçimde yok eder": [
-  "guvenlik.py:719"
+  "guvenlik.py:744"
  ],
  "simge '{ad}' bulunamadı (eşik {esik}{ipucu})": [
-  "eylem.py:1062"
+  "eylem.py:1121"
  ],
  "simge adı yalnız harf/rakam/._- içermeli: {ad}": [
   "gorsel.py:120"
@@ -2689,7 +2726,7 @@
   "web.py:540"
  ],
  "sistemi kapatma/yeniden başlatma ({komut})": [
-  "guvenlik.py:818"
+  "guvenlik.py:895"
  ],
  "siz durdurdunuz": [
   "gui/metinler.py:24"
@@ -2706,11 +2743,14 @@
  "submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)": [
   "mcp_sunucu.py:1007"
  ],
+ "systemctl ile masaüstü/oturum hizmetini durdurma": [
+  "guvenlik.py:770"
+ ],
  "systemd-run yok: bellek kafesi kurulamaz (bilerek kapatmak için DESKHAND_SANAL_BELLEK=0)": [
   "masaustu.py:763"
  ],
  "süre 0-30 sn olmalı": [
-  "eylem.py:751"
+  "eylem.py:809"
  ],
  "süre doldu": [
   "gui/metinler.py:100"
@@ -2719,10 +2759,10 @@
   "masaustu.py:387"
  ],
  "sürükleme": [
-  "eylem.py:804"
+  "eylem.py:863"
  ],
  "sürükleme sonunda imleç hedefte değil ({imlec} ≠ {hedef}): kullanıcı fareyi oynattı; bırakıldı": [
-  "eylem.py:834"
+  "eylem.py:893"
  ],
  "sürükleme: ({x1},{y1}) → ({x2},{y2})": [
   "mcp_sunucu.py:1172"
@@ -2731,10 +2771,10 @@
   "mcp_sunucu.py:1155"
  ],
  "sürüklendi ({dugme}): ({x1},{y1}) → ({x2},{y2}) {sn} sn": [
-  "eylem.py:854"
+  "eylem.py:913"
  ],
  "sürüklerken aktif pencere değişti → {baslik}; bırakıldı": [
-  "eylem.py:826"
+  "eylem.py:885"
  ],
  "sürüm okunamadı (kwin/plasmashell bulunamadı)": [
   "doktor.py:89"
@@ -2753,22 +2793,22 @@
  ],
  "taşıma": [
   "arka_uc/__init__.py:134",
-  "eylem.py:954"
+  "eylem.py:1013"
  ],
  "taşıma için x ve y gerekli": [
-  "eylem.py:992"
+  "eylem.py:1051"
  ],
  "tesseract hata verdi: {hata}": [
   "ocr.py:268"
  ],
  "tmux ile ayrık oturumda komut çalıştırma": [
-  "guvenlik.py:725"
+  "guvenlik.py:750"
  ],
  "truncate -s 0: dosyanın içeriğini siler": [
-  "guvenlik.py:721"
+  "guvenlik.py:746"
  ],
  "tuş": [
-  "eylem.py:658"
+  "eylem.py:684"
  ],
  "tuş verilmedi": [
   "arka_uc/sanal.py:1053"
@@ -2777,9 +2817,9 @@
   "mcp_sunucu.py:1079"
  ],
  "tuş: {kombinasyon}": [
-  "eylem.py:667",
-  "eylem.py:693",
-  "guvenlik.py:1298",
+  "eylem.py:695",
+  "eylem.py:751",
+  "guvenlik.py:1385",
   "mcp_sunucu.py:1093"
  ],
  "tüm ekran": [
@@ -2796,16 +2836,16 @@
  ],
  "tıklama": [
   "erisim.py:826",
-  "erisim.py:1028",
+  "erisim.py:1030",
   "eylem.py:198",
-  "eylem.py:608",
-  "eylem.py:1075",
-  "eylem.py:1102",
-  "eylem.py:1139"
+  "eylem.py:634",
+  "eylem.py:1134",
+  "eylem.py:1161",
+  "eylem.py:1198"
  ],
  "tıklama (erişilebilirlik eylemi)": [
-  "erisim.py:1049",
-  "erisim.py:1099"
+  "erisim.py:1051",
+  "erisim.py:1103"
  ],
  "tıklama: {hedef} @ {pencere}": [
   "mcp_sunucu.py:929"
@@ -2832,7 +2872,7 @@
   "arka_uc/kde.py:907"
  ],
  "uygulama başlatma": [
-  "guvenlik.py:1342"
+  "guvenlik.py:1432"
  ],
  "uygulama durumları": [
   "oturum/cli.py:62"
@@ -2844,11 +2884,11 @@
   "web.py:273"
  ],
  "uçbirim çoklayıcısı (tmux/screen/zellij) çözülemedi: tüm uçbirim pencereleri korunur": [
-  "guvenlik.py:1383"
+  "guvenlik.py:1473"
  ],
  "uçbirim: {sinif}": [
-  "guvenlik.py:1320",
-  "ucbirim.py:284"
+  "guvenlik.py:1410",
+  "ucbirim.py:367"
  ],
  "var": [
   "gui/metinler.py:172",
@@ -2887,7 +2927,7 @@
   "cli.py:367"
  ],
  "xargs rm: listedeki her dosyayı siler": [
-  "guvenlik.py:731"
+  "guvenlik.py:756"
  ],
  "yalnız bu rol (ör. 'push button', 'check box')": [
   "cli.py:445"
@@ -2926,11 +2966,11 @@
  ],
  "yazma kesildi": [
   "eylem.py:335",
-  "eylem.py:415"
+  "eylem.py:439"
  ],
  "yazı": [
-  "eylem.py:719",
-  "eylem.py:723"
+  "eylem.py:777",
+  "eylem.py:781"
  ],
  "yazı (Enter/Tab/boşluk içeriyor)": [
   "eylem.py:264"
@@ -2943,22 +2983,22 @@
  ],
  "yazılacak: {metin}": [
   "eylem.py:265",
-  "guvenlik.py:1321"
+  "guvenlik.py:1411"
  ],
  "yazılamayan karakter {karakter} (U+{kod}): '{duzen}' düzeninde yok, yedeği yok; hiçbir şey yazılmadı": [
   "eylem.py:64"
  ],
  "yazıldı: {karakter} karakter, {parca} parça": [
-  "eylem.py:441"
+  "eylem.py:467"
  ],
  "yazıldı: {karakter} karakter, {parca} parça (panodan yapıştırıldı)": [
-  "eylem.py:371"
+  "eylem.py:373"
  ],
  "yazıldı: {rol} '{ad}' ← {karakter} karakter ({yontem}){dogrulandi}, {kademe} eşleşme": [
-  "erisim.py:1138"
+  "erisim.py:1146"
  ],
  "yetki/kabuk programına bağlantı (adını gizler)": [
-  "guvenlik.py:698"
+  "guvenlik.py:723"
  ],
  "yok": [
   "gui/metinler.py:173",
@@ -2976,7 +3016,7 @@
   "uygulama.py:263"
  ],
  "yıkıcı komutu çalıştırılabilecek bir dosyaya yazma ({hedef})": [
-  "guvenlik.py:663"
+  "guvenlik.py:688"
  ],
  "zaman aşımı": [
   "insan.py:87",
@@ -2987,6 +3027,9 @@
  ],
  "zaten açıktı, öne geldi ({sn} sn)": [
   "uygulama.py:762"
+ ],
+ "zip -TT: komut çalıştırır": [
+  "guvenlik.py:794"
  ],
  "{ad} arka planda çalıştırılmaz (ikinci örnek asıl veriyi/oturumu bozar).": [
   "oturum/__init__.py:41"
@@ -3013,7 +3056,7 @@
   "oturum/__init__.py:111"
  ],
  "{ad}: kabuk her istemde/başlangıçta bu kodu çalıştırır": [
-  "guvenlik.py:738"
+  "guvenlik.py:807"
  ],
  "{ad}: kopya yöntemi tanımlı değil": [
   "oturum/__init__.py:139"
@@ -3059,25 +3102,25 @@
   "mesgul.py:544"
  ],
  "{etiket} içinde '{komut}' kullanılamaz": [
-  "eylem.py:896"
+  "eylem.py:955"
  ],
  "{etiket} {no}. satır hatalı: {satir}": [
-  "eylem.py:894"
+  "eylem.py:953"
  ],
  "{etiket} {no}. satır önceden onaylı (--onayli) ama kullanıcı onayı alınmadı: {satir}": [
-  "eylem.py:899"
+  "eylem.py:958"
  ],
  "{hata}; varsayılan ({deger}) kullanılıyor": [
   "ayarlar.py:106"
  ],
  "{islem} tamam: {baslik} | konum {x},{y} boyut {g}x{h}": [
-  "eylem.py:1047"
+  "eylem.py:1106"
  ],
  "{komut} -R kök/ev/sistem dizininde: tüm dosyaların izin/sahipliğini değiştirir": [
-  "guvenlik.py:832"
+  "guvenlik.py:909"
  ],
  "{komut} -u: kullanıcının tüm süreçlerini sonlandırır": [
-  "guvenlik.py:705"
+  "guvenlik.py:730"
  ],
  "{komut} MS olmalı: {satir}": [
   "arka_uc/sanal.py:1141"
@@ -3086,46 +3129,64 @@
   "arka_uc/sanal.py:1101"
  ],
  "{komut} betik dosyasını çalıştırır ({dosya}): içeriği denetlenemez": [
-  "guvenlik.py:686"
+  "guvenlik.py:711"
+ ],
+ "{komut} betiği çalıştırır ({dosya}): içeriği denetlenemez": [
+  "guvenlik.py:777"
  ],
  "{komut} geçici/uzantısız betiği çalıştırır ({dosya})": [
-  "guvenlik.py:676"
+  "guvenlik.py:701"
  ],
  "{komut} ile kapatma/yeniden başlatma/askıya alma/oturum sonlandırma": [
-  "guvenlik.py:821"
+  "guvenlik.py:898"
  ],
  "{komut} ile satır içi kod: dosya silme / komut çalıştırma / dinamik kod": [
-  "guvenlik.py:845"
+  "guvenlik.py:922"
  ],
  "{komut} ile yetki yükseltme": [
-  "guvenlik.py:816"
+  "guvenlik.py:893"
+ ],
+ "{komut} içinden kabuk komutu": [
+  "guvenlik.py:796"
  ],
  "{komut} programı kabuk komutu çalıştırır (system / boru)": [
-  "guvenlik.py:691"
+  "guvenlik.py:716"
+ ],
+ "{komut}: ProxyCommand/LocalCommand ile yerel komut": [
+  "guvenlik.py:784"
  ],
  "{komut}: dosyadaki komutları bu kabukta çalıştırır (içeriği denetlenemez)": [
-  "guvenlik.py:668"
+  "guvenlik.py:693"
+ ],
+ "{komut}: geçici dizindeki derleme dosyası komut çalıştırır": [
+  "guvenlik.py:798"
+ ],
+ "{komut}: komutu sonra/ayrık çalıştırır": [
+  "guvenlik.py:800"
  ],
  "{komut}: komutu uçbirimin dışında/ayrık başlatır (denetlenemez)": [
-  "guvenlik.py:723"
+  "guvenlik.py:748"
+ ],
+ "{komut}: seçenekle kabuk komutu çalıştırır": [
+  "guvenlik.py:781"
  ],
  "{komut}: sonradan (görünmeden) çalışacak komut tanımlar": [
-  "guvenlik.py:696"
+  "guvenlik.py:721"
  ],
  "{mesaj} ({yazilan}/{toplam} karakter tamam)": [
   "eylem.py:337",
-  "eylem.py:354",
-  "eylem.py:417",
-  "eylem.py:434"
+  "eylem.py:356",
+  "eylem.py:441",
+  "eylem.py:460"
  ],
  "{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam)": [
   "eylem.py:341"
  ],
  "{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf ({son}) yeni yere gitmiş olabilir, oraya bak": [
-  "eylem.py:426"
+  "eylem.py:450"
  ],
  "{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf yeni yere gitmiş olabilir, oraya bak": [
-  "eylem.py:423"
+  "eylem.py:447"
  ],
  "{no}. satır geçerli bir desen değil: {hata}": [
   "gui/metinler.py:143"
@@ -3185,7 +3246,7 @@
   "uygulama.py:688"
  ],
  "{x},{y} noktasındaki yazı: {yazi}": [
-  "guvenlik.py:1206"
+  "guvenlik.py:1283"
  ],
  "{yol}: hiç 'ekran' bloğu ya da 'basari' yok": [
   "akis.py:82"
@@ -3212,7 +3273,7 @@
   "cli.py:140"
  ],
  "Ödeme/yetki/hesap silme gibi hassas bir düğme": [
-  "guvenlik.py:1272"
+  "guvenlik.py:1359"
  ],
  "Önizleme yok": [
   "gui/metinler.py:88"
@@ -3222,9 +3283,6 @@
  ],
  "Özet: {tamam} tamam, {uyari} uyarı, {eksik} eksik zorunlu bağımlılık": [
   "doktor.py:214"
- ],
- "çalışacak satır: {satir}": [
-  "ucbirim.py:285"
  ],
  "çalışmıyor: hassas eylem onayı ve DUR/Devral düğmeleri yok": [
   "doktor.py:97"
@@ -3242,7 +3300,7 @@
   "doktor.py:160"
  ],
  "çatal bombası (sistemi kilitler)": [
-  "guvenlik.py:877"
+  "guvenlik.py:954"
  ],
  "çok uzun ya da denetim karakteri içeriyor": [
   "uygulama.py:294"
@@ -3267,22 +3325,22 @@
   "web.py:649"
  ],
  "öge eylem arayüzü sunmuyor (Action yok): fare ile tıkla (--eylem olmadan)": [
-  "erisim.py:1085"
+  "erisim.py:1089"
  ],
  "öge kimliği yok (yol_ver)": [
   "web.py:635"
  ],
  "öge konumu doğrulanamadı (erişilebilirlik çerçeve sınırı pencere geometrisine uymuyor); tıklanmadı. OCR ile metne tıklamayı dene (click-text)": [
-  "erisim.py:931"
+  "erisim.py:933"
  ],
  "öge konumu doğrulanamadı; tıklanmadı": [
-  "erisim.py:972"
+  "erisim.py:974"
  ],
  "öge yazılabilir değil (EditableText ya da Value arayüzü yok)": [
   "erisim.py:472"
  ],
  "öge yazılabilir değil (EditableText ya da Value arayüzü yok): '{ad}'": [
-  "erisim.py:1120"
+  "erisim.py:1127"
  ],
  "ölçek {olcek}": [
   "gorsel.py:234"
@@ -3292,6 +3350,9 @@
  ],
  "ön plan panosunu okumak için: kullanıcı AÇIKÇA onayladı": [
   "cli.py:384"
+ ],
+ "ön planda kabuk değil: {adlar} (vim/REPL olabilir; yine de satır çalıştırılır)": [
+  "ucbirim.py:329"
  ],
  "özel D-Bus (dbus-daemon) açılmadı": [
   "masaustu.py:868"
