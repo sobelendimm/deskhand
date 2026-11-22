@@ -7,8 +7,10 @@ kapatma). 7 yalnız OCR venv'i + modeli + ekran kartı olan makinede: gerçek su
 kullanılır; soket/günlük geçici klasörde), kullanıcı oyundaysa atlanır.
 
 Çalıştır:  python3 tests/test_ocr_gpu.py"""
+import fcntl
 import os
 import signal
+import subprocess
 import socket
 import sys
 import threading
@@ -206,6 +208,76 @@ def sahte():
         g.eksikler, g.oyunda, g.ISTEK_SN, g.kapat = eski
 
 
+def acilis():
+    """Açılış beklemesi: yavaş ama yaşayan sunucu başarır; açılırken ölen sunucu hızlı ve nedenli hata verir."""
+    import sys as _sys
+    eski = (g.eksikler, g.oyunda)
+    g.eksikler = lambda: []
+    g.oyunda = lambda: False
+    kfd = []
+    try:
+        os.makedirs(os.path.dirname(g.kilit_yolu()), exist_ok=True)
+        os.makedirs(os.path.dirname(g.gunluk_yolu()), exist_ok=True)
+        # 1. yavaş açılan sunucu: süreç yaşıyor, 5 sn sonra kilit + soket gelir
+        yavas = subprocess.Popen([_sys.executable, "-c", "import time; time.sleep(8)"])
+        g._son_baslatma[0] = time.monotonic()
+        g._surec_kaydet(yavas)
+        sv = []
+
+        def gec():
+            time.sleep(5)
+            fd = os.open(g.kilit_yolu(), os.O_RDWR | os.O_CREAT, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            kfd.append(fd)
+            sv.append(SahteSunucu(KUTULAR))
+        th = threading.Thread(target=gec, daemon=True)
+        th.start()
+        t0 = time.monotonic()
+        k = g.oku(WEB, bekle=12)
+        sure = time.monotonic() - t0
+        kontrol("yavaş açılan sunucu (5 sn): oku başarılı, yanlış alarm yok", k is not None and [w["t"] for w in k] == ["Satın", "al", "Kaydet"] and 4.5 < sure < 11, f"{sure:.1f} sn")
+        th.join()
+        for x in sv:
+            x.kapat()
+        for fd in kfd:
+            os.close(fd)
+        kfd.clear()
+        yavas.kill()
+        yavas.wait()
+        # 2. anında ölen sunucu
+        try:
+            os.unlink(g.hata_yolu())
+        except FileNotFoundError:
+            pass
+        with open(g.gunluk_yolu(), "w") as gl:
+            olu = subprocess.Popen([_sys.executable, "-c", "import sys; print('patladi: bellek'); sys.exit(3)"], stdout=gl, stderr=gl)
+        olu.wait()
+        g._son_baslatma[0] = time.monotonic()
+        g._surec_kaydet(olu)
+        t0 = time.monotonic()
+        k = g.oku(WEB, bekle=12)
+        sure = time.monotonic() - t0
+        hata = open(g.hata_yolu()).read() if os.path.exists(g.hata_yolu()) else ""
+        kontrol("anında ölen sunucu: hızlı None (bekleme süresini beklemez)", k is None and sure < 2.0, f"{sure:.1f} sn")
+        kontrol("ölen sunucu: açık hata (çıkış kodu + günlüğün son satırı)", "çıkış kodu 3" in hata and "patladi: bellek" in hata, hata)
+        # 3. oyunda ölen sunucu: hata dosyası yazılmaz (bekçinin bilerek kapatması)
+        os.unlink(g.hata_yolu())
+        calis = [True]
+
+        def oyun_sirasi():
+            calis[0] = not calis[0]
+            return calis[0]  # oku başında False, ölüm denetiminde True
+        g.oyunda = oyun_sirasi
+        g._son_baslatma[0] = time.monotonic()
+        g._surec_kaydet(olu)
+        k = g.oku(WEB, bekle=5)
+        kontrol("oyunda kapanan sunucu: 'atlandı' (hata dosyası yazılmaz)", k is None and not os.path.exists(g.hata_yolu()))
+    finally:
+        g.eksikler, g.oyunda = eski
+        g._surec[:] = [None, 0, None]
+        g._son_baslatma[0] = 0.0
+
+
 # ---------------------------------------------------------------- 7. gerçek sunucu (varsa)
 OYUNDA_GORULDU = [False]
 
@@ -286,7 +358,7 @@ def gercek():
 
 def main():
     t0 = time.monotonic()
-    for adim in (kurulumsuz, protokol, bicim, ekleme, sahte, gercek):
+    for adim in (kurulumsuz, protokol, bicim, ekleme, sahte, acilis, gercek):
         adim()
     print(f"\n{gecen}/{toplam} ekran kartı OCR testi geçti ({time.monotonic() - t0:.1f} sn)")
     sys.exit(0 if gecen == toplam else 1)
