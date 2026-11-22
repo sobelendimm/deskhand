@@ -1,2 +1,2 @@
 """Deskhand: bir yapay zekâ ajanının KDE Plasma (Wayland) masaüstünü güvenle kullanması (ekran v3.2'nin devamı)."""
-__version__ = "0.8.2"
+__version__ = "0.9.0"
