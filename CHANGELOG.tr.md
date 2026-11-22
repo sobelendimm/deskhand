@@ -2,9 +2,24 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
-## Yayımlanmamış (Tur 3: dinleme)
+## 0.6.1 (22 Kasım 2026)
 
-- **`listen` aracı.** Görünmez masaüstündeki uygulamaların SESİ yerel Whisper ile yazıya dökülür (video, sesli mesaj). Her masaüstü isterse kendi özel, donanımsız ses sunucusunu alır (`manage_desktop(start, audio=true)` ya da ilk `listen`); uygulamalar yalnız onu görür, ses kullanıcının hoparlörüne gitmez, mikrofon yoktur. Kayıt bellekte tutulur, metin günlüğe yazılmaz, kullanıcının kendi ekran sesi dinlenmez. `doctor` "Dinleme" satırı eklendi; ayarlar `[dinleme]`.
+- **Chromium ailesi görünmez masaüstünde açılıyor.** profile-sync-daemon kullanan sistemlerde Chromium/Vivaldi/Electron
+  arka planda açılışta çöküyordu; boşta kalan profil bağı artık ad alanına özel boş bir dizine çıkıyor (gerçek profil
+  yine görünmez). İndirmeler gerçek indirme klasörü kuralına uyar.
+- **Güvenlik: tarayıcı profil yedekleri gizlendi.** profile-sync-daemon'un Chromium/Brave disk kopyaları
+  (`*-back-ovfs`, `*-backup`) görünmez masaüstündeki uygulamalardan gizlenir (0.5.4'ten beri açıktı).
+- **Hassas alan değerleri maskelenir.** `observe`/`read_text` giriş alanlarının değerini döndürürken parola, PIN,
+  tek kullanımlık kod, doğrulama kodu, kart alanları `***` olarak gelir.
+- **`type_text` aynı adlı ögelerde** `role`/`nth` alır; ad tam eşleşip tek yazılabilir alan varsa onu seçer.
+- **KWrite/Kate metni ağaçtan okunur** (`read_text(source="tree")`).
+- **Gerçek ekran kilidi.** `DESKHAND_GERCEK_EKRAN=kapali` (testler bunu kendiliğinden ayarlar) iken kullanıcının
+  gerçek ekranına giden her yan etki en alt katmanda reddedilir (çıkış kodu 17); `salt-okuma` değeri yalnız yan
+  etkileri kapatır.
+- `doctor` ekransız ortamda çökme kaydı bırakmaz; panel soket yolu çok uzunsa açık ileti verir.
+
+
+- **`listen` aracı (dinleme).** Görünmez masaüstündeki uygulamaların SESİ yerel Whisper ile yazıya dökülür (video, sesli mesaj). Her masaüstü isterse kendi özel, donanımsız ses sunucusunu alır (`manage_desktop(start, audio=true)` ya da ilk `listen`); uygulamalar yalnız onu görür, ses kullanıcının hoparlörüne gitmez, mikrofon yoktur. Kayıt bellekte tutulur, metin günlüğe yazılmaz, kullanıcının kendi ekran sesi dinlenmez. `doctor` "Dinleme" satırı eklendi; ayarlar `[dinleme]`.
 - **Dinleme güvenlik düzeltmeleri (bağımsız inceleme).** Uygulamalar özel ses sunucusuna yalnız pulse soketinden ulaşır ve modül YÜKLETEMEZ (`load-module` kapalı: tünel ile gerçek mikrofona/hoparlöre bağlanma, LADSPA ile keyfi kod, pipe ile dosya yazma, TCP soketi açma engellendi). PipeWire'ın tam yetkili soketi uygulamaya hiç bağlanmaz. Üç ses süreci de kendi bwrap ad alanında çalışır: ağ yok, ses donanımı/GPU yok, kullanıcının gerçek oturum soketleri ve ev dizini görünmez, yalnız `ses/` yazılabilir, düşük öncelik. Konuşma tanıma masaüstünün bellek kafesinde düşük öncelikle çalışır; kullanıcı oyundayken CPU'da en çok 4 iş parçacığı kullanır.
 
 ## 0.6.0 (0.5.4'ten sonra)

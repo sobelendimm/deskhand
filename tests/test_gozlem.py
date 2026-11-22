@@ -185,7 +185,7 @@ async def liste_testleri():
         r = await c.list_tools()
         talimat = (c.initialize_result.instructions if getattr(c, "initialize_result", None) else None) or s.TALIMAT
     araclar = {t.name: t for t in r.tools}
-    kontrol("liste: 18 araç (en çok 18)", len(araclar) == 18, str(sorted(araclar)))
+    kontrol("liste: 19 araç (0.6.1: + listen)", len(araclar) == 19, str(sorted(araclar)))
     for ad in ("observe", "wait_for"):
         a = araclar[ad].annotations
         kontrol(f"liste: {ad} salt-okunur", a.read_only_hint is True)

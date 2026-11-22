@@ -328,8 +328,13 @@ kontrol("(b) GÜVENLİK: ad alanında `ses/` içinde yalnız `pulse/` (PipeWire 
 kontrol("(b) GÜVENLİK: pw-cli / pw-dump PipeWire'a bağlanamaz (varsayılan, açık yol, -manager)",
         all(ok_(k) for k in ("pw_cli", "pw_cli_acik", "pw_cli_yonetici", "pw_dump")),
         str({k: o.get(k) for k in ("pw_cli", "pw_cli_acik", "pw_cli_yonetici", "pw_dump")})[:600])
-kontrol("GÜVENLİK: ad alanında kullanıcının GERÇEK pulse/pipewire soketi yok (/run/user/UID boş)",
-        o.get("gercek_pulse") is False and o.get("gercek_pw") is False and o.get("runtime_ls") == [], str(o.get("runtime_ls")))
+# /run/user/UID ad alanında boş tmpfs; yalnız arka_ortak.sir_bos_hedefler'in açtığı BOŞ özel dizinler (ör. psd: tarayıcı
+# profil bağlarının hedefi) bulunabilir — gerçek oturum soketi/dizini değil
+_izinli = {os.path.relpath(h, f"/run/user/{os.getuid()}").split("/")[0]
+           for h in ao.sir_bos_hedefler() if h.startswith(f"/run/user/{os.getuid()}/")}
+kontrol("GÜVENLİK: ad alanında kullanıcının GERÇEK pulse/pipewire soketi yok (/run/user/UID yalnız boş özel dizinler)",
+        o.get("gercek_pulse") is False and o.get("gercek_pw") is False
+        and set(o.get("runtime_ls") or []) <= _izinli, str((o.get("runtime_ls"), sorted(_izinli))))
 kontrol("GÜVENLİK: açık gerçek yolla bağlanma BAŞARISIZ", o.get("gercek_yolla") not in (0, None), str(o.get("gercek_yolla")))
 s_cik = (o.get("sinks") or [1, ""])[1].splitlines()
 s_kay = (o.get("sources") or [1, ""])[1].splitlines()
