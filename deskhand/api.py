@@ -566,7 +566,13 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     t0 = time.monotonic()
     while time.monotonic() - t0 < sure:
         time.sleep(0.25)
-        for w in tum_pencereler() - once:
+        try:
+            yeni = tum_pencereler() - once
+        except Dur as e:
+            if e.kod != 7:
+                raise
+            continue  # geçici pencere listesi hatası: uygulama zaten başladı, süre bitene dek yoklamaya devam
+        for w in yeni:
             b, s = au.baslik(w), au.sinif(w)
             if (b or s) and (not baslik or re.search(baslik, b, re.I)):
                 y = yasak_mi(w)

@@ -2243,7 +2243,13 @@ def wait_for(
                             goruldu = goruldu or o is not None
                             tamam = goruldu and o is None
                 elif condition == "window":
-                    for p in api.pencereler(value):
+                    try:
+                        adaylar = api.pencereler(value)
+                    except hata.Dur as e:
+                        if e.kod != 7:
+                            raise
+                        adaylar = []  # geçici pencere listesi hatası: bekleme iptal olmaz, süre bitene dek yokla
+                    for p in adaylar:
                         if not p.get("forbidden"):
                             tamam, pencere_id = True, p["id"]
                             eslesme = {"title": p["title"], "id": p["id"]}

@@ -413,7 +413,7 @@
   "guvenlik.py:960"
  ],
  "; açılan başka pencereler: {pencereler}": [
-  "uygulama.py:778"
+  "uygulama.py:784"
  ],
  "; en yakın aday benzerliği {benzerlik}": [
   "eylem.py:1157"
@@ -428,7 +428,7 @@
   "ocr.py:598"
  ],
  "; çıktı: {log}": [
-  "uygulama.py:779"
+  "uygulama.py:785"
  ],
  "> /dev/diskaygıtı: diskin üzerine yazar": [
   "guvenlik.py:822",
@@ -1335,7 +1335,7 @@
   "mcp_sunucu.py:1951"
  ],
  "akış adı yalnız harf/rakam/._- içermeli: {ad} (list ile adlara bak)": [
-  "api.py:605"
+  "api.py:611"
  ],
  "akış dosyası okunamadı: {hata}": [
   "akis.py:43"
@@ -1356,7 +1356,7 @@
   "akis.py:167"
  ],
  "akış yok: {ad} ({dizin})": [
-  "api.py:608"
+  "api.py:614"
  ],
  "akış {ad}: {pencere}": [
   "mcp_sunucu.py:1939"
@@ -1419,7 +1419,7 @@
   "oturum/cli.py:120"
  ],
  "açıldı ({sn} sn)": [
-  "uygulama.py:768"
+  "uygulama.py:774"
  ],
  "basılı tutuldu ({dugme}, {sn} sn): pencere ({x},{y}) = ekran ({ex},{ey})": [
   "eylem.py:219"
@@ -2578,7 +2578,7 @@
   "masaustu.py:364"
  ],
  "metin erişilebilirlik ağacında hiç görülmedi; pencere önde değilken OCR yapılmaz — pencereyi öne getirip yeniden dene ya da window deseniyle arka plan masaüstünü kullan": [
-  "mcp_sunucu.py:2283"
+  "mcp_sunucu.py:2289"
  ],
  "metin okuma (tesseract)": [
   "gui/saglik.py:15"
@@ -3502,7 +3502,7 @@
   "masaustu.py:1050"
  ],
  "zaten açıktı, öne geldi ({sn} sn)": [
-  "uygulama.py:774"
+  "uygulama.py:780"
  ],
  "zip -TT: komut çalıştırır": [
   "guvenlik.py:796"
@@ -3696,13 +3696,13 @@
   "akis.py:259"
  ],
  "{sn} sn içinde uygun pencere açılmadı": [
-  "uygulama.py:777"
+  "uygulama.py:783"
  ],
  "{sn} sn içinde yanıt yok": [
   "mesgul.py:504"
  ],
  "{sn} sn içinde yeni pencere görünmedi (çıktı: {log})": [
-  "api.py:577"
+  "api.py:583"
  ],
  "{tus} boşta görünüyor.": [
   "gui/metinler.py:165"

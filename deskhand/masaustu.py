@@ -969,7 +969,7 @@ def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, g
         # boş çıkış yok → ses PULSE_SERVER ile kapatıldı; ama flatpak --socket=pulseaudio sandbox içinde
         # PULSE_SERVER'ı kendi soketine EZER (ölçüldü) → ses kullanıcının kulaklığına giderdi
         argv.insert(argv.index("run") + 1, "--nosocket=pulseaudio")
-    if tur(d) == "kwin":  # Gecko (Firefox…) XWayland'den: yerel Wayland'de erişilebilirlik koordinatları mutlak değil
+    if tur(d) == "kwin" and d.get("xwayland"):  # Gecko (Firefox…) XWayland'den: yerel Wayland'de erişilebilirlik koordinatları mutlak değil
         from . import kwin_oturum
         env = {**kwin_oturum.gecko_ipuclari(argv), **(env or {})} or None
     try:

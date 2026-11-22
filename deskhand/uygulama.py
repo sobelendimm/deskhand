@@ -757,7 +757,13 @@ def k_ac(a):
         return (not a.baslik or re.search(a.baslik, b, re.I)) and (not a.sinif or re.search(a.sinif, s, re.I))
     while time.monotonic() - t0 < a.sure:
         time.sleep(0.25)
-        for w in tum_pencereler() - once:
+        try:
+            yeni = tum_pencereler() - once
+        except Dur as e:
+            if e.kod != 7:
+                raise
+            yeni = set()  # geçici pencere listesi hatası: uygulama başladı, yoklamaya devam (çift açılış olmasın)
+        for w in yeni:
             b, s = au.baslik(w), au.sinif(w)
             if b or s:
                 gorulen[w] = (b, s)
