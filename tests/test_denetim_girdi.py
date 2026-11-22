@@ -1075,7 +1075,7 @@ else:
             return []
 
     def pencere(ad, baslik, sinif, geo, pid=0, kip="duz"):
-        LOGLAR[ad] = os.path.join(G, f"{ad}.log")
+        LOGLAR[ad] = os.path.join(_yalitim.PAYLASIM, f"{ad}.log")
         open(LOGLAR[ad], "w").close()
         masaustu.baslat([sys.executable, YARDIMCI, baslik, sinif, *map(str, geo), str(pid), kip], {"LOG": LOGLAR[ad]})
         t = time.monotonic() + 15
@@ -1092,13 +1092,24 @@ else:
     # ---- 6a–6c: ajanın kendi uçbirimi (penceresinin _NET_WM_PID'i bu sürecin kendisi = ata kümesinde)
     kg = pencere("ghostty", "* Claude Code - izin: Bash(rm -rf build) 1=Yes 2=No", "com.mitchellh.ghostty",
                  (50, 50, 700, 400), os.getpid())
+    # Pencere bwrap ad alanında açılır: X sunucusu SAHİBİNİ ana makine PID'iyle bildirir (sahte _NET_WM_PID yazmak artık
+    # işe yaramaz) ve süreç bu sürecin torunu değil (masaüstü hizmeti başlatır). "Ajanın uçbirimi" senaryosu: pencerenin
+    # gerçek PID'ini ata kümesine koy.
+    with api.hedef("sanal"):
+        _wp = guvenlik.sec().pid(kg)
     kendi.sifirla()
+    _once_kume6 = kendi.kume
+    _kume6 = kendi.kume()
+    _kume6.pidler.add(_wp)
+    kendi.kume = lambda tazele=False: _kume6
     sonuc = {ad: kod(f, *a) for ad, f, a in (
         ("type_text '1' (6a)", api.yaz, (kg, "1")), ("press_key Return (6b)", api.tus, (kg, "Return")),
         ("tek tuş '1' (6c)", api.tus, (kg, "1")), ("click", api.tikla, (kg, 100, 100)),
         ("scroll", api.kaydir, (kg, "down", 1)), ("drag", api.surukle, (kg, 10, 10, 80, 80)),
         ("hold", api.bas, (kg, "1", 0.1)), ("manage_window", api.pencere_yonet, (kg, "tasi", 60, 60)),
         ("close", api.pencere_kapat, (kg, ".")))}
+    kendi.kume = _once_kume6
+    kendi.sifirla()
     time.sleep(0.4)
     kontrol("denetim 6a–6c: ajanın kendi uçbirimine HER girdi türü → 10", all(v == 10 for v in sonuc.values()), str(sonuc))
     kontrol("…ve pencereye hiçbir tuş/tık ulaşmadı (IZIN yok)", not [l for l in oku("ghostty") if l != "hazir"],
@@ -1232,7 +1243,7 @@ else:
     ucbirim.satir_oku = lambda k: SATIR["oku"]
 
     # ---- 2a/2b: AT-SPI çerçeve karışıklığı (gerçek Qt penceresi, CLI alt süreç)
-    LOGA = os.path.join(G, "a11y.log")
+    LOGA = os.path.join(_yalitim.PAYLASIM, "a11y.log")
     masaustu.baslat([sys.executable, os.path.join(KOK, "tests/yardimci/a11y_pencere.py")],
                     {"LOG": LOGA, "PENCERE_BASLIK": "Deskhand"})
     t_ = time.monotonic() + 20
@@ -1258,15 +1269,15 @@ else:
     kontrol("denetim 2b: aynı yolla yasak pencerenin metin alanına değer YAZILMADI",
             kb_ != 0 and not any("ajan-yazdi" in l for l in yeni), f"{kb_} {cb_[-200:]}")
     # ---- denetim 2 B (YO1): AT-SPI'siz çocuk pencerenin eylemi ATA uygulamanın çerçevesine gitmesin
-    LOGE = os.path.join(G, "ebeveyn.log")
-    XC = os.path.join(G, "x_cocuk.py")
+    LOGE = os.path.join(_yalitim.PAYLASIM, "ebeveyn.log")
+    XC = os.path.join(_yalitim.PAYLASIM, "x_cocuk.py")
     with open(XC, "w") as f:
         f.write("import os\nfrom Xlib import X, display\nd = display.Display(); s = d.screen()\n"
                 "w = s.root.create_window(1300, 520, 500, 400, 0, s.root_depth, X.InputOutput, X.CopyFromParent,"
                 " background_pixel=s.white_pixel)\nw.set_wm_name('Cocuk Notlar'); w.set_wm_class('cocuk', 'Cocuk')\n"
                 "w.change_property(d.intern_atom('_NET_WM_PID'), d.intern_atom('CARDINAL'), 32, [os.getpid()])\n"
                 "w.map(); d.flush()\nwhile True:\n    d.next_event()\n")
-    SAR = os.path.join(G, "ebeveyn.py")
+    SAR = os.path.join(_yalitim.PAYLASIM, "ebeveyn.py")
     with open(SAR, "w") as f:
         f.write(f"import subprocess, sys, runpy\nsubprocess.Popen([sys.executable, {XC!r}])\n"
                 f"runpy.run_path({os.path.join(KOK, 'tests/yardimci/a11y_pencere.py')!r}, run_name='__main__')\n")
@@ -1290,7 +1301,7 @@ else:
     os.makedirs(os.path.dirname(yollar.yasak_dosya()), exist_ok=True)
     with open(yollar.yasak_dosya(), "w") as f:
         f.write("^Deskhand notlar$\n")  # yerleşik ^deskhand$ ana pencereyi de yasaklar → başlığı değiştirilmiş kopya
-    LOGP = os.path.join(G, "a11y2.log")
+    LOGP = os.path.join(_yalitim.PAYLASIM, "a11y2.log")
     masaustu.baslat([sys.executable, os.path.join(KOK, "tests/yardimci/a11y_pencere.py")],
                     {"LOG": LOGP, "PENCERE_BASLIK": "parola-testi"})
     t_ = time.monotonic() + 20
@@ -1310,28 +1321,31 @@ else:
             f"{kp2} {kp3} {cp3[-200:]}")
 
     # ---- K6: SIGKILL sonrası basılı XTEST tuşu/düğmesi bir sonraki açılışta bırakılır
-    kod_k6 = ("import sys, time; sys.path.insert(0, sys.argv[1]);"
-              "from deskhand import arka_uc; from deskhand.arka_uc import EKRAN\n"
-              "with arka_uc.hedef_sabit('sanal'):\n"
-              "    g = arka_uc.sec().girdi('k6')\n"
-              "    g.gonder(EKRAN, None, 'keydown leftshift', 'buttondown left')\n"
-              "    print('hazir', flush=True); time.sleep(60)")
-    p = subprocess.Popen([sys.executable, "-c", kod_k6, KOK], stdout=subprocess.PIPE, text=True)
-    hazir = p.stdout.readline().strip()
-    os.kill(p.pid, signal.SIGKILL)
-    p.wait()
-    from deskhand.arka_uc import sanal
-    x = sanal._X(masaustu.durum_oku()["ekran"])
-    basili_once = any(x.d.query_keymap()) or bool(x.kok.query_pointer().mask & 0x100)
-    with arka_uc.hedef_sabit("sanal"):
-        g2 = arka_uc.sec().girdi("k6-yeni")
-        takili = g2.takili
-        g2.kapat()
-    basili_sonra = any(x.d.query_keymap()) or bool(x.kok.query_pointer().mask & 0x100)
-    x.kapat()
-    kontrol("K6: SIGKILL'den sonra Shift ve sol düğme basılı kaldı; yeni Girdi açılışında bırakıldı",
-            hazir == "hazir" and basili_once and takili[0] >= 1 and takili[1] >= 1 and not basili_sonra,
-            f"{hazir} {basili_once} {takili} {basili_sonra}")
+    if masaustu.secilen_tur()[0] != "xvfb":
+        print("K6 ATLANDI: X11/XTEST'e özgü (kwin türünde ekran adı X ekranı değil)")
+    else:
+        kod_k6 = ("import sys, time; sys.path.insert(0, sys.argv[1]);"
+                  "from deskhand import arka_uc; from deskhand.arka_uc import EKRAN\n"
+                  "with arka_uc.hedef_sabit('sanal'):\n"
+                  "    g = arka_uc.sec().girdi('k6')\n"
+                  "    g.gonder(EKRAN, None, 'keydown leftshift', 'buttondown left')\n"
+                  "    print('hazir', flush=True); time.sleep(60)")
+        p = subprocess.Popen([sys.executable, "-c", kod_k6, KOK], stdout=subprocess.PIPE, text=True)
+        hazir = p.stdout.readline().strip()
+        os.kill(p.pid, signal.SIGKILL)
+        p.wait()
+        from deskhand.arka_uc import sanal
+        x = sanal._X(masaustu.durum_oku()["ekran"])
+        basili_once = any(x.d.query_keymap()) or bool(x.kok.query_pointer().mask & 0x100)
+        with arka_uc.hedef_sabit("sanal"):
+            g2 = arka_uc.sec().girdi("k6-yeni")
+            takili = g2.takili
+            g2.kapat()
+        basili_sonra = any(x.d.query_keymap()) or bool(x.kok.query_pointer().mask & 0x100)
+        x.kapat()
+        kontrol("K6: SIGKILL'den sonra Shift ve sol düğme basılı kaldı; yeni Girdi açılışında bırakıldı",
+                hazir == "hazir" and basili_once and takili[0] >= 1 and takili[1] >= 1 and not basili_sonra,
+                f"{hazir} {basili_once} {takili} {basili_sonra}")
     masaustu.masaustu_durdur()
 
 kontrol("yalıtım: gerçek ~/.config/deskhand DEĞİŞMEDİ", agac_ozeti("~/.config/deskhand") == gercek0)

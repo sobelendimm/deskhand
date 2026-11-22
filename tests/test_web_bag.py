@@ -161,7 +161,7 @@ srv = wt.Sunucu()
 
 
 def ac(sayfa, **kw):
-    ff = wt.Firefox(s_au, _yalitim.GECICI, srv.url(sayfa), erisilebilirlik=False, **kw)  # GNOME_ACCESSIBILITY YOK
+    ff = wt.Firefox(s_au, _yalitim.PAYLASIM, srv.url(sayfa), erisilebilirlik=False, **kw)  # GNOME_ACCESSIBILITY YOK
     acik_firefoxlar.append(ff)
     profil_denetle(f"{sayfa} açıldı")
     return ff
@@ -578,8 +578,8 @@ try:
 
     # ------------------------------------------------------------ `ac --arka` ile açılan Firefox (CLI yolu)
     print("ac --arka (ham komut, yalıtık profil) ile açılan Firefox")
-    prof = os.path.join(_yalitim.GECICI, "ac-profil")
-    xdg = os.path.join(_yalitim.GECICI, "ac-xdg")
+    prof = os.path.join(_yalitim.PAYLASIM, "ac-profil")
+    xdg = os.path.join(_yalitim.PAYLASIM, "ac-xdg")
     os.makedirs(prof, mode=0o700)
     os.makedirs(xdg, mode=0o700)
     with open(os.path.join(prof, "user.js"), "w") as f:

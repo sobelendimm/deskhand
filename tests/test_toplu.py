@@ -202,7 +202,7 @@ async def sahte_testler():
 
 async def sanal_test():
     from mcp import Client
-    LOG = os.path.join(_yalitim.GECICI, "a11y-toplu.log")
+    LOG = os.path.join(_yalitim.PAYLASIM, "a11y-toplu.log")
     import importlib
     from deskhand import erisim, eylem, onay
     importlib.reload(erisim)  # A'nın sahteleri temizlensin: gerçek AT-SPI

@@ -38,13 +38,13 @@ gecen = toplam = 0
 # open_app yalnız kurulu .desktop girdisi başlatır (ham komut yok): test pencereleri geçici bir uygulama dizinindeki
 # girdilerle açılır (uygulama.UYGULAMA_DIZINLERI süreç içinde / stdio sunucusunda DESKHAND_TEST_UYGULAMA_DIZINI ile).
 UYG_DIZIN = os.path.join(GECICI, "uygulamalar")
-os.makedirs(os.path.join(GECICI, "bin"), exist_ok=True)
+os.makedirs(os.path.join(_yalitim.PAYLASIM, "bin"), exist_ok=True)
 os.makedirs(UYG_DIZIN, exist_ok=True)
 
 
 def test_uygulamasi(kimlik: str, ad: str, ortam: dict) -> str:
     """Test penceresini açan çalıştırılabilir betik + .desktop girdisi (Exec = betiğin yolu). → kimlik"""
-    betik = os.path.join(GECICI, "bin", kimlik)
+    betik = os.path.join(_yalitim.PAYLASIM, "bin", kimlik)
     satir = " ".join(f"{k}='{v}'" for k, v in ortam.items())
     with open(betik, "w") as f:
         f.write(f"#!/bin/sh\n{satir} exec '{sys.executable}' '{TEST_PENCERE}' \"$@\"\n")

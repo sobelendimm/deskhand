@@ -310,7 +310,7 @@ d = masaustu.masaustu_baslat()
 os.makedirs(os.path.dirname(yollar.yasak_dosya()), exist_ok=True)
 with open(yollar.yasak_dosya(), "w") as f:
     f.write("GizliKasa\n")
-dok = os.path.join(G, "ortam.txt")
+dok = os.path.join(_yalitim.PAYLASIM, "ortam.txt")
 kod = ("import os,json;open(os.environ['DESKHAND_CONFIG_DIR']+'/yasak-pencereler.txt','w').write('');"
        f"json.dump(dict(os.environ),open({dok!r},'w'))")
 for app, args in ((sys.executable, ["-c", kod]), ("python3", ["-c", kod]), ("/bin/sh", ["-c", f"python3 -c \"{kod}\""]),
@@ -322,9 +322,9 @@ kontrol("1a: yasak listesi SİLİNMEDİ (kod çalışmadı)", open(yollar.yasak_
 kontrol("1b/1c: arka plan uygulamasının ortamı dökülemedi (kod çalışmadı)", not os.path.exists(dok))
 
 # ================================================================ C/D) 4a/4b: onay beklerken eşzamanlı girdi + hedef değişimi
-YARDIM = os.path.join(G, "odeme_pencere.py")
-LOG4 = os.path.join(G, "odeme.log")
-TETIK = os.path.join(G, "sayfa-b")
+YARDIM = os.path.join(_yalitim.PAYLASIM, "odeme_pencere.py")
+LOG4 = os.path.join(_yalitim.PAYLASIM, "odeme.log")
+TETIK = os.path.join(_yalitim.PAYLASIM, "sayfa-b")
 with open(YARDIM, "w") as f:
     f.write('''import os, sys
 from PyQt6.QtCore import QTimer
