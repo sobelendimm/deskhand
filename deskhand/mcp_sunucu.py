@@ -546,6 +546,8 @@ def _yeni_metin(im, bolge) -> list[str] | None:
 # durulma beklenip SON ölçüm alınır (yarım animasyon değil, oturmuş hâl). Hiç değişmezse üst sınırda changed=false.
 SONRA_ARALIKLAR = (0.05, 0.12, 0.22, 0.35)
 SONRA_DURULMA = 0.11
+ONSUZ_ANLAR = (0.06, 0.12, 0.2)  # ön ölçümsüz yol: başlık yoklama anları (sn); sonuncusu üst sınır (ONSUZ_BEKLE)
+ONSUZ_BEKLE = ONSUZ_ANLAR[-1]
 
 
 def _sonra(k: str, once: fark.Once | None, bekle: float = 0.35) -> dict:
@@ -555,8 +557,8 @@ def _sonra(k: str, once: fark.Once | None, bekle: float = 0.35) -> dict:
 
     Uyarlamalı bekleme: ekran SONRA_ARALIKLAR anlarında (en çok `bekle` sn'ye dek) ölçülür; değişiklik ilk görüldüğünde
     SONRA_DURULMA kadar beklenip son ölçüm alınır (changed_region animasyonun ortasını değil oturmuş hâli yansıtır).
-    Değişmezse `bekle` sonunda changed=false. Ön ölçüm (`once`) yoksa yalnız `bekle` kadar beklenip başlık/pencere
-    durumu döner."""
+    Değişmezse `bekle` sonunda changed=false. Ön ölçüm (`once`) yoksa en çok ONSUZ_BEKLE (ölçülmüş) kadar başlık
+    yoklanır (değişince hemen) ve başlık/pencere durumu döner."""
     au = api.arka()
     t0 = time.monotonic()
 
@@ -574,7 +576,22 @@ def _sonra(k: str, once: fark.Once | None, bekle: float = 0.35) -> dict:
     fark_ = None
     im = None
     if once is None:
-        uyku(bekle)
+        # ön ölçüm yok (kde'de via='action': görüntü pencereyi öne getirirdi): yalnız başlık/pencere durumu döner.
+        # Ölçüm (görünmez masaüstü, Qt, AT-SPI eylemi → ekranda değişiklik, 25 deneme): medyan ~170 ms, en çok
+        # ~180 ms → sabit 0,35 sn yerine en çok ONSUZ_BEKLE; başlık daha önce değişirse hemen dönülür.
+        try:
+            b0 = au.baslik(k) if k != EKRAN else ""
+        except hata.Dur:
+            b0 = None
+        for t in ONSUZ_ANLAR:
+            uyku(min(t, bekle))
+            try:
+                if b0 is not None and k != EKRAN and au.baslik(k) != b0:
+                    break
+            except hata.Dur:
+                break
+            if t >= bekle:
+                break
     else:
         anlar = [t for t in SONRA_ARALIKLAR if t < bekle] + [bekle]
         for t in anlar:
@@ -1278,6 +1295,7 @@ def run_flow(
         raise ToolError("[1] " + _("run için name gerekli (action=list ile adlar)"))
     with baglam(desktop, _("akış {ad}: {pencere}").format(ad=name, pencere=window)) as bilgi:
         hata.dur_denetle()
+        _onay_kapisi()  # erken ret (akışın kendi onayı istenmeden); çalıştırma ayrıca kilit altında denetlenir
         k = _pencere_zorunlu(window)
         y_ = api.yasak_mi(k)
         if y_:

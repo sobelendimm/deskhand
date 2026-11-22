@@ -45,7 +45,8 @@ deskhand/
   pano_sahibi.py   sanal masaüstünün CLIPBOARD seçimini sunan yardımcı süreç (kafeste, ilk pano yazımında başlar)
   oturum/          oturum köprüsü (bkz. docs/SESSIONS.md)
   mesgul.py        kullanıcı meşgul mü (oyun / film) koruması
-  onay.py          insan onayı protokolü (§8)
+  onay.py          insan onayı protokolü (§8): istek dosyası + panelin doğrulanmış onay kanalı (Unix soketi)
+  onay_hedef.py    onay verilen hedefin özeti (kimlik, başlık, geometri, bölge görüntüsü) + onay sonrası doğrulama (§8)
   girdi_merkezi.py panelin içinde hazır bekleyen tek dotool + RUNTIME_DIR/girdi.sock (Qt'siz; §2, §4)
   gui/             panel, tepsi, onay diyaloğu
   fark.py          eylem öncesi/sonrası ekran farkı (changed, changed_region, changed_ratio; NumPy, imleç dayanıklı)
@@ -166,8 +167,28 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   boyutlandır/küçült/büyüt/geri) "fare" girdisi sayılır (goruntule'de 10, tikla'da serbest); değiştirici tuşlu tık
   ("keydown") ve yapıştırarak yazma klavye sayılır (tikla'da 10). Panonun kendisi (`clipboard`) pencereye bağlı olmadığından
   seviye denetimi dışındadır.
-- **Riskli komut başlatma.** `ac --komut` ve MCP `open_app` (args) ham komut satırı `guvenlik.riskli_komut`'tan geçer:
-  yıkıcı kalıpta insan onayı (CLI'de `--onayli`, gözetimsiz kipte geçmez), red → 10 ve hiçbir şey başlatılmaz.
+- **Riskli komut başlatma.** `ac --komut` ham komut satırı `guvenlik.riskli_komut`'tan geçer: yıkıcı kalıpta insan
+  onayı (CLI'de `--onayli`, gözetimsiz kipte geçmez), red → 10 ve hiçbir şey başlatılmaz. `ac --komut` kabuğu olan
+  kullanıcı/ajan içindir; MCP yüzeyi bu yola HİÇ ulaşmaz.
+- **MCP uygulama başlatma (`open_app`).** Kabuğu OLMAYAN bir MCP ajanı kod çalıştıramamalı (`uygulama.mcp_uygulama`,
+  tek giriş noktası; `api.uygulama_komutu` → `gio launch GIRDI.desktop [belgeler…]`): `app` yalnız kurulu bir
+  masaüstü girdisi (`uygulama_bul`); `/` içeren ad (yol/komut) → 10. Girdi reddedilir (10): Exec'in program konumunda
+  (geçirgen sarmalayıcılar nice/prime-run/gamemoderun… atlanarak) ya da herhangi bir öğesinde yol/yalın ad olarak
+  yorumlayıcı, kabuk, sarmalayıcı (`env setsid nohup systemd-run flatpak-spawn xargs`…), yetki yükseltici, başlatıcı
+  (`xdg-open gio kioclient`…), `deskhand`/`ekran`, uçbirim öykünücüsü (`guvenlik.ucbirim_mi` + ek liste) varsa;
+  `Terminal=true`, `Categories=…TerminalEmulator`; Flatpak'ta `run` dışı alt komut, uçbirim kimliği ya da yasak
+  `--command`. Argümanlar yalnız belge: http/https URL'si (sorgudaki `=` serbest), yerel `file://` URL'si ya da var
+  olan dosya/klasörün MUTLAK yolu; `-` ile başlayan, `=` içeren (URL dışı), başka şemalı, denetim karakterli,
+  çalıştırılabilir dosya ya da `.desktop` gösteren argüman → 10 (en çok 16). Başlatılan sürecin ortamına ajan
+  değişken veremez (yalnız oturum politikasının `env_ek`'i). Görünmez masaüstünde oturum köprüsü yoksa hiçbir
+  uygulama başlatılmaz (10). Shebang'li betik uygulamalar (Exec = betiğin yolu) meşru sayılır; GUI içinden kabuk
+  açan uygulamalar (dosya yöneticisinin gömülü uçbirimi, IDE konsolu) bu denetimin kapsamı dışındadır.
+- **Bekleyen onay = girdi yok (MCP).** Bir masaüstünde (kde/sanal) insan onayı beklenirken O masaüstüne giden her
+  girdi aracı (click, type_text, press_key, scroll, drag, manage_window, clipboard write, run_flow, open_app) kilidi
+  alır almaz beklemeden `[7] onay bekleniyor` ile reddedilir (`mcp_sunucu.kilitli(girdi=True)`); kayıt kilit
+  bırakılmadan önce açılır, onaydan sonra kilit yeniden alındıktan sonra kapanır. Başka canlı Deskhand süreçlerinin
+  aynı masaüstündeki istekleri de sayılır (`onay.bekleyen_var`; ömrü olağandışı uzun sahte istek sayılmaz). Okuma
+  araçları ve DUR her zaman serbest.
 - **Gözetimsiz kip.** `DESKHAND_GOZETIMSIZ=1` ya da genel bayrak `--unattended` (`--gozetimsiz`): onay gerektiren her
   eylem panel diyaloğu açılmadan ve beklemeden reddedilir (10, "gözetimsiz çalışmada hassas eylem yapılmaz"). Tek nokta
   `onay.iste_sonuc` (CLI, MCP, akış hepsi oradan geçer). Sohbet/insan olmadığından `--onayli` de geçersiz sayılır
@@ -267,12 +288,32 @@ Arayüz sözleşmesine zamanla giren kararların özeti (ayrıntılar ilgili bö
 ## 8. Onay protokolü (arayüz + MCP + CLI ortak)
 Hassas eylem (hassas düğme, ödeme sayfası, yasak dışı ama riskli `ac`, oturum aktarımı) için onay YALNIZ insandan:
 - `deskhand/onay.py`: `iste(eylem, hedef, ayrinti, masaustu, sure=120) -> bool`.
-  İstek: `RUNTIME_DIR/onay/istek-<uuid>.json` {id, eylem, hedef, ayrinti, masaustu, zaman, son_zaman, pid}.
-  Panel (QFileSystemWatcher) diyalog açar: **Bir kez izin ver / Reddet** (+ hedefin küçük ekran görüntüsü).
-  Yanıt: `yanit-<uuid>.json` {id, karar: "izin"|"red", kaynak: "arayuz", zaman}. Yalnız panel yazar.
-  İsteyen yanıtı bekler; süre dolarsa ya da panel kapalıysa → red (mesaj: "Deskhand paneli kapalı, onay alınamadı").
-  Tek kullanımlık; istek/yanıt dosyaları kullanılınca silinir; dizin 0700.
+  Panel kaydı: `RUNTIME_DIR/panel.pid` {pid, baslangic (/proc/<pid>/stat 22. alan), exe (/proc/<pid>/exe), zaman}.
+  **Onay kanalı:** panel `RUNTIME_DIR/onay/kanal.sock` Unix soketini dinler (0600, dizin 0700; `panel_kaydet` açar,
+  `panel_sil` kapatır; Qt'siz iş parçacıklı sunucu). İsteyen ÖNCE kanala bağlanır ve karşı tarafı doğrular: soket
+  dosyası ve dizin kendisinin ve başkalarına kapalı; SO_PEERCRED uid = kendi uid, pid = panel.pid'deki pid, aynı
+  başlangıç zamanı ve aynı exe. Doğrulanamazsa red ("onay kanalı doğrulanamadı", günlüğe neden).
+  İstek: `RUNTIME_DIR/onay/istek-<uuid>.json` {id, eylem, hedef, ayrinti, masaustu, zaman, son_zaman, pid, goruntu};
+  ardından kanala `bekle <uuid>`. Panel bağlananın SO_PEERCRED pid'ini isteğin `pid` alanıyla karşılaştırır (başka
+  süreç başkasının kararını alamaz). Panel (QFileSystemWatcher) diyalog açar: **Bir kez izin ver / Reddet** (+ hedefin
+  küçük ekran görüntüsü). Karar AYNI bağlantıdan döner: `karar izin|red <uuid>` (isteyen henüz bağlanmadıysa panel
+  saklar). **İzin yalnız kanaldan gelir;** `yanit-<uuid>.json` {id, karar: "red", kaynak: "arayuz", zaman} yalnız red
+  için yazılır ve isteyen her yanıt dosyasını (içeriği ne olursa olsun) RED sayar: aynı kullanıcıdaki, yalnız dosya
+  yazabilen bir süreç sahte izin üretemez. Süre dolarsa, panel kapalıysa/kapanırsa (bağlantı kopar) ya da DUR
+  açılırsa → red (mesaj: "Deskhand paneli kapalı, onay alınamadı"). Tek kullanımlık; istek/yanıt dosyaları kullanılınca
+  silinir. Panel izni göndermeden önce diyaloğu gizler (onay sonrası doğrulamada hedefi örtmesin).
+- **Onay sonrası yeniden doğrulama (MCP, `onay_hedef.py`).** Onay isteğinden hemen önce (kilit tutulurken)
+  `yakala(k, bolge)` → `OnayHedefi` {k, masaustu, baslik, geometri, bolge (pencere pikseli), ozet (fark.Once), zaman};
+  izinden sonra kilit altında, eylemden önce `dogrula_dur(h)`: pencere yok, başlık/geometri farklı ya da bölgenin
+  görüntüsü değiştiyse (fark.py eşiği; geçici örtü için 0/0,15/0,3 sn yeniden bakılır) → Dur 10 "onay verilen hedef
+  değişti; yeniden onay gerekir", eylem yapılmaz. Bölge: koordinatlı tıklamada noktanın çevresi (480×200, onay
+  görüntüsüyle aynı), çekirdeğin görüntüsü `info["deskhand_bolge"]` taşıyorsa o, yoksa tüm pencere. kde'de görüntü
+  yalnız çekirdek zaten hedef görüntüsünü aldıysa alınır (odak çalınmaz; yoksa yalnız kimlik/başlık/geometri);
+  bölgesiz tüm ekran görüntüyle karşılaştırılmaz.
 - CLI `--onayli` kalır (kullanıcı sohbette açıkça onayladıysa), MCP yüzeyinde YOK. Riskli tuş ve uçbirim komutu da bu
   protokolü kullanır (eylem metni "Riskli tuş: …" / "Uçbirime komut yaz: …"); gözetimsiz kipte `iste_sonuc` hiç panele
   yazmadan `gozetimsiz` nedeniyle red döner.
 - Onay diyaloğu penceresi yasak listesine (sınıf/başlık) otomatik eklenir: hiçbir otomasyon girdisi ona gitmez.
+- Tehdit modeli: onay, ajanın (yanlışlıkla ya da istem enjeksiyonuyla) kendi kendine izin vermesini ve yalnız dosya
+  yazabilen bir sürecin sahte izin üretmesini engeller. Kabuğu olan ajan için sandbox değildir: aynı kullanıcıyla
+  keyfi kod çalıştırabilen süreç paneli öldürüp yerine geçebilir ya da ptrace ile bağlanabilir.
