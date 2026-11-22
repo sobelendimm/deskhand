@@ -176,6 +176,13 @@ e2 = ko.uygulama_ortami({**sahte, "xwayland": ":123", "xauth": "/x/Xauthority"},
                         {"QT_QPA_PLATFORM": "xcb", "WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0",
                          "DBUS_SESSION_BUS_ADDRESS": gercek_bus})
 kontrol("ortam: env yalnız araç takımı ipucunu değiştirir (QT_QPA_PLATFORM)", e2["QT_QPA_PLATFORM"] == "xcb")
+e3 = ko.uygulama_ortami({**sahte, "xwayland": ":123", "xauth": "/x/Xauthority"}, ko.gecko_ipuclari(["/usr/bin/firefox", "-P"]))
+kontrol("ortam: Gecko (firefox) XWayland'den (GDK_BACKEND=x11, MOZ_ENABLE_WAYLAND=0), DISPLAY oturumun, Wayland soketi de var",
+        e3["GDK_BACKEND"] == "x11" and e3["MOZ_ENABLE_WAYLAND"] == "0" and e3["DISPLAY"] == ":123"
+        and e3["WAYLAND_DISPLAY"] == sahte["wayland_yol"] and e3["QT_QPA_PLATFORM"] == "wayland")
+kontrol("ortam: Gecko ipuçları yalnız Gecko programlarına (başkası yerel Wayland kalır; env ezer)",
+        ko.gecko_ipuclari(["konsole"]) == {} and ko.gecko_ipuclari([]) == {} and ko.gecko_ipuclari(["firefox"])
+        and {**ko.gecko_ipuclari(["firefox"]), "MOZ_ENABLE_WAYLAND": "1"}["MOZ_ENABLE_WAYLAND"] == "1")
 kontrol("ortam: env ile verilen WAYLAND_DISPLAY/DISPLAY/DBUS yok sayılır",
         e2["WAYLAND_DISPLAY"] == sahte["wayland_yol"] and e2["DISPLAY"] == ":123"
         and e2["DBUS_SESSION_BUS_ADDRESS"] == sahte["dbus_adres"])

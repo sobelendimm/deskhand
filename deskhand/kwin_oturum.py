@@ -55,6 +55,19 @@ YEDEK_PATH = ASGARI_PATH
 # Uygulama araçkiti ipuçları: açıkça verilirse uygulama ortamında değişebilen (güvenlikle ilgisiz) değişkenler
 ARAC_IPUCLARI = ("QT_QPA_PLATFORM", "GDK_BACKEND", "MOZ_ENABLE_WAYLAND", "SDL_VIDEODRIVER", "SDL_VIDEO_DRIVER",
                  "ELECTRON_OZONE_PLATFORM_HINT")
+# Gecko tarayıcıları (Firefox ve türevleri) KWin türünde XWayland'den çalışır: yerel Wayland'de Gecko'nun erişilebilirlik
+# (AT-SPI) ekran koordinatları MUTLAK değildir (Wayland'de genel koordinat yok; SCREEN = WINDOW, köken Gecko'nun
+# kendi tahmini: ölçüldü, çerçeve 26,23 ↔ KWin geometrisi 320,54) → ögelere tık konumu doğrulanamaz. XWayland'de
+# ekran koordinatı mutlak ve KWin geometrisiyle tutarlıdır (tık/ekran görüntüsü aynı uzay).
+GECKO_PROGRAMLAR = frozenset({"firefox", "firefox-esr", "firefox-bin", "firefox-developer-edition", "firefox-nightly",
+                              "librewolf", "floorp", "waterfox", "zen", "zen-browser", "icecat", "thunderbird"})
+GECKO_IPUCLARI = {"GDK_BACKEND": "x11", "MOZ_ENABLE_WAYLAND": "0"}
+
+
+def gecko_ipuclari(argv) -> dict:
+    """Başlatılan program bir Gecko tarayıcısıysa XWayland ipuçları (açıkça verilen env bunları ezer), değilse {}."""
+    ad = os.path.basename(str((argv or [""])[0]))
+    return dict(GECKO_IPUCLARI) if ad in GECKO_PROGRAMLAR else {}
 
 
 # ---------------------------------------------------------------- yolların / adreslerin gerçek değerleri
