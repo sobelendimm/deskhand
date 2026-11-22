@@ -35,7 +35,7 @@ from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYIL
                          _gunluk_dosyasi, _isaretli_surecler, _kafes_surecleri, _kafese_al, _komut_satiri,
                          _kullanici_bus_ortami, _oncelik, _ortam_oku, _pactl, _satir_bekle, _sink_modulu, _sinyal,
                          _takas_siniri, _xauth_yaz, kafeste_baslat, ortam_tabani, ses_kaldir, ses_kur,
-                         ses_ortami_uygula)
+                         ses_ortami_uygula, uygulama_runtime)
 from .hata import ARAC_EKSIK, SANAL_KAPALI, Dur
 from .i18n import _, h_
 from .komutlar import MASAUSTU, SECENEKLER, cevirici, secimler
@@ -268,6 +268,7 @@ def uygulama_ortami(d: dict, env: dict | None = None, izinli: tuple = ()) -> dic
     if d.get("kimlik"):  # durdururken kafes dışındaki/kafessiz süreçler de bulunabilsin (_isaretli_surecler)
         e["DESKHAND_SANAL_KIMLIK"] = d["kimlik"]
     ses_ortami_uygula(e, d.get("ses"), os.path.join(_calisma(d["no"]), "ses-yok"))
+    e["XDG_RUNTIME_DIR"] = uygulama_runtime(d.get("calisma") or _calisma(d["no"]))  # masaüstünün kendi klasörü
     return e
 
 

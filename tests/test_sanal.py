@@ -119,7 +119,15 @@ masaustu.ozel_veri_yolu_kancasi(lambda adres, durum: kanca_adres.append((adres, 
 t = time.monotonic()
 d = masaustu.masaustu_baslat()
 olcum["masaüstü açılış"] = f"{(time.monotonic() - t) * 1000:.0f} ms"
-kontrol("masaüstü: açıldı, :90+ ekranı", d and int(d["no"]) >= 90 and d["ekran"] == f":{d['no']}")
+KW = masaustu.tur(d) == "kwin"  # arka plan masaüstü türü: KWin oturumu ya da Xvfb (DESKHAND_ARKA_TUR ile zorlanır)
+print(f"arka plan masaüstü türü: {masaustu.tur(d)}")
+if os.environ.get("DESKHAND_ARKA_TUR") in ("kwin", "xvfb"):
+    kontrol("masaüstü: zorlanan tür açıldı (DESKHAND_ARKA_TUR)", masaustu.tur(d) == os.environ["DESKHAND_ARKA_TUR"])
+if KW:
+    kontrol("masaüstü: KWin oturumu açıldı (özel Wayland soketi, XWayland :120+)",
+            d["ekran"] == d["wayland"] and os.path.exists(d["wayland_yol"]) and int(d["xwayland"][1:]) >= 120)
+else:
+    kontrol("masaüstü: açıldı, :90+ ekranı", d and int(d["no"]) >= 90 and d["ekran"] == f":{d['no']}")
 kontrol("masaüstü: durum dosyası doğrulanıyor", masaustu.durum() is not None)
 kontrol("masaüstü: ikinci başlatma aynı masaüstünü döndürür", masaustu.masaustu_baslat().get("zaten") is True)
 kontrol("kanca: özel veri yolu hazır kancası adresle çağrıldı", kanca_adres == [(d["dbus_adres"], d["ekran"])],
@@ -129,12 +137,14 @@ masaustu.OZEL_VERI_YOLU_KANCALARI.clear()
 # erişim anahtarı: anahtarsız yerel istemci (ör. X11 izni olan bir Flatpak uygulaması) bağlanamaz
 xa = d.get("xauth") or ""
 st = os.stat(xa) if xa and os.path.exists(xa) else None
-kontrol("anahtar: Xvfb -auth ile açıldı, anahtar dosyası 0600 ve Xvfb komut satırında",
-        st is not None and (st.st_mode & 0o777) == 0o600 and xa in masaustu._komut_satiri(d["pid"]["xvfb"]))
+XEKRAN = d["xwayland"] if KW else d["ekran"]  # X istemcilerinin ekranı (KWin: oturumun XWayland'i)
+kontrol("anahtar: X sunucusu -auth ile açıldı, anahtar dosyası 0600 ve komut satırında",
+        st is not None and (st.st_mode & 0o777) == 0o600 and
+        xa in masaustu._komut_satiri(d["pid"]["kwin" if KW else "xvfb"]))
 def _anahtarsiz(xauth_ortam):
     kod = ("import sys\nfrom Xlib import display\ntry:\n    display.Display(sys.argv[1]).close()\n"
            "    print('BAGLANDI')\nexcept Exception as e:\n    print('RED', type(e).__name__)")
-    r = subprocess.run([sys.executable, "-I", "-c", kod, d["ekran"]], capture_output=True, text=True, timeout=20,
+    r = subprocess.run([sys.executable, "-I", "-c", kod, XEKRAN], capture_output=True, text=True, timeout=20,
                        env={k: v for k, v in os.environ.items() if k != "XAUTHORITY"} | xauth_ortam)
     satirlar = r.stdout.strip().splitlines()  # Xlib önce "no xauthority details" uyarısı basabilir
     return satirlar[-1] if satirlar else r.stderr.strip()[-200:]
@@ -143,25 +153,46 @@ kontrol("anahtar: kullanıcının kendi XAUTHORITY'siyle de REDDEDİLİR",
         _anahtarsiz({"XAUTHORITY": os.environ.get("XAUTHORITY", "/dev/null")}).startswith("RED"))
 kontrol("anahtar: uygulamaya verilen XAUTHORITY ile bağlanır",
         _anahtarsiz({"XAUTHORITY": masaustu.uygulama_ortami(d).get("XAUTHORITY", "")}) == "BAGLANDI")
-kontrol("anahtar: Deskhand'in kendi bağlantısı (x_ac) çalışır", masaustu.x_ac(d["ekran"]).screen() is not None)
+if KW:  # KWin türünde Deskhand X'e hiç bağlanmaz; x_ac oturumun Wayland soket adını ekran sanmaz (Dur 14)
+    kontrol("anahtar: KWin türünde x_ac(ekran) reddedilir (X bağlantısı yok, soket adı ekran değil)",
+            dur_kodu(masaustu.x_ac, d["ekran"]) == 14)
+else:
+    kontrol("anahtar: Deskhand'in kendi bağlantısı (x_ac) çalışır", masaustu.x_ac(d["ekran"]).screen() is not None)
 
 ue = masaustu.uygulama_ortami(d, {"WAYLAND_DISPLAY": "wayland-0", "BENIM": "1"})
 wd = ue.get("WAYLAND_DISPLAY", "")
-kontrol("ortam: DISPLAY/özel D-Bus/x11 zorunlu, WAYLAND_DISPLAY = var olmayan mutlak yol, ek değişken geçer",
-        ue["DISPLAY"] == d["ekran"] and ue["DBUS_SESSION_BUS_ADDRESS"] == d["dbus_adres"] and
-        os.path.isabs(wd) and not os.path.exists(wd) and wd.startswith(d["calisma"]) and
-        ue["QT_QPA_PLATFORM"] == "xcb" and ue["GDK_BACKEND"] == "x11" and
-        ue["MOZ_ENABLE_WAYLAND"] == "0" and ue["SDL_VIDEODRIVER"] == "x11" and
-        ue["ELECTRON_OZONE_PLATFORM_HINT"] == "x11" and ue["PULSE_SINK"].startswith("deskhand-sessiz") and ue["BENIM"] == "1")
-kontrol("ortam: XDG_CURRENT_DESKTOP=KDE, KDE_SESSION_VERSION=6, XDG_SESSION_TYPE=x11",
-        (ue["XDG_CURRENT_DESKTOP"], ue["KDE_SESSION_VERSION"], ue["XDG_SESSION_TYPE"]) == ("KDE", "6", "x11"))
+if KW:
+    kontrol("ortam: oturumun Wayland soketi (MUTLAK, var), DISPLAY=XWayland, özel D-Bus, Wayland araç takımları, ek "
+            "değişken geçer", wd == d["wayland_yol"] and os.path.exists(wd) and ue["DISPLAY"] == d["xwayland"] and
+            ue["XAUTHORITY"] == d["xauth"] and ue["DBUS_SESSION_BUS_ADDRESS"] == d["dbus_adres"] and
+            ue["QT_QPA_PLATFORM"] == "wayland" and ue["GDK_BACKEND"] == "wayland" and ue["MOZ_ENABLE_WAYLAND"] == "1"
+            and ue["ELECTRON_OZONE_PLATFORM_HINT"] == "wayland" and ue["PULSE_SINK"].startswith("deskhand-sessiz")
+            and ue["BENIM"] == "1")
+else:
+    kontrol("ortam: DISPLAY/özel D-Bus/x11 zorunlu, WAYLAND_DISPLAY = var olmayan mutlak yol, ek değişken geçer",
+            ue["DISPLAY"] == d["ekran"] and ue["DBUS_SESSION_BUS_ADDRESS"] == d["dbus_adres"] and
+            os.path.isabs(wd) and not os.path.exists(wd) and wd.startswith(d["calisma"]) and
+            ue["QT_QPA_PLATFORM"] == "xcb" and ue["GDK_BACKEND"] == "x11" and
+            ue["MOZ_ENABLE_WAYLAND"] == "0" and ue["SDL_VIDEODRIVER"] == "x11" and
+            ue["ELECTRON_OZONE_PLATFORM_HINT"] == "x11" and ue["PULSE_SINK"].startswith("deskhand-sessiz") and
+            ue["BENIM"] == "1")
+kontrol("ortam: XDG_CURRENT_DESKTOP=KDE, KDE_SESSION_VERSION=6, XDG_SESSION_TYPE",
+        (ue["XDG_CURRENT_DESKTOP"], ue["KDE_SESSION_VERSION"], ue["XDG_SESSION_TYPE"]) ==
+        ("KDE", "6", "wayland" if KW else "x11"))
+kontrol("ortam: kullanıcının SSH ajanı/erişilebilirlik adresi/EIS soketi geçmez, GSETTINGS_BACKEND=memory",
+        not any(a in ue for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS", "LIBEI_SOCKET", "KDE_FULL_SESSION"))
+        and ue.get("GSETTINGS_BACKEND") == "memory", str([a for a in ("SSH_AUTH_SOCK", "AT_SPI_BUS_ADDRESS") if a in ue]))
 kontrol("ortam: ses akışı boş çıkış kalkınca taşınmaz (pulse + pipewire dont-fallback/dont-reconnect)",
         all(x in ue["PULSE_PROP"] for x in ("deskhand.sanal=1", "node.dont-fallback=true", "node.dont-reconnect=true"))
         and "node.dont-fallback = true" in ue["PIPEWIRE_PROPS"] and "node.dont-reconnect = true" in ue["PIPEWIRE_PROPS"],
         ue["PULSE_PROP"])
 kontrol("ortam: masaüstü kimliği işareti (kafessiz durdurma için)",
-        len(d.get("kimlik") or "") == 16 and ue.get("DESKHAND_SANAL_KIMLIK") == d["kimlik"])
-kontrol("masaüstü: openbox çalışıyor", d.get("openbox"), str(d.get("uyarilar")))
+        len(d.get("kimlik") or "") == (8 if KW else 16) and ue.get("DESKHAND_SANAL_KIMLIK") == d["kimlik"])
+if KW:
+    kontrol("masaüstü: pencere yöneticisi = KWin (canlı, uyarı yok)", masaustu._canli(d["pid"]["kwin"]) and
+            not d.get("uyarilar"), str(d.get("uyarilar")))
+else:
+    kontrol("masaüstü: openbox çalışıyor", d.get("openbox"), str(d.get("uyarilar")))
 kontrol("masaüstü: bellek kafesi (scope) içinde", d.get("kafes") and d["cgroup"].endswith(d["kafes"]))
 r = subprocess.run(["systemctl", "--user", "show", d["kafes"], "-p", "MemoryMax"], capture_output=True, text=True)
 kontrol("masaüstü: kafes MemoryMax = 4G", r.stdout.strip() == f"MemoryMax={4 * 1024 ** 3}", r.stdout)
@@ -169,10 +200,11 @@ r = subprocess.run(["systemctl", "--user", "show", d["kafes"], "-p", "MemorySwap
 kontrol("masaüstü: kafes MemorySwapMax = 0 (takasa taşmaz)", r.stdout.strip() == "MemorySwapMax=0", r.stdout)
 kontrol("masaüstü: ses bekçisi çalışıyor (kafeste)", masaustu._canli(d["pid"].get("ses_bekcisi")) and
         masaustu._cgroup(d["pid"]["ses_bekcisi"]) == d["cgroup"], str(d.get("uyarilar")))
-xpid = d["pid"]["xvfb"]
-kontrol("masaüstü: Xvfb nice 10", os.getpriority(os.PRIO_PROCESS, xpid) >= 10, str(os.getpriority(os.PRIO_PROCESS, xpid)))
+xpid = d["pid"]["kwin" if KW else "xvfb"]
+kontrol("masaüstü: ekran sunucusu nice 10", os.getpriority(os.PRIO_PROCESS, xpid) >= 10,
+        str(os.getpriority(os.PRIO_PROCESS, xpid)))
 r = subprocess.run(["ionice", "-p", str(xpid)], capture_output=True, text=True)
-kontrol("masaüstü: Xvfb ionice idle", "idle" in r.stdout, r.stdout)
+kontrol("masaüstü: ekran sunucusu ionice idle", "idle" in r.stdout, r.stdout)
 ses = d.get("ses") or {}
 kontrol("masaüstü: kendi boş çıkışı (deskhand-sessiz-<no>) yüklü", ses.get("sink", "").startswith("deskhand-sessiz-") and
         masaustu._sink_modulu(ses.get("sink")) == ses.get("modul"))
@@ -226,7 +258,7 @@ for ad_, kod_ in (("libwayland", WL_ISTEMCI), ("qt6 -platform wayland", QT_ISTEM
 time.sleep(0.2)
 wl_n = wl_baglanti_say()
 kontrol("WAYLAND: arka plan istemcileri (libwayland, Qt6 ve GTK4 Wayland'i zorlasa bile) wayland-0'a BAĞLANMADI",
-        wl_n == 0 and "BAGLANAMADI" in wl_cikti[0], f"{wl_n} bağlantı; " + " | ".join(wl_cikti))
+        wl_n == 0 and ("BAGLANDI" if KW else "BAGLANAMADI") in wl_cikti[0], f"{wl_n} bağlantı; " + " | ".join(wl_cikti))
 sw.close()
 
 au = sec(arka_bayragi=True)
@@ -239,7 +271,8 @@ for _ in range(7):
     sureler.append((time.perf_counter() - t) * 1000)
 olcum["tüm ekran görüntüsü (1920x1080)"] = f"{statistics.median(sureler):.1f} ms (medyan, 7 ölçüm)"
 kontrol("görüntü: RGB, ekran boyutunda", im.mode == "RGB" and im.size == tuple(d["boyut"][:2]))
-kontrol("görüntü: kök zemin düz gri", im.getpixel((3, 3)) == (0x8C, 0x8C, 0x8C), str(im.getpixel((3, 3))))
+if not KW:  # KWin türünde masaüstü zemini KWin'in (Plasma/duvar kâğıdı yok): yalnız Xvfb kökü boyanır
+    kontrol("görüntü: kök zemin düz gri", im.getpixel((3, 3)) == (0x8C, 0x8C, 0x8C), str(im.getpixel((3, 3))))
 kontrol("görüntü: < 50 ms", statistics.median(sureler) < 50, f"{statistics.median(sureler):.1f} ms")
 
 # özel D-Bus: kullanıcının oturumundaki servisler etkinleşmez (kwalletd, kded…)
@@ -293,7 +326,8 @@ kontrol("pencere: sanal masaüstünde açıldı", k is not None)
 if k is None:
     masaustu.masaustu_durdur()
     sys.exit(1)
-kontrol("pencere: kimlik arka:0x… biçiminde", re.fullmatch(ARKA_ONEK + r"0x[0-9a-f]+", k), k)
+kontrol("pencere: kimlik arka:… biçiminde (xvfb: 0x…, kwin: {uuid})",
+        re.fullmatch(ARKA_ONEK + (r"\{[0-9a-f-]{36}\}" if KW else r"0x[0-9a-f]+"), k), k)
 kontrol("pencere: pencere_coz(ad) → aynı kimlik", au.pencere_coz("deskhand-sanal ANA") == k)
 kontrol("pencere: pencere_coz(kimlik) → aynı", au.pencere_coz(k) == k)
 kontrol("pencere: pencere_coz('ekran') → EKRAN", au.pencere_coz("ekran") == EKRAN)
@@ -307,7 +341,7 @@ geo = au.geometri(k)
 W, H = au.ekran_alani()[2:]
 kontrol("pencere: geometri ekranın içinde, 760x640", 0 <= geo[0] and 0 <= geo[1] and geo[0] + geo[2] <= W
         and geo[1] + geo[3] <= H and geo[2:] == (760, 640), str(geo))
-kontrol("pencere: openbox yerleşimi (0,0 değil, ortalı)", geo[0] > 0 and geo[1] > 0, str(geo))
+kontrol("pencere: pencere yöneticisi yerleşimi (0,0 değil)", geo[0] > 0 and geo[1] > 0, str(geo))
 kontrol("pencere: yeni pencere odak aldı (aktif)", bekle(lambda: au.aktif() == k, 3), au.aktif())
 log_bekle(LOG, r"^$|.", 0.1)
 bekle(lambda: True, 0.4)  # HAZIR_MS
@@ -377,16 +411,24 @@ try:
             log_bekle(LOG, "^eposta=" + re.escape(metin) + "$", 3) is not None, (log_satirlari(LOG) or [""])[-1])
     g.gonder(k, "ANA", "key ctrl+a", "key backspace")
     kontrol("tuş: ctrl+a + backspace → alan boş", log_bekle(LOG, r"^eposta=$", 3) is not None)
-    ozel = "a—b…c'd\"e“f”g‘h’i@#{}~|<>"
+    ozel = "a—b…c'd\"e“f”g‘h’i@#{}~|<>" if not KW else "a'b\"c@#{}~|<>$€"
     t = time.perf_counter()
     g.gonder(k, "ANA", f"type {ozel}")
     olcum["yazma hızı"] = f"{len(ozel) / (time.perf_counter() - t):.0f} harf/sn (typehold 8 + typedelay 2 ms)"
-    kontrol("yazı: — … ' \" “ ” ‘ ’ @#{}~|<> birebir",
+    kontrol("yazı: özel karakterler birebir (" + ozel + ")",
             log_bekle(LOG, "^eposta=" + re.escape(ozel) + "$", 3) is not None, (log_satirlari(LOG) or [""])[-1])
     g.gonder(k, "ANA", "key ctrl+a", "key backspace")
-    g.gonder(k, "ANA", "type ½ ŧ Ω ж")  # düzende ve kalıcı eşlemede yok → geçici eşleme
-    kontrol("yazı: geçici eşleme (½ ŧ Ω ж)", log_bekle(LOG, "^eposta=½ ŧ Ω ж$", 3) is not None,
-            (log_satirlari(LOG) or [""])[-1])
+    if KW:  # KWin: klavye haritasında olmayan karakter (— ж) → `type` HEP YA DA HİÇ: Dur 1, hiçbir harf gitmez
+        n0 = len(log_satirlari(LOG))
+        kontrol("yazı: düzende olmayan karakter (— ж) → Dur 1, HİÇBİR harf yazılmadı (üst katman panoya düşer)",
+                dur_kodu(g.gonder, k, "ANA", "type ab—cж") == 1 and
+                log_bekle(LOG, "^eposta=.+$", 0.5, n0) is None, (log_satirlari(LOG) or [""])[-1])
+        kontrol("yazı: yazilabilir_mi düzene göre (ş evet, — ve ж hayır)",
+                au.yazilabilir_mi("ş") and not au.yazilabilir_mi("—") and not au.yazilabilir_mi("ж"))
+    else:
+        g.gonder(k, "ANA", "type ½ ŧ Ω ж")  # düzende ve kalıcı eşlemede yok → geçici eşleme
+        kontrol("yazı: geçici eşleme (½ ŧ Ω ж)", log_bekle(LOG, "^eposta=½ ŧ Ω ж$", 3) is not None,
+                (log_satirlari(LOG) or [""])[-1])
     g.gonder(k, "ANA", "key ctrl+a", "key x:BackSpace", "typedelay 1", "typehold 3", "type Hızlı", "key shift+home")
     kontrol("tuş: x:Keysym + typedelay/typehold", log_bekle(LOG, r"^eposta=Hızlı$", 3) is not None)
 
@@ -465,14 +507,29 @@ try:
 
     # kaydırma: kendi dinleyici penceremizde XTEST düğme 4/5/6/7
     from Xlib import X  # noqa: E402
-    dp = masaustu.x_ac(d["ekran"])
+    if KW:  # XWayland penceresi: Wayland tekerleği (ayrık 120'lik birim) XWayland'de düğme 4-7 olur
+        from Xlib import display as _xdisp  # noqa: E402
+        _eski_xa = os.environ.get("XAUTHORITY")
+        os.environ["XAUTHORITY"] = d["xauth"]
+        try:
+            dp = _xdisp.Display(masaustu.guvenli_ekran(d["xwayland"]))
+        finally:
+            if _eski_xa is None:
+                os.environ.pop("XAUTHORITY", None)
+            else:
+                os.environ["XAUTHORITY"] = _eski_xa
+    else:
+        dp = masaustu.x_ac(d["ekran"])
     kok = dp.screen().root
     dw = kok.create_window(0, 0, 300, 200, 0, dp.screen().root_depth, event_mask=X.ButtonPressMask,
                            background_pixel=0xFFFFFF)
     dw.set_wm_name("deskhand-sanal DINLEYICI")
     dw.map()
     dp.sync()
-    kd_ = ARKA_ONEK + f"0x{dw.id:x}"
+    if KW:
+        kd_ = bekle(lambda: next((w for w, b, _ in au.pencereler("deskhand-sanal DINLEYICI")), None), 5)
+    else:
+        kd_ = ARKA_ONEK + f"0x{dw.id:x}"
     kontrol("kaydırma: dinleyici penceresi istemci listesinde", bekle(lambda: kd_ in au.kimlikler(), 3))
     au.one_getir(kd_)
     while dp.pending_events():
@@ -528,7 +585,8 @@ finally:
     g.kapat()
 
 # ---------------------------------------------------------------- 2b) SIGKILL sonrası basılı kalan tuş/düğme (D2)
-from Xlib import X as _XX, display as _xd  # noqa: E402
+from Xlib import X as _XX, display as _xd  # noqa: E402,F401
+KW_2B = KW
 
 
 def basililar():
@@ -545,32 +603,72 @@ COCUK = ("import sys, time; sys.path.insert(0, %r); from deskhand.arka_uc import
          "g = sec(arka_bayragi=True).girdi('takili-test'); "
          "g.gonder(EKRAN, None, 'mouseto 0.003 0.003', 'keydown leftshift', 'buttondown left'); "
          "print('basili', flush=True); time.sleep(60)") % KOK
-pc = subprocess.Popen([sys.executable, "-c", COCUK], stdout=subprocess.PIPE, text=True)
-hazir_ = pc.stdout.readline().strip()
-os.kill(pc.pid, signal.SIGKILL)
-pc.wait()
-tus0, dugme0 = basililar()
-kontrol("takılı: SIGKILL sonrası Xvfb'de Shift (50) ve sol düğme basılı kaldı (sorun gerçek)",
-        hazir_ == "basili" and 50 in tus0 and dugme0, f"{hazir_} {tus0} {dugme0}")
-g3 = au.girdi("takili-temizle")
-tus1, dugme1 = basililar()
-kontrol("takılı: yeni SanalGirdi basılı tuş/düğmeleri bıraktı", g3.takili[0] >= 1 and g3.takili[1] >= 1 and
-        not tus1 and not dugme1, f"{g3.takili} {tus1} {dugme1}")
-g4 = au.girdi("takili-ikinci")
-kontrol("takılı: başka girdi nesnesi canlıyken temizlik YAPILMAZ (bilerek basılı tutulan bozulmasın)", g4.takili == (0, 0))
-g4.kapat()
-# Devral girdisi: DUR açıkken bırakma satırı yine gider (düğme basılı kalmasın), basma gitmez
-g3.insan_ham("mouseto 0.003 0.003")
-g3.insan_ham("buttondown left")
-open(hata.dur_dosyasi(), "w").close()
-try:
-    kod_up = dur_kodu(g3.insan_ham, "buttonup left")
-    kontrol("insan_ham: DUR açıkken buttonup geçer, düğme bırakıldı", kod_up is None and not basililar()[1])
-    kontrol("insan_ham: DUR açıkken buttondown → 13", dur_kodu(g3.insan_ham, "buttondown left") == 13 and
-            not basililar()[1])
-finally:
-    os.remove(hata.dur_dosyasi())
-    g3.kapat()
+if KW_2B:
+    # KWin: Girdi'yi açan süreç SIGKILL'lenince deskhand-eis yardımcısı stdin EOF alır ve basılı HER ŞEYİ bırakır;
+    # (yardımcının kendisi öldürülürse KWin tuşları bırakır, düğmeyi Eis.kurtar bırakır: test_arka_kwin.py).
+    # Kanıt test penceresinin olay günlüğünden: OYUN ALANI'nda Shift + sol düğme basılıp süreç öldürülür.
+    X_, Y_ = au.geometri(k)[:2]
+    COCUK_K = ("import sys, time; sys.path.insert(0, %r); from deskhand.arka_uc import sec, EKRAN; "
+               "g = sec(arka_bayragi=True).girdi('takili-test'); "
+               "g.gonder(EKRAN, None, 'mouseto %.6f %.6f', 'click left'); time.sleep(0.2); "
+               "g.gonder(EKRAN, None, 'keydown leftshift', 'buttondown left'); "
+               "print('basili', flush=True); time.sleep(60)") % (KOK, (X_ + m_oyun["cx"] + 0.5) / W,
+                                                                   (Y_ + m_oyun["cy"] + 0.5) / H)
+    au.one_getir(k)
+    n0 = len(log_satirlari(LOG))
+    pc = subprocess.Popen([sys.executable, "-c", COCUK_K], stdout=subprocess.PIPE, text=True)
+    hazir_ = pc.stdout.readline().strip()
+    SHIFT = str(0x01000020)  # Qt::Key_Shift (olayın metni yok → kod yazılır)
+    basildi = log_bekle(LOG, r"^tus_bas " + SHIFT + " ", 3, n0) and \
+        bekle(lambda: [l.split()[0] for l in log_satirlari(LOG)[n0:] if l.startswith("fare_")][-1:] == ["fare_bas"], 3)
+    n1 = len(log_satirlari(LOG))
+    os.kill(pc.pid, signal.SIGKILL)
+    pc.wait()
+    kontrol("takılı (KWin): Girdi süreci SIGKILL → yardımcı (EOF) Shift + sol düğmeyi bıraktı",
+            hazir_ == "basili" and basildi and log_bekle(LOG, r"^fare_birak sol ", 3, n1) is not None and
+            log_bekle(LOG, r"^tus_birak " + SHIFT + " ", 3, n1) is not None, str(log_satirlari(LOG)[n0:][-6:]))
+    g3 = au.girdi("takili-temizle")
+    n0 = len(log_satirlari(LOG))
+    g3.insan_ham("buttondown left")
+    open(hata.dur_dosyasi(), "w").close()
+    try:
+        kontrol("insan_ham: DUR açıkken buttonup geçer, düğme bırakıldı",
+                dur_kodu(g3.insan_ham, "buttonup left") is None and log_bekle(LOG, r"^fare_birak sol ", 3, n0))
+        n1 = len(log_satirlari(LOG))
+        kontrol("insan_ham: DUR açıkken buttondown → 13", dur_kodu(g3.insan_ham, "buttondown left") == 13 and
+                log_bekle(LOG, r"^fare_bas sol ", 0.5, n1) is None)
+    finally:
+        os.remove(hata.dur_dosyasi())
+        g3.kapat()
+    pc = None
+else:
+    pc = subprocess.Popen([sys.executable, "-c", COCUK], stdout=subprocess.PIPE, text=True)
+    hazir_ = pc.stdout.readline().strip()
+    os.kill(pc.pid, signal.SIGKILL)
+    pc.wait()
+if not KW_2B:
+    tus0, dugme0 = basililar()
+    kontrol("takılı: SIGKILL sonrası Xvfb'de Shift (50) ve sol düğme basılı kaldı (sorun gerçek)",
+            hazir_ == "basili" and 50 in tus0 and dugme0, f"{hazir_} {tus0} {dugme0}")
+    g3 = au.girdi("takili-temizle")
+    tus1, dugme1 = basililar()
+    kontrol("takılı: yeni SanalGirdi basılı tuş/düğmeleri bıraktı", g3.takili[0] >= 1 and g3.takili[1] >= 1 and
+            not tus1 and not dugme1, f"{g3.takili} {tus1} {dugme1}")
+    g4 = au.girdi("takili-ikinci")
+    kontrol("takılı: başka girdi nesnesi canlıyken temizlik YAPILMAZ (bilerek basılı tutulan bozulmasın)", g4.takili == (0, 0))
+    g4.kapat()
+    # Devral girdisi: DUR açıkken bırakma satırı yine gider (düğme basılı kalmasın), basma gitmez
+    g3.insan_ham("mouseto 0.003 0.003")
+    g3.insan_ham("buttondown left")
+    open(hata.dur_dosyasi(), "w").close()
+    try:
+        kod_up = dur_kodu(g3.insan_ham, "buttonup left")
+        kontrol("insan_ham: DUR açıkken buttonup geçer, düğme bırakıldı", kod_up is None and not basililar()[1])
+        kontrol("insan_ham: DUR açıkken buttondown → 13", dur_kodu(g3.insan_ham, "buttondown left") == 13 and
+                not basililar()[1])
+    finally:
+        os.remove(hata.dur_dosyasi())
+        g3.kapat()
 
 # ---------------------------------------------------------------- 3) ses (SESSİZ kısa akış; yalnız sıfırlar)
 if shutil.which("pacat"):
@@ -685,7 +783,13 @@ olcum["masaüstü kapanış"] = f"{(time.monotonic() - t) * 1000:.0f} ms"
 kontrol("durdur: kapatıldı, not yok", ok and not notlar, str(notlar))
 kontrol("durdur: durum yok", masaustu.durum() is None and not os.path.exists(masaustu.durum_yolu()))
 kontrol("durdur: test penceresi süreci öldü", bekle(lambda: p1.poll() is not None, 3))
-kontrol("durdur: X soketi kalktı", not os.path.exists(f"/tmp/.X11-unix/X{d['no']}"))
+if KW:
+    kontrol("durdur: XWayland soketleri + kilitleri ve Wayland soketi kalktı",
+            not any(os.path.exists(y_) for n_ in (d["x_ana"], d["x_ana"] + 1)
+                    for y_ in (f"/tmp/.X11-unix/X{n_}", f"/tmp/.X{n_}-lock")) and not os.path.exists(d["wayland_yol"]))
+    kontrol("durdur: KWin süreci öldü", not masaustu._canli(d["pid"]["kwin"]))
+else:
+    kontrol("durdur: X soketi kalktı", not os.path.exists(f"/tmp/.X11-unix/X{d['no']}"))
 kontrol("durdur: kafes boşaldı", not masaustu._kafes_surecleri(cg))
 kontrol("durdur: kendi boş çıkışı kaldırıldı", masaustu._sink_modulu(d["ses"]["sink"]) is None)
 kontrol("durdur: özel D-Bus soketi/çalışma klasörü silindi", not os.path.exists(d["calisma"]))
@@ -715,6 +819,26 @@ kontrol("kafessiz: durdur tüm uygulamaları kapattı (sonra boş çıkış kald
 pk.wait(3)
 
 # ---------------------------------------------------------------- 5c) bayat durum dosyası + aynı numarada başka X (D6)
+if KW:
+    # KWin türü: OYNANMIŞ durum dosyası kullanıcının GERÇEK KWin'ini (canlı PID, gerçek Wayland soketi, gerçek veri
+    # yolu) gösterse bile bağlantı kapısı (kwin_oturum.baglanti_denetle) Dur 14 verir; hiçbir araç bağlanmaz.
+    gw_ = os.environ.get("WAYLAND_DISPLAY", "")
+    grt = os.environ.get("XDG_RUNTIME_DIR", "")
+    gpid = next((int(p_) for p_ in pidler("kwin_wayland") if gw_ and gw_ in masaustu._komut_satiri(p_)), None)
+    if gpid and gw_:
+        masaustu._durum_yaz({"surum": 1, "tur": "kwin", "kimlik": "sahte001", "ekran": gw_, "wayland": gw_,
+                             "wayland_yol": os.path.join(grt, gw_), "calisma": grt, "boyut": [1920, 1080],
+                             "dbus_adres": f"unix:path={grt}/bus", "pid": {"kwin": gpid}, "baslangic": 1,
+                             "xwayland": os.environ.get("DISPLAY"), "kafes": None, "cgroup": "", "ses": None})
+        try:
+            au2 = sec(arka_bayragi=True)
+            kontrol("oynanmış durum: gerçek KWin/soket/veri yolu → girdi, görüntü, pencere listesi, pano Dur 14",
+                    type(au2).__name__ == "KwinArkaUc" and dur_kodu(au2.girdi, "bayat") == 14 and
+                    dur_kodu(au2.goruntu) == 14 and dur_kodu(au2.pencereler) == 14 and dur_kodu(au2.pano_oku) == 14)
+        finally:
+            os.remove(masaustu.durum_yolu())
+    else:
+        kontrol("oynanmış durum testi: gerçek KWin bulunamadı (atlandı)", True)
 no_ = masaustu.bos_ekran()
 px = subprocess.Popen(["Xvfb", f":{no_}", "-nolisten", "tcp", "-screen", "0", "640x480x24"], stdout=subprocess.DEVNULL,
                       stderr=subprocess.DEVNULL)

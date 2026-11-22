@@ -322,6 +322,7 @@ def uygulama_ortami(d: dict, env: dict | None = None, izinli: tuple = ()) -> dic
     if d.get("kimlik"):  # durdururken kafes dışındaki/kafessiz süreçler de bulunabilsin (_isaretli_surecler)
         e["DESKHAND_SANAL_KIMLIK"] = d["kimlik"]
     ao.ses_ortami_uygula(e, d.get("ses"), os.path.join(d["calisma"], "ses-yok"))
+    e["XDG_RUNTIME_DIR"] = ao.uygulama_runtime(d["calisma"])  # masaüstünün kendi klasörü (kullanıcınınki değil)
     e["WAYLAND_DISPLAY"] = d["wayland_yol"]  # MUTLAK yol: değişken yoksa libwayland kullanıcının wayland-0'ına düşerdi
     e["XDG_SESSION_TYPE"] = "wayland"
     for k, v in {"QT_QPA_PLATFORM": "wayland", "GDK_BACKEND": "wayland", "MOZ_ENABLE_WAYLAND": "1",
@@ -537,6 +538,42 @@ def _hazir_denetle(d: dict, k: subprocess.Popen) -> None:
         d["uyarilar"].append(_("KWin donanım hızlandırması yok ({gpu}): yazılım çizimi").format(gpu=d["gpu"] or "?"))
 
 
+def oncelik_durumu(pid) -> list[tuple[int, int, int]]:
+    """Sürecin iş parçacıkları → [(tid, nice, zamanlama politikası)] (/proc; politika 0 = SCHED_OTHER)."""
+    sonuc = []
+    try:
+        for t in os.listdir(f"/proc/{int(pid)}/task"):
+            try:
+                with open(f"/proc/{int(pid)}/task/{t}/stat") as f:
+                    a = f.read().rsplit(")", 1)[1].split()
+                sonuc.append((int(t), int(a[16]), int(a[38])))
+            except (OSError, ValueError, IndexError):
+                continue
+    except (OSError, ValueError, TypeError):
+        pass
+    return sonuc
+
+
+def _oncelik_dusur(d: dict, pid: int) -> None:
+    """Güvence: KWin'in HER iş parçacığı nice >= 10 ve gerçek zamanlı olmayan zamanlamada. no_new_privs ile normalde
+    zaten öyledir; değilse (setpriv yok) iş parçacıkları tek tek düşürülür (kendi süreçlerimiz: izin gerekmez). Yine
+    de yükseltilmiş kalan varsa açılış DURUR (arka plan masaüstü kullanıcının önüne geçmesin)."""
+    for tid, nice, politika in oncelik_durumu(pid):
+        try:
+            if politika in (1, 2, 6):  # SCHED_FIFO / SCHED_RR / SCHED_DEADLINE
+                # SCHED_RESET_ON_FORK bayrağı yetkisiz temizlenemez: bayrak korunarak SCHED_OTHER'a
+                os.sched_setscheduler(tid, os.SCHED_OTHER | getattr(os, "SCHED_RESET_ON_FORK", 0x40000000),
+                                      os.sched_param(0))
+            if nice < 10:
+                os.setpriority(os.PRIO_PROCESS, tid, 10)
+        except OSError:
+            pass
+    kalan = [(t, n, p) for t, n, p in oncelik_durumu(pid) if n < 10 or p in (1, 2, 6)]
+    if kalan:
+        raise Dur(ARAC_EKSIK, _("KWin düşük önceliğe alınamadı (iş parçacığı, nice, politika): {kalan}").format(
+            kalan=kalan[:5]))
+
+
 def _kxkbrc(cfg: str, duzen: tuple[str, str]) -> None:
     layout, variant = duzen
     with open(os.path.join(cfg, "kxkbrc"), "w") as f:
@@ -700,7 +737,14 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
             raise Dur(ARAC_EKSIK, _("dbus-daemon bellek kafesinde değil: {cgroup}").format(cgroup=repr(d["cgroup"])))
 
     # 2) XWayland soketleri + Xauthority
-    kwin = ["kwin_wayland", "--virtual", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
+    # no_new_privs: kwin_wayland'in dosya yeteneği (cap_sys_nice) VERİLMEZ → KWin kendini SCHED_RR + nice -12'ye
+    # yükseltemez, kafesin nice 10 / ionice idle önceliğinde kalır (ölçüldü: yeteneğiyle -12 + gerçek zamanlı
+    # zamanlama; arka plan masaüstü oyun oynayan kullanıcıdan işlemci çalardı). Yan kazanç: süreç /proc'tan okunabilir.
+    # RLIMIT_RTPRIO=0 + RLIMIT_NICE=10 (en düşük nice 10): yetenek olmadan da kullanıcı sınırları (limits.conf) izin
+    # veriyorsa SCHED_RR alıp nice -12ye inebiliyordu (ölçüldü)
+    kwin = [*(["prlimit", "--rtprio=0", "--nice=10"] if shutil.which("prlimit") else []),
+            *(["setpriv", "--no-new-privs"] if shutil.which("setpriv") else []),
+            "kwin_wayland", "--virtual", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities",
             "--socket", d["wayland"], "--width", str(d["boyut"][0]), "--height", str(d["boyut"][1])]
     xs = None
     fdler: list[int] = []
@@ -746,6 +790,7 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
         raise Dur(ARAC_EKSIK, _("KWin özel veri yoluna bağlanmadı: {hata}").format(hata=_log_sonu(cdir, "kwin")))
     if not _kwin_mi(d):
         raise Dur(ARAC_EKSIK, _("KWin süreci doğrulanamadı (pid {pid})").format(pid=k.pid))
+    _oncelik_dusur(d, k.pid)
     _hazir_denetle(d, k)
 
     # 4) ses bekçisi (masaustu ile aynı ikinci savunma hattı)

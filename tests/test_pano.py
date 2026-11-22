@@ -735,6 +735,8 @@ d = masaustu.masaustu_baslat()
 au = arka_uc.sec(arka_bayragi=True)
 kontrol("sanal: masaüstü açıldı, arka uç sanal, pano uygulanıyor", au.ad == "sanal" and
         type(au).pano_yaz is not arka_uc.ArkaUc.pano_yaz)
+KW = masaustu.tur(d) == "kwin"  # KWin türü: pano = wl-copy/wl-paste (oturum soketi), yardımcı = wl-copy sunucusu
+print(f"arka plan masaüstü türü: {masaustu.tur(d)}")
 LOG = os.path.join(GECICI, "pano.log")
 LOG2 = os.path.join(GECICI, "pano2.log")
 p1 = au.baslat([sys.executable, PANO_PENCERE], env={"LOG": LOG, "BASLIK": "pano-test ANA"})
@@ -763,7 +765,8 @@ def temizle_kutu():
 
 
 # --- pano yardımcısı: ilk kullanım başlatır, kafeste, boş pano
-kontrol("sanal pano: ilk durumda boş (None)", au.pano_oku() is None and au.pano_yedekle() == {"metin": None, "metin_disi": False})
+kontrol("sanal pano: ilk durumda boş (None)", au.pano_oku() is None and au.pano_yedekle() == (
+    {"bos": True} if KW else {"metin": None, "metin_disi": False}))
 t = time.perf_counter()
 au.pano_yaz("eski içerik ğüşİ 😀")
 olcum["sanal pano_yaz (yardımcıyı başlatan ilk çağrı)"] = f"{(time.perf_counter() - t) * 1000:.0f} ms"
@@ -781,8 +784,11 @@ au.pano_yaz("eski içerik ğüşİ 😀")
 
 
 def yardimci_pid():
+    """Panoyu sunan yardımcı: Xvfb'de pano_sahibi.py, KWin'de wl-copy'nin sunucu çocuğu (ikisi de kafeste)."""
     for pid in masaustu._kafes_surecleri(d["cgroup"]):
-        if any(x.endswith("pano_sahibi.py") for x in masaustu._komut_satiri(pid)):
+        kom = masaustu._komut_satiri(pid)
+        if (KW and kom[:1] and os.path.basename(kom[0]) == "wl-copy") or \
+                (not KW and any(x.endswith("pano_sahibi.py") for x in kom)):
             return pid
     return None
 
@@ -790,13 +796,23 @@ def yardimci_pid():
 yp = yardimci_pid()
 kontrol("sanal pano: yardımcı süreç masaüstü kafesinde", yp is not None and masaustu._cgroup(yp) == d["cgroup"], str(yp))
 yo = masaustu._ortam_oku(yp) if yp else {}
-kontrol("sanal pano: yardımcı ortamı sanal (DISPLAY=:N, WAYLAND_DISPLAY sahte, XAUTHORITY masaüstünün)",
-        yo.get("DISPLAY") == d["ekran"] and yo.get("XAUTHORITY") == d["xauth"] and
-        os.path.basename(yo.get("WAYLAND_DISPLAY", "")) == "wayland-yok", str({a: yo.get(a) for a in ("DISPLAY", "WAYLAND_DISPLAY")}))
-sock = os.path.join(d["calisma"], "pano.sock")
-kontrol("sanal pano: soket 0600, masaüstü çalışma klasöründe", os.path.exists(sock) and (os.stat(sock).st_mode & 0o777) == 0o600)
-au.pano_yaz("başka")
-kontrol("sanal pano: ikinci yazma AYNI yardımcıyı kullanır", yardimci_pid() == yp)
+if KW:  # wl-copy: oturumun MUTLAK Wayland soketi, kullanıcının ekranı/veri yolu yok; her yazma yeni sunucu
+    kontrol("KWin pano: yardımcı (wl-copy) ortamı yalıtık (WAYLAND_DISPLAY oturum soketi, DISPLAY/DBUS yok)",
+            yo.get("WAYLAND_DISPLAY") == d["wayland_yol"] and "DISPLAY" not in yo and
+            "DBUS_SESSION_BUS_ADDRESS" not in yo, str({a: yo.get(a) for a in ("DISPLAY", "WAYLAND_DISPLAY")}))
+    au.pano_yaz("başka")
+    kontrol("KWin pano: ikinci yazma eski sunucuyu devirir (tek sunucu kalır)",
+            bekle(lambda: masaustu._canli(yp) is False, 3) and yardimci_pid() not in (None, yp))
+else:
+    kontrol("sanal pano: yardımcı ortamı sanal (DISPLAY=:N, WAYLAND_DISPLAY sahte, XAUTHORITY masaüstünün)",
+            yo.get("DISPLAY") == d["ekran"] and yo.get("XAUTHORITY") == d["xauth"] and
+            os.path.basename(yo.get("WAYLAND_DISPLAY", "")) == "wayland-yok",
+            str({a: yo.get(a) for a in ("DISPLAY", "WAYLAND_DISPLAY")}))
+    sock = os.path.join(d["calisma"], "pano.sock")
+    kontrol("sanal pano: soket 0600, masaüstü çalışma klasöründe", os.path.exists(sock) and
+            (os.stat(sock).st_mode & 0o777) == 0o600)
+    au.pano_yaz("başka")
+    kontrol("sanal pano: ikinci yazma AYNI yardımcıyı kullanır", yardimci_pid() == yp)
 au.pano_yaz("")
 kontrol("sanal pano: pano_yaz('') → temizle (sahiplik bırakıldı), oku → None", au.pano_oku() is None)
 au.pano_yaz("a" * 100)
@@ -855,12 +871,17 @@ temizle_kutu()
 t = time.perf_counter()
 r, ms = api_yaz("kısa 😀")
 bekle(lambda: kutu_metni() == "kısa 😀", 3)
-kontrol("yazı: kısa emoji sanalda harf harf yolu (yapıştırma yok), eski pano dokunulmadı",
-        kutu_metni() == "kısa 😀" and "panodan" not in r and au.pano_oku() == "eski içerik ğüşİ 😀", f"{kutu_metni()!r} {r}")
+if KW:  # KWin: emoji klavye haritasında yok (yazilabilir_mi False) → kde gibi yapıştırılır, eski pano geri gelir
+    kontrol("yazı: kısa emoji KWin'de yapıştırma yolu (düzende yok), eski pano geri",
+            kutu_metni() == "kısa 😀" and "panodan" in r and au.pano_oku() == "eski içerik ğüşİ 😀", f"{kutu_metni()!r} {r}")
+else:
+    kontrol("yazı: kısa emoji sanalda harf harf yolu (yapıştırma yok), eski pano dokunulmadı",
+            kutu_metni() == "kısa 😀" and "panodan" not in r and au.pano_oku() == "eski içerik ğüşİ 😀",
+            f"{kutu_metni()!r} {r}")
 
 # yazilabilir_mi emojiyi reddederse (kde gibi) kısa emoji da yapıştırılır
-gercek_yazilabilir = sanal.SanalArkaUc.yazilabilir_mi
-sanal.SanalArkaUc.yazilabilir_mi = lambda self, c: ord(c) < 0x10000 and c.isprintable()
+gercek_yazilabilir = type(au).yazilabilir_mi
+type(au).yazilabilir_mi = lambda self, c: ord(c) < 0x10000 and c.isprintable() and gercek_yazilabilir(self, c)
 try:
     temizle_kutu()
     r, ms = api_yaz("tek 😀 emoji")
@@ -869,7 +890,7 @@ try:
     kontrol("yapıştır: yazilabilir_mi emojiyi reddedince KISA emoji yapıştırılır, pano geri",
             kutu_metni() == "tek 😀 emoji" and "panodan" in r and au.pano_oku() == "eski içerik ğüşİ 😀", f"{kutu_metni()!r} {r}")
 finally:
-    sanal.SanalArkaUc.yazilabilir_mi = gercek_yazilabilir
+    type(au).yazilabilir_mi = gercek_yazilabilir
 
 # 5000 karakter
 temizle_kutu()

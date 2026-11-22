@@ -833,7 +833,8 @@ p1 = p2 = None
 arka_uc._ORNEKLER.clear()  # önceki bölümlerin sahte arka uçları gerçek sec()'in önüne geçmesin
 try:
     d = masaustu.masaustu_baslat()
-    kontrol("e2e: sanal masaüstü açıldı", bool(d) and d.get("ekran", "").startswith(":"))
+    kontrol("e2e: sanal masaüstü açıldı (xvfb: :N ekranı, kwin: özel Wayland soketi)", bool(d) and (
+        d.get("ekran", "").startswith(":") if masaustu.tur(d) == "xvfb" else d.get("ekran") == d.get("wayland")))
     os.environ["DESKHAND_HEDEF"] = "arka"
     au = arka_uc.sec(arka_bayragi=True)
     p1 = au.baslat([sys.executable, TEST_PENCERE], env={"LOG": LOG, "BASLIK": "deskhand-riskli TERM", "HAZIR_MS": "300",

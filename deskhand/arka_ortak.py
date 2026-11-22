@@ -31,7 +31,8 @@ SILINECEK_ORTAM = ("WAYLAND_DISPLAY", "WAYLAND_SOCKET", "XAUTHORITY", "DESKTOP_S
 # SONRA ikinci kez uygulanır). Masaüstüne ait değerleri (özel veri yolu, ekran, ses) çağıran bunların ÜSTÜNE yazar.
 # AT_SPI_BUS_ADDRESS: kullanıcının erişilebilirlik veri yolu (erisim.py süreç ortamına geçici koyar) asla geçmez;
 # yalnız masaüstünün KENDİ kayıt defteri izinli_env ile alır. SSH_AUTH_SOCK/SSH_AGENT_PID: arka plan uygulaması
-# kullanıcının SSH anahtarlarını kullanamaz. XDG_RUNTIME_DIR BİLEREK kalır (bkz. docs/ARCHITECTURE.md §4).
+# kullanıcının SSH anahtarlarını kullanamaz. XDG_RUNTIME_DIR masaüstünün kendi klasörüne çevrilir (uygulama_runtime);
+# HOME BİLEREK kullanıcınındır (uygulamalar kullanıcının dosyalarıyla çalışır; bkz. docs/ARCHITECTURE.md §4).
 CIKARILACAK_ORTAM = frozenset({
     *SILINECEK_ORTAM, "DBUS_SESSION_BUS_ADDRESS", "AT_SPI_BUS_ADDRESS", "DISPLAY", "LIBEI_SOCKET", "EIS_SOCKET",
     "GNOME_KEYRING_CONTROL", "KDE_FULL_SESSION", "SSH_AUTH_SOCK", "SSH_AGENT_PID", "PULSE_SERVER", "PULSE_SINK",
@@ -304,10 +305,30 @@ def ses_kaldir(ses: dict | None) -> str | None:
     return None
 
 
+def gercek_runtime() -> str:
+    """Kullanıcının GERÇEK XDG_RUNTIME_DIR'i (ses sunucusu soketleri burada): /run/user/UID, yoksa ortamdaki."""
+    rt = f"/run/user/{os.getuid()}"
+    return rt if os.path.isdir(rt) else (os.environ.get("XDG_RUNTIME_DIR") or rt)
+
+
+def uygulama_runtime(cdir: str) -> str:
+    """Arka plan uygulamalarının XDG_RUNTIME_DIR'i: masaüstünün KENDİ klasörü (<çalışma>/run, 0700). Uygulamalar
+    kullanıcının gerçek runtime dizinindeki soketleri (Wayland, veri yolu, erişilebilirlik…) varsayılan yoldan bulamaz;
+    ses yalnız açık soket yoluyla (ses_ortami_uygula) boş çıkışa gider."""
+    yol = os.path.join(cdir, "run")
+    os.makedirs(yol, mode=0o700, exist_ok=True)
+    return yol
+
+
 def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
-    """Uygulama ortamının SES bölümü (iki tür için aynı): boş çıkış varsa ona yönlendir, yoksa sesi tamamen kapat."""
+    """Uygulama ortamının SES bölümü (iki tür için aynı): boş çıkış varsa ona yönlendir, yoksa sesi tamamen kapat.
+    Uygulamanın XDG_RUNTIME_DIR'i masaüstünün kendi klasörü olduğundan ses sunucusu AÇIK yolla verilir
+    (PULSE_SERVER + PIPEWIRE_RUNTIME_DIR: kullanıcının ses sunucusu; akış yine yalnız boş çıkışa gider)."""
     ses = ses or {}
     if ses.get("sink"):
+        rt = gercek_runtime()
+        e["PULSE_SERVER"] = f"unix:{rt}/pulse/native"
+        e["PIPEWIRE_RUNTIME_DIR"] = rt
         s = ses["sink"]
         e["PULSE_SINK"] = s
         e["PULSE_SOURCE"] = f"{s}.monitor"  # kayıt da sessizlikten: arka plan uygulaması mikrofonu duymaz
@@ -322,6 +343,7 @@ def ses_ortami_uygula(e: dict, ses: dict | None, yok_yolu: str) -> None:
     else:  # boş çıkış kurulamadı: ses tamamen kapalı (varsayılan çıkışa, yani kullanıcının kulağına düşmesin)
         e["PULSE_SERVER"] = f"unix:{yok_yolu}"
         e["PIPEWIRE_REMOTE"] = yok_yolu
+        e["PIPEWIRE_RUNTIME_DIR"] = os.path.dirname(yok_yolu)
         e.pop("PULSE_SINK", None)
 
 

@@ -536,6 +536,13 @@ class KesikGirdi:
 
 
 def basili_mod(g):
+    if getattr(g.arka if hasattr(g, "arka") else None, "tur", "") == "kwin":
+        # KWin: girdi yardımcısının (deskhand-eis) bu bağlantıda basılı tuttuğu evdev kodları; değiştiriciler
+        # 29/97 ctrl, 42/54 shift, 56/100 alt, 125/126 meta
+        y = g.arka.eis_satir("basili")
+        m = re.search(r"tus=([\d,]*)", y)
+        tus = {int(x) for x in m.group(1).split(",") if x} if m else set()
+        return bool(tus & {29, 97, 42, 54, 56, 100, 125, 126})
     from Xlib import X
     q = g.x.kok.query_pointer()
     return bool(q.mask & (X.ControlMask | X.ShiftMask | X.Mod1Mask | X.Mod4Mask))

@@ -26,6 +26,7 @@
  *   wheel N / hwheel N       kaydır; N artı = yukarı / sağ (dotool gibi), N çentik
  *   typedelay MS typehold MS keydelay MS keyhold MS    (varsayılan 2 8 2 8, dotool gibi)
  *   birak                    basılı tutulan HER ŞEYİ hemen bırak
+ *   basili                   (tanılama) "tamam tus=KOD,… dugme=KOD,…": bu bağlantının basılı tuttukları
  *   bilgi                    "tamam GENİŞLİK YÜKSEKLİK DÜZEN"
  *   cik                      hepsini bırak, çık
  *
@@ -773,6 +774,13 @@ static void satir_isle(char *satir) {
     else if (!strcmp(c, "keydelay")) h = komut_ms(arg, &keydelay);
     else if (!strcmp(c, "keyhold")) h = komut_ms(arg, &keyhold);
     else if (!strcmp(c, "birak")) hepsini_birak();
+    else if (!strcmp(c, "basili")) { /* tanılama: bu bağlantının basılı tuttuğu evdev tuş / düğme kodları */
+        char t[BASILI_AZAMI * 8 + 16] = "", b[8 * 8 + 16] = "";
+        for (int i = 0; i < basili_tus_n; i++) snprintf(t + strlen(t), sizeof t - strlen(t), "%s%d", i ? "," : "", basili_tus[i]);
+        for (int i = 0; i < basili_dugme_n; i++) snprintf(b + strlen(b), sizeof b - strlen(b), "%s%d", i ? "," : "", basili_dugme[i]);
+        yanit("tamam tus=%s dugme=%s", t, b);
+        return;
+    }
     else if (!strcmp(c, "bilgi")) {
         double bx, by, bw, bh;
         sinirlar(&bx, &by, &bw, &bh);

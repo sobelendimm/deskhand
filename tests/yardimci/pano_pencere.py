@@ -25,9 +25,31 @@ kutu = QPlainTextEdit()
 kutu.setWindowTitle(os.environ.get("BASLIK", "pano-test"))
 kutu.resize(700, 400)
 kutu.textChanged.connect(lambda: log(json.dumps({"metin": kutu.toPlainText()}, ensure_ascii=False)))
+if os.environ.get("SINIF") in ("xterm", "konsole", "kitty", "alacritty", "foot"):
+    # uçbirim taklidi: gerçek uçbirimler gibi ctrl+shift+v yapıştırır (Deskhand uçbirim sınıfında bu tuşu kullanır)
+    from PyQt6.QtGui import QKeySequence, QShortcut
+    QShortcut(QKeySequence("Ctrl+Shift+V"), kutu, activated=kutu.paste)
 kutu.show()
 buyuk = int(os.environ.get("PANO_BUYUK", "0"))
-if buyuk:
+
+
+def pano_doldur():
     app.clipboard().setText(("büyük ğüş İÇ 😀 " * (buyuk // 14 + 1))[:buyuk])
     log("pano hazir")
+
+
+if buyuk:
+    if app.platformName() == "wayland":
+        # Wayland: istemci panoyu yalnız klavye odağı varken (geçerli bir olay seri numarasıyla) ayarlayabilir →
+        # pencere etkinleşince doldur (KWin oturumunda yeni pencere odak alır)
+        from PyQt6.QtCore import QTimer
+
+        def etkin_olunca():
+            if kutu.isActiveWindow():
+                pano_doldur()
+            else:
+                QTimer.singleShot(50, etkin_olunca)
+        QTimer.singleShot(50, etkin_olunca)
+    else:
+        pano_doldur()
 sys.exit(app.exec())

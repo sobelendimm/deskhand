@@ -340,18 +340,12 @@ def sunucu_pidleri():
 
 
 def x_tasi(kimlik, dx):
-    """Testin kendisi: pencereyi görünmez masaüstünde taşı (girdi değil; bayat shot_id sınaması)."""
-    d = masaustu.durum()
-    dp = masaustu.x_ac(d["ekran"])
-    try:
-        w = dp.create_resource_object("window", int(kimlik.split(":", 1)[1], 16))
-        g = w.get_geometry()
-        t = dp.screen().root.translate_coords(w, 0, 0)
-        w.configure(x=t.x + dx, y=t.y)
-        dp.sync()
-    finally:
-        dp.close()
-    _ = g
+    """Testin kendisi: pencereyi görünmez masaüstünde taşı (girdi değil; bayat shot_id sınaması). Arka uçtan bağımsız
+    (Xvfb: EWMH, KWin: kdotool) — arka ucun pencere yönetimi yöntemiyle."""
+    from deskhand.arka_uc import sec
+    au = sec(arka_bayragi=True)
+    x, y = au.geometri(kimlik)[:2]
+    au.tasi(kimlik, x + dx, y)
 
 
 async def stdio_testleri():

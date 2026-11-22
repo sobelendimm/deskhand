@@ -18,6 +18,7 @@ EIS kopması: yardımcı süreç ölürse (KWin yeniden başladı, çökme) bas�
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -38,7 +39,8 @@ KD_ZAMAN = 10.0
 _KD_OKUMA = {"search", "getactivewindow", "getwindowgeometry", "getwindowname", "getwindowclassname",
              "getmouselocation", "getwindowpid"}
 PANO_ZAMAN = 5.0
-PANO_AZAMI = 32 * 1024 * 1024
+PANO_AZAMI = 32 * 1024 * 1024       # geri yüklenmek üzere okunacak pano en çok (kde ile aynı)
+PANO_YAZ_AZAMI = 64 * 1024 * 1024   # yazılabilecek metin en çok (Xvfb türüyle aynı sınır)
 GOZCU_ARALIK = 0.012  # yazı gözcüsü yoklama aralığı (her yoklama tek kdotool çağrısı)
 
 
@@ -108,39 +110,55 @@ class KwinArkaUc(ArkaUc):
             time.sleep(0.005 * (deneme + 1))
         return ""
 
-    # -------- pencere
-    def kimlikler(self) -> list[str]:
-        d = self._d()
-        u = set(self._kd("search", "--name", ".", d=d).split()) | set(self._kd("search", "--class", ".", d=d).split())
-        return sorted(kimlik_yap(x) for x in u if UUID.fullmatch(x))
+    # -------- pencere: KWin betikleri (kdotool kwinscript, özel veri yolu). Geometri İSTEMCİ ALANIDIR (Xvfb türüyle
+    # aynı: başlık çubuğu/çerçeve hariç), böylece pencere pikseli = uygulamanın kendi koordinatı ve taşı/boyutlandır
+    # istemci alanının köşesini/boyutunu verir.
+    _LISTE_BETIGI = (
+        "const L = []; for (const w of workspace.windowList()) { if (w.deleted) continue; "
+        "const g = w.clientGeometry, f = w.frameGeometry; "
+        "L.push({i: w.internalId.toString(), t: w.caption, c: w.resourceClass, p: w.pid, m: w.minimized, "
+        "x: w.maximizeMode, g: [g.x, g.y, g.width, g.height], f: [f.x, f.y, f.width, f.height]}); } "
+        "output_result(JSON.stringify(L));")
 
-    def _geo_coz(self, out: str) -> tuple[int, int, int, int] | None:
-        p = re.search(r"Position:\s*(-?[\d.]+),(-?[\d.]+)", out)
-        s = re.search(r"Geometry:\s*([\d.]+)x([\d.]+)", out)
-        if not (p and s):
-            return None
-        return tuple(round(float(v)) for v in (*p.groups(), *s.groups()))
+    def _betik(self, kod: str, d: dict | None = None) -> str:
+        return self._kd("kwinscript", "--inline", kod, d=d)
+
+    def _liste(self, d: dict | None = None) -> list[dict]:
+        """Oturumdaki pencereler: [{i, t, c, p, m, x, g, f}] (g istemci, f çerçeve geometrisi)."""
+        for _deneme in range(3):
+            out = self._betik(self._LISTE_BETIGI, d)
+            try:
+                return [w for w in json.loads(out or "null") or [] if UUID.fullmatch(str(w.get("i", "")))]
+            except ValueError:
+                time.sleep(0.01)
+        return []
+
+    def _pencere(self, k: str, d: dict | None = None) -> dict:
+        u = kimlik_coz(k)
+        w = next((w for w in self._liste(d) if w["i"] == u), None)
+        if w is None:
+            raise Dur(PENCERE_YOK, _("pencere bulunamadı: {kimlik}").format(kimlik=k))
+        return w
+
+    @staticmethod
+    def _geo(w: dict) -> tuple[int, int, int, int]:
+        return tuple(round(float(v)) for v in w["g"])
+
+    def kimlikler(self) -> list[str]:
+        return sorted(kimlik_yap(w["i"]) for w in self._liste() if w.get("t") or w.get("c"))
 
     def pencereler(self, desen: str | None = None):
         try:
             rx = re.compile(desen, re.I) if desen else None
         except re.error:
             rx = re.compile(re.escape(desen), re.I)
-        d = self._d()
         sonuc = []
-        for k in self.kimlikler():
-            u = kimlik_coz(k)
-            out = self._kd("getwindowname", u, "getwindowgeometry", u, d=d)
-            satirlar = out.splitlines()
-            geo = self._geo_coz(out)
-            if geo is None:
-                continue  # listelenirken kapanan pencere
-            # chain çıktısı: ilk satır başlık, sonra "Window …", "Position", "Geometry"
-            b = satirlar[0] if satirlar and not satirlar[0].startswith(("Window ", "  Position")) else ""
-            if rx is not None and not rx.search(b):
+        for w in self._liste():
+            b = w.get("t") or ""
+            if not (b or w.get("c")) or (rx is not None and not rx.search(b)):
                 continue
-            sonuc.append((k, b, geo))
-        return sonuc
+            sonuc.append((kimlik_yap(w["i"]), b, self._geo(w)))
+        return sorted(sonuc)
 
     def pencere_coz(self, arg: str) -> str:
         if (arg or "").lower() in EKRAN_ADLARI or arg == EKRAN:
@@ -164,10 +182,7 @@ class KwinArkaUc(ArkaUc):
         if k == EKRAN:
             x0, y0, x1, y1 = self.ekran_alani()
             return (x0, y0, x1 - x0, y1 - y0)
-        geo = self._geo_coz(self._kd("getwindowgeometry", kimlik_coz(k)))
-        if geo is None:
-            raise Dur(PENCERE_YOK, _("pencere bulunamadı: {kimlik}").format(kimlik=k))
-        return geo
+        return self._geo(self._pencere(k))
 
     def baslik(self, k: str) -> str:
         if k == EKRAN:
@@ -220,27 +235,56 @@ class KwinArkaUc(ArkaUc):
         self.geometri(k)
         self._kd("windowclose", kimlik_coz(k))
 
-    # -------- pencere yönetimi (kdotool; denetimler üst katmanda: eylem.pencere_yonet)
-    def _pencere_eylemi(self, k: str, *kd_args) -> None:
+    # -------- pencere yönetimi (kdotool; denetimler üst katmanda: eylem.pencere_yonet). Xvfb türü gibi: istek
+    # gönderildikten sonra durum doğrulanır (en çok ~1 sn; olmazsa Dur 9).
+    def pencere_durumu(self, k: str) -> set[str]:
+        """{"hidden" (küçültülmüş), "maximized"} (KWin betiği; salt okuma)."""
+        w = self._pencere(k)
+        return ({"hidden"} if w.get("m") else set()) | ({"maximized"} if w.get("x") == 3 else set())
+
+    def _pencere_eylemi(self, k: str, *kd_args, bekle=None, ne: str = "") -> None:
         if k == EKRAN:
             raise Dur(PENCERE_YOK, _("masaüstü kipi taşınamaz/boyutlandırılamaz; pencere kimliği/adı ver"))
         self.geometri(k)  # yoksa Dur 8
         self._kd(*kd_args)
+        if bekle is None:
+            return
+        bitis = time.monotonic() + 1.0
+        while time.monotonic() < bitis:
+            if bekle(self.pencere_durumu(k)):
+                return
+            time.sleep(0.02)
+        raise Dur(ARAC_EKSIK, _("pencere yöneticisi isteği yerine getirmedi: {ne}").format(ne=ne))
+
+    def _cerceve_ayarla(self, k: str, x=None, y=None, g=None, h=None) -> None:
+        """İSTEMCİ alanını (geometri() ölçüsü) taşı/boyutlandır: çerçeve, istemci–çerçeve farkı kadar kaydırılır."""
+        if k == EKRAN:
+            raise Dur(PENCERE_YOK, _("masaüstü kipi taşınamaz/boyutlandırılamaz; pencere kimliği/adı ver"))
+        w = self._pencere(k)
+        (gx, gy, gw, gh), (fx, fy, fw, fh) = w["g"], w["f"]
+        hedef = [fx if x is None else int(x) - (gx - fx), fy if y is None else int(y) - (gy - fy),
+                 fw if g is None else int(g) + (fw - gw), fh if h is None else int(h) + (fh - gh)]
+        kod = ("for (const w of workspace.windowList()) { if (w.internalId == '%s') { const q = Object.assign({}, "
+               "w.frameGeometry); q.x = %d; q.y = %d; q.width = %d; q.height = %d; w.frameGeometry = q; } }"
+               % (w["i"], *(round(v) for v in hedef)))
+        self._betik(kod)
 
     def tasi(self, k: str, x: int, y: int) -> None:
-        self._pencere_eylemi(k, "windowmove", kimlik_coz(k), str(int(x)), str(int(y)))
+        self._cerceve_ayarla(k, x=x, y=y)
 
     def boyutlandir(self, k: str, g: int, y: int) -> None:
-        self._pencere_eylemi(k, "windowsize", kimlik_coz(k), str(int(g)), str(int(y)))
+        self._cerceve_ayarla(k, g=g, h=y)
 
     def kucult(self, k: str) -> None:
-        self._pencere_eylemi(k, "windowminimize", kimlik_coz(k))
+        self._pencere_eylemi(k, "windowminimize", kimlik_coz(k), bekle=lambda d: "hidden" in d, ne=_("küçültme"))
 
     def buyut(self, k: str) -> None:
-        self._pencere_eylemi(k, "windowstate", "--add", "MAXIMIZED", kimlik_coz(k))
+        self._pencere_eylemi(k, "windowstate", "--add", "MAXIMIZED", kimlik_coz(k),
+                             bekle=lambda d: "maximized" in d, ne=_("büyütme"))
 
     def geri_yukle(self, k: str) -> None:
-        self._pencere_eylemi(k, "windowstate", "--remove", "MINIMIZED", "--remove", "MAXIMIZED", kimlik_coz(k))
+        self._pencere_eylemi(k, "windowstate", "--remove", "MINIMIZED", "--remove", "MAXIMIZED", kimlik_coz(k),
+                             bekle=lambda d: not ({"hidden", "maximized"} & d), ne=_("geri yükleme"))
 
     # -------- fare / ekran
     def fare(self):
@@ -423,6 +467,8 @@ class KwinArkaUc(ArkaUc):
     def pano_yaz(self, metin: str, hassas: bool = True) -> None:
         """hassas: oturumda pano yöneticisi (Klipper) yok, yok sayılır."""
         hata.dur_denetle()
+        if len(metin.encode()) > PANO_YAZ_AZAMI:
+            raise Dur(1, _("metin sanal panoya sığmıyor (en çok {mb} MB)").format(mb=PANO_YAZ_AZAMI >> 20))
         self._pano_yaz_ham(metin)
 
     def pano_yedekle(self):
