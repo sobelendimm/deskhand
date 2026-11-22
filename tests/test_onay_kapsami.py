@@ -268,10 +268,15 @@ with arka_uc.hedef_sabit("kde"):
         else:
             kontrol("[kart] para düğmesi + --onayli → YOK SAYILIR: panelden sorulur, panel red → 10",
                     kod == 10 and n == 1, f"{kod} {n}")
-        # ödeme sayfasında Enter
+        # ödeme sayfasında Enter (bu test ödeme onayını sınar: sayfa İNSAN-DOĞRULAMA kapısı için "okunur, sınama yok" sayılır;
+        # okunamayan tarayıcıda tek başına Enter zaten 18 ile reddedilir: tests/test_dogrulama_devri.py)
+        from deskhand import dogrulama_sinamasi as _dsk
+        _dsk_once = _dsk.hazir_oku
+        _dsk.hazir_oku = lambda k_, baslik=None: (None, True)
         kod, n, g = sorar(eylem.k_tus, ns(kimlik="{o}", kombinasyon="enter"))
         kontrol(f"[{mod}] ödeme sayfasında Enter → onay ister, tuş gitmez", kod == 10 and n == 1 and g == 0, f"{kod} {n} {g}")
         kod, n, g = sorar(eylem.k_tus, ns(kimlik="{o}", kombinasyon="enter", onayli=True))
+        _dsk.hazir_oku = _dsk_once
         if mod == "kart":
             kontrol("[kart] ödeme sayfasında Enter + --onayli → yok sayılır (panel red → 10)",
                     kod == 10 and n == 1 and g == 0, f"{kod} {n} {g}")
