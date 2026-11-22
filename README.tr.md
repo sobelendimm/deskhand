@@ -110,6 +110,15 @@ eşleşir (ş/s, ı/i…); birden çok eşleşme varsa tahmin etmez, durur. Ayr�
 ağacı (AT-SPI, düğmeye adıyla tıklama), kayıtlı simgeler, renk alanları ve tekrarlı işler
 için ekran tanıma *akışları*.
 
+### 0.6.0'ın yeni yetenekleri
+
+Ayrıntılar için bkz. [CHANGELOG.tr.md](CHANGELOG.tr.md).
+
+- **Gözlem ve toplu eylem:** `observe` pencerenin ögelerini numaralı (`ref`) listeler; `click`/`type_text`/`scroll`/`drag` bu numarayla çalışır, ekran değiştiyse hiçbir şey gönderilmeden reddedilir. `batch` en çok 20 adımı, `wait_for` bekleme koşullarını yürütür.
+- **Web ögeleri:** tarayıcı sayfasının düğme/bağlantı/alanları erişilebilirlik ağacından okunur; tarayıcıya uzaktan denetim kapısı açılmaz.
+- **Görünmez masaüstü:** yalıtık, ekran kartı hızlandırmalı KWin oturumu (`bubblewrap` içinde); olmazsa Xvfb yedeği.
+- **Onay kapsamı "Yalnız kartla ödeme":** yalnız panelden (Ayarlar → Onay soruları) açılır; yalnız para düğmeleri ve kart bilgisi yazma onay sorar. Varsayılan "hepsi"dir.
+
 ### MCP sunucusu (15 araç)
 
 `deskhand mcp` stdio MCP sunucusudur: `get_status`, `choose_desktop`, `manage_desktop`,
