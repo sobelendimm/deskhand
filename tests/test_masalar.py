@@ -294,5 +294,57 @@ kontrol("CLI desktop list --json", isinstance(liste, list) and any(m["ad"] == "s
 kontrol("list: sahipsiz oto masaüstü temizlenir", liste is not None and not any(m["ad"] == "s9" for m in liste)
         and not os.path.exists(masalar.kok("s9")))
 
+# ---------------------------------------------------------------- 11) MCP otomatik bağlama
+print("\n11) MCP otomatik bağlama (masa_bagla)")
+
+
+def bagla_dene():
+    mcp_sunucu._MASA.update(bagli=False, ad="", oto=False, sahip=False, sabit=None)
+    os.environ.pop(masalar.ORTAM, None)
+    try:
+        return mcp_sunucu.masa_bagla(), dict(mcp_sunucu._MASA)
+    finally:
+        os.environ.pop(masalar.ORTAM, None)
+
+
+for a_ in masalar.adlar():
+    masalar.birak(a_)
+ad_, m_ = bagla_dene()
+kontrol("varsayılan sahipsiz → '' sahiplenilir", ad_ == "" and m_["sahip"] and not m_["oto"]
+        and (masalar.sahip_oku("") or {}).get("pid") == os.getpid(), str(m_))
+masalar.birak("")
+ebeveyn = os.getppid()
+with open(masalar.sahip_yolu(""), "w") as f:  # varsayılanın sahibi bu sürecin ATASI
+    f.write(f"mcp {ebeveyn} {masalar._baslangic(ebeveyn)} 1 - 0\n")
+ad_, m_ = bagla_dene()
+kontrol("varsayılanın sahibi ata → '' paylaşılır (sahiplenmeden)", ad_ == "" and not m_["sahip"], str(m_))
+yabanci = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
+try:
+    bas = masalar._baslangic(yabanci.pid)
+    with open(masalar.sahip_yolu(""), "w") as f:  # varsayılanın sahibi başka oturum (kardeş MCP)
+        f.write(f"mcp {yabanci.pid} {bas} {yabanci.pid} {bas} 0\n")
+    ad_, m_ = bagla_dene()
+    kontrol("varsayılan başkasının → en küçük boş oturum-N (oto, sahip)", ad_.startswith("oturum-") and m_["oto"]
+            and m_["sahip"] and masalar.oto_mu(ad_), str(m_))
+    mcp_sunucu.masa_birak()
+    kontrol("kapanışta açılmamış oto masaüstünün dizini silinir", not os.path.exists(masalar.kok(ad_)))
+    mcp_sunucu._MASA.update(bagli=False, sabit="s7")
+    os.environ.pop(masalar.ORTAM, None)
+    kontrol("sabit ad (--desktop-name) → o ad", mcp_sunucu.masa_bagla() == "s7" and os.environ.get(masalar.ORTAM) == "s7")
+    os.environ.pop(masalar.ORTAM, None)
+    with open(masalar.sahip_yolu("s7"), "w") as f:
+        f.write(f"mcp {yabanci.pid} {bas} {yabanci.pid} {bas} 0\n")
+    mcp_sunucu._MASA.update(bagli=False, sabit="s7")
+    kontrol("sabit ad başka oturumun → Dur 14", dur_kodu(mcp_sunucu.masa_bagla) == 14)
+finally:
+    yabanci.kill()
+    yabanci.wait()
+    os.environ.pop(masalar.ORTAM, None)
+    for a_ in ("", "s7"):
+        try:
+            os.remove(masalar.sahip_yolu(a_))
+        except OSError:
+            pass
+
 print(f"\n{gecen}/{toplam} çoklu masaüstü birim testi geçti")
 sys.exit(0 if gecen == toplam else 1)
