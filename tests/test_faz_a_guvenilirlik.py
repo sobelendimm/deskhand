@@ -129,7 +129,9 @@ p = subprocess.Popen([sys.executable, "-c", "pass"])
 p.wait()
 k_olu = istek_yaz(p.pid)
 k_reuse = istek_yaz(os.getpid(), pid_bas="1")  # canlı PID ama başka başlangıç zamanı
-k_nabizsiz = istek_yaz(os.getpid(), pid_bas=onay._baslangic(os.getpid()), yas=onay.NABIZ_SINIR + 30)
+# no recorded start time: liveness rests on the heartbeat (a verifiably running owner is never dropped on mtime
+# alone: tests/test_guv_091_devir.py)
+k_nabizsiz = istek_yaz(os.getpid(), yas=onay.NABIZ_SINIR + 30)
 kontrol("1d: sahibi ölmüş / PID yeniden kullanılmış / nabzı durmuş istekler bekleyen sayılmaz, kilit yok",
         onay.bekleyenler() == [] and not onay.bekleyen_var("arka"), str(onay.bekleyenler()))
 silinen = onay.temizle()

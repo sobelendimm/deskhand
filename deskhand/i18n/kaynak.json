@@ -374,7 +374,7 @@
   "ucbirim.py:364"
  ],
  "(sayfa adresi değişti: sınamanın kalkması çözüm sayılmadı)": [
-  "mcp_sunucu.py:2961"
+  "mcp_sunucu.py:2979"
  ],
  "(varsayılan)": [
   "masaustu.py:544",
@@ -841,7 +841,7 @@
   "mcp_sunucu.py:2806"
  ],
  "Deskhand sizi bekliyor": [
-  "mcp_sunucu.py:2834"
+  "mcp_sunucu.py:2843"
  ],
  "Deskhand sürümü": [
   "doktor.py:71"
@@ -2196,7 +2196,7 @@
   "arka_uc/sanal.py:111"
  ],
  "bu pencere için insana devir zaten bekliyor": [
-  "mcp_sunucu.py:2864"
+  "mcp_sunucu.py:2873"
  ],
  "bu sunucu yalnız görünmez masaüstünde çalışır": [
   "mcp_sunucu.py:1445"
@@ -2312,11 +2312,14 @@
  "desteklenmeyen görüntü biçimi (QImage {bicim})": [
   "arka_uc/kde_goruntu.py:75"
  ],
+ "devir isteği beklerken silindi; hiçbir girdi gönderilmedi": [
+  "mcp_sunucu.py:2813"
+ ],
  "devir isteği yazılamadı": [
   "mcp_sunucu.py:2811"
  ],
  "devir sonuçlanmadı": [
-  "mcp_sunucu.py:2956"
+  "mcp_sunucu.py:2974"
  ],
  "devir tamam": [
   "gui/metinler.py:108"
@@ -2325,7 +2328,7 @@
   "gui/metinler.py:108"
  ],
  "devir tamamlandı: observe çağırıp sayfayı yeniden oku": [
-  "mcp_sunucu.py:2954"
+  "mcp_sunucu.py:2972"
  ],
  "devir: DUR": [
   "gui/metinler.py:111"
@@ -3124,7 +3127,7 @@
   "dogrulama_sinamasi.py:1093"
  ],
  "insana devir: {pencere}": [
-  "mcp_sunucu.py:2857"
+  "mcp_sunucu.py:2866"
  ],
  "istek geri çekildi": [
   "gui/metinler.py:106"
@@ -3328,7 +3331,7 @@
   "arka_uc/kwin.py:133"
  ],
  "kullanıcı Bitti dedi ama sınama işareti hâlâ sayfada: observe ile bak; sayfa ilerlemiyorsa kullanıcıya söyle (aynı sınama için yeniden çağrılmaz)": [
-  "mcp_sunucu.py:2951"
+  "mcp_sunucu.py:2969"
  ],
  "kullanıcı DUR dedi": [
   "arka_uc/kwin.py:775",
@@ -3346,7 +3349,7 @@
   "mcp_sunucu.py:143"
  ],
  "kullanıcı az önce devri reddetti ya da gelmedi: {sn} sn içinde yeniden isteme; kullanıcıya haber ver": [
-  "mcp_sunucu.py:2876"
+  "mcp_sunucu.py:2885"
  ],
  "kullanıcı bildirimi kapattı": [
   "mesgul.py:517"
@@ -3364,7 +3367,7 @@
   "cli.py:552"
  ],
  "kullanıcı bu sınama için zaten Bitti dedi; yeniden sorulmadı: sayfa ilerlemiyorsa kullanıcıya söyle": [
-  "mcp_sunucu.py:2885"
+  "mcp_sunucu.py:2899"
  ],
  "kullanıcı devri reddetti / çözemedi; hiçbir girdi gönderilmedi": [
   "mcp_sunucu.py:2805"
@@ -3621,10 +3624,13 @@
   "guvenlik.py:1309"
  ],
  "onay iletişim kutusu": [
-  "onay.py:698"
+  "onay.py:722"
  ],
  "onay isteği başarısız ({hata})": [
   "mcp_sunucu.py:699"
+ ],
+ "onay isteği beklerken silindi → red": [
+  "onay.py:69"
  ],
  "onay isteği yazılamadı → red": [
   "onay.py:64"
@@ -3635,7 +3641,7 @@
  "onay modülü yok (Deskhand paneli kurulu değil)": [
   "mcp_sunucu.py:690",
   "mcp_sunucu.py:748",
-  "mcp_sunucu.py:2890"
+  "mcp_sunucu.py:2904"
  ],
  "onay modülü yüklenemedi: {hata}": [
   "guvenlik.py:1304"
@@ -3764,10 +3770,10 @@
   "gui/metinler.py:105"
  ],
  "panel kaydı eski ({alanlar} uymuyor): panel en çok {sn} sn içinde kendiliğinden tazeler, düzelmezse paneli yeniden başlatın": [
-  "onay.py:331"
+  "onay.py:355"
  ],
  "panel kaydı eski: panel çalışırken Python/kurulum güncellenmiş (exe: {exe}); panel kaydını en çok {sn} sn içinde kendiliğinden tazeler, düzelmezse paneli yeniden başlatın": [
-  "onay.py:328"
+  "onay.py:352"
  ],
  "panel soketi açılamadı ({dizin})": [
   "gui/__main__.py:42"
@@ -4310,7 +4316,7 @@
   "cli.py:413"
  ],
  "sınama kendiliğinden geçti; kullanıcı çağrılmadı: observe çağırıp sayfayı yeniden oku": [
-  "mcp_sunucu.py:2924"
+  "mcp_sunucu.py:2940"
  ],
  "sınırsız": [
   "masaustu.py:1379"
@@ -4394,8 +4400,8 @@
   "mcp_sunucu.py:1675",
   "mcp_sunucu.py:1738",
   "mcp_sunucu.py:1836",
-  "mcp_sunucu.py:2857",
-  "mcp_sunucu.py:2938"
+  "mcp_sunucu.py:2866",
+  "mcp_sunucu.py:2954"
  ],
  "tüm oturum kopyalarını sil": [
   "oturum/cli.py:76"
@@ -4569,7 +4575,7 @@
   "mcp_sunucu.py:2371",
   "mcp_sunucu.py:2417",
   "mcp_sunucu.py:2674",
-  "mcp_sunucu.py:2862"
+  "mcp_sunucu.py:2871"
  ],
  "yasak/hassas: yapılmadı: {uygulama} için oturum politikası 'kapali'": [
   "mcp_sunucu.py:2325"
@@ -5065,7 +5071,7 @@
   "guvenlik.py:1000"
  ],
  "çağrı iptal edildi": [
-  "mcp_sunucu.py:2928"
+  "mcp_sunucu.py:2944"
  ],
  "çağrı iptal edildi: devir isteği geri çekildi": [
   "mcp_sunucu.py:2812"
