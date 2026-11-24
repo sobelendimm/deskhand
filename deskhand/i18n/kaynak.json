@@ -525,6 +525,12 @@
  "Ajan panonun metnini okumak istiyor ({n} karakter)": [
   "mcp_sunucu.py:2046"
  ],
+ "Ajan şu an: bu masaüstünde henüz bir eylem yok": [
+  "gui/metinler.py:321"
+ ],
+ "Ajan şu an: {eylem} · [{pencere}] · {once}": [
+  "gui/metinler.py:320"
+ ],
  "Ajanın tüm girdilerini hemen durdurur (basılı tuşlar bırakılır).": [
   "gui/metinler.py:42"
  ],
@@ -590,6 +596,9 @@
  "Açarsanız arka plandaki tarayıcı bu hesabın e-postalarına ve dosyalarına erişebilir; güvenilmeyen bir sayfa ajanı kandırabilir. Hesabın kendi ödeme sayfaları (Google Pay, Microsoft faturalama) da bu oturumla açılır; ödeme düğmeleri yine onayınıza gelir. İzni kapatınca o an açık arka plan tarayıcısı kapanana kadar oturum sürer.": [
   "gui/metinler.py:181"
  ],
+ "Açık": [
+  "gui/metinler.py:310"
+ ],
  "Açık: {ekran} · {g}×{y}": [
   "gui/metinler.py:78"
  ],
@@ -630,6 +639,9 @@
  "Bir kez izin ver": [
   "gui/metinler.py:124"
  ],
+ "Bir masaüstü seçin: önizleme onu gösterir (yalnız izleme).": [
+  "gui/metinler.py:314"
+ ],
  "Bir yapay zekâ ajanı kullanıcının panosunun metnini okumak istiyor": [
   "cli.py:291"
  ],
@@ -662,6 +674,9 @@
  ],
  "Bu pencere bir sistem yetki/parola/izin istemi ({ad}). Ajan ona {ne} göndermek istiyor.": [
   "guvenlik.py:1723"
+ ],
+ "Bu, bir ajanın kendi masaüstü: burada yalnız izlersiniz. Devral varsayılan masaüstünde ya da bir onay devrinde açılır.": [
+  "gui/metinler.py:323"
  ],
  "Bırak": [
   "gui/metinler.py:87",
@@ -1343,7 +1358,8 @@
   "gui/metinler.py:59",
   "gui/metinler.py:100",
   "gui/metinler.py:101",
-  "gui/metinler.py:119"
+  "gui/metinler.py:119",
+  "gui/metinler.py:310"
  ],
  "Masaüstü oturumu": [
   "doktor.py:79",
@@ -1542,6 +1558,9 @@
  ],
  "Sistem istemine girdi: {ad}": [
   "guvenlik.py:1722"
+ ],
+ "Son etkinlik": [
+  "gui/metinler.py:310"
  ],
  "Sonnet (dengeli)": [
   "gui/metinler.py:245"
@@ -2848,6 +2867,9 @@
  ],
  "github.com, ornek.com — boşsa çerezsiz temiz profil": [
   "gui/metinler.py:290"
+ ],
+ "gizli alana yazı (içerik gösterilmez)": [
+  "gui/metinler.py:322"
  ],
  "gizli yazı panoda kalmış olabilir: pano temizlenemedi ({hata})": [
   "eylem.py:435"
@@ -4352,7 +4374,8 @@
   "doktor.py:195"
  ],
  "varsayılan": [
-  "doktor.py:306"
+  "doktor.py:306",
+  "gui/metinler.py:311"
  ],
  "via='action' yalnız ref/element hedefiyle, button='left' ile ve değiştirici tuşsuz kullanılır": [
   "mcp_sunucu.py:1853"
@@ -4722,11 +4745,17 @@
  "{no}. satır geçerli değil: {hata}": [
   "gui/metinler.py:157"
  ],
+ "{n} dk": [
+  "gui/metinler.py:316"
+ ],
  "{n} onay bekliyor": [
   "gui/metinler.py:25"
  ],
  "{n} satır": [
   "gui/metinler.py:66"
+ ],
+ "{n} sn": [
+  "gui/metinler.py:315"
  ],
  "{n} sunucu kurulum güncellenmeden önce başlamış: istemcide MCP'yi yeniden bağla (/mcp)": [
   "doktor.py:130"
@@ -4765,6 +4794,12 @@
  ],
  "{sn} sn içinde yeni pencere görünmedi (çıktı: {log})": [
   "api.py:619"
+ ],
+ "{sure} önce": [
+  "gui/metinler.py:318"
+ ],
+ "{s} sa {d} dk": [
+  "gui/metinler.py:317"
  ],
  "{tus} boşta görünüyor.": [
   "gui/metinler.py:208"
@@ -4826,6 +4861,9 @@
  "Çakışma: {tus} şu an «{eylem}» ({bilesen}) için kullanılıyor.": [
   "gui/metinler.py:207"
  ],
+ "Çalışan arka plan masaüstü yok. Bir ajan masaüstü açınca burada görünür; varsayılan masaüstünü Başlat ile açabilirsiniz.": [
+  "gui/metinler.py:312"
+ ],
  "Çalışma dizini": [
   "doktor.py:261"
  ],
@@ -4843,6 +4881,9 @@
  ],
  "Ödeme/yetki/hesap silme gibi hassas bir düğme": [
   "guvenlik.py:1477"
+ ],
+ "Önizleme gizlendi: yasak pencereler denetlenemedi ({hata})": [
+  "gui/metinler.py:325"
  ],
  "Önizleme yok": [
   "gui/metinler.py:92"
@@ -5050,6 +5091,9 @@
  ],
  "İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.": [
   "gui/metinler.py:126"
+ ],
+ "—": [
+  "gui/metinler.py:319"
  ],
  "‘{hedef}’ tıklanıyor": [
   "gui/metinler.py:265"
