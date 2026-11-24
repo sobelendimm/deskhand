@@ -174,6 +174,8 @@ class Panel(QObject):
             self.tepsi.arka_istendi.connect(self.arka_goster)
             self.tepsi.gorev_istendi.connect(self.gorev_goster)
             self.tepsi.cikis_istendi.connect(self.cik)
+            # 0.9.1 (Faz A): bekleyen isteğin tepsi bildirimine tıklamak yalnız paneli ve diyaloğu öne getirir (karar üretmez)
+            self.tepsi.onay_istendi.connect(lambda k: (self.goster(), self.diyalog_one(k)))
         app.aboutToQuit.connect(self.kapanis)
 
         onay.panel_kaydet()
@@ -290,6 +292,11 @@ class Panel(QObject):
         for b in bekleyen:
             if b["id"] not in self.diyaloglar:
                 self._diyalog_ac(b)
+                if self.tepsi is not None:  # tam ekran oyun/film altında kalan diyalog için kalıcı tepsi bildirimi
+                    try:
+                        self.tepsi.onay_bildir(b)
+                    except Exception:  # noqa: BLE001 — bildirim gösterilemese de diyalog açık kalır
+                        pass
         self.pencere.onaylar.guncelle(bekleyen)
 
     def _diyalog_ac(self, istek: dict) -> OnayDiyalog:

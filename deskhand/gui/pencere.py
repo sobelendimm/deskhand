@@ -381,6 +381,8 @@ class ArkaPlanSekmesi(QWidget):
         from .. import masalar
         return masalar.secili()
 
+    IZLEME_KULLANIM_SN = 60
+
     def masalar_yenile(self) -> None:
         """Çalışan masaüstlerini yeniden oku (salt okuma) ve listeyi güncelle."""
         try:
@@ -388,6 +390,20 @@ class ArkaPlanSekmesi(QWidget):
         except Exception:  # noqa: BLE001 - okunamadı: eski liste kalır
             return
         self.masalar_guncelle(liste)
+        self._izleme_kullanimi()
+
+    def _izleme_kullanimi(self) -> None:
+        """0.9.1: kullanıcı önizlemeyi izlerken masaüstü 'boşta' sayılıp kendiliğinden kapanmasın (dakikada bir işaret)."""
+        import time
+        simdi = time.monotonic()
+        if simdi - getattr(self, "_son_isaret", 0.0) < self.IZLEME_KULLANIM_SN or not self.isVisible():
+            return
+        self._son_isaret = simdi
+        try:
+            from .. import masaustu
+            masaustu.kullanim_isaretle(self._secili_masa() or None, zorla=True)
+        except Exception:  # noqa: BLE001 - işaretlenemedi: en kötü masaüstü boşta sayılır
+            pass
 
     def masalar_guncelle(self, liste: list[dict]) -> None:
         self.masalar = list(liste or [])
