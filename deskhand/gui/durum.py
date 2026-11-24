@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import time
 from dataclasses import dataclass
 
 from .. import yollar
@@ -123,3 +125,126 @@ def sanal_durum(dogrula: bool = True) -> dict | None:
         return d if isinstance(d, dict) else None
     except (OSError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------- çoklu arka plan masaüstü (SALT OKUMA)
+
+def _masaustu_durumu(m, ad: str) -> dict | None:
+    """Bir masaüstünün doğrulanmış durumu (masaustu.durum(ad=…, saglik=False)). `ad` parametresi olmayan eski/sahte
+    modülde yalnız varsayılan masaüstü okunur."""
+    try:
+        return m.durum(saglik=False, ad=ad)
+    except TypeError:
+        if ad != "":
+            return None
+        try:
+            return m.durum()
+        except Exception:  # noqa: BLE001
+            return None
+    except Exception:  # noqa: BLE001 - bozuk kayıt / yarışta silinmiş: listelenmez
+        return None
+
+
+def masa_listesi(masaustu_m=None) -> list[dict]:
+    """O an ÇALIŞAN arka plan masaüstleri: [{ad, ekran, tur, baslangic, boyut, durum}] (varsayılan "" önce, sonra
+    adlılar sıralı). SALT OKUR: masalar.adlar() (dizin listesi) + masaustu.durum(ad=…, saglik=False) (PID/soket
+    doğrulamalı). Hiçbir masaüstünü başlatmaz, durdurmaz, temizlemez; sahiplik dosyasına dokunmaz."""
+    from .. import masalar
+    m = masaustu_m
+    if m is None:
+        try:
+            from .. import masaustu as m
+        except Exception:  # noqa: BLE001
+            return []
+    try:
+        adlar = [a for a in masalar.adlar() if a != ""]
+    except Exception:  # noqa: BLE001
+        adlar = []
+    sonuc = []
+    for ad in [""] + adlar:
+        d = _masaustu_durumu(m, ad)
+        if not isinstance(d, dict):
+            continue
+        bas = d.get("baslangic")
+        if not isinstance(bas, (int, float)):
+            try:
+                bas = os.path.getmtime(masalar.durum_yolu(ad))
+            except Exception:  # noqa: BLE001
+                bas = None
+        sonuc.append({"ad": ad, "ekran": str(d.get("ekran") or ""), "tur": str(d.get("tur") or ""),
+                      "baslangic": bas, "boyut": list(d.get("boyut") or [])[:2], "durum": d})
+    return sonuc
+
+
+def sure_metni(sn: float | None) -> str:
+    """Süre → kısa metin: "12 sn", "5 dk", "2 sa 3 dk" (negatif/None: 0 sn)."""
+    sn = max(0, int(sn or 0))
+    if sn < 60:
+        return _(T.A_SURE_SN).format(n=sn)
+    if sn < 3600:
+        return _(T.A_SURE_DK).format(n=sn // 60)
+    return _(T.A_SURE_SA).format(s=sn // 3600, d=(sn % 3600) // 60)
+
+
+def saat_epoch(zaman: str, simdi: float) -> float | None:
+    """Günlük satırının "HH:MM:SS" saati → epoch (bugün; gelecekteyse dün: gece yarısından önceki satırlar)."""
+    try:
+        h, dk, sn = (int(x) for x in zaman.split(":"))
+    except (ValueError, AttributeError):
+        return None
+    lt = time.localtime(simdi)
+    t = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, h, dk, sn, 0, 0, -1))
+    if t > simdi + 300:
+        t -= 86400
+    return t
+
+
+_GIZLI_IZ = re.compile(r"\*\*\*|(?:^|[\s;:])(?:type|keydown|keyup)\s")
+
+
+def guvenli_eylem(e: dict) -> str:
+    """Bir girdi kaydının GÖSTERİLEBİLİR özeti: yalnız komut etiketi (ör. "tikla (617,761) sol", "ogeye-tikla
+    'Kaydet' sol", "yaz 12 karakter"); günlüğün satırlar kısmı (`type …` = yazılan metin) HİÇ kullanılmaz. Günlükte
+    maskeli (***) girdi ya da etikette bir yazı/tuş satırı izi → "gizli alana yazı" (içerik yok)."""
+    etiket = str(e.get("etiket") or "")
+    if e.get("gizli") or not etiket or _GIZLI_IZ.search(etiket):
+        return _(T.A_EYLEM_GIZLI)
+    from .dil import _komut_adlari
+    return _komut_adlari(etiket)[:100]
+
+
+class SonEylemler:
+    """Arka plan masaüstü başına (ekran adıyla) SON girdi kaydı: günlük satırlarından (gunluk_okur.ayristir) beslenir.
+    Yalnız arka plan satırları ("arka <ekran> [...]"); kullanıcının ekranı ve DUR satırları sayılmaz."""
+
+    def __init__(self):
+        self._son: dict[str, dict] = {}
+
+    def ekle(self, satirlar: list[dict], simdi: float) -> None:
+        for d in satirlar or []:
+            if not d or d.get("tur") != "girdi" or d.get("arka") != "arka" or not d.get("ekran"):
+                continue
+            t = saat_epoch(d.get("zaman", ""), simdi)
+            if t is None:
+                continue
+            self._son[d["ekran"]] = {"zaman": t, "etiket": d.get("etiket", ""), "pencere": d.get("pencere", ""),
+                                     "gizli": bool(d.get("gizli"))}
+
+    def son(self, ekran: str, baslangic: float | None = None) -> dict | None:
+        """`ekran`ın son eylemi; masaüstü `baslangic`tan ÖNCEKİ kayıt (aynı ekran adını kullanmış eski masaüstü) yok
+        sayılır."""
+        e = self._son.get(ekran or "")
+        if e is None or (baslangic is not None and e["zaman"] < baslangic - 2):
+            return None
+        return e
+
+
+def eylem_satiri(e: dict | None, simdi: float) -> str:
+    """"Ajan şu an ne yapıyor" satırı."""
+    if e is None:
+        return _(T.A_EYLEM_YOK)
+    pencere = str(e.get("pencere") or "?")
+    if len(pencere) > 60:
+        pencere = pencere[:59] + "…"
+    return _(T.A_EYLEM).format(eylem=guvenli_eylem(e), pencere=pencere,
+                               once=_(T.A_ONCE).format(sure=sure_metni(simdi - e["zaman"])))

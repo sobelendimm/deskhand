@@ -305,34 +305,17 @@ class Panel(QObject):
 
     def _masa_sec(self, masa: str) -> None:
         """Panelin Arka plan sekmesini (önizleme, Devral, başlat/durdur) `masa` görünmez masaüstüne çevir ("" =
-        varsayılan). Panel sürecinin bağlamıdır (masalar.secili ← DESKHAND_MASAUSTU); açık Devral önce kapanır (bayrak
-        eski masaüstünün dosyasından silinsin)."""
-        from .. import masalar
-        try:
-            masa = masalar.dogrula(masa or "", ayrilmis_serbest=True)
-        except Exception:  # noqa: BLE001 - geçersiz ad: varsayılan
-            masa = ""
-        if masalar.secili() == masa:
-            return
-        arka = self.pencere.arka
-        if arka.b_devral.isChecked():
-            arka.b_devral.setChecked(False)
-        if masa:
-            os.environ[masalar.ORTAM] = masa
-        else:
-            os.environ.pop(masalar.ORTAM, None)
-        try:
-            s = arka.m.durum() if arka.m is not None else None
-        except Exception:  # noqa: BLE001
-            s = None
-        arka.sanal_guncelle(s)
+        varsayılan): pencere.ArkaPlanSekmesi.masa_sec (sekmedeki masaüstü listesi de aynı yolu kullanır)."""
+        self.pencere.arka.masa_sec(masa)
 
     def devral_ac(self, _istek_id: str = ""):
         """İnsan doğrulaması devri: panel Arka plan sekmesinde Devral açılır (önizleme + girdi aktarımı; ajan bekler);
         insan sınamayı çözer, diyalogda Bitti der. Devral'ı panel (yerleşik yasak pencere) açar: ajan açamaz. Sekme
         önce isteğin görünmez masaüstüne çevrilir (adlı masaüstündeki devir de çözülebilsin)."""
         dlg = self.diyaloglar.get(_istek_id)
-        self._masa_sec((getattr(dlg, "istek", None) or {}).get("masa", "") if dlg is not None else "")
+        masa = (getattr(dlg, "istek", None) or {}).get("masa", "") if dlg is not None else ""
+        self.pencere.arka.devir_masa = masa or None  # devrin masaüstünde Devral serbest (yalnız bu devir süresince)
+        self._masa_sec(masa)
         self.arka_goster()
         b = self.pencere.arka.b_devral
         if b.isEnabled() and not b.isChecked():
@@ -348,8 +331,13 @@ class Panel(QObject):
 
     def _karar(self, istek_id: str, _neden: str):
         self.diyaloglar.pop(istek_id, None)
+        arka = self.pencere.arka
+        if arka.devir_masa and not any((getattr(d, "istek", None) or {}).get("masa", "") == arka.devir_masa
+                                       for d in self.diyaloglar.values()):
+            arka.devir_masa = None  # o masaüstünde bekleyen devir kalmadı: Devral yeniden yalnız varsayılanda
         if getattr(self, "_devral_acan", None) == istek_id:  # devir bitti: Devral açık kalıp ajanı/kullanıcıyı şaşırtmasın
             self._devral_acan = None
+            self.pencere.arka.devir_masa = None
             b = self.pencere.arka.b_devral
             if b.isChecked():
                 b.setChecked(False)

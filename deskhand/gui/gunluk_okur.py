@@ -26,6 +26,8 @@ KUYRUK = 500
 
 def ayristir(satir: str) -> dict | None:
     """Bir günlük satırı → {zaman, arka ("ekran"|"arka"|""), pencere, eylem, tur, ham}. tur: girdi|dur|onay|diger.
+    Pencereli satırlarda ayrıca: etiket (komut etiketi; yazılan METNİ içermez), ekran (arka plan masaüstünün ekran adı,
+    ör. ":90" ya da KWin soketi; kullanıcının ekranında ""), gizli (girdi maskeli: `type ***` / `tus ***`).
     Biçimsiz satır None."""
     satir = satir.rstrip("\n")
     m = SATIR.match(satir)
@@ -51,7 +53,8 @@ def ayristir(satir: str) -> dict | None:
     if mp:
         etiket = mp.group("etiket")
         d.update(arka="arka" if mp.group("ekran") else "ekran", pencere=mp.group("pencere"),
-                 eylem=f"{etiket}: {mp.group('eylem')}")
+                 eylem=f"{etiket}: {mp.group('eylem')}", etiket=etiket, ekran=mp.group("ekran") or "",
+                 gizli="***" in etiket or "***" in mp.group("eylem"))
         d["tur"] = "onay" if etiket.startswith("onay ") else "girdi"
         return d
     parcalar = govde.split(" | ", 2)
