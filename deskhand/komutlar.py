@@ -59,7 +59,7 @@ DUGME = {"left": "sol", "right": "sag", "double": "cift", "triple": "uclu", "mid
 YON = {"down": "asagi", "up": "yukari", "left": "sol", "right": "sag"}
 RENK = {"green": "yesil", "red": "kirmizi", "blue": "mavi"}
 MASAUSTU = {"start": "baslat", "stop": "durdur", "status": "durum", "list": "liste"}
-OTURUM = {"status": "durum", "prepare": "hazirla", "policy": "politika", "clear": "sil"}
+OTURUM = {"status": "durum", "prepare": "hazirla", "policy": "politika", "clear": "sil", "check": "denetle"}
 ERISIM = {"on": "ac", "off": "kapat", "status": "durum"}
 PENCERE = {"move": "tasi", "resize": "boyut", "minimize": "kucult", "maximize": "buyut", "restore": "geri"}
 

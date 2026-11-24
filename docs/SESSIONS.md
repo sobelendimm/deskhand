@@ -387,6 +387,41 @@ Profil dizini symlink olabilir (ör. tmpfs'e taşınmış profil) → `realpath`
 - Hangi sitelerin yalnız oturum çerezi kullandığını önceden bilmek zor; bu yüzden "bu site girişli kalsın" listesi
   (`oturum.toml`) kullanıcı tarafından, ya da denemeyle belirlenmeli.
 
+### 3.4.1 Süresiz oturum çerezleri: uygulanan yol ve `sessions check`
+
+**Uygulanan yol** (`deskhand/oturum/firefox.py` `_oturum_cerezleri_ekle`): sekmeler geri yüklenmez; `recovery.jsonlz4`
+çözülür, kökteki `cookies` dizisinden ret listesi / site izni / görev kipi süzgecinden geçenler kopyanın
+`cookies.sqlite`'ına **1 gün ömürlü kalıcı** çerez olarak yazılır (bitiş 0 yazılırsa Firefox açılışta atar). Aynı
+anahtarda (ad, konak, yol, `originAttributes`) **süresi geçmiş** kalıcı satır varsa silinir: Firefox süresi geçen
+satırı veritabanından geç siler ve eski kod (`INSERT OR IGNORE`) canlı oturum çerezini bu bayat satır yüzünden
+atlıyordu. Geçerli kalıcı çakışan satır kalır. Bölümlenmiş (CHIPS) çerezde `isPartitionedAttributeSet` de yazılır.
+Değerler yalnız kopyaya gider; günlüğe ve çıktıya yazılmaz; kopya 0700, dosyaları 0600.
+
+**24 Kas olayı (Shopier, kanıt):** satıcı paneli kopyada giriş istedi. Sebep süresiz çerezlerin taşınmaması DEĞİLDİ:
+`sec_session_id` ve `shopier_buyer` kalıcı çerezlerdir, ömürleri son istekten itibaren **2 saat** (kayan); yalnız
+`PHPSESSID` süresizdir ve kopyaya taşınıyordu. Kullanıcının panele son girişi önceki akşamdı; kopya alındığında giriş
+çerezlerinin süresi ~12 saat önce dolmuştu. Kullanıcının kendi Firefox geçmişinde de panel adresi önce giriş sayfasına
+yönlendi (`/m/orders.php` → `/m/login.php`), yani kendi tarayıcısı da girişsizdi (açık sekme eski sayfayı
+gösteriyordu). Yeniden girişten sonra alınan kopya girişli açıldı.
+
+**`deskhand sessions check <site>`** (`oturum denetle`; salt okuma): profilin `cookies.sqlite`'ını geçici 0700
+klasöre tutarlı kopyalayıp okur, `recovery.jsonlz4`'ü çözer, en yeni Firefox kopyasına (önce bağlamdaki masaüstü)
+bakar. Çerez başına: ad, konak, kalıcı/süresiz, kalan süre ya da "süresi geçti", kopyada aynı/yok/eski. Değerler
+yalnız bellekte SHA-256 özetiyle karşılaştırılır; değer ve özet yazılmaz. Giriş çerezi ad deseniyle tahmin edilir
+(`session`, `sid`, `auth`, `token`, `login`, `user`, `buyer`…) ya da `--cerez AD` (fnmatch, tekrarlanabilir) ile
+verilir. Süresi geçmiş kalıcı giriş çerezi var, geçerli kalıcı yoksa (yalnız süresiz `PHPSESSID` kalmışsa) oturum YOK
+sayılır: Shopier olayındaki durum budur.
+
+| Çıkış | Anlamı | Ne yapılır |
+|---|---|---|
+| 0 | kopya güncel ve girişli, ya da kopya yok ama profil girişli (sonraki `open firefox` alır) | devam |
+| 1 | profilde oturum yok / süresi geçmiş / politika dışı, kopya oturumsuz ya da profilde daha yeni giriş var | kullanıcı kendi Firefox'unda girsin, sonra kopyayı tazeleyin (`deskhand open firefox`) |
+| 2 | geçersiz alan adı | — |
+
+Yayın ajanları için ön kontrol: `deskhand sessions check shopier.com --cerez sec_session_id || <kullanıcıya giriş
+yaptırın>`. Sınır: Firefox süresi geçen satırı zaten silmişse ve yalnız süresiz bir çerez kalmışsa bu ayırt edilemez
+(sunucu tarafındaki zaman aşımı bilinmez); kesin sonuç için sitenin giriş çerezini `--cerez` ile verin.
+
 ### 3.5 Firefox 140+ değişiklikleri
 
 - 147: XDG Base Directory desteği (§0). `MOZ_LEGACY_HOME=1` ile eski düzen (tek kaynak, issoh.co.jp/desdelinux haberleri,
