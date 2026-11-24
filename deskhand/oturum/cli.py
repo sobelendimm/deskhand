@@ -1,10 +1,11 @@
 """Oturum köprüsü alt komutları: `main(argv)` (ana cli.py'ye koordinatör bağlar). İngilizce adlar birincil,
-Türkçeleri takma ad (status/durum, prepare/hazirla, policy/politika, clear/sil; komutlar.OTURUM).
+Türkçeleri takma ad (status/durum, prepare/hazirla, policy/politika, clear/sil, check/denetle; komutlar.OTURUM).
 
   durum [<uygulama>]        uygulama başına: kurulu mu, kullanıcıda açık mı, politika, kopya var mı
   hazirla <uygulama> [--site ALAN ...] [--json]   kararı + (kopya ise) argv'yi üret
   politika [<uygulama>]     çözülmüş politikayı yaz
   sil                       tüm oturum kopyalarını sil
+  denetle <alan> [--cerez AD ...] [--json]   site oturumu profilde/kopyada var mı (salt okuma; çıkış 0 var, 1 yok)
 
 Sır değerleri yazılmaz. `hazirla` kopya üretir (kaynak YAZILMAZ) ama uygulamayı BAŞLATMAZ.
 """
@@ -74,6 +75,12 @@ def main(argv=None) -> int:
 
     komut("sil", h_("tüm oturum kopyalarını sil"))
 
+    pk = komut("denetle", h_("site oturumu Firefox profilinde ve kopyada var mı (salt okuma; 0 = var, 1 = yok/eski)"))
+    pk.add_argument("alan", help=h_("site alan adı ya da adresi (shopier.com)"))
+    pk.add_argument("--cerez", action="append", default=None, metavar="AD",
+                    help=h_("giriş çerezinin adı (fnmatch; tekrarlanabilir). Yoksa ad deseniyle tahmin edilir"))
+    pk.add_argument("--json", action="store_true")
+
     a = p.parse_args(argv)
     yap = politika.yukle()
 
@@ -123,6 +130,16 @@ def main(argv=None) -> int:
             if h.argv:
                 print("argv: " + " ".join(h.argv))
         return 0 if h.karar in ("kopya", "paylas") else 3
+
+    if a.komut == "denetle":
+        from . import denetle
+        alan = denetle.alan_normu(a.alan)
+        if not alan:
+            print(_("geçersiz alan adı: {alan}").format(alan=a.alan))
+            return 2
+        d = denetle.denetle(alan, desenler=a.cerez)
+        print(json.dumps(d, ensure_ascii=False, indent=2) if a.json else "\n".join(denetle.metin(d)))
+        return d["kod"]
 
     if a.komut == "sil":
         n = sil_hepsi()

@@ -443,6 +443,7 @@ def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, g
     alanlar: set[str] = set()
     try:
         import time
+        sutunlar = {r[1] for r in con.execute("PRAGMA table_info(moz_cookies)")}
         # Oturum çerezi kopyada kalıcı yazılır (kopya zaten oturumluk): bitiş = şimdi + 1 gün, birim mevcut satırlardan
         # (Firefox ≥ ~130 ms yazar; satır yoksa ms — saniye beklenen eski sürümde de yalnız uzun ömür demek). 0 yazmak
         # "süresi geçmiş" demekti: Firefox çerezi açılışta atıyordu (oturum girişleri aktarılmıyordu).
@@ -463,15 +464,27 @@ def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, g
             oa = oa_soneki(c.get("originAttributes", ""))
             if oa is None:  # çevrilemeyen bağlam (gizli pencere, bilinmeyen alan): yanlış kaba yazmaktansa atla
                 continue
+            ad, yol_ = c.get("name", ""), c.get("path", "/")
             try:
+                # Aynı anahtarda (ad, konak, yol, bağlam) SÜRESİ GEÇMİŞ kalıcı satır varsa (Firefox süresi geçeni
+                # cookies.sqlite'tan geç siler) canlı oturum çerezi onun yüzünden ATLANMASIN: bayat satır silinir.
+                # Süresi geçmemiş kalıcı satır kalır (IGNORE): ikisi birden varsa canlı tarayıcıda hangisinin
+                # geçerli olduğunu bilemeyiz, kalıcı olan güncel cookies.sqlite'tan gelir.
+                con.execute("DELETE FROM moz_cookies WHERE name=? AND host=? AND path=? AND originAttributes=? "
+                            "AND expiry < ?", (ad, host, yol_, oa, int(simdi * (1000 if ms else 1))))
+                ek_sutun, ek_deger = "", ()
+                if "isPartitionedAttributeSet" in sutunlar:
+                    ek_sutun, ek_deger = ",isPartitionedAttributeSet", (int(bool(c.get("isPartitioned"))),)
+                if "updateTime" in sutunlar:
+                    ek_sutun, ek_deger = ek_sutun + ",updateTime", ek_deger + (mikro,)
                 cur = con.execute(
                     "INSERT OR IGNORE INTO moz_cookies "
                     "(originAttributes,name,value,host,path,expiry,lastAccessed,creationTime,"
-                    "isSecure,isHttpOnly,sameSite,schemeMap) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (oa, c.get("name", ""), c.get("value", ""), host, c.get("path", "/"),
+                    f"isSecure,isHttpOnly,sameSite,schemeMap{ek_sutun}) "
+                    f"VALUES (?,?,?,?,?,?,?,?,?,?,?,?{',?' * len(ek_deger)})",
+                    (oa, ad, c.get("value", ""), host, yol_,
                      bitis, mikro, mikro, int(bool(c.get("secure"))), int(bool(c.get("httponly"))),
-                     int(c.get("sameSite", 0) or 0), int(c.get("schemeMap", 0) or 0)))
+                     int(c.get("sameSite", 0) or 0), int(c.get("schemeMap", 0) or 0), *ek_deger))
                 if cur.rowcount > 0:  # IGNORE ile atlanan (zaten var) sayılmaz
                     eklenen += 1
                     alanlar.add(alan)

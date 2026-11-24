@@ -120,6 +120,8 @@ YARDIM_KOMUTLAR = (
        "komutları onu kullanır"),
     N_("  ekran mcp [--desktop auto|background]  MCP sunucusu (stdio) — Claude Code vb. için araçlar"),
     N_("  ekran sessions (oturum) status|policy|clear   arka plan oturum aktarımı (hangi uygulama girişli açılır)"),
+    N_("  ekran sessions check (denetle) <site> [--cerez AD] [--json]   site oturumu profilde ve kopyada var mı\n"
+       "                                          (salt okuma, değer yazmaz; çıkış 0 = var, 1 = giriş/tazeleme gerekir)"),
     N_("  ekran panel [--tepsi]                   izleme paneli + tepsi simgesi (DUR, Devral, onaylar, ayarlar)"),
     N_("  ekran busy (mesgul) [--json]            kullanıcı meşgul mü (tam ekran, çalan medya, klavye/fare, oyun, "
        "kilit);\n"
