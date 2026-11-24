@@ -106,6 +106,16 @@ def satir_panel():
     from . import onay
     pid = onay.panel_pid()
     if pid:
+        tani = onay.panel_kanal_tanisi()  # 0.9.1: kayıt eskiyse neden açıkça (önceden yalnız "panel teyit etmiyor")
+        if tani:
+            return _satir(_("Panel"), "uyari", _("çalışıyor (pid {pid}) ama {neden}").format(pid=pid, neden=tani),
+                          _("paneli yeniden başlatın (tepsi → Çık, sonra deskhand panel --tepsi)"))
+        t = onay.kayit_tazelendi_bilgisi()
+        if t:
+            import time
+            return _satir(_("Panel"), "tamam", _("çalışıyor (pid {pid}); kimlik kaydı {saat}'te kendiliğinden tazelendi "
+                                                 "({neden})").format(
+                pid=pid, saat=time.strftime("%H:%M", time.localtime(float(t.get("zaman") or 0))), neden=t.get("neden")))
         return _satir(_("Panel"), "tamam", _("çalışıyor (pid {pid})").format(pid=pid))
     return _satir(_("Panel"), "uyari", _("çalışmıyor: hassas eylem onayı ve DUR/Devral düğmeleri yok"),
                   "deskhand panel --tepsi")
@@ -177,6 +187,14 @@ def satir_hesap_oturumlari():
     except Exception:  # noqa: BLE001
         teyitsiz = frozenset()
     if teyitsiz:  # dosyada açık ama panel teyit etmiyor (kapalı / panel dışında yazılmış): izin YOK
+        from . import onay
+        tani = onay.panel_kanal_tanisi()
+        if tani:  # 0.9.1: neden kayıt eskimesi (panel açık ama doğrulanamıyor): açıkça söyle
+            return _satir(_("Hesap oturumları"), "uyari",
+                          metin + _(" (ayar dosyasında {saglayici} açık ama panel doğrulanamıyor: {neden}; kimlik "
+                                    "çerezleri süzülüyor)").format(
+                              saglayici=", ".join(KIMLIK_ADLARI[s] for s in sorted(teyitsiz)), neden=tani),
+                          _("paneli yeniden başlatın"))
         return _satir(_("Hesap oturumları"), "uyari",
                       metin + _(" (ayar dosyasında {saglayici} açık ama panel teyit etmiyor: panel kapalı ya da panel "
                                 "dışında yazılmış; kimlik çerezleri süzülüyor)").format(

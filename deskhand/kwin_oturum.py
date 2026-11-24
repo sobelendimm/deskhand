@@ -270,6 +270,8 @@ def baglanti_denetle(d: dict) -> dict:
         if _ayni_yol(g["wayland_yol"], w if os.path.isabs(w) else os.path.join(gr["runtime"], w)):
             raise Dur(SANAL_KAPALI, _("Wayland soketi kullanıcının gerçek soketi; bağlanılmadı"))
     _karsi_denetle(g)
+    from . import masaustu
+    masaustu.kullanim_isaretle()  # 0.9.1: boştaki masaüstünü kapatma sayacı (bağlamdaki masaüstü; seyrek, sessiz)
     return g
 
 

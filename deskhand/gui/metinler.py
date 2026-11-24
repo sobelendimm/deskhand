@@ -305,3 +305,9 @@ G_ONAY_METIN = N_("Görev: {metin}\n\nOturumla girilebilecek siteler: {siteler}\
                   "yapabilir (ayar değiştirme, gönderi, silme); güvenilmeyen sayfa içeriği ajanı kandırabilir.")
 G_ONAY_SITE_YOK = N_("yok — çerezsiz")
 G_INDIRILENLER = N_("İndirilen dosyalar: {dosyalar} (klasör: {klasor})")
+
+# ---------------------------------------------------------------- 0.9.1 (Faz A): bekleyen istek bildirimi, iptal edilen devir
+TB_DEVIR_BASLIK = N_("Deskhand: insan doğrulaması sizi bekliyor")
+TB_ONAY_BASLIK = N_("Deskhand: onay bekliyor")
+TB_ONAY_GOVDE = N_("{neden}\nAçmak için tıklayın; Bitti / Vazgeç panel penceresinde.")
+O_KARAR.update({"iptal": N_("isteyen vazgeçti"), "devir-iptal": N_("devir: çağrı iptal edildi")})

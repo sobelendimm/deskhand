@@ -353,10 +353,119 @@ def guvenli_kayit(d: dict) -> dict:
     return g
 
 
+# ---------------------------------------------------------------- boştaki masaüstünü kapatma (0.9.1)
+# MCP'nin açtığı görünmez masaüstü saatlerce boşta kalıyordu. Her bağlantı kapısı (girdi, ekran görüntüsü, pencere
+# listesi, erişilebilirlik gözlemi; CLI ve MCP aynı yoldan) masaüstünün `son-kullanim` dosyasına dokunur (süreç başına
+# en çok KULLANIM_ISARET_SN'de bir; panel süreci SAYMAZ: önizleme yoklaması masaüstünü sonsuza dek açık tutmasın).
+# [masaustu] bosta_kapat_dk (varsayılan 30, 0 = kapalı) dakika dokunulmayan masaüstü bosta_kapat() ile kapanır —
+# Devral açıkken (insan çalışıyor), bekleyen onay/devir isteği varken ve görev kipinde KAPANMAZ. Kapanış günlüğe yazılır;
+# open_app / `deskhand ac --arka` sonraki kullanımda masaüstünü kendiliğinden yeniden açar.
+KULLANIM_DOSYA = "son-kullanim"
+KULLANIM_ISARET_SN = 20.0
+_SON_ISARET: dict[str, float] = {}
+
+
+def kullanim_yolu(ad: str | None = None) -> str:
+    return os.path.join(masalar.kok(ad), KULLANIM_DOSYA)
+
+
+def _panel_sureci() -> bool:
+    try:
+        from . import onay
+        return onay.panel_pid() == os.getpid()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def kullanim_isaretle(ad: str | None = None, zorla: bool = False) -> None:
+    """Bu masaüstü şimdi kullanıldı (bkz. yukarı). zorla: sıklık sınırı ve panel istisnası yok (açılış, panelin canlı
+    izlemesi/Devral gibi açık kullanıcı kullanımı). Hata sessiz: kullanım kaydı asla bir işlemi durdurmaz."""
+    try:
+        ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
+        t = time.monotonic()
+        if not zorla:
+            if t - _SON_ISARET.get(ad, -1e9) < KULLANIM_ISARET_SN:
+                return
+            _SON_ISARET[ad] = t
+            if _panel_sureci():
+                return
+        else:
+            _SON_ISARET[ad] = t
+        yol = kullanim_yolu(ad)
+        if not os.path.isdir(os.path.dirname(yol)):
+            return
+        fd = os.open(yol, os.O_WRONLY | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+        os.close(fd)
+        os.utime(yol)
+    except (OSError, Dur, ValueError):
+        pass
+
+
+def son_kullanim(ad: str | None = None) -> float | None:
+    """Son kullanım zamanı (time.time): `son-kullanim` dosyası ya da yoksa durum kaydının yazılışı; kayıt yoksa None."""
+    zamanlar = []
+    for yol in (kullanim_yolu(ad), masalar.durum_yolu(ad)):
+        try:
+            zamanlar.append(os.stat(yol).st_mtime)
+        except OSError:
+            pass
+    return max(zamanlar) if zamanlar else None
+
+
+def bosta_kapat_dk() -> int:
+    """[masaustu] bosta_kapat_dk (0 = kapalı)."""
+    try:
+        from . import ayarlar
+        return int(ayarlar.al("masaustu", "bosta_kapat_dk"))
+    except Exception:  # noqa: BLE001 - ayar okunamadı: varsayılan
+        return 30
+
+
+def bosta_neden(ad: str | None = None, simdi: float | None = None) -> str | None:
+    """Masaüstü kapatılabilecek kadar boşta mı? → None (kapatılabilir) | kapatılmama nedeni."""
+    ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
+    dk = bosta_kapat_dk()
+    if dk <= 0:
+        return "kapali"
+    d = durum(saglik=False, ad=ad)
+    if d is None:
+        return "masaustu-yok"
+    if d.get("gorev"):
+        return "gorev"
+    if devral_var(devral_yolu(ad)):
+        return "devral"  # insan masaüstünde çalışıyor (ör. devir sırasında)
+    try:
+        from . import onay
+        if onay.bekleyen_var("arka", masa=ad):
+            return "onay"
+    except Exception:  # noqa: BLE001 - karar verilemedi: kapatma
+        return "onay?"
+    son = son_kullanim(ad)
+    simdi = time.time() if simdi is None else simdi
+    if son is None or simdi - son < dk * 60:
+        return "kullaniliyor"
+    return None
+
+
+def bosta_kapat(ad: str | None = None, simdi: float | None = None) -> bool:
+    """Boşta ise masaüstünü kapat ve günlüğe yaz. → kapatıldı mı."""
+    ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
+    if bosta_neden(ad, simdi) is not None:
+        return False
+    son = son_kullanim(ad) or 0
+    kapandi, _notlar = masaustu_durdur(ad)
+    if kapandi:
+        from .gunluk import gunluk
+        dk = int(((time.time() if simdi is None else simdi) - son) // 60)
+        gunluk(f"masaustu | {ad or 'varsayılan'} {dk} dk boşta kaldı: kapatıldı (sonraki kullanımda yeniden açılır)")
+    return kapandi
+
+
 def xvfb_karsi_denetle(g: dict) -> None:
     """Xvfb türünde bağlanmadan önce karşı taraf (sert bağ / yer değiştirmeye karşı): özel veri yolu soketinin SO_PEERCRED
     PID'i kayıttaki dbus-daemon (başlangıç zamanı aynı, komut satırında bu masaüstünün bus.conf'u), X soketininki
     kayıttaki Xvfb; soketler kullanıcının gerçek soketlerinin sert bağı değil. Değilse Dur(14)."""
+    kullanim_isaretle()
     pid, bas = g.get("pid") or {}, g.get("pid_bas") or {}
     gercek = gercek_soket_kimlikleri()
     for yol, ad in ((os.path.join(g["calisma"], "bus"), "dbus"), (f"/tmp/.X11-unix/X{g['no']}", "xvfb")):
@@ -372,6 +481,7 @@ def xvfb_karsi_denetle(g: dict) -> None:
 
 def baglanti_denetle(d: dict) -> dict:
     """Türüne göre bağlantı kapısı → GÜVENLİ kayıt (yollar çalışma dizininden; karşı taraf doğrulanmış)."""
+    kullanim_isaretle(d.get("ad") if isinstance(d.get("ad"), str) else None)
     if tur(d) == "kwin":
         from . import kwin_oturum
         return kwin_oturum.baglanti_denetle(d)
@@ -386,6 +496,7 @@ def a11y_denetle(adres: str, d: dict | None = None) -> str:
     d = d or durum(saglik=False)
     if d is None:
         raise kapali_hatasi()
+    kullanim_isaretle()  # gözlem (erişilebilirlik ağacı) = kullanım
     g = guvenli_kayit(d)
     dizin = os.path.join(g["calisma"], "at-spi" if tur(g) == "kwin" else os.path.join("run", "at-spi"))
     return a11y_soket_denetle(adres, dizin, g.get("cgroup") or "", g.get("a11y_dizin_kimlik"))
@@ -713,6 +824,7 @@ def _baslat_sinirli(ad: str, boyut: str | None, openbox: bool, oto: bool, olcek:
     if ajan is not None:
         d["baslatan_ajan"] = [ajan, masalar._baslangic(ajan)]
     _durum_yaz(d)
+    kullanim_isaretle(ad, zorla=True)  # boşta sayacı açılıştan başlar
     return d
 
 

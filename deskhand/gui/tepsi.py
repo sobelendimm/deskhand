@@ -11,6 +11,7 @@ from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
+from ..i18n import _
 from . import metinler as T
 from .dil import Metinler
 from .durum import RENK, Durum
@@ -85,6 +86,7 @@ class Tepsi(QObject):
     arka_istendi = pyqtSignal()
     gorev_istendi = pyqtSignal()
     cikis_istendi = pyqtSignal()
+    onay_istendi = pyqtSignal(str)      # (istek id): kullanıcı tepsi bildirimine tıkladı → panel diyaloğu öne getirir
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -107,6 +109,8 @@ class Tepsi(QObject):
         self.menu.addAction(self.a_cik)
         self.ikon.setContextMenu(self.menu)
         self.ikon.activated.connect(self._etkin)
+        self.ikon.messageClicked.connect(self._mesaj_tiklandi)
+        self._bildirilen = ""
         self.guncelle(self.durum)
 
     def _eylem(self, msgid: str, sinyal) -> QAction:
@@ -135,3 +139,27 @@ class Tepsi(QObject):
     def goster(self) -> None:
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.ikon.show()
+
+    # -------- bekleyen onay / insan devri bildirimi (0.9.1)
+    def onay_bildir(self, istek: dict) -> bool:
+        """Panelin KENDİ tepsi bildirimi: yeni bekleyen istek (özellikle insan devri). MCP'nin KDE bildirimi tek yönlüdür
+        (düğmesiz: "Tamam" yalnız kapatır); diyalog tam ekran bir pencerenin altında kalırsa kullanıcı isteği bulamıyordu
+        (22 Kas). Bu bildirime tıklamak YALNIZ diyaloğu öne getirir (onay_istendi): karar yine diyalogdaki Bitti /
+        Vazgeç ile verilir (bildirim plasmashell'de; ajanın tıklayabileceği bir yerden karar çıkmaz). → gösterildi mi."""
+        k = str(istek.get("id") or "")
+        if not k:
+            return False
+        self._bildirilen = k
+        devir = istek.get("tur") == "devir"
+        baslik = _(T.TB_DEVIR_BASLIK if devir else T.TB_ONAY_BASLIK)
+        govde = _(T.TB_ONAY_GOVDE).format(neden=(istek.get("ayrinti") or istek.get("eylem") or "")[:200])
+        try:
+            self.ikon.showMessage(baslik, govde, QSystemTrayIcon.MessageIcon.Warning, 60000)
+        except Exception:  # noqa: BLE001 - bildirim isteğe bağlı: diyalog ve panel listesi asıl kanal
+            return False
+        return True
+
+    def _mesaj_tiklandi(self) -> None:
+        k = getattr(self, "_bildirilen", "")
+        if k:
+            self.onay_istendi.emit(k)

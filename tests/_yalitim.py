@@ -36,8 +36,122 @@ os.environ["PYTHONPATH"] = KOK + (os.pathsep + os.environ["PYTHONPATH"] if os.en
 if KOK not in sys.path:
     sys.path.insert(0, KOK)
 
+# ---------------------------------------------------------------- SÜREÇ SIZINTISI (0.9.1)
+# Kök neden: görünmez masaüstü süreçleri (kwin_wayland --virtual, özel dbus-daemon, oncelik_bekcisi, bildirim_yakalayici,
+# ayrık oto temizleyici) start_new_session ile AYRIK başlar; takımın sökümü (masaustu_durdur / atexit) yalnız süreç
+# DÜZGÜN biterse çalışır. Takım zaman aşımında SIGKILL ile öldürülünce (tools/test_kos.py), çökünce ya da sökümü atlayan
+# bir hata olunca bu süreçler GECICI altındaki dizinlerle birlikte sahipsiz kalıp çalışmayı sürdürüyordu. Önlem: (1) çıkışta
+# GECICI'ye bağlı tüm süreçler süpürülür; (2) ayrık bir BEKÇİ süreç test sürecinin ölümünü bekler (SIGKILL dahil) ve
+# aynı süpürmeyi yapıp GECICI'yi siler. Ölçüt DAR: komut satırında ya da ortamında bu takımın GECICI yolu geçen, aynı
+# kullanıcının süreçleri (GECICI rastgele ve takıma özel: kullanıcının başka süreçlerine dokunulmaz).
+_SUPUR_KOD = r'''
+import os, signal, sys, time, shutil
+def surecler(kok, haric):
+    kb = kok.encode()
+    uid = os.getuid()
+    for ad in os.listdir("/proc"):
+        if not ad.isdigit() or int(ad) in haric:
+            continue
+        try:
+            if os.stat("/proc/" + ad).st_uid != uid:
+                continue
+            with open("/proc/%s/cmdline" % ad, "rb") as f:
+                cmd = f.read()
+            try:
+                with open("/proc/%s/environ" % ad, "rb") as f:
+                    env = f.read()
+            except OSError:
+                env = b""
+        except OSError:
+            continue
+        if kb in cmd or kb in env:
+            yield int(ad)
+def supur(kok, haric):
+    haric = set(haric) | {os.getpid()}
+    hedef = list(surecler(kok, haric))
+    for s in (signal.SIGTERM, signal.SIGKILL):
+        for p in hedef:
+            try:
+                os.kill(p, s)
+            except OSError:
+                pass
+        son = time.monotonic() + 3
+        while time.monotonic() < son and any(os.path.exists("/proc/%d" % p) for p in hedef):
+            time.sleep(0.05)
+        hedef = [p for p in hedef if os.path.exists("/proc/%d" % p)]
+        if not hedef:
+            break
+    return hedef
+if __name__ == "__main__" and len(sys.argv) >= 4:
+    ebeveyn, kok, sakla = int(sys.argv[1]), sys.argv[2], sys.argv[3] == "1"
+    try:
+        import select
+        fd = os.pidfd_open(ebeveyn)
+        select.select([fd], [], [])
+    except OSError:
+        while os.path.exists("/proc/%d" % ebeveyn):
+            time.sleep(0.5)
+    supur(kok, ())
+    if not sakla:
+        shutil.rmtree(kok, True)
+'''
+
+
+def _supur_modulu():
+    ns = {"__name__": "_supur"}
+    exec(compile(_SUPUR_KOD, "_supur", "exec"), ns)  # noqa: S102 - kendi sabit kodumuz (bekçiyle ortak)
+    return ns
+
+
+def gecici_surecleri() -> list[int]:
+    """Bu takımın GECICI'sine bağlı (bu süreç, atalar ve bekçi hariç) yaşayan süreçler."""
+    return list(_supur_modulu()["surecler"](GECICI, _haric()))
+
+
+def _haric() -> set[int]:
+    h = {os.getpid()}
+    p = os.getppid()
+    while p > 1:
+        h.add(p)
+        try:
+            with open(f"/proc/{p}/stat") as f:
+                p = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    if _BEKCI is not None:
+        h.add(_BEKCI.pid)
+    return h
+
+
+def surecleri_supur() -> list[int]:
+    """GECICI'ye bağlı süreçleri SIGTERM → SIGKILL ile kapat (bu süreç, atalar ve bekçi hariç). → kapanmayanlar."""
+    return _supur_modulu()["supur"](GECICI, _haric())
+
+
+def _bekci_baslat():
+    import subprocess
+    try:
+        return subprocess.Popen([sys.executable, "-I", "-c", _SUPUR_KOD, str(os.getpid()), GECICI,
+                                 "1" if os.environ.get("DESKHAND_TEST_SAKLA") == "1" else "0"],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                start_new_session=True, cwd="/", close_fds=True)
+    except OSError:
+        return None
+
+
+_BEKCI = _bekci_baslat()
+
+
+def _cikis_supur():
+    try:
+        surecleri_supur()
+    except Exception:  # noqa: BLE001 - çıkışta asla fırlatma (bekçi yine süpürür)
+        pass
+
+
 if os.environ.get("DESKHAND_TEST_SAKLA") != "1":
     atexit.register(shutil.rmtree, GECICI, True)
+atexit.register(_cikis_supur)  # atexit ters sırada çalışır: önce süpürme, sonra dizin silme
 
 
 # ---------------------------------------------------------------- gerçek masaüstü araçları için TUZAK ikililer

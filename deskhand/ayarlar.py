@@ -31,6 +31,8 @@ Dosya yoksa varsayılanlar kullanılır; OKUMA dosya oluşturmaz. Bilinmeyen/yan
 
   [masaustu]
   azami = 3                # aynı anda en çok kaç görünmez masaüstü (1..6; her MCP oturumu kendi masaüstünü açar)
+  bosta_kapat_dk = 30      # hiç kullanılmadan (girdi/gözlem/ekran görüntüsü) bu kadar dakika geçen görünmez masaüstü
+                           # kendiliğinden kapanır (0 = kapalı; Devral ya da bekleyen onay varken kapanmaz)
 """
 from __future__ import annotations
 
@@ -67,6 +69,7 @@ VARSAYILAN = {
     },
     "masaustu": {
         "azami": 3,
+        "bosta_kapat_dk": 30,
     },
 }
 TAKMA = {("karar", "mesgulken"): {"hep-arka": "arka"}}
@@ -76,7 +79,7 @@ SECENEK = {("karar", "mesgulken"): {"sor", "arka", "bekle"}, ("karar", "cevapsiz
 KUME = {("guvenlik", "hesap_oturumlari"): ("microsoft", "google", "edevlet")}
 ARALIK = {("karar", "sor_sure"): (1, 3600), ("karar", "girdi_esik_sn"): (0, 3600),
           ("gorev", "azami_dakika"): (1, 240), ("gorev", "azami_tur"): (1, 500),
-          ("masaustu", "azami"): (1, 6)}
+          ("masaustu", "azami"): (1, 6), ("masaustu", "bosta_kapat_dk"): (0, 1440)}
 
 _uyarilan = set()
 

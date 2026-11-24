@@ -65,11 +65,15 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "gozetimsiz": N_("gözetimsiz çalışmada hassas eylem yapılmaz"),
     "kanal": N_("onay kanalı doğrulanamadı (yanıtın Deskhand panelinden geldiği kanıtlanamadı) → red"),
     "kosul": N_("beklenen koşul gerçekleşti (insan doğrulaması sayfadan kalktı)"),
+    "iptal": N_("isteyen vazgeçti (çağrı iptal edildi) → red"),
 }
 TUR_DEVIR = "devir"           # istek türü: insan doğrulaması devri (panelde "Devral / Bitti / Vazgeç"; izin = Bitti)
 DEVIR_EN_COK = 3600.0         # insan devri isteğinin en uzun ömrü (request_human timeout_s üst sınırı): bekleme boyunca BAŞKA
                               # süreçlerin girdisi de kapalı kalır (bekleyen_var bu sınıra kadar "sahte" saymaz)
 KONTROL_ARALIK = 3.0          # isteyen `kontrol` işlevini en çok bu sıklıkta çağırır (sn)
+NABIZ_SINIR = 30.0            # 0.9.1: isteyen beklerken istek dosyasına CANLILIK_ARALIK'ta bir dokunur (nabız); bu kadar sn
+                              # dokunulmadıysa bekleme döngüsü yok (süreç donmuş/durdurulmuş, iş parçacığı terk edilmiş):
+                              # istek bekleyen SAYILMAZ (panel göstermez, başka süreçlerin girdisi kilitlenmez; temizle siler)
 KARARLAR = ("izin", "red")
 _ID = re.compile(r"[0-9a-f]{32}")
 
@@ -216,6 +220,7 @@ def panel_kaydet(pid: int | None = None) -> str:
     _dizin_hazirla()
     if pid == os.getpid():
         kanal_ac()
+        _tazeleyici_baslat()  # 0.9.1: kayıt eskirse (ör. Python güncellendi → exe "(deleted)") panel kendisi tazeler
     _yaz_atomik(panel_pid_yolu(), {"pid": pid, "baslangic": _baslangic(pid), "exe": _exe(pid),
                                    "cmdline": _komut_satiri(pid), "cwd": _cwd(pid),
                                    "paket": paket_yolu() if pid == os.getpid() else None, "zaman": time.time()})
@@ -226,11 +231,112 @@ def panel_sil(pid: int | None = None) -> None:
     """Panel kapanırken: pid dosyası yalnız kendisininse silinir; kendi kanalı kapanır (bekleyenlerin bağlantısı
     kopar → isteyenler hemen red)."""
     pid = os.getpid() if pid is None else pid
+    if pid == os.getpid():
+        _tazeleyici_durdur()
     d = _json_oku(panel_pid_yolu()) or {}
     if d.get("pid") == pid:
         _sil(panel_pid_yolu())
         if pid == os.getpid():
             kanal_kapat()
+
+
+TAZELE_ARALIK = 60.0          # panel kendi kimlik kaydını bu sıklıkta denetler (gerekirse yeniden yazar)
+_TAZELEYICI: threading.Event | None = None
+
+
+def _canli_kimlik(pid: int) -> dict:
+    """Bir sürecin ŞU ANKİ kimlik alanları (panel kaydında doğrulanan alanlar)."""
+    return {"baslangic": _baslangic(pid), "exe": _exe(pid), "cmdline": _komut_satiri(pid), "cwd": _cwd(pid)}
+
+
+def kayit_farki(kayit: dict | None) -> list[str]:
+    """Panel kaydındaki kimlik alanlarından canlı süreçle UYMAYANLAR (isteyenin _kanala_baglan'da birebir karşılaştırdığı
+    alanlar). Boş liste = kayıt güncel. Örnek: Python paketi güncellenince çalışan panelin /proc/<pid>/exe'si
+    "/usr/bin/python3.X (deleted)" olur → ["exe"] (0.9.1 hatası: hesap oturumu izni sessizce kapalı kalıyordu)."""
+    if not isinstance(kayit, dict) or not isinstance(kayit.get("pid"), int):
+        return ["pid"]
+    canli = _canli_kimlik(kayit["pid"])
+    return [k for k, v in canli.items() if v is None or kayit.get(k) != v]
+
+
+def panel_kaydi_tazele() -> str:
+    """Panel sürecinde: kendi kimlik kaydını denetle, eskimişse yeniden yaz. → "ayni" | "tazelendi" | "baskasi".
+    GÜVENLİK: doğrulama zayıflamaz — kayıt yalnız BU sürecin (panel) kendi canlı /proc değerleriyle yazılır ve isteyen
+    yine birebir karşılaştırır (SO_PEERCRED PID + başlangıç + exe + cmdline + cwd + paket). Başka bir CANLI sürecin
+    kaydına dokunulmaz ("baskasi"); kayıt yoksa ya da sahibi ölmüşse bu panel yeniden kaydolur (kanal da açılır)."""
+    benim = os.getpid()
+    d = _json_oku(panel_pid_yolu())
+    sahip = d.get("pid") if isinstance(d, dict) else None
+    if isinstance(sahip, int) and sahip > 0 and sahip != benim:
+        bas = _baslangic(sahip)
+        if bas is not None and bas == d.get("baslangic"):
+            return "baskasi"  # başka canlı panel: onun kaydı
+    fark = ["kayit"] if sahip != benim else kayit_farki(d)
+    if sahip == benim and d.get("paket") != paket_yolu():
+        fark.append("paket")
+    if not fark and os.path.exists(kanal_yolu()):
+        return "ayni"
+    kanal_ac()
+    simdi = time.time()
+    eski_exe = d.get("exe") if isinstance(d, dict) else None
+    _yaz_atomik(panel_pid_yolu(), {"pid": benim, **_canli_kimlik(benim), "paket": paket_yolu(), "zaman": simdi,
+                                   "tazelendi": {"zaman": simdi, "neden": ",".join(fark) or "kanal",
+                                                 "eski_exe": eski_exe}})
+    try:
+        from .gunluk import gunluk
+        gunluk(f"panel kimlik kaydı tazelendi ({','.join(fark) or 'kanal'})")
+    except Exception:  # noqa: BLE001 - günlük isteğe bağlı
+        pass
+    return "tazelendi"
+
+
+def _tazeleyici_baslat() -> None:
+    """Panel: kimlik kaydını TAZELE_ARALIK'ta bir denetleyen arka iş parçacığı (Qt'siz; panel_sil durdurur)."""
+    global _TAZELEYICI
+    if _TAZELEYICI is not None:
+        return
+    dur = _TAZELEYICI = threading.Event()
+
+    def dongu():
+        while not dur.wait(TAZELE_ARALIK):
+            try:
+                panel_kaydi_tazele()
+            except Exception:  # noqa: BLE001 - bir tur başarısız: sonraki turda yeniden
+                pass
+    threading.Thread(target=dongu, name="panel-kayit-tazele", daemon=True).start()
+
+
+def _tazeleyici_durdur() -> None:
+    global _TAZELEYICI
+    t, _TAZELEYICI = _TAZELEYICI, None
+    if t is not None:
+        t.set()
+
+
+def panel_kanal_tanisi() -> str | None:
+    """SALT OKUNUR tanı (doktor): canlı panelin kaydı süreçle uyuşuyor mu? → None (uyuşuyor / panel yok) | neden."""
+    d = _panel_kaydi()
+    if d is None:
+        return None
+    fark = kayit_farki(d)
+    if d.get("paket") != paket_yolu():
+        fark.append("paket")
+    if not fark:
+        return None
+    exe = _exe(d["pid"]) or ""
+    if "exe" in fark and exe.endswith(" (deleted)"):
+        return _("panel kaydı eski: panel çalışırken Python/kurulum güncellenmiş (exe: {exe}); panel kaydını en çok "
+                 "{sn} sn içinde kendiliğinden tazeler, düzelmezse paneli yeniden başlatın").format(
+                     exe=exe, sn=int(TAZELE_ARALIK))
+    return _("panel kaydı eski ({alanlar} uymuyor): panel en çok {sn} sn içinde kendiliğinden tazeler, düzelmezse "
+             "paneli yeniden başlatın").format(alanlar=", ".join(fark), sn=int(TAZELE_ARALIK))
+
+
+def kayit_tazelendi_bilgisi() -> dict | None:
+    """Canlı panelin kaydı kendiliğinden tazelendiyse {zaman, neden, eski_exe}; yoksa None (doktor bilgisi)."""
+    d = _panel_kaydi()
+    t = d.get("tazelendi") if isinstance(d, dict) else None
+    return t if isinstance(t, dict) else None
 
 
 def _panel_kaydi() -> dict | None:
@@ -573,14 +679,16 @@ def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str, tur
 
 
 def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran", sure: float = VARSAYILAN_SURE,
-               goruntu=None, gunluge_yaz: bool = True, tur: str = "", kontrol=None) -> OnaySonucu:
+               goruntu=None, gunluge_yaz: bool = True, tur: str = "", kontrol=None, iptal=None) -> OnaySonucu:
     """Paneldeki insandan bir kez izin iste ve bekle (en çok `sure` sn). → OnaySonucu.
     masaustu: "ekran" (kullanıcının ekranı) | "arka" (görünmez masaüstü).
     tur: "" (hassas eylem onayı) | "devir" (insan doğrulaması devri: panel "Devral/Bitti/Vazgeç" gösterir; izin = Bitti).
     kontrol: isteğe bağlı koşul işlevi (beklerken ~KONTROL_ARALIK sn'de bir çağrılır); True dönerse bekleme biter,
     OnaySonucu(izin=False, neden="kosul"): izin DEĞİL, yalnız "beklenen şey kendiliğinden oldu" (isteği kapatma yetkisi
     ajanda değil: koşul sayfanın gerçek durumudur ve bekleme boyunca ajanın girdisi o masaüstüne kapalıdır).
-    goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu."""
+    goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu.
+    iptal: isteğe bağlı işlev; True dönerse (ör. MCP çağrısı istemcide iptal edildi) bekleme HEMEN biter, istek silinir,
+    OnaySonucu(False, "iptal") — red; yalnız isteyenin kendi beklemesini bitirir (izin üretemez)."""
     masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
     # Gerçek ekran kilidi (DESKHAND_GERCEK_EKRAN=kapali) gerçek oturuma GİRDİYİ keser. Görünmez masaüstündeki bir eylemin
     # onayını panelde göstermek gerçek ekrana girdi değildir: yalnız hedef kullanıcının ekranıysa reddedilir (yoksa
@@ -624,7 +732,7 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
         from . import masalar
         istek = {"id": istek_id, "eylem": str(eylem), "hedef": str(hedef),
                  "ayrinti": str(ayrinti or "")[:AYRINTI_SINIR], "masaustu": masaustu, "zaman": simdi,
-                 "son_zaman": simdi + sure, "pid": os.getpid(), "goruntu": g_yol,
+                 "son_zaman": simdi + sure, "pid": os.getpid(), "pid_bas": _baslangic(os.getpid()), "goruntu": g_yol,
                  "masa": masalar.secili() if masaustu == "arka" else ""}
         if tur == TUR_DEVIR:
             istek["tur"] = TUR_DEVIR
@@ -661,10 +769,20 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
                 return bitir(OnaySonucu(False, "sure", istek_id))
             if _dur_acik():
                 return bitir(OnaySonucu(False, "dur", istek_id))
+            if iptal is not None:
+                try:
+                    if iptal():
+                        return bitir(OnaySonucu(False, "iptal", istek_id))
+                except Exception:  # noqa: BLE001 - iptal okunamadı: beklemeye devam
+                    pass
             if t >= sonraki_canlilik:
                 sonraki_canlilik = t + CANLILIK_ARALIK
                 if panel_pid() != ppid:
                     return bitir(OnaySonucu(False, "panel-kapandi", istek_id))
+                try:
+                    os.utime(iy)  # nabız: bekleme döngüsü yaşıyor (bekleyenler NABIZ_SINIR'dan eskisini saymaz)
+                except OSError:
+                    pass
             if kontrol is not None and t >= sonraki_kontrol:
                 try:
                     if kontrol():
@@ -718,6 +836,22 @@ def _canli(pid: int) -> bool:
     return pid > 0 and os.path.exists(f"/proc/{pid}")
 
 
+def _sahibi_canli(d: dict) -> bool:
+    """İsteyen süreç yaşıyor mu: PID var ve (kayıtta varsa) başlangıç zamanı aynı (PID yeniden kullanımına karşı)."""
+    if not _canli(d["pid"]):
+        return False
+    bas = d.get("pid_bas")
+    return not isinstance(bas, str) or _baslangic(d["pid"]) == bas
+
+
+def _nabiz_var(yol: str) -> bool:
+    """İstek dosyasına son NABIZ_SINIR sn içinde dokunulmuş mu (isteyenin bekleme döngüsü yaşıyor)."""
+    try:
+        return time.time() - os.stat(yol).st_mtime <= NABIZ_SINIR
+    except OSError:
+        return False
+
+
 def bekleyenler(simdi: float | None = None) -> list[dict]:
     """Yanıtlanmamış, süresi dolmamış, isteyeni yaşayan istekler (eskiden yeniye)."""
     simdi = time.time() if simdi is None else simdi
@@ -734,7 +868,9 @@ def bekleyenler(simdi: float | None = None) -> list[dict]:
             continue
         if _KANAL is not None and _KANAL.yanitlandi(d["id"]):  # izin kanaldan gitti (dosya yok): yeniden sorma
             continue
-        if d["pid"] and not _canli(d["pid"]):
+        if d["pid"] and not _sahibi_canli(d):
+            continue
+        if not _nabiz_var(os.path.join(dizin(), ad)):  # isteyen artık beklemiyor (donmuş / terk edilmiş)
             continue
         sonuc.append(d)
     return sorted(sonuc, key=lambda d: d["zaman"])
@@ -781,7 +917,8 @@ def temizle(simdi: float | None = None) -> list[str]:
         tur, istek_id = m.group(1), m.group(2)
         if tur == "istek" and m.group(3) == "json":
             d = istek_oku(yol)
-            eski = d is None or d["son_zaman"] + ESKI_PAY < simdi or (d["pid"] and not _canli(d["pid"]))
+            eski = (d is None or d["son_zaman"] + ESKI_PAY < simdi or (d["pid"] and not _sahibi_canli(d))
+                    or not _nabiz_var(yol))
         else:  # yanıt ya da görüntü: isteği yoksa ve bir dakikadır duruyorsa
             try:
                 yas = simdi - os.lstat(yol).st_mtime

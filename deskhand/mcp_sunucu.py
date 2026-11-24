@@ -268,7 +268,45 @@ def _json(d) -> str:
     return json.dumps(d, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
-def arac(sema, **kayit):
+_IPTAL_YEREL = threading.local()  # iptal edilebilir araç çağrısının olayı (bu iş parçacığında): istemci çağrıyı iptal etti mi
+
+
+def cagri_iptal_edildi() -> bool:
+    """Bu iş parçacığındaki araç çağrısı istemcide iptal edildi mi (MCP notifications/cancelled ya da bağlantı koptu).
+    İptal edilebilir olmayan çağrıda / doğrudan (test, batch) çağrıda hep False."""
+    olay = getattr(_IPTAL_YEREL, "olay", None)
+    return olay is not None and olay.is_set()
+
+
+def _iptalli_sarmala(senkron, imza):
+    """0.9.1: uzun bekleyen araç (request_human) için ASYNC sarmalayıcı. mcp SDK eşzamanlı aracı
+    anyio.to_thread.run_sync ile iptalsiz koşar: istemci çağrıyı iptal etse / arka plana alsa / bağlantı kopsa da iş
+    parçacığı süre dolana dek bekliyordu (22 Kas: devir isteği 15 dk boyunca o masaüstünün girdisini kilitledi). Burada
+    iptal gelince olay kurulur; çekirdek (onay.iste_sonuc iptal=…) beklemeyi bırakır, isteği siler ve günlüğe yazar."""
+    import anyio
+    import anyio.to_thread
+
+    @functools.wraps(senkron)
+    async def sarili(*a, **k):
+        olay = threading.Event()
+
+        def calis():
+            _IPTAL_YEREL.olay = olay
+            try:
+                return senkron(*a, **k)
+            finally:
+                _IPTAL_YEREL.olay = None
+        try:
+            return await anyio.to_thread.run_sync(calis, abandon_on_cancel=True)
+        except anyio.get_cancelled_exc_class():
+            olay.set()
+            raise
+    del sarili.__wrapped__  # SDK eşzamanlılık denetimi sarmalanan eşzamanlı işleve bakmasın
+    sarili.__signature__ = imza
+    return sarili
+
+
+def arac(sema, iptalli: bool = False, **kayit):
     """Sonuç sözleşmeli araç kaydı. MCP'ye SARMALAYICI kaydedilir: gönderim sayacı sıfırlanır, ToolError hata sonucuna
     (sent/next, yapılandırılmış) çevrilir, sözlük sonuç kısa JSON metni + structuredContent olur; outputSchema =
     `sema`. sema=None: outputSchema YOK ve başarılı sonuç YALNIZ kısa metin (+ görüntü) içeriktir — structuredContent
@@ -292,8 +330,11 @@ def arac(sema, **kayit):
             if isinstance(r, CallToolResult):
                 return r
             return CallToolResult(content=[TextContent(type="text", text=_json(r))], structured_content=r)
-        sarili.__signature__ = inspect.signature(fn, eval_str=True).replace(
+        imza = inspect.signature(fn, eval_str=True).replace(
             return_annotation=CallToolResult if sema is None else Annotated[CallToolResult, sema])
+        sarili.__signature__ = imza
+        if iptalli:
+            sarili = _iptalli_sarmala(sarili, imza)
         if sema is None:
             kayit.setdefault("structured_output", False)
         mcp.add_tool(sarili, name=fn.__name__, **kayit)
@@ -2740,7 +2781,7 @@ def wait_for(
 
 
 class DevirSonuc(TypedDict, total=False):
-    status: Literal["resolved", "timeout", "declined", "unavailable"]
+    status: Literal["resolved", "timeout", "declined", "unavailable", "cancelled"]
     resolved_by: Literal["user", "challenge_cleared"]
     still_detected: bool
     suppressed: bool
@@ -2768,6 +2809,7 @@ DEVIR_NEDEN = {  # onay.OnaySonucu.neden → (status, mesaj)
     "dur": ("unavailable", N_("kullanıcı DUR dedi")),
     "kanal": ("unavailable", N_("panel kanalı doğrulanamadı")),
     "hata": ("unavailable", N_("devir isteği yazılamadı")),
+    "iptal": ("cancelled", N_("çağrı iptal edildi: devir isteği geri çekildi")),
 }
 
 
@@ -2794,7 +2836,7 @@ def _devir_bildir(ozet: str) -> None:
         log.debug("devir bildirimi gönderilemedi: %s", e)
 
 
-@arac(DevirSonuc, title="Hand over to the user", annotations=SECIM)
+@arac(DevirSonuc, iptalli=True, title="Hand over to the user", annotations=SECIM)
 def request_human(
     reason: Annotated[str, Field(min_length=1, max_length=400, description="Why the user is needed, in one sentence "
                                                                            "(shown in the notification and panel)")],
@@ -2882,8 +2924,10 @@ def _devir_yurut(k: str, reason: str, timeout_s: float, bilgi: dict) -> dict[str
                      "message": _("sınama kendiliğinden geçti; kullanıcı çağrılmadı: observe çağırıp sayfayı yeniden oku")}
                 return s
             hata.dur_denetle()
+            if cagri_iptal_edildi():
+                return {**bilgi, "status": "cancelled", "window": baslik, "message": _("çağrı iptal edildi")}
             time.sleep(0.5)
-    ozet = (reason.strip() + (f" ({once['site']})" if once and once.get("site") else ""))[:300]
+    ozet =(reason.strip() + (f" ({once['site']})" if once and once.get("site") else ""))[:300]
     from .gunluk import gunluk
     # bildirim yalnız gerçekten beklenecekse: gözetimsiz / DUR / panel kapalıyken kullanıcı boşuna rahatsız edilmez
     if not hata.gozetimsiz() and not os.path.exists(hata.dur_dosyasi()) and getattr(o, "panel_canli", lambda: False)():
@@ -2892,7 +2936,7 @@ def _devir_yurut(k: str, reason: str, timeout_s: float, bilgi: dict) -> dict[str
     kalan_sure = max(0.5, timeout_s - (time.monotonic() - t0))
     with _OnayKaydi(ad):  # beklerken bu masaüstüne girdi yok ([7]); ajan isteği kendi kapatamaz
         sonuc = o.iste_sonuc("human_verification", baslik or _("tüm ekran"), reason, masa, kalan_sure,
-                             tur="devir", kontrol=kayboldu)
+                             tur="devir", kontrol=kayboldu, iptal=cagri_iptal_edildi)
     gecen = round(time.monotonic() - t0, 1)
     s = {**bilgi, "window": baslik, "waited_s": gecen}
     if sonuc.izin or sonuc.neden == "kosul":
@@ -2974,6 +3018,32 @@ def _ebeveyn_izle(ppid: int) -> None:
         time.sleep(0.5)
 
 
+BOSTA_DENETIM_SN = 60.0
+
+
+def bosta_denetle() -> bool:
+    """0.9.1: bu oturumun SAHİBİ olduğu görünmez masaüstü [masaustu] bosta_kapat_dk dakikadır kullanılmadıysa kapat
+    (masaustu.bosta_kapat: Devral / bekleyen onay / görev kipinde kapatmaz; günlüğe yazar). Araç çalışırken (KILIT tutulu)
+    bu tur atlanır. → kapatıldı mı."""
+    if not (_MASA["bagli"] and _MASA["sahip"]):
+        return False
+    if not KILIT.acquire(blocking=False):
+        return False
+    try:
+        with masalar.masa_sabit(_MASA["ad"]):
+            return masaustu.bosta_kapat(_MASA["ad"])
+    except Exception as e:  # noqa: BLE001 - bekçi asla sunucuyu düşürmesin
+        log.warning("boştaki masaüstü denetimi: %s", e)
+        return False
+    finally:
+        KILIT.release()
+
+
+def _bosta_bekcisi() -> None:
+    while not _KAPANIYOR.wait(BOSTA_DENETIM_SN):
+        bosta_denetle()
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--desktop-name" in argv:  # bu oturumu adlı görünmez masaüstüne sabitle
@@ -3003,6 +3073,7 @@ def main(argv: list[str] | None = None) -> None:
     for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(s, _sinyal)
     threading.Thread(target=_ebeveyn_izle, args=(os.getppid(),), daemon=True).start()
+    threading.Thread(target=_bosta_bekcisi, name="bosta-bekcisi", daemon=True).start()
     try:
         mcp.run()
     finally:
