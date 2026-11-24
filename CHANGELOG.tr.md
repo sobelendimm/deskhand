@@ -2,6 +2,30 @@
 
 *Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
 
+## 0.9.1 (24 Kasım 2026)
+
+- **Düzeltme: insan devri (`request_human`) isteği 15 dakika kilitli kalabiliyordu.** Bekleme artık iptal edilebilir
+  (istemci çağrıyı iptal edince ≤1 sn'de biter, istek silinir, günlüğe `devir-iptal` yazılır). Sahibi ölmüş ya da 30 sn
+  nabız vermeyen istek kilit tutmaz. Bekleyen istek için tepsiden kalıcı bildirim çıkar; tıklamak yalnız paneli ve
+  diyaloğu öne getirir, karar yine diyalogdaki Bitti / Vazgeç ile verilir.
+- **Düzeltme: panel kimlik kaydı eskiyince hesap oturumu izni sessizce kapalı kalıyordu** (panel çalışırken Python
+  güncellenince `/proc/<pid>/exe` "(deleted)" oluyor). Panel kaydını dakikada bir kendi canlı değerleriyle tazeler;
+  doğrulama gevşetilmedi. Doktor nedeni açıkça söyler.
+- **Yeni: boştaki arka plan masaüstü kendiliğinden kapanır** (varsayılan 30 dk; `ayarlar.toml` → `[masaustu]
+  bosta_kapat_dk`, 0 = kapalı). Devral, bekleyen onay/devir, görev kipi ve panelden izleme sırasında kapatılmaz;
+  sonraki kullanımda kendiliğinden açılır.
+- **Yeni: panelde masaüstü seçici ve canlı izleme.** "Arka plan ekranı" sekmesi çalışan bütün görünmez masaüstlerini
+  (adlılar dahil) listeler; seçileni canlı gösterir (yalnız izleme, girdi yolu yok) ve "Ajan şu an: …" satırında son
+  eylemi yazar (gizli alana yazılan içerik gösterilmez).
+- **Güvenlik: önizlemeler yasak pencereleri karartır** (Arka plan ve Görev sekmeleri; `api.goruntu_al` ile aynı kural).
+  Denetlenemezse kare hiç gösterilmez.
+- **Yeni: `deskhand sessions check <site>` (`oturum denetle`).** Site oturumu Firefox profilinde ve görünmez masaüstü
+  kopyasında var mı, kalıcı mı, süresi ne zaman doluyor; değer yazmaz. Çıkış 0 = var, 1 = giriş/tazeleme gerekir.
+  Yayın öncesi ön kontrol için.
+- **Düzeltme: oturum kopyasında süresi geçmiş eski çerez satırı, canlı oturum çerezinin aktarılmasını sessizce
+  engelliyordu.**
+- **Testler: sızan test süreçleri** (KWin, dbus) takım öldürülse ya da çökse de temizlenir.
+
 ## 0.9.0 (22 Kasım 2026)
 
 - **Düzeltme (kritik): görünmez masaüstünde (KWin) Firefox'a yazılan `#`, `$`, `€` sessizce kayboluyordu** ("a#b" →
