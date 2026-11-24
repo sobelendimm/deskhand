@@ -204,6 +204,61 @@ class Onizleme(QWidget):
         return super().focusNextPrevChild(ileri)
 
 
+def yasak_kutulari(au, im_boyut: tuple[int, int], sinif_onbellek: dict | None = None) -> list[tuple[int, int, int, int]]:
+    """Önizleme görüntüsüne düşen YASAK pencerelerin kutuları (görüntü pikseli; x0, y0, x1, y1). Kural api.goruntu_al
+    ile aynı: guvenlik.yasak_desenler() + onay.YASAK_DESENLER, başlıkta ya da sınıfta (büyük/küçük harf duyarsız).
+    Pencere listesi ya da desenler okunamazsa istisna YÜKSELİR (çağıran kareyi göstermez: güvenli taraf). Arka ucun
+    pencere listesi yoksa (sahte arka uç) []. Salt okur: girdi göndermez."""
+    import re
+    pencereler = getattr(au, "pencereler", None)
+    if pencereler is None:
+        return []
+    from .. import guvenlik
+    try:
+        from ..onay import YASAK_DESENLER as onay_desen
+    except ImportError:
+        onay_desen = ()
+    desenler = [re.compile(d, re.I) for d in list(guvenlik.yasak_desenler()) + list(onay_desen)]
+    W, H = im_boyut
+    try:
+        x0, y0, x1, y1 = au.ekran_alani()
+    except Exception:  # noqa: BLE001 - ekran alanı yok: görüntü = ekran
+        x0, y0, x1, y1 = 0, 0, W, H
+    fx = W / max(1, x1 - x0)
+    fy = H / max(1, y1 - y0)
+    onb = sinif_onbellek if sinif_onbellek is not None else {}
+    if len(onb) > 256:
+        onb.clear()
+    sonuc = []
+    for k, baslik, (X, Y, G, Yk) in pencereler():
+        if k not in onb:
+            try:
+                onb[k] = au.sinif(k) if hasattr(au, "sinif") else ""
+            except Exception:  # noqa: BLE001 - pencere bu arada kapandı: sınıfsız denetlenir (başlık yine bakılır)
+                onb[k] = ""
+        sinif = onb[k]
+        if not any(d.search(baslik or "") or d.search(sinif or "") for d in desenler):
+            continue
+        import math
+        a, b = max(0, math.floor((X - x0) * fx)), max(0, math.floor((Y - y0) * fy))
+        c, e = min(W, math.ceil((X - x0 + G) * fx)), min(H, math.ceil((Y - y0 + Yk) * fy))
+        if c > a and e > b:
+            sonuc.append((a, b, c, e))
+    return sonuc
+
+
+def maskele(im, kutular) -> object:
+    """Kutuları siyahla örter (kopya üzerinde)."""
+    if not kutular:
+        return im
+    from PIL import ImageDraw
+    im = im.copy()
+    d = ImageDraw.Draw(im)
+    for a, b, c, e in kutular:
+        d.rectangle([a, b, c - 1, e - 1], fill=(0, 0, 0))
+    return im
+
+
 def pil_qimage(im, boyut: QSize | None = None) -> tuple[QImage, QSize]:
     """PIL.Image → (QImage, kaynak boyutu). boyut verilirse önce küçültülür (aktarım/çizim ucuz)."""
     kaynak = QSize(im.width, im.height)
