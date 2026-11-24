@@ -191,10 +191,13 @@ class Politika:
         """alan ret listesinde mi (kendisi ya da üst alanı)?"""
         return _alan_eslesir(alan, self._reddet)
 
-    def cerez_reddedildi(self, host: str) -> bool:
+    def cerez_reddedildi(self, host: str, bilinen_konaklar=()) -> bool:
         """Çerez/giriş kaydı konağı reddedilmeli mi? Alanın kendisi (ya da üstü) ret listesindeyse; ayrıca ALAN
         çerezi (".google.com", baştaki nokta) ret listesindeki bir alt alana (accounts.google.com) da
-        gönderildiği için reddedilir. host baştaki noktayla verilmezse yalnız ilk kural."""
+        gönderildiği için reddedilir. host baştaki noktayla verilmezse yalnız ilk kural.
+        bilinen_konaklar: hosts known from the profile (cookie hosts, session cookies). A domain cookie is also
+        rejected when ANY known host it would be sent to is rejected, so a wildcard rule (`*bank*`) that matches
+        bank.example.com also stops the `.example.com` cookie."""
         h = (host or "").strip().lower()
         alan = h.lstrip(".").rstrip(".")
         if not alan:
@@ -209,6 +212,10 @@ class Politika:
                 continue
             # yalnız düz alan kalıpları ("*.gov.tr" gibi kalıpların alt alanları zaten site_reddedildi'de)
             if "*" not in k and "?" not in k and "[" not in k and (k == alan or k.endswith("." + alan)):
+                return True
+        for b in bilinen_konaklar or ():
+            b = str(b).strip().lower().lstrip(".").rstrip(".")
+            if b != alan and b.endswith("." + alan) and self.site_reddedildi(b):
                 return True
         return False
 

@@ -246,13 +246,16 @@ def _yasak_dikdortgenler(k: str, kok_ekran: tuple[int, int], boyut: tuple[int, i
     sonuc = []
     ox, oy = kok_ekran
     W, H = boyut
-    for w, b, (X, Y, G, Yk) in au.pencereler():
+    # KWin: mask the FRAME (title bar + borders), not only the client area: a secret title must not show
+    cerceve = getattr(au, "maske_pencereleri", None)
+    liste = [(w, b, geo) for w, b, _s, geo in cerceve()] if cerceve is not None else au.pencereler()
+    for w, b, (X, Y, G, Yk) in liste:
         if w == k:
             continue
         try:
             y = yasak_mi(w)
         except Dur:
-            continue
+            y = "?"  # could not be checked (closed meanwhile / read error): mask it (safe side)
         if not y:
             continue
         x0, y0 = max(0, X - ox), max(0, Y - oy)

@@ -261,7 +261,7 @@
   "arka_uc/kde.py:239"
  ],
  "'{ad}' adlı pencere yok (sanal masaüstü; deskhand --arka bul …)": [
-  "arka_uc/kwin.py:293",
+  "arka_uc/kwin.py:306",
   "arka_uc/sanal.py:535"
  ],
  "'{ad}' adlı uygulama bulunamadı (.desktop); komutla başlatmak için: deskhand open --command \"…\"": [
@@ -301,7 +301,7 @@
  ],
  "'{ad}' {sayi} pencereye uyuyor; kimlik ver:\n{liste}": [
   "arka_uc/kde.py:242",
-  "arka_uc/kwin.py:296",
+  "arka_uc/kwin.py:309",
   "arka_uc/sanal.py:538"
  ],
  "'{ad}' {sayi} uygulamaya uyuyor; tam adını ya da kimliğini ver:\n{liste}": [
@@ -991,7 +991,7 @@
  ],
  "Firefox profili bulunamadı (profiles.ini)": [
   "oturum/denetle.py:290",
-  "oturum/firefox.py:155"
+  "oturum/firefox.py:241"
  ],
  "Firefox çalışırken açılan erişilebilirliği algılamıyor: Firefox'u kapatıp yeniden başlat": [
   "erisim.py:239"
@@ -1279,7 +1279,7 @@
   "arka_uc/kwin.py:253"
  ],
  "KWin pencere listesi alınamadı: {hata}": [
-  "api.py:621",
+  "api.py:624",
   "uygulama.py:851"
  ],
  "KWin süreci doğrulanamadı (pid {pid})": [
@@ -1713,15 +1713,15 @@
   "erisim.py:332"
  ],
  "YASAK pencere: ağacı okunmaz": [
-  "api.py:373",
+  "api.py:376",
   "dogrulama_sinamasi.py:676",
   "web.py:680"
  ],
  "YASAK pencere: içeriği gösterilmez/okunmaz ({neden})": [
-  "api.py:275"
+  "api.py:278"
  ],
  "YASAK pencere: içeriği okunmaz": [
-  "api.py:429"
+  "api.py:432"
  ],
  "YASAK pencere: {baslik} (sınıf {sinif}) /{desen}/ ile eşleşti; hiçbir girdi gönderilmez ({dosya})": [
   "guvenlik.py:1076"
@@ -1818,7 +1818,7 @@
  ],
  "aktif pencere değişti → {baslik}": [
   "arka_uc/kde.py:566",
-  "arka_uc/kwin.py:783",
+  "arka_uc/kwin.py:796",
   "arka_uc/sanal.py:1226"
  ],
  "aktif pencere değişti → {baslik}; girdi gönderilmedi": [
@@ -1828,7 +1828,7 @@
   "mcp_sunucu.py:2423"
  ],
  "akış adı yalnız harf/rakam/._- içermeli: {ad} (list ile adlara bak)": [
-  "api.py:650"
+  "api.py:653"
  ],
  "akış dosyası okunamadı: {hata}": [
   "akis.py:43"
@@ -1849,7 +1849,7 @@
   "akis.py:167"
  ],
  "akış yok: {ad} ({dizin})": [
-  "api.py:653"
+  "api.py:656"
  ],
  "akış {ad}: {pencere}": [
   "mcp_sunucu.py:2411"
@@ -1873,9 +1873,9 @@
   "gui/saglik.py:22"
  ],
  "arka plan girdisi gönderilemedi: {hata}": [
-  "arka_uc/kwin.py:839",
-  "arka_uc/kwin.py:856",
-  "arka_uc/kwin.py:869"
+  "arka_uc/kwin.py:852",
+  "arka_uc/kwin.py:869",
+  "arka_uc/kwin.py:882"
  ],
  "arka plan masaüstü (xorg-server-xvfb)": [
   "gui/saglik.py:15"
@@ -1909,7 +1909,7 @@
  ],
  "ayrıntı yok": [
   "arka_uc/kde.py:801",
-  "arka_uc/kwin.py:585"
+  "arka_uc/kwin.py:598"
  ],
  "ayrıntılı yardım metnini yaz": [
   "cli.py:226"
@@ -1985,7 +1985,7 @@
  ],
  "başlık değişti: {baslik} (beklenen /{desen}/)": [
   "arka_uc/kde.py:568",
-  "arka_uc/kwin.py:787",
+  "arka_uc/kwin.py:800",
   "arka_uc/sanal.py:1228"
  ],
  "başlık kilidi (regex)": [
@@ -2244,7 +2244,7 @@
  ],
  "büyütme": [
   "arka_uc/__init__.py:152",
-  "arka_uc/kwin.py:402",
+  "arka_uc/kwin.py:415",
   "arka_uc/sanal.py:668",
   "eylem.py:1198"
  ],
@@ -2631,17 +2631,17 @@
  ],
  "eski pano içeriği ({tur}) çok büyük olduğu için geri yüklenemedi": [
   "arka_uc/kde.py:829",
-  "arka_uc/kwin.py:622"
+  "arka_uc/kwin.py:635"
  ],
  "eski pano içeriği geri yüklenemedi: {hata}": [
   "arka_uc/kde.py:836",
-  "arka_uc/kwin.py:629",
+  "arka_uc/kwin.py:642",
   "arka_uc/sanal.py:842",
   "eylem.py:414"
  ],
  "eski pano içeriği metin değildi; birincil türü ({tur}) geri yüklendi, diğer biçimler kaybolmuş olabilir": [
   "arka_uc/kde.py:838",
-  "arka_uc/kwin.py:631"
+  "arka_uc/kwin.py:644"
  ],
  "eski pano içeriği metin değildi; görünmez masaüstünde geri yüklenemez, pano temizlendi": [
   "arka_uc/sanal.py:844"
@@ -2723,7 +2723,7 @@
  ],
  "geri yükleme": [
   "arka_uc/__init__.py:156",
-  "arka_uc/kwin.py:406",
+  "arka_uc/kwin.py:419",
   "arka_uc/sanal.py:672",
   "eylem.py:1198"
  ],
@@ -2812,9 +2812,9 @@
  ],
  "girdi gönderilmedi": [
   "arka_uc/kde.py:536",
-  "arka_uc/kwin.py:744",
-  "arka_uc/kwin.py:751",
-  "arka_uc/kwin.py:755",
+  "arka_uc/kwin.py:757",
+  "arka_uc/kwin.py:764",
+  "arka_uc/kwin.py:768",
   "arka_uc/sanal.py:1182",
   "arka_uc/sanal.py:1189",
   "arka_uc/sanal.py:1193"
@@ -2864,10 +2864,10 @@
   "kwin_oturum.py:1311"
  ],
  "girdi yardımcısı koptu ({hata}); basılı düğmeler bırakıldı: {liste}": [
-  "arka_uc/kwin.py:474"
+  "arka_uc/kwin.py:487"
  ],
  "girdi yardımcısı koptu; basılı tuş/düğmeler bırakıldı (kurtarıldı), girdi gönderilmedi": [
-  "arka_uc/kwin.py:705"
+  "arka_uc/kwin.py:718"
  ],
  "girdi yardımcısı {sn} sn içinde yanıt vermedi": [
   "kwin_oturum.py:1292"
@@ -3011,7 +3011,7 @@
   "cli.py:454"
  ],
  "gözcü hatası: {hata}": [
-  "arka_uc/kwin.py:796",
+  "arka_uc/kwin.py:809",
   "arka_uc/sanal.py:1235"
  ],
  "gözetimsiz kip: onay gerektiren eylem diyalog açılmadan reddedilir (10)": [
@@ -3070,7 +3070,7 @@
  ],
  "hedef pencere aktif olmadı (aktif: {baslik})": [
   "arka_uc/kde.py:275",
-  "arka_uc/kwin.py:341",
+  "arka_uc/kwin.py:354",
   "arka_uc/sanal.py:620"
  ],
  "hedef pencere ekran alanının dışına taşıyor: konum {x},{y} boyut {g}x{h}; ekran alanı {x0},{y0}..{x1},{y1}": [
@@ -3255,7 +3255,7 @@
   "guvenlik.py:778"
  ],
  "kimlik oturumları: {ozet}": [
-  "oturum/firefox.py:378"
+  "oturum/firefox.py:468"
  ],
  "kimlikle verilen girdi komutunda otomatik tam başlık kilidini kapat": [
   "cli.py:406"
@@ -3331,7 +3331,7 @@
   "mcp_sunucu.py:2951"
  ],
  "kullanıcı DUR dedi": [
-  "arka_uc/kwin.py:775",
+  "arka_uc/kwin.py:788",
   "arka_uc/sanal.py:1220",
   "mcp_sunucu.py:2809"
  ],
@@ -3404,16 +3404,16 @@
   "onay.py:59"
  ],
  "kullanıcı sanal masaüstünü devraldı (Devral)": [
-  "arka_uc/kwin.py:777",
+  "arka_uc/kwin.py:790",
   "arka_uc/sanal.py:1067",
   "arka_uc/sanal.py:1222"
  ],
  "kullanıcı sanal masaüstünü devraldı (Devral); {ne}": [
-  "arka_uc/kwin.py:750",
+  "arka_uc/kwin.py:763",
   "arka_uc/sanal.py:1188"
  ],
  "kullanıcı sanal masaüstünü {sn} sn boyunca kullandı (Devral); {ne}": [
-  "arka_uc/kwin.py:738",
+  "arka_uc/kwin.py:751",
   "arka_uc/sanal.py:1176"
  ],
  "kullanıcı seçti": [
@@ -3479,7 +3479,7 @@
  ],
  "küçültme": [
   "arka_uc/__init__.py:148",
-  "arka_uc/kwin.py:398",
+  "arka_uc/kwin.py:411",
   "arka_uc/sanal.py:665",
   "eylem.py:1197"
  ],
@@ -3502,13 +3502,13 @@
   "eylem.py:1171"
  ],
  "masaüstü kipi kapatılamaz": [
-  "arka_uc/kwin.py:353",
+  "arka_uc/kwin.py:366",
   "arka_uc/sanal.py:625"
  ],
  "masaüstü kipi taşınamaz/boyutlandırılamaz; pencere kimliği/adı ver": [
   "arka_uc/kde.py:919",
-  "arka_uc/kwin.py:366",
-  "arka_uc/kwin.py:381",
+  "arka_uc/kwin.py:379",
+  "arka_uc/kwin.py:394",
   "arka_uc/sanal.py:646",
   "eylem.py:1220"
  ],
@@ -3534,7 +3534,7 @@
   "mcp_sunucu.py:1738"
  ],
  "metin sanal panoya sığmıyor (en çok {mb} MB)": [
-  "arka_uc/kwin.py:599",
+  "arka_uc/kwin.py:612",
   "arka_uc/sanal.py:821"
  ],
  "metin yaz": [
@@ -3806,7 +3806,7 @@
   "arka_uc/sanal.py:790"
  ],
  "pano yazma": [
-  "api.py:520",
+  "api.py:523",
   "arka_uc/kde.py:789",
   "cli.py:280",
   "guvenlik.py:2046"
@@ -3875,7 +3875,7 @@
  ],
  "pencere kimliği boş": [
   "arka_uc/kde.py:236",
-  "arka_uc/kwin.py:286",
+  "arka_uc/kwin.py:299",
   "arka_uc/sanal.py:528"
  ],
  "pencere küçültme": [
@@ -3907,7 +3907,7 @@
   "eylem.py:1269"
  ],
  "pencere yöneticisi isteği yerine getirmedi: {ne}": [
-  "arka_uc/kwin.py:376",
+  "arka_uc/kwin.py:389",
   "arka_uc/sanal.py:656"
  ],
  "pencere yönetimi": [
@@ -4510,7 +4510,7 @@
  ],
  "wl-copy başarısız ({kod}): {hata}": [
   "arka_uc/kde.py:801",
-  "arka_uc/kwin.py:585"
+  "arka_uc/kwin.py:598"
  ],
  "write için text gerekli ('' panoyu temizler)": [
   "mcp_sunucu.py:2073"
@@ -4663,7 +4663,7 @@
   "guvenlik.py:840"
  ],
  "{ad} aktarıldı ({cerez} çerez, {giris} kayıtlı giriş)": [
-  "oturum/firefox.py:373"
+  "oturum/firefox.py:463"
  ],
  "{ad} arka planda çalıştırılmaz (ikinci örnek asıl veriyi/oturumu bozar).": [
   "oturum/__init__.py:42"
@@ -4678,10 +4678,10 @@
   "oturum/__init__.py:148"
  ],
  "{ad} süzüldü (görev kipinde aktarılmaz)": [
-  "oturum/firefox.py:371"
+  "oturum/firefox.py:461"
  ],
  "{ad} süzüldü ({cerez} çerez; izin kapalı: panel → Ayarlar → Hesap oturumları)": [
-  "oturum/firefox.py:376"
+  "oturum/firefox.py:466"
  ],
  "{ad} · {g}×{y}": [
   "gui/metinler.py:219"
@@ -4718,15 +4718,15 @@
  ],
  "{arac} yok (wl-clipboard paketi)": [
   "arka_uc/kde.py:727",
-  "arka_uc/kwin.py:542",
-  "arka_uc/kwin.py:553"
+  "arka_uc/kwin.py:555",
+  "arka_uc/kwin.py:566"
  ],
  "{arac} yok (ya da güvenli dizinde değil: /usr/bin, /bin)": [
   "kwin_oturum.py:384"
  ],
  "{arac} {sn} sn içinde bitmedi": [
   "arka_uc/kde.py:739",
-  "arka_uc/kwin.py:565"
+  "arka_uc/kwin.py:578"
  ],
  "{ayar} metin olmalı": [
   "ayarlar.py:132"
@@ -4918,7 +4918,7 @@
   "mesgul.py:505"
  ],
  "{sn} sn içinde yeni pencere görünmedi (çıktı: {log})": [
-  "api.py:619"
+  "api.py:622"
  ],
  "{sure} kaldı": [
   "oturum/denetle.py:277"

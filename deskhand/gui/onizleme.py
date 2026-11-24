@@ -204,21 +204,50 @@ class Onizleme(QWidget):
         return super().focusNextPrevChild(ileri)
 
 
-def yasak_kutulari(au, im_boyut: tuple[int, int], sinif_onbellek: dict | None = None) -> list[tuple[int, int, int, int]]:
-    """Önizleme görüntüsüne düşen YASAK pencerelerin kutuları (görüntü pikseli; x0, y0, x1, y1). Kural api.goruntu_al
-    ile aynı: guvenlik.yasak_desenler() + onay.YASAK_DESENLER, başlıkta ya da sınıfta (büyük/küçük harf duyarsız).
-    Pencere listesi ya da desenler okunamazsa istisna YÜKSELİR (çağıran kareyi göstermez: güvenli taraf). Arka ucun
-    pencere listesi yoksa (sahte arka uç) []. Salt okur: girdi göndermez."""
+class MaskeHatasi(Exception):
+    """Forbidden windows could not be determined: the frame must not be shown (safe side)."""
+
+    def __init__(self, neden):
+        super().__init__(str(neden))
+        self.mesaj = getattr(neden, "mesaj", None) or str(neden)
+
+
+def _yasak_pencereler(au, desenler, onb: dict) -> list[tuple[int, int, int, int]]:
+    """Geometries (screen coordinates) of the forbidden windows. A backend with `maske_pencereleri` (KWin) gives title,
+    class and FRAME geometry from one listing; otherwise the class is read per window and cached. A failed class
+    read raises (the frame is dropped) and is never cached; an empty class is not cached either (read again next
+    frame), so a transient failure cannot leave a window permanently unchecked."""
+    liste = getattr(au, "maske_pencereleri", None)
+    if liste is not None:
+        kayitlar = list(liste())
+    else:
+        kayitlar = []
+        for k, baslik, geo in au.pencereler():
+            if k in onb:
+                sinif = onb[k]
+            elif hasattr(au, "sinif"):
+                sinif = au.sinif(k)  # raises → caller drops the frame
+                if sinif:
+                    onb[k] = sinif
+            else:
+                sinif = ""
+            kayitlar.append((k, baslik, sinif, geo))
+    return [tuple(geo) for _k, baslik, sinif, geo in kayitlar
+            if any(d.search(baslik or "") or d.search(sinif or "") for d in desenler)]
+
+
+def _desenler():
     import re
-    pencereler = getattr(au, "pencereler", None)
-    if pencereler is None:
-        return []
     from .. import guvenlik
     try:
         from ..onay import YASAK_DESENLER as onay_desen
     except ImportError:
         onay_desen = ()
-    desenler = [re.compile(d, re.I) for d in list(guvenlik.yasak_desenler()) + list(onay_desen)]
+    return [re.compile(d, re.I) for d in list(guvenlik.yasak_desenler()) + list(onay_desen)]
+
+
+def _kutulara(au, geolar, im_boyut: tuple[int, int]) -> list[tuple[int, int, int, int]]:
+    import math
     W, H = im_boyut
     try:
         x0, y0, x1, y1 = au.ekran_alani()
@@ -226,25 +255,49 @@ def yasak_kutulari(au, im_boyut: tuple[int, int], sinif_onbellek: dict | None = 
         x0, y0, x1, y1 = 0, 0, W, H
     fx = W / max(1, x1 - x0)
     fy = H / max(1, y1 - y0)
+    sonuc = []
+    for X, Y, G, Yk in geolar:
+        a, b = max(0, math.floor((X - x0) * fx)), max(0, math.floor((Y - y0) * fy))
+        c, e = min(W, math.ceil((X - x0 + G) * fx)), min(H, math.ceil((Y - y0 + Yk) * fy))
+        if c > a and e > b and (a, b, c, e) not in sonuc:
+            sonuc.append((a, b, c, e))
+    return sonuc
+
+
+def yasak_kutulari(au, im_boyut: tuple[int, int], sinif_onbellek: dict | None = None) -> list[tuple[int, int, int, int]]:
+    """Önizleme görüntüsüne düşen YASAK pencerelerin kutuları (görüntü pikseli; x0, y0, x1, y1). Kural api.goruntu_al
+    ile aynı: guvenlik.yasak_desenler() + onay.YASAK_DESENLER, başlıkta ya da sınıfta (büyük/küçük harf duyarsız).
+    Pencere listesi, desenler ya da bir pencerenin sınıfı okunamazsa istisna YÜKSELİR (çağıran kareyi göstermez:
+    güvenli taraf). Arka ucun pencere listesi yoksa (sahte arka uç) []. Salt okur: girdi göndermez."""
+    if getattr(au, "pencereler", None) is None:
+        return []
     onb = sinif_onbellek if sinif_onbellek is not None else {}
     if len(onb) > 256:
         onb.clear()
-    sonuc = []
-    for k, baslik, (X, Y, G, Yk) in pencereler():
-        if k not in onb:
-            try:
-                onb[k] = au.sinif(k) if hasattr(au, "sinif") else ""
-            except Exception:  # noqa: BLE001 - pencere bu arada kapandı: sınıfsız denetlenir (başlık yine bakılır)
-                onb[k] = ""
-        sinif = onb[k]
-        if not any(d.search(baslik or "") or d.search(sinif or "") for d in desenler):
-            continue
-        import math
-        a, b = max(0, math.floor((X - x0) * fx)), max(0, math.floor((Y - y0) * fy))
-        c, e = min(W, math.ceil((X - x0 + G) * fx)), min(H, math.ceil((Y - y0 + Yk) * fy))
-        if c > a and e > b:
-            sonuc.append((a, b, c, e))
-    return sonuc
+    return _kutulara(au, _yasak_pencereler(au, _desenler(), onb), im_boyut)
+
+
+def maskeli_goruntu(au, sinif_onbellek: dict | None = None):
+    """Frame of the background desktop with forbidden windows blacked out. The window list is read BEFORE and AFTER
+    the grab and the union is masked, so a window that closes, opens or moves while the frame is taken is still
+    covered at both positions. Grab errors propagate as they are; any masking error is raised as MaskeHatasi (the
+    caller must not show the frame)."""
+    if getattr(au, "pencereler", None) is None:
+        return au.goruntu()
+    onb = sinif_onbellek if sinif_onbellek is not None else {}
+    if len(onb) > 256:
+        onb.clear()
+    try:
+        desenler = _desenler()
+        once = _yasak_pencereler(au, desenler, onb)
+    except Exception as e:  # noqa: BLE001
+        raise MaskeHatasi(e) from e
+    im = au.goruntu()
+    try:
+        sonra = _yasak_pencereler(au, desenler, onb)
+        return maskele(im, _kutulara(au, once + sonra, (im.width, im.height)))
+    except Exception as e:  # noqa: BLE001
+        raise MaskeHatasi(e) from e
 
 
 def maskele(im, kutular) -> object:
