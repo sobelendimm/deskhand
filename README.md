@@ -310,7 +310,7 @@ deskhand --background open firefox --site github.com   # signed-in Firefox on th
 deskhand --background open firefox https://example.com # starts the desktop if it is off; http/https only
 deskhand goto <window> https://example.com             # go to an address in a browser (ctrl+l → address → Return)
 deskhand stop                           # STOP: no input from now on
-deskhand resume                         # lift a STOP set from the CLI
+deskhand resume                         # ask the panel to lift a STOP (needs your Yes there)
 ```
 
 Cheat sheet (`deskhand --help` lists the subcommands as a table, `deskhand help` shows the full syntax; the Turkish names work too, in parentheses):
@@ -437,7 +437,7 @@ chat. Without it, Deskhand asks the user in the panel.
 Every directory can be moved with `DESKHAND_CONFIG_DIR`, `DESKHAND_STATE_DIR`,
 `DESKHAND_CACHE_DIR`, `DESKHAND_DATA_DIR`, `DESKHAND_RUNTIME_DIR`. Other variables:
 `DESKHAND_HEDEF=on|arka|oto` (default desktop), `DESKHAND_SANAL_BOYUT=1920x1080` (background
-size), `DESKHAND_SANAL_BELLEK=6G` (memory cap, `0` = off). `DESKHAND_GERCEK_EKRAN=kapali` locks your
+size), `DESKHAND_SANAL_BELLEK=8G` (memory cap, `0` = off). `DESKHAND_GERCEK_EKRAN=kapali` locks your
 real screen for that process at the lowest layer (input, window actions, app launch, clipboard write,
 notifications, screenshots all fail with exit code 17; `salt-okuma` still allows reading
 screenshots and the clipboard): set it in test and measurement scripts so a forgotten background
@@ -457,13 +457,13 @@ target cannot touch your desktop.
 | 7 | timeout |
 | 8 | window gone or moved |
 | 9 | a required tool did not run (dotool, tesseract, Xvfb…) |
-| 10 | forbidden window, or a sensitive action without approval |
+| 10 | forbidden window, a sensitive action without approval, or the panel could not verify its forbidden-window list / access levels (see Security model) |
 | 11 | a flow reached an error screen |
 | 12 | you are using the computer (human priority) |
 | 13 | STOP is on |
 | 14 | background desktop not available |
 | 15 | you are playing a game or watching a video: your screen is not touched |
-| 16 | the app cannot be opened on the background desktop (open on your screen, or keyring-only) |
+| 16 | the app cannot be opened on the background desktop (open on your screen, keyring-only, or Flatpak Chrome: use native `chromium`) |
 | 17 | your real screen is locked for this process (`DESKHAND_GERCEK_EKRAN`): use the background desktop |
 | 18 | a human-verification challenge (CAPTCHA) is in the way: never solved or bypassed; hand over with `request_human` |
 | 20 / 21 | `decide`: background / later (0 = your screen) |
@@ -478,8 +478,8 @@ Over MCP the same codes appear as `[code] name: detail` errors.
   software: WebGL, games and video decoding are slow there.
 - **Wayland-only apps cannot run on the Xvfb fallback** (it is X11).
 - **Without `bubblewrap` no app opens in the background.**
-- **Keyring apps are foreground-only.** Chromium-family browsers, VS Code and anything that
-  keeps its secrets in KWallet/Secret Service do not open logged in on the background desktop.
+- **Keyring apps are foreground-only.** VS Code and anything that
+  keeps its secrets in KWallet/Secret Service do not open logged in on the background desktop. Native `chromium` opens there with an empty profile; Flatpak Chrome does not open there.
 - **Up to 3 background desktops** at a time (`[masaustu] azami`, 1..6).
 - **OCR can misread.** Ambiguous matches stop rather than guess, and clicks can be verified,
   but small or low-contrast text may be read wrong or not found.
@@ -505,11 +505,18 @@ It is **not a sandbox**, and it does not defend against code that already runs a
   is a check against a misbehaving agent, not against another program running as the same user,
   which can imitate the panel, answer approvals, or edit your files directly. This is a known design
   limit; a same-user process can also drive the desktop without Deskhand.
-- **The settings that only the panel may loosen are in the same class.** The approval scope "card
-  payments only", account sessions and persistent sessions are accepted only with the panel's own
-  marker file, so an agent that writes the settings file by hand gains nothing. A process that can
-  forge the settings file and the marker together while the panel is closed is outside what this
-  protects.
+- **The settings that only the panel may loosen are in the same class.** The forbidden-window list,
+  the app access levels, the approval scope "card payments only", account sessions, persistent
+  sessions and your STOP are anchored in a record the panel keeps in your Secret Service (KDE
+  Wallet) and signs with a key stored there. Tightening a setting in the file is accepted; loosening
+  it applies only after your Yes in the panel (default No), so an agent that edits the settings
+  file by hand gains nothing. Every such question shows the exact entries Deskhand will apply, and a
+  Yes counts only for that text. If the panel cannot read its record (locked wallet, no Secret
+  Service) and it is not a first start, the forbidden-window list and access levels are asked in
+  one dialog; on No they count as not verified, and clients stop with exit code 10 until the wallet
+  can be read. Settings shows an unverified list read-only. This does not cover code running as you
+  that deliberately reads or changes the wallet item (KDE Wallet has no per-application access
+  control), or that deletes the item while the wallet is open (that looks like a first start).
 - **An agent that can run arbitrary shell commands as your user** can edit files, kill the panel or drive
   the desktop without Deskhand. Keep shell access behind your client's permission prompts.
 - Apps on the background desktop run inside `bubblewrap` (read-only root, empty home, masked secret

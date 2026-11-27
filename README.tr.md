@@ -51,10 +51,24 @@ Ajan ya da izin kipi ne derse desin, iki masaüstünde de aracın kendisi uygula
   tuttuğu tuşları, siz herhangi bir şeye dokunduğunuz an bırakır.
 - **DUR anahtarı.** Paneldeki düğme, tepsi menüsü ya da isteğe bağlı genel kısayol. Açıkken
   hiçbir girdi gönderilmez, basılı tuşlar bırakılır. Ajan da DUR diyebilir, ama **sizin
-  koyduğunuz DUR'u kaldıramaz**; onu yalnız panel kaldırır.
+  koyduğunuz DUR'u kaldıramaz**. DUR yalnız panelde verdiğiniz Evet ile kalkar (panelin Devam düğmesi,
+  kısayol ya da `deskhand resume`'un orada sorduğu soru; varsayılan Hayır); `--approved` yanıt sayılmaz.
+  Panel açılışta imzalı DUR kaydını okuyamazsa (kilitli cüzdan, Secret Service yok, okunamayan ya da
+  eski biçimli kayıt) kendi DUR'unu koyar. Yalnız onu, imzalı kayıtta DUR'un kapalı olduğunu okuyunca
+  kendisi kaldırır; eski sürümün kaydı için bir kez Devam'a basmanız gerekir. Ajanın `resume`'u
+  kendi koymadığı DUR'u kaldırmaz.
 - **Etkinlik günlüğü.** Her girdi günlüğe yazılır (`~/.local/state/deskhand`, 7 gün; yalnız siz
   okuyabilirsiniz: klasör 0700, dosyalar 0600) ve panelde canlı görünür. `secret` olmadan yazılan metinler
   günlükte parça parça görünür: parola, kod ve kişisel bilgileri `secret=true` (`--secret`) ile yazın.
+  `secret` sınırları: metin harf harf yazılır, panoya hiç girmez; her harften önce ve sonra etkin pencere
+  yoklanır. Yalnız gönder tuşundan (Enter) sonra yoklanmaz, çünkü diyaloğun kapanması ya da odağın taşınması
+  olağan sonuçtur. Metin ve pencere başlıkları sonuçta, günlükte ve panel akışında yer almaz. Pencere
+  kimliği ya da ref ile yazı, pencereye ve uygulama sınıfına kilitlidir, başlığa değil; aynı pencere
+  içindeki sekme ya da sayfa değişimi fark edilmez. Her Enter'dan hemen önce de odak yoklanır, ama bu
+  yoklama ile tuş arasındaki birkaç milisaniyede pencere değişirse yakalanmaz. Yazıdan sonraki ayrı bir
+  `observe` ya da ekran görüntüsü, metni içeren bir pencere başlığını yine gösterebilir. Gizli metni
+  maskeli alanlara (parola alanı) yazın. Uçbirime giden metin kabuğun kendi geçmişine girer; bu
+  Deskhand'in dışındadır.
 
 ### Arka plan masaüstü
 
@@ -78,8 +92,20 @@ kapatıp yeniden açın.
   dizini görür: gerçek evinizden yalnız tema ve görünüm ayarları, XDG klasör adları, dosya
   ilişkilendirmeleri ve Flatpak kurulumları salt okunur görünür.
 - **Hafif.** Düşük işlemci/disk önceliği ve bellek sınırı (systemd kapsamı, varsayılan
-  6 GB). Açılışı yaklaşık 0,2 sn sürer; boş masaüstü ~30 MiB kullanır. Boştaki masaüstü 30 dakika
+  8 GB). Açılışı yaklaşık 0,2 sn sürer; boş masaüstü ~30 MiB kullanır. Boştaki masaüstü 30 dakika
   sonra kendiliğinden kapanır (`ayarlar.toml` içinde `bosta_kapat_dk`, `0` = kapalı).
+- **Bellek izleme.** Masaüstü bellek sınırının %80'ini ya da fazlasını kullanınca araç sonuçlarına
+  `memory_warning` alanı eklenir (anonim + paylaşılan bellek; sayfa önbelleği sayılmaz). Masaüstü 2 dakika
+  boşta kalır ve kullanım %85 ya da üstündeyse Deskhand yalnız Firefox'u, oturumu geri yüklenerek yeniden
+  başlatır; diğer uygulamalar ve masaüstü açık kalır. Sekmeler Firefox'un yaklaşık 15 saniyede bir yazdığı
+  kurtarma dosyasından gelir: son ~15 saniyede açılan sekme kaybolabilir, pencere kimlikleri değişir (yeniden
+  gözlem yapın). Kurtarma dosyası yoksa ya da çalışan Firefox'tan eskiyse Firefox'a dokunulmaz. 10 dakikada en
+  çok bir, 24 saatte en çok 3 yeniden başlatma; yeniden başlatma belleği %10'dan az azaltırsa sonraki 60 dakika
+  beklenir (her seferinde iki katı, en çok 24 saat). Başarısız olursa uyarı oturum yedeğinin yolunu verir
+  (oturum kopyasında `sessionstore-backups/deskhand-yedek.jsonlz4`) ve kopya en çok 24 saat korunur;
+  masaüstü durdurulsa da silinmez. %60 ve üstünde (yeniden başlatma sırası yokken) `memory.reclaim` en çok
+  10 dakikada bir çalışır. `DESKHAND_FF_YENIDEN=off` (ya da `false`, `0`, `no`, `kapali`) yeniden başlatmayı
+  kapatır; uyarı kalır. Siz ya da bir görev masaüstünü kullanırken yalnız uyarı verilir.
 - **Uygulama başına oturum politikası.** Bazı uygulamalar orada girişli açılabilir:
   - **Firefox:** profilinizin tutarlı, **tek yönlü anlık kopyası** (çerezler, girişler,
     görev sitelerinin deposu). Kopyadan asıl profile hiçbir şey geri yazılmaz. Sync kimliği alınmaz;
@@ -91,8 +117,11 @@ kapatıp yeniden açın.
     siteleri hiçbir ayarla açılmaz; görev kipinde uygulanmaz). Açıkken arka plandaki tarayıcı o hesabın
     e-postalarına ve dosyalarına erişebilir.
   - **Şifre deposu kullanmayan Flatpak uygulamaları** (örneğin Discord, Spotify): anlık kopya.
-  - **Şifre deposu isteyen uygulamalar** (Chromium ailesi, VS Code) ve gerçek dosyalara
+  - **Şifre deposu isteyen uygulamalar** (VS Code ve benzerleri) ve gerçek dosyalara
     yazan uygulamalar (Obsidian kasaları) **yalnız sizin ekranınızda** çalışır.
+  - **Chromium:** yerli `chromium` arka plan masaüstünde **boş profille** açılır: kayıtlı giriş yok, şifre
+    deposu yok. İkinci pencere aynı süreçte açılır. **Flatpak Chrome orada başlamaz** (neden belirtilerek 16
+    koduyla durur); yerli `chromium` ya da kendi ekranınız.
   - **İki istemciyle bozulan uygulamalar** (Telegram, Signal, WhatsApp sarmalayıcıları,
     Element, Steam, Thunderbird vb.) **asla kopyalanmaz** ve arka planda hiç başlatılmaz;
     ajana sizi beklemesi söylenir. Posta/eşitleme servisleri (KMail/Akonadi, Nextcloud)
@@ -279,7 +308,7 @@ deskhand --background open firefox --site github.com   # görünmez masaüstünd
 deskhand --background open firefox https://example.com # masaüstü kapalıysa kendiliğinden başlar; yalnız http/https
 deskhand goto <pencere> https://example.com            # tarayıcıda adres çubuğuyla git (ctrl+l → adres → Return)
 deskhand stop                           # DUR: bundan sonra girdi yok
-deskhand resume                         # komut satırından konan DUR'u kaldır
+deskhand resume                         # paneli DUR kaldırmaya çağır (orada Evet demeniz gerekir)
 ```
 
 Komutlar (`deskhand --help` alt komutları tablo olarak, `deskhand help` ayrıntılı söz dizimini gösterir; Türkçe adlar da çalışır, parantez içinde):
@@ -405,7 +434,7 @@ açıkça onayladıysa verin. Verilmezse Deskhand kullanıcıya panelden sorar.
 Her klasör `DESKHAND_CONFIG_DIR`, `DESKHAND_STATE_DIR`, `DESKHAND_CACHE_DIR`,
 `DESKHAND_DATA_DIR`, `DESKHAND_RUNTIME_DIR` ile taşınabilir. Diğer değişkenler:
 `DESKHAND_HEDEF=on|arka|oto` (varsayılan masaüstü), `DESKHAND_SANAL_BOYUT=1920x1080`
-(arka plan boyutu), `DESKHAND_SANAL_BELLEK=6G` (bellek sınırı, `0` = kapalı).
+(arka plan boyutu), `DESKHAND_SANAL_BELLEK=8G` (bellek sınırı, `0` = kapalı).
 `DESKHAND_GERCEK_EKRAN=kapali` o süreçte gerçek ekranınızı en alt katmanda kilitler (girdi, pencere
 eylemleri, uygulama açma, pano yazma, bildirim, ekran görüntüsü 17 koduyla reddedilir; `salt-okuma`
 ekran görüntüsü ve pano okumaya izin verir): test/ölçüm betiklerinde ayarlayın, unutulan bir arka
@@ -425,13 +454,13 @@ plan hedefi masaüstünüze dokunamasın.
 | 7 | zaman aşımı |
 | 8 | pencere yok ya da taşındı |
 | 9 | gerekli bir araç çalışmadı (dotool, tesseract, Xvfb…) |
-| 10 | yasak pencere ya da onaysız hassas eylem |
+| 10 | yasak pencere, onaysız hassas eylem ya da panelin yasak pencere listesini / erişim seviyelerini doğrulayamaması (bkz. Güvenlik modeli) |
 | 11 | akış bir hata ekranına geldi |
 | 12 | bilgisayarı siz kullanıyorsunuz (insan önceliği) |
 | 13 | DUR açık |
 | 14 | arka plan masaüstü kullanılamıyor |
 | 15 | oyun oynuyor ya da film izliyorsunuz: ekranınıza dokunulmaz |
-| 16 | uygulama görünmez masaüstünde açılamaz (ekranınızda açık ya da şifre deposu istiyor) |
+| 16 | uygulama görünmez masaüstünde açılamaz (ekranınızda açık, şifre deposu istiyor ya da Flatpak Chrome: yerli `chromium` kullanın) |
 | 17 | gerçek ekranınız bu süreçte kilitli (`DESKHAND_GERCEK_EKRAN`): görünmez masaüstünü kullanın |
 | 18 | insan doğrulaması (CAPTCHA) sınaması: asla çözülmez/atlatılmaz; `request_human` ile kullanıcıya devredin |
 | 20 / 21 | `decide`: arka plan / sonra (0 = ekranınız) |
@@ -446,9 +475,8 @@ MCP'de aynı kodlar `[kod] ad: ayrıntı` biçiminde hata olarak döner.
   WebGL, oyunlar ve video çözme orada yavaştır.
 - **Xvfb yedeğinde yalnız Wayland destekleyen uygulamalar çalışmaz** (orası X11).
 - **`bubblewrap` olmadan arka planda uygulama açılmaz.**
-- **Şifre deposu isteyen uygulamalar yalnız ön planda.** Chromium ailesi tarayıcılar,
-  VS Code ve sırlarını KWallet/Secret Service'te tutan her şey arka plan masaüstünde girişli
-  açılmaz.
+- **Şifre deposu isteyen uygulamalar yalnız ön planda.** VS Code ve sırlarını KWallet/Secret Service'te tutan
+  her şey arka plan masaüstünde girişli açılmaz. Yerli `chromium` orada boş profille açılır; Flatpak Chrome açılmaz.
 - Aynı anda **en çok 3 arka plan masaüstü** (`[masaustu] azami`, 1..6).
 - **OCR yanlış okuyabilir.** Belirsiz eşleşmede tahmin etmez, durur; tıklamalar
   doğrulanabilir. Yine de küçük ya da düşük kontrastlı yazı yanlış okunabilir ya da
@@ -474,11 +502,17 @@ aracı veya komutu yoktur. Onay diyaloğu, DUR, yasak pencere listesi ve meşgul
   yanlış davranan bir ajana karşı bir denetimdir; aynı kullanıcıyla çalışan başka bir programa karşı değil:
   o program paneli taklit edebilir, onayları yanıtlayabilir ya da dosyalarınızı doğrudan değiştirebilir. Bu
   bilinen bir tasarım sınırıdır; aynı kullanıcıdaki bir süreç masaüstünü Deskhand olmadan da sürebilir.
-- **Yalnız panelin gevşetebildiği ayarlar aynı sınıftadır.** "Yalnız kartla ödeme" onay kapsamı, hesap
-  oturumları ve kalıcı oturumlar yalnız panelin kendi işaret dosyasıyla birlikte kabul edilir; yani ayar
-  dosyasını elle yazan bir ajan bir şey kazanmaz. Panel kapalıyken ayar dosyasını ve işareti birlikte
-  sahteleyebilen bir süreç bu korumanın dışındadır.
-- **Sizin kullanıcınızla istediği kabuk komutunu çalıştırabilen bir ajan** dosyaları değiştirebilir, paneli
+- **Yalnız panelin gevşetebildiği ayarlar aynı sınıftadır.** Yasak pencere listesi, uygulama erişim seviyeleri,
+  "yalnız kartla ödeme" onay kapsamı, hesap oturumları, kalıcı oturumlar ve DUR'unuz, panelin Secret Service'te
+  (KDE Cüzdan) tuttuğu ve orada saklanan anahtarla imzaladığı bir kayda bağlıdır. Ayar dosyasında bir ayarı
+  sıkılaştırmak kabul edilir; gevşetmek ancak panelde verdiğiniz Evet'ten sonra uygulanır (varsayılan Hayır);
+  yani ayar dosyasını elle yazan bir ajan bir şey kazanmaz. Böyle her soru Deskhand'in uygulayacağı girişleri
+  aynen gösterir ve Evet yalnız gösterilen metin için geçerlidir. Panel kaydını okuyamazsa (kilitli cüzdan,
+  Secret Service yok) ve ilk açılış değilse, yasak pencere listesi ve erişim seviyeleri tek diyalogda sorulur;
+  Hayır denirse doğrulanmamış sayılır ve cüzdan okunana dek istemciler 10 koduyla durur. Ayarlar sekmesi
+  doğrulanmamış listeyi salt okunur gösterir. Bu, cüzdan kaydını bilerek okuyan ya da değiştiren (KDE
+  Cüzdan'da uygulama başına erişim denetimi yok) ya da cüzdan açıkken kaydı silen (ilk açılış gibi görünür)
+  sizin kullanıcınızla çalışan kodu kapsamaz.
   kapatabilir ya da masaüstünü Deskhand olmadan sürebilir. Kabuk erişimini istemcinizin izin istemlerinin
   arkasında tutun.
 - Arka plan masaüstündeki uygulamalar `bubblewrap` içinde çalışır (salt okunur kök, boş ev dizini, örtülü sır

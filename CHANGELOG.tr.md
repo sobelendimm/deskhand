@@ -1,6 +1,56 @@
 # Değişiklik notları (Türkçe)
 
-*Bu dosya İngilizce belgelerden bağımsız tutulan Türkçe özettir; İngilizce çeviri henüz yapılmadı.*
+*Asıl dosya İngilizcedir: [CHANGELOG.md](CHANGELOG.md). Bu dosya Türkçe özettir; 0.10.0 ve öncesinin ayrıntısı İngilizce dosyadadır.*
+
+## Unreleased
+
+0.9.1'den bu yana değişenler için belge ve yükseltme notları. Aşağıdaki eski bir girdi panelin bir şeyi "kaldırdığını"
+söylüyorsa, bu bölümdeki ve README'deki "Güvenlik modeli"ndeki kurallar geçerlidir.
+
+- **Güvenlik: panelin ayarları Secret Service'inize bağlandı.** Yasak pencere listesi, erişim seviyeleri, onay
+  kapsamı, hesap oturumları, kalıcı oturumlar ve DUR'unuzun son onaylı değeri, panelin KDE Cüzdan'da tuttuğu tek
+  imzalı kayıttadır; diskte sahtelenen ayar dosyası ve işaret artık onun yerine geçmez. Daraltma kabul edilir,
+  gevşetme panelde Evet'inizi bekler (varsayılan Hayır). Sorular uygulanacak girişleri aynen gösterir (ASCII dışı
+  ve görünmez karakterler uyarı işaretiyle `\u{XXXX}` yazılır) ve Evet yalnız o metin için geçerlidir. Kayıt
+  okunamıyorsa listeler tek diyalogda sorulur; Hayır denirse cüzdan okunana dek istemciler 10 koduyla durur.
+  Ayarlar, doğrulanmamış listeyi salt okunur gösterir.
+- **Güvenlik: DUR'u kaldırmak Evet'inizi ister.** `deskhand resume` paneli sorar (varsayılan Hayır; panel kapalı ya
+  da gözetimsiz kip: 13 kodu; `--approved` yanıt sayılmaz). DUR bir kaynak kümesidir: ajanın `resume`'u yalnız
+  ajanın koyduğu DUR'u kaldırır. Panel açılışta imzalı DUR kaydını okuyamazsa kendi DUR'unu koyar ve kayıt
+  okunabilince kaldırır.
+- **Güvenlik: onay istekleri karma taşır.** İsteyen yazdığı istek dosyasının sha256'sını gönderir; uymayan dosya ya
+  da ikinci farklı karma reddedilir.
+- **Güvenlik: `secret=true` yazımı.** Metin harf harf yazılır, panoya hiç girmez; her harften önce ve sonra etkin
+  pencere yoklanır; başlıklar ve metin sonuçta, günlükte ve panel akışında yoktur. Sınırlar (README, "Etkinlik
+  günlüğü"): Enter öncesi odak yoklaması ile tuş arasında birkaç milisaniyelik boşluk vardır, gönder tuşundan sonra
+  denetim yoktur, yazıdan sonraki ayrı bir `observe` metni içeren pencere başlığını gösterebilir, tek pencere
+  içindeki sekme değişimi fark edilmez.
+- **Değişiklik: arka plan masaüstü bellek sınırı 8 GB** (6 GB idi). Araç sonuçları %80'de `memory_warning` taşır;
+  %85'te boşta masaüstünde yalnız Firefox, oturumu geri yüklenerek yeniden başlatılır (24 saatte en çok 3; az
+  bellek açarsa en çok 24 saate kadar bekler; `DESKHAND_FF_YENIDEN=off` kapatır). Ayrıntı ve ~15 saniyelik sekme
+  kaybı sınırı: README, "Bellek izleme".
+- **Değişiklik: tarayıcılar.** Çalışan Firefox ya da Chromium'un ikinci penceresi aynı süreçte açılır. Yerli
+  `chromium` arka plan masaüstünde boş profille açılır (kayıtlı giriş yok); Flatpak Chrome orada açılmaz (neden
+  belirtilerek 16 kodu). `open_app`, yazılan sayfa adresi doğrulanamadıysa `address_unverified` durumunu döndürür.
+  Aynı süreçte aynı başlıklı iki pencere yanlış olanı okumak yerine 6 koduyla durur.
+- **Düzeltme: panel yeniden başlayınca Ayarlar, kayıtlı onay kapsamı ve hesap oturumları yerine varsayılanı
+  gösteriyordu.** Panel artık korumasını başlatınca ve her gösterimde bunları yeniden yükler.
+- **Değişiklik: `sessions forget` depo kilidini alamazsa** 7 koduyla çıkar ve hiçbir
+  şeyin unutulmadığını söyler; o durumda asla "kayıt yok" demez.
+
+### Yükseltme
+
+- Kodu güncelledikten hemen sonra paneli ve MCP sunucusunu **birlikte** yeniden başlatın. Eski kodla çalışan bir
+  panel DUR dosyasının üzerine yazabilir.
+- `install.sh`'yi yeniden çalıştırın: `deskhand` sarmalayıcısı artık Python'u `-I` ile başlatır (kullanıcı
+  site-packages'ı ve `PYTHON*` değişkenleri yok). O zamana kadar panel kendini `-I` ile yeniden başlatır, MCP
+  sunucusu başlatmaz.
+- Eski sha256 işaretleri artık kabul edilmez. Panelin ilk açılışı eski değerler için tek birleşik soru sorar
+  (varsayılan Hayır; bir Evet yeter). Hayır, yalnız varsayılanları ve daraltmaları tutar.
+- Önceki sürümün yazdığı kayıtta DUR alanı yoktur. Güncellemeden sonraki ilk açılış bu yüzden panelin kendi DUR'unu
+  koyar; panelde bir kez **Devam**'a basana dek Deskhand durur.
+- Başında kimse yokken gözetimsiz çalışan bir makineyi güncellemeyin: hem soru hem Devam sizi ister.
+- Bellek izleme sayaçları yeni biçimle sıfırlandı; ilk yeniden başlatma sınırları sıfırdan başlar.
 
 ## 0.9.1 (24 Kasım 2026)
 

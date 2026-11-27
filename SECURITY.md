@@ -45,9 +45,14 @@ It is **not a sandbox**. Known design limits, which are not vulnerabilities in t
 - A malicious process running under the **same user account** can act like the panel: the panel is recognised
   by process identity (socket peer, start time, executable, command line, working directory), which stops a
   misbehaving agent, not another program that runs as the user. The settings that only the panel may
-  loosen (approval scope "card payments only", account sessions, persistent sessions) are accepted only
-  together with the panel's own marker file; a process that can forge both while the panel is closed is in
-  the same class.
+  loosen (forbidden windows, access levels, approval scope "card payments only", account sessions,
+  persistent sessions, your STOP) are anchored in a record the panel signs and keeps in the user's Secret
+  Service (KDE Wallet): loosening needs the user's Yes in the panel. Code running as the user that
+  deliberately reads or changes that wallet item (KDE Wallet has no per-application access control), or
+  deletes it while the wallet is open (which looks like a first start), is in the same class.
+- `secret=true` text never touches the clipboard and is left out of results, log and panel, but it is not
+  protected after the fact: a separate `observe` or screenshot can show a window title that contains it,
+  the focus check before an Enter has a gap of a few milliseconds, and nothing is checked after the submit key.
 - An agent that can run arbitrary shell commands as the user can edit files, kill the panel or drive the
   desktop without Deskhand.
 

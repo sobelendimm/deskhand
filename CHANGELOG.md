@@ -6,6 +6,56 @@ Versions 0.6.0 to 0.9.1 were local builds and were never published; 0.10.0 is th
 release after 0.5.4. Every entry between them is listed here so a 0.5.4 user sees the whole change.
 Security fixes are marked **Security**.
 
+## Unreleased
+
+Documentation and upgrade notes for the changes since 0.9.1. Where a sentence in an older entry below says the
+panel "removes" or "lifts" something, the rules in this section and in the README's "Security model" apply.
+
+- **Security: the panel's settings are anchored in your Secret Service.** The forbidden-window list, the access
+  levels, the approval scope, account sessions, persistent sessions and your STOP have their last approved value
+  in one signed record the panel keeps in KDE Wallet; a settings file plus marker forged on disk no longer
+  replaces it. Tightening is accepted, loosening waits for your Yes in the panel (default No). The questions show
+  the exact entries that will be applied (non-ASCII and invisible characters written as `\u{XXXX}` with a warning
+  mark) and a Yes counts only for that text. With an unreadable record the lists are asked in one dialog, and on No
+  clients stop with exit code 10 until the wallet can be read. Settings shows an unverified list read-only.
+- **Security: lifting STOP needs your Yes.** `deskhand resume` asks the panel (default No; panel closed or
+  unattended mode: exit code 13; `--approved` is not an answer). STOP is a set of sources: an agent's
+  `resume` removes only a STOP the agent set. If the panel cannot read its signed STOP record at start it sets its
+  own STOP and removes it once the record can be read.
+- **Security: approval requests carry a fingerprint.** The requester sends the sha256 of the request file it wrote;
+  a file that does not match, or a second different fingerprint, is refused.
+- **Security: `secret=true` typing.** Text is typed key by key, never through the clipboard, with the active window
+  checked before and after every key; titles and text stay out of results, log and panel feed. Limits (README,
+  "Activity log"): the focus check before an Enter leaves a gap of a few milliseconds, nothing is checked after
+  the submit key, a separate `observe` afterwards can show a window title that contains the text, and tab switches
+  inside one window are not noticed.
+- **Change: the background desktop memory cap is 8 GB** (was 6 GB). Tool results carry `memory_warning` at 80%; an
+  idle desktop at 85% gets a Firefox-only restart with session restore (at most 3 per 24 hours, backing off up to 24
+  hours when it frees little; `DESKHAND_FF_YENIDEN=off` disables it). Details and the ~15 second tab-loss limit:
+  README, "Memory watch".
+- **Change: browsers.** A second window of a running Firefox or Chromium opens in the same process. Native
+  `chromium` opens on the background desktop with an empty profile (no saved logins); Flatpak Chrome does not
+  open there (exit code 16 with the reason). `open_app` returns status `address_unverified` when the typed page
+  address could not be confirmed. Two windows with the same title in one process stop with exit code 6 instead
+  of reading the wrong one.
+- **Fix: Settings showed the default instead of the saved approval scope and account sessions after a panel
+  restart.** The panel now reloads them once its protection is running and on every show.
+- **Change: `sessions forget` when it cannot take the store lock** exits with code 7
+  and says nothing was forgotten; it never answers "no record" then.
+
+### Upgrading
+
+- Restart the panel and the MCP server **together**, right after updating the code. A panel left running from the
+  old code can overwrite the STOP file.
+- Run `install.sh` again: the `deskhand` wrapper now starts Python with `-I` (no user site-packages, no `PYTHON*`
+  variables). Until then the panel re-executes itself with `-I`, but the MCP server does not.
+- Old sha256 markers are not accepted any more. The first panel start asks one combined question about the old
+  values (default No; one Yes is enough). Answering No keeps the defaults and tightenings only.
+- A record written by an earlier version has no STOP field. The first start after the update therefore sets a
+  STOP of the panel's own, and Deskhand stays stopped until you press **Resume** in the panel once.
+- Do not update a machine that runs unattended while nobody is at it: both the question and the Resume need you.
+- The memory-watch counters were reset by the new format; the first restart limits start from zero.
+
 ## 0.10.0
 
 Everything in 0.6.0–0.9.1 below, plus:

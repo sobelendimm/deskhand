@@ -2048,8 +2048,11 @@ def type_text(
     window takes the focus, the window closes or changes app, or the user starts typing; a tab/page switch inside the
     same window is not detected. A title pattern also stops it when the title stops matching. A stop mid-text says how
     many characters were sent (sent=maybe_partial); the focus is checked right before each Enter (not sent if another
-    window has it). With secret=true (or a password field) the text and window titles are left out of the result,
-    messages and log, and Enter (submit) closing the dialog counts as success. Enter on a payment page,
+    window has it), but a focus change in the few milliseconds between that check and the key is not caught, and
+    nothing is checked after the Enter. With secret=true (or a password field) the text and window titles are left
+    out of this result, the messages and the log, and Enter (submit) closing the dialog counts as success; a
+    separate observe or screenshot afterwards can still show a window title that contains the text, so type
+    secrets into masked fields. Enter on a payment page,
     typing into a password field and destructive shell commands in a terminal (rm -r, sudo, curl | sh, mkfs...) need
     the user's approval. Returns effect (confirmed = the typed text is visible where the window changed)."""
     if ref and element:
@@ -2334,7 +2337,11 @@ def open_app(
     """Start an installed application (.desktop entry) on the chosen desktop and wait for its new window; args are
     documents/URLs for it to open. Forbidden apps, terminals, shells and interpreters are never started [10]. On the
     background desktop the app's session policy decides whether the user's logins are reused; single-instance apps
-    already open on the user's screen may return status "waiting". Returns the new window's id for later calls."""
+    already open on the user's screen may return status "waiting". A second window of a browser that is already
+    running opens in the same process; if its page address cannot be confirmed after typing, status is
+    "address_unverified" (the window id is returned but the page is not confirmed: observe before acting). Flatpak
+    Chrome does not open on the background desktop [16]; native chromium opens there with an empty profile (no
+    saved logins). Returns the new window's id for later calls."""
     with baglam(desktop, _("uygulama aç: {uygulama}").format(uygulama=app)) as bilgi:
         hata.dur_denetle()
         # yalnız kurulu masaüstü girdisi + belge argümanları (ham yol/komut, yorumlayıcı, uçbirim → 10)

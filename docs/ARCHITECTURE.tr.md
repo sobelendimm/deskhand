@@ -68,6 +68,7 @@ deskhand/
                    güvenlik kapıları (guvenlik_kapilari, baglanti_denetle), GPU seçimi, hazır olma denetimi, Eis sınıfı
   arka_ortak.py    iki türün ORTAK iç yapı taşları: bellek kafesi, öncelik, boş ses çıkışı, uygulama ortamı tabanı
                    (ortam_tabani), özel D-Bus yapılandırması, Xauthority, öncelik bekçisi başlatma
+  bellek_bekcisi.py   görünmez masaüstünün bellek bekçisi: %80'de `memory_warning` (anonim + paylaşılan), %85'te boştayken yalnız Firefox'u oturumu geri yükleyerek yeniden başlatma (sınırlar README "Bellek izleme" bölümünde), %60'ta `memory.reclaim`
   oncelik_bekcisi.py  kafesteki her iş parçacığını nice >= 10 / gerçek zamanlı olmayan / idle G/Ç'de tutan bekçi;
                    ekran sunucusu (KWin/Xvfb) SIGKILL/OOM ile ölürse oturumu kapatır (kafes, X soket/kilit, dizin)
   ses_bekcisi.py   (artık başlatılmıyor: arka plan uygulamaları kullanıcının ses sunucusuna hiç erişmez)
@@ -526,7 +527,7 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     soketleri, başka X soketleri görünmez), `/run/user/<UID>` (Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh,
     xauth, at-spi, portal, systemd soketleri) ve (başka yerdeyse) Deskhand'in RUNTIME_DIR'i (girdi.sock, sanal.json,
     diğer oturumlar).
-  - **Ev dizini BOŞ tmpfs + BEYAZ LİSTE** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` = min(2 GiB, kafes belleği/4), kafes varsayılanı 6G → 1,5 GiB; ad alanındaki `/tmp` de aynı sınırla): gerçek
+  - **Ev dizini BOŞ tmpfs + BEYAZ LİSTE** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` = min(2 GiB, kafes belleği/4), kafes varsayılanı 8G → 2 GiB; ad alanındaki `/tmp` de aynı sınırla): gerçek
     ev dizininden YALNIZ masaüstü/araç takımı görünümü SALT OKUNUR görünür — `~/.config/kdeglobals`, `kdedefaults/`,
     `kcminputrc`, `kcmfonts`, `Trolltech.conf`, `plasma-localerc`, `breezerc`, `Kvantum`, `qt5ct`/`qt6ct`, `gtk-3.0`,
     `gtk-4.0`, `gtkrc`, `gtkrc-2.0`, `~/.gtkrc-2.0`, `xsettingsd`, `fontconfig`, `~/.local/share/fonts`, `~/.fonts`,
@@ -970,6 +971,9 @@ Hassas eylem (hassas düğme, ödeme sayfası, yasak dışı ama riskli `ac`, ot
 - CLI `--onayli` kalır (kullanıcı sohbette açıkça onayladıysa), MCP yüzeyinde YOK. Riskli tuş ve uçbirim komutu da bu
   protokolü kullanır (eylem metni "Riskli tuş: …" / "Uçbirime komut yaz: …"); gözetimsiz kipte `iste_sonuc` hiç panele
   yazmadan `gozetimsiz` nedeniyle red döner.
+- **İstek karması ve liste doğrulaması (H3 incelemesi).** İsteyen `istek-<uuid>.json` yazar ve `bekle <uuid> <yazdığı baytların sha256'sı>` gönderir (`onay.py`, `iste_sonuc`). Panel her uuid için ilk karmayı tutar; ona uymayan dosya, ikinci farklı karma ya da karmasız istek reddedilir (red, görünür uyarı). Diyalog `(Evet, jeton)` döndürür; jeton, gösterdiği kanonik giriş listelerinin sha256'sıdır (`liste_koruma.gosterim()`); Evet yalnız bu, isteyenin karmasına eşitse uygulanır ve diyalog arayüz metnini hiç karmalamaz. `liste <tur>` `dogrulanamadi` yanıtlayabilir (liste doğrulanmadı: karşılaştırılacak imzalı kayıt ve kullanıcının Evet'i yok); istemci bu durumda 10 koduyla durur. Reddedilen Evet nedeniyle birlikte `red` döner.
+- **DUR bir kaynak kümesidir** (`guvenlik.dur_ac` / `dur_kapat` / `dur_kaynaklari`): `kullanici` (kullanıcınınki), `cli` (ajanınki), `panel-kapali-basarisiz` (panel imzalı kaydını okuyamadı) ve bilinmeyen etiketler. Kullanıcınınki dışındaki bir kaynak yalnız kendini kaldırır; kullanıcının Devam'ı hepsini kaldırır. `dur_kaldir_iste` (CLI `resume`) paneli `dur` istek türüyle sorar (varsayılan Hayır; panel kapalı, gözetimsiz kip ya da yanıtsız → 13; `--approved` yanıt sayılmaz). MCP `stop_by` alanı `panel-kapali-basarisiz` dönebilir. Yazımlar DUR düğmesini hiç engellemeyen kısa bir kilit alır.
+- Onay kanalından gelen uyarılar tepsiye kuyruklu bir Qt sinyaliyle ulaşır (neden başına 10 sn'de en çok bir bildirim).
 - Onay diyaloğu penceresi yasak listesine (sınıf/başlık) otomatik eklenir: hiçbir otomasyon girdisi ona gitmez.
 - Tehdit modeli: onay, ajanın (yanlışlıkla ya da istem enjeksiyonuyla) kendi kendine izin vermesini ve yalnız dosya
   yazabilen bir sürecin sahte izin üretmesini engeller. Kabuğu olan ajan için sandbox değildir: aynı kullanıcıyla

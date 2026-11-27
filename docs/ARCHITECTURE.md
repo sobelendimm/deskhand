@@ -71,6 +71,7 @@ deskhand/
                    XWayland, safety gates (guvenlik_kapilari, baglanti_denetle), GPU selection, readiness check, the Eis class
   arka_ortak.py    internal building blocks COMMON to both types: memory cage, priority, empty audio output, base of the
                    application environment (ortam_tabani), private D-Bus configuration, Xauthority, starting the priority guard
+  bellek_bekcisi.py   memory watch of the invisible desktop: `memory_warning` at 80% (anonymous + shared), idle Firefox-only restart with session restore at 85% (README "Memory watch" has the limits), `memory.reclaim` at 60%
   oncelik_bekcisi.py  guard that keeps every thread in the cage at nice >= 10 / non-realtime / idle I/O;
                    if the display server (KWin/Xvfb) dies from SIGKILL/OOM it closes the session (cage, X socket/lock, directory)
   ses_bekcisi.py   (no longer started: background applications never reach the user's sound server)
@@ -548,7 +549,7 @@ suggests doing the work in the background, otherwise in the foreground.
     other X sockets are invisible), `/run/user/<UID>` (Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh, xauth, at-spi, portal,
     systemd sockets) and (if elsewhere) Deskhand's RUNTIME_DIR (girdi.sock, sanal.json, other sessions).
   - **The home directory is an EMPTY tmpfs + a WHITELIST** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` = min(2 GiB,
-    cage memory/4), cage default 6G → 1.5 GiB; the `/tmp` in the namespace has the same limit): of the real home directory ONLY the
+    cage memory/4), cage default 8G → 2 GiB; the `/tmp` in the namespace has the same limit): of the real home directory ONLY the
     desktop/toolkit appearance is visible, READ-ONLY — `~/.config/kdeglobals`, `kdedefaults/`, `kcminputrc`, `kcmfonts`,
     `Trolltech.conf`, `plasma-localerc`, `breezerc`, `Kvantum`, `qt5ct`/`qt6ct`, `gtk-3.0`, `gtk-4.0`, `gtkrc`, `gtkrc-2.0`,
     `~/.gtkrc-2.0`, `xsettingsd`, `fontconfig`, `~/.local/share/fonts`, `~/.fonts`, `~/.cache/fontconfig`, `~/.icons`,
@@ -959,6 +960,9 @@ For a sensitive action (sensitive button, payment page, `ac` that is not forbidd
   already took the target image (focus is not stolen; otherwise only id/title/geometry); the full screen without a region is not compared with an image.
 - CLI `--onayli` remains (if the user explicitly approved in the chat), NOT on the MCP surface. A risky key and terminal command also use this protocol (action text "Risky
   key: …" / "Type a command into the terminal: …"); in unattended mode `iste_sonuc` returns a refusal for the reason `gozetimsiz` without writing to the panel at all.
+- **Request fingerprint and list verification (H3 review).** The requester writes `istek-<uuid>.json` and sends `bekle <uuid> <sha256 of the bytes it wrote>` (`onay.py`, `iste_sonuc`). The panel keeps the first hash per uuid; a file that does not match it, a second different hash, or no hash is refused (red, visible warning). The dialog gives back `(Yes, token)` where the token is the sha256 of the canonical entry lists it showed (`liste_koruma.gosterim()`); a Yes is applied only when that equals the requester's fingerprint, and the dialog never hashes widget text. `liste <kind>` may answer `dogrulanamadi` (list not verified: no signed record to compare with and no Yes from the user); a client then stops with Dur 10. A refused Yes comes back as `red` with the reason.
+- **STOP is a set of sources** (`guvenlik.dur_ac` / `dur_kapat` / `dur_kaynaklari`): `kullanici` (the user's), `cli` (an agent's), `panel-kapali-basarisiz` (the panel could not read its signed record) and unknown labels. A source other than the user's removes only itself; the user's Resume removes all. `dur_kaldir_iste` (CLI `resume`) asks the panel with the request type `dur` (default No; panel closed, unattended mode or no answer → Dur 13; `--approved` is not an answer). The MCP `stop_by` field can return `panel-kapali-basarisiz`. Writes take a short lock that never blocks the STOP button.
+- Warnings from the approval channel reach the tray through a queued Qt signal (at most one notification per reason per 10 s).
 - The approval dialog window is automatically added to the forbidden list (class/title): no automation input goes to it.
 - Threat model: approval prevents the agent (by mistake or through prompt injection) from giving itself permission and prevents a process that can only write files from
   producing a fake permission. It is not a sandbox for an agent that has a shell: a process that can run arbitrary code as the same user can kill the panel and take its
