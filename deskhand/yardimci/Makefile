@@ -51,7 +51,8 @@ deskhand-eis: deskhand-eis.c deskhand-eis-tuslar.h
 tuslar:
 	{ echo '/* deskhand-eis: dotool tuş adı -> evdev kodu (linux/input-event-codes.h den üretildi: make tuslar) */'; \
 	  LC_ALL=C awk '/^#define[ \t]+KEY_[A-Z0-9_]+[ \t]/ { n=substr($$2,5); if (n!="MAX" && n!="CNT" && n!="MIN_INTERESTING") \
-	  printf "    {\"%s\", KEY_%s},\n", tolower(n), n }' /usr/include/linux/input-event-codes.h; } > deskhand-eis-tuslar.h
+	  printf "#ifdef KEY_%s\n    {\"%s\", KEY_%s},\n#endif\n", n, tolower(n), n }' /usr/include/linux/input-event-codes.h; } \
+	  > deskhand-eis-tuslar.h
 
 protokol:
 	wayland-scanner client-header $(PROTOKOL_XML) ext-idle-notify-v1-client-protocol.h

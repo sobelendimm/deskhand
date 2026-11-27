@@ -8,6 +8,7 @@ Derleme depo kökünün geçici bir KOPYASINDA yapılır (depoya build/, dist/, 
 
 Çalıştır:  python3 tests/test_paket.py"""
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -180,7 +181,29 @@ def test_libei_surum_siniri():
         shutil.rmtree(gecici, ignore_errors=True)
 
 
+def test_tus_basligi_ifdef():
+    """deskhand-eis-tuslar.h: her KEY_ girdisi kendi #ifdef'i içinde (eski çekirdek başlığında olmayan ad düşer,
+    derleme kırılmaz; CI Ubuntu run 46068772200). Üreten Makefile `tuslar` hedefi de aynı biçimi yazar."""
+    with open(os.path.join(KOK, "deskhand", "yardimci", "deskhand-eis-tuslar.h"), encoding="utf-8") as f:
+        satirlar = f.read().splitlines()
+    korumasiz = []
+    girdi = 0
+    for i, s in enumerate(satirlar):
+        m = re.search(r"\bKEY_(\w+)\}", s)
+        if not m:
+            continue
+        girdi += 1
+        if not (0 < i < len(satirlar) - 1 and satirlar[i - 1] == f"#ifdef KEY_{m.group(1)}" and satirlar[i + 1] == "#endif"):
+            korumasiz.append(s.strip())
+    kontrol("tuş başlığı: her KEY_ girdisi #ifdef KEY_X … #endif içinde", girdi > 0 and not korumasiz,
+            f"{girdi} girdi, korumasız: {korumasiz[:5]}")
+    with open(os.path.join(KOK, "deskhand", "yardimci", "Makefile"), encoding="utf-8") as f:
+        mk = f.read()
+    kontrol("Makefile `tuslar` hedefi #ifdef/#endif yazar", "#ifdef KEY_%s" in mk and "#endif" in mk)
+
+
 test_wheel_veri_dosyalari()
+test_tus_basligi_ifdef()
 test_doctor_paket_adi()
 test_doctor_yardimci_komutu()
 test_libei_surum_siniri()
