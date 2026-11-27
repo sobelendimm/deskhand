@@ -21,7 +21,7 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 from . import ocr_gpu, yollar
-from .gorsel import bolge_coz, pencere_goruntusu
+from .gorsel import bolge_coz, korumali_goruntu
 from .hata import Dur
 from .i18n import _
 
@@ -380,15 +380,12 @@ def yazdir_eslesme(ms, numarali=True):
         print(f"  {no}({m['cx']:.0f},{m['cy']:.0f}) [{m['conf']:.0f}{benz}] {m['t']}")
 
 
-def tara(k, metin, bolge, hassas=False, korumali=False):
+def tara(k, metin, bolge, hassas=False):
     """Bir kez görüntü al + oku + ara. → (pencere koordinatlı eşleşmeler, geo, kök, görüntü özeti).
     Görüntü içerik durunca alınır (kaydırma animasyonu sürerken okunan konum tıklamada kayar).
-    korumali=True: yasak pencere listesine uyar (hedef yasaksa 10, diğer yasaklar siyah; CLI `bekle`)."""
-    if korumali:
-        from .gorsel import korumali_goruntu
-        im, geo, kok = korumali_goruntu(k, bolge, kararli=True)
-    else:
-        im, geo, kok = pencere_goruntusu(k, bolge, kararli=True)
+    Her zaman yasak pencere listesine uyar (korumali_goruntu: hedef yasaksa 10, diğer yasaklar siyah, liste karenin
+    önünde ve arkasında): eşleşen satırlar ajana yazdırılır (`bekle`, `metne-tikla`; SINIF-MASKE)."""
+    im, geo, kok = korumali_goruntu(k, bolge, kararli=True)
     ozet = hashlib.blake2b(im.tobytes(), digest_size=16).digest()
     ms = ara(satirla(oku(im, hassas)), metin)
     return [kok_ekle(m, kok) for m in ms], geo, kok, ozet, im
@@ -410,14 +407,14 @@ def yedek_ara(im, metin):
     return []
 
 
-def bul_dongu(k, metin, bolge, sure, yok=False, son_care=True, korumali=False):
+def bul_dongu(k, metin, bolge, sure, yok=False, son_care=True):
     """Metin görünene (yok=True: kaybolana) kadar görüntü al + oku.
     → (eşleşmeler, geo, kök, süre, görüntü özeti, görüntü). Aynı görüntü yeniden okunmaz (önbellek)."""
     t0 = time.monotonic()
     bitis = t0 + sure
     hassas_denendi = False
     while True:
-        ms, geo, kok, ozet, im = tara(k, metin, bolge, korumali=korumali)
+        ms, geo, kok, ozet, im = tara(k, metin, bolge)
         son = time.monotonic() >= bitis
         if not ms and not yok and son and son_care and not hassas_denendi:
             hassas_denendi = True  # son çare: ekran kartı, bir kademe büyütme, kutu çerçevesiz okumalar (yedek_ara)
@@ -481,8 +478,9 @@ def dogrula(im, kok, metin, cx, cy):
 
 def nokta_metni(k, x, y):
     """Tıklanacak noktanın üstündeki/yakınındaki yazı (hassas düğme denetimi için; ~0,4 sn, dotool
-    kurulumuyla örtüşür)."""
-    im, geo, kok = pencere_goruntusu(k, (round(x) - 220, round(y) - 35, 440, 70), kararli=True)
+    kurulumuyla örtüşür). Yazı ajana yazdırılır ("noktadaki yazı", Dur iletileri): görüntü yasak pencere listesine
+    uyar (korumali_goruntu; masaüstü kipinde noktadaki parola yöneticisi okunmaz — SINIF-MASKE)."""
+    im, geo, kok = korumali_goruntu(k, (round(x) - 220, round(y) - 35, 440, 70), kararli=True)
     sonuc = {}
 
     def is_(ad, **secenek):
@@ -572,7 +570,6 @@ def derin_oku(im, okumalar=DENETIM_OKUMALARI, gpu_bekle=ocr_gpu.SOGUK_SN):
 
 def k_metin(a):
     t0 = time.monotonic()
-    from .gorsel import korumali_goruntu
     im, geo, kok = korumali_goruntu(a.kimlik, bolge_coz(a.bolge))  # yasak pencere listesine uyar (10 / siyah)
     if a.derin:
         satirlar = derin_oku(im)
@@ -606,8 +603,7 @@ def k_metin(a):
 
 
 def k_bekle(a):
-    ms, geo, kok, sure, *_x = bul_dongu(a.kimlik, a.metin, bolge_coz(a.bolge), a.sure, a.yok,
-                                     korumali=True)
+    ms, geo, kok, sure, *_x = bul_dongu(a.kimlik, a.metin, bolge_coz(a.bolge), a.sure, a.yok)
     if a.yok:
         if ms:
             raise Dur(7, _("'{metin}' {sure} sn içinde kaybolmadı").format(metin=a.metin, sure=a.sure))

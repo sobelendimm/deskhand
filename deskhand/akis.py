@@ -12,7 +12,7 @@ import time
 from . import yollar
 from .arka_uc import sec
 from .eylem import GIRDI_KOMUTLARI, adim_metni, adimlari_calistir
-from .gorsel import bolge_coz, pencere_goruntusu
+from .gorsel import bolge_coz, korumali_goruntu
 from .gunluk import gunluk
 from .hata import Dur, dur_denetle
 from .i18n import _
@@ -180,7 +180,7 @@ def k_akis(a):
                 if tur == "komut" and subprocess.run(deger, shell=True, capture_output=True, timeout=30).returncode == 0:
                     return bitti(_("komut: {komut}").format(komut=deger))
             bolge = akis_bolge(ayar["bolge"], sec().geometri(k))
-            im, geo, kok = pencere_goruntusu(k, bolge)
+            im, geo, kok = korumali_goruntu(k, bolge)  # tanınan metin akışı yönetir: yasak pencere maskeli
             son_bakis = time.monotonic()
             blok = None
             for derin in (False, True):  # önce tek okuma; hiçbir şey tanınmazsa renkli düğmeleri de gören derin okuma

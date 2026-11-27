@@ -204,7 +204,7 @@
   "erisim.py:1154"
  ],
  "# '{desen}': {sayi} eşleşme ({sn} sn)": [
-  "ocr.py:593"
+  "ocr.py:590"
  ],
  "# '{desen}': {sayi} öge ({kademe} eşleşme, {sn} sn)": [
   "erisim.py:1062"
@@ -243,7 +243,7 @@
   "web.py:766"
  ],
  "# {sayi} satır, pencere {genislik}x{yukseklik} ({sn} sn); (merkez x,y) [güven] metin": [
-  "ocr.py:601"
+  "ocr.py:598"
  ],
  "# {sayi} öge ({gorunen} görünen, {sn} sn); (merkez x,y) rol: ad": [
   "erisim.py:1071"
@@ -334,10 +334,10 @@
   "eylem.py:1372"
  ],
  "'{metin}' {sure} sn içinde görünmedi": [
-  "ocr.py:617"
+  "ocr.py:613"
  ],
  "'{metin}' {sure} sn içinde kaybolmadı": [
-  "ocr.py:613"
+  "ocr.py:609"
  ],
  "'{pencere}' görünmez masaüstünün penceresi; desktop='background' ile kullan": [
   "api.py:196"
@@ -489,10 +489,10 @@
   "guvenlik.py:993"
  ],
  "; {sayi} gürültü satırı gizli (--hepsi)": [
-  "ocr.py:603"
+  "ocr.py:600"
  ],
  "; {sayi} satırı yalnız ekran kartı okudu": [
-  "ocr.py:604"
+  "ocr.py:601"
  ],
  "; çıktı: {log}": [
   "uygulama.py:850"
@@ -1279,7 +1279,7 @@
   "arka_uc/kwin.py:253"
  ],
  "KWin pencere listesi alınamadı: {hata}": [
-  "api.py:660",
+  "api.py:671",
   "uygulama.py:851"
  ],
  "KWin süreci doğrulanamadı (pid {pid})": [
@@ -1713,16 +1713,16 @@
   "erisim.py:332"
  ],
  "YASAK pencere: ağacı okunmaz": [
-  "api.py:412",
+  "api.py:423",
   "dogrulama_sinamasi.py:676",
   "web.py:680"
  ],
  "YASAK pencere: içeriği gösterilmez/okunmaz ({neden})": [
-  "api.py:303",
-  "api.py:317"
+  "api.py:307",
+  "api.py:328"
  ],
  "YASAK pencere: içeriği okunmaz": [
-  "api.py:468"
+  "api.py:479"
  ],
  "YASAK pencere: {baslik} (sınıf {sinif}) /{desen}/ ile eşleşti; hiçbir girdi gönderilmez ({dosya})": [
   "guvenlik.py:1076"
@@ -1829,7 +1829,7 @@
   "mcp_sunucu.py:2423"
  ],
  "akış adı yalnız harf/rakam/._- içermeli: {ad} (list ile adlara bak)": [
-  "api.py:689"
+  "api.py:700"
  ],
  "akış dosyası okunamadı: {hata}": [
   "akis.py:43"
@@ -1850,7 +1850,7 @@
   "akis.py:167"
  ],
  "akış yok: {ad} ({dizin})": [
-  "api.py:692"
+  "api.py:703"
  ],
  "akış {ad}: {pencere}": [
   "mcp_sunucu.py:2411"
@@ -2219,7 +2219,7 @@
   "gorsel.py:291",
   "gorsel.py:301",
   "mcp_sunucu.py:141",
-  "ocr.py:596",
+  "ocr.py:593",
   "web.py:775"
  ],
  "bulunamazsa sayfayı aşağı kaydırıp ara (en çok N kez, varsayılan 10)": [
@@ -2959,7 +2959,7 @@
   "oturum/cli.py:69"
  ],
  "göründü: '{metin}' ({sn} sn)": [
-  "ocr.py:618"
+  "ocr.py:614"
  ],
  "görünen metne tıkla": [
   "cli.py:192"
@@ -3204,8 +3204,11 @@
  "kararı + kopyayı üret (başlatmaz)": [
   "oturum/cli.py:67"
  ],
+ "kare alınırken yasak bir pencere değişti (artık yasak sayılmıyor): görüntü gönderilmedi (güvenli taraf); tekrar dene": [
+  "api.py:322"
+ ],
  "kare alınırken yasak bir pencere kapandı: görüntü gönderilmedi (güvenli taraf); tekrar dene": [
-  "api.py:313"
+  "api.py:324"
  ],
  "kare boyutu {boyut} ≠ oturum {hedef} (ölçek {olcek})": [
   "kwin_oturum.py:657"
@@ -3220,7 +3223,7 @@
   "doktor.py:150"
  ],
  "kayboldu: '{metin}' ({sn} sn)": [
-  "ocr.py:614"
+  "ocr.py:610"
  ],
  "kaydır": [
   "cli.py:190"
@@ -3816,7 +3819,7 @@
   "arka_uc/sanal.py:790"
  ],
  "pano yazma": [
-  "api.py:559",
+  "api.py:570",
   "arka_uc/kde.py:789",
   "cli.py:280",
   "guvenlik.py:2046"
@@ -4570,7 +4573,7 @@
   "mesgul.py:222"
  ],
  "yasak pencere listesi okunamadı: görüntü gönderilmedi (güvenli taraf; tekrar dene): {neden}": [
-  "api.py:284"
+  "api.py:288"
  ],
  "yasak/hassas: yapılmadı": [
   "mcp_sunucu.py:142"
@@ -4931,7 +4934,7 @@
   "mesgul.py:505"
  ],
  "{sn} sn içinde yeni pencere görünmedi (çıktı: {log})": [
-  "api.py:658"
+  "api.py:669"
  ],
  "{sure} kaldı": [
   "oturum/denetle.py:300"

@@ -243,14 +243,18 @@ def pencereler(desen: str | None = None) -> list[dict]:
 def _yasak_geometriler(k: str) -> dict:
     """Forbidden windows other than k → {id: screen geometry}. KWin: the FRAME (title bar + borders), not only the
     client area: a secret title must not show. A window that cannot be checked (closed meanwhile / read error)
-    counts as forbidden (safe side). A list read error raises (the caller drops the frame)."""
+    counts as forbidden (safe side). A list read error raises (the caller drops the frame).
+    → maske_kare.Geometriler (.tum: every other window's geometry: a window forbidden only after the frame is masked
+    at its pre-frame place too)."""
+    from .maske_kare import Geometriler
     au = arka()
     cerceve = getattr(au, "maske_pencereleri", None)
     liste = [(w, b, geo) for w, b, _s, geo in cerceve()] if cerceve is not None else au.pencereler()
-    sonuc = {}
+    sonuc = Geometriler()
     for w, _b, geo in liste:
         if w == k:
             continue
+        sonuc.tum[w] = tuple(geo)
         try:
             y = yasak_mi(w)
         except Dur:
@@ -303,13 +307,20 @@ def goruntu_al(k: str, bolge=None, tam: bool = False, kararli: bool = False):
         raise Dur(10, _("YASAK pencere: içeriği gösterilmez/okunmaz ({neden})").format(neden=y))
     bolge_s = ",".join(str(int(v)) for v in bolge) if bolge else None
     from .gorsel import bolge_coz
+    okumalar = []
+
+    def oku():
+        okumalar.append(_yasak_geometriler(k))
+        return okumalar[-1]
     try:
         (im, geo, kok), geolar, kapanan = iki_okumali_kare(
-            lambda: _yasak_geometriler(k),
-            lambda: pencere_goruntusu(k, bolge_coz(bolge_s), kararli=kararli, tam=tam))
+            oku, lambda: pencere_goruntusu(k, bolge_coz(bolge_s), kararli=kararli, tam=tam))
     except ListeOkunamadi as e:
         raise _maske_okunamadi(e) from e
     if kapanan:  # where it was at grab time is unknown (it may have moved before closing): drop the frame
+        if any(w in okumalar[-1].tum for w in kapanan):  # still open, no longer forbidden (title changed)
+            raise Dur(PENCERE_YOK, _("kare alınırken yasak bir pencere değişti (artık yasak sayılmıyor): görüntü "
+                                     "gönderilmedi (güvenli taraf); tekrar dene"), tur="maske-yarisi")
         raise Dur(PENCERE_YOK, _("kare alınırken yasak bir pencere kapandı: görüntü gönderilmedi (güvenli taraf); "
                                  "tekrar dene"), tur="maske-yarisi")
     y = yasak_mi(k)
