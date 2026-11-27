@@ -270,6 +270,7 @@ def _cerceve_bul(yol: _Yol, pid: int, baslik: str) -> tuple[str, str, int, str, 
     import os
 
     from . import kendi
+    from .guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık iletiye girmez
     if not pid:
         raise Dur(BULUNAMADI, _("pencerenin süreç kimliği (PID) bilinmiyor: web çerçevesi güvenle eşlenemez ({baslik})"
                                 ).format(baslik=repr(baslik)))
@@ -300,15 +301,27 @@ def _cerceve_bul(yol: _Yol, pid: int, baslik: str) -> tuple[str, str, int, str, 
 
     def puan(i):
         ad = _ozd(adlar_[i], "") or ""
-        benz = 1.0 if ad and baslik and (ad == baslik or ad in baslik or baslik in ad) else \
+        benz = 2.0 if ad and ad == baslik else 1.0 if ad and baslik and (ad in baslik or baslik in ad) else \
             difflib.SequenceMatcher(None, ad, baslik).ratio()
         d = _durumlar(durum[i])
         return (adaylar[i][2] == pid, benz, "active" in d, "showing" in d)
-    en_iyi = max(range(len(adaylar)), key=puan)
-    if len(adaylar) > 1 and puan(en_iyi)[1] < 0.6:
-        raise Dur(BULUNAMADI, _("pencere erişilebilirlik ağacında bulunamadı ({baslik})").format(baslik=repr(baslik)))
-    b_, y, ap, an = adaylar[en_iyi]
-    return b_, y, ap, an, _ozd(adlar_[en_iyi], "") or ""
+    if len(adaylar) == 1:  # tek çerçeve: karışacak başka pencere yok (ad başlığın gerisinde kalsa da bu pencere)
+        b_, y, ap, an = adaylar[0]
+        return b_, y, ap, an, _ozd(adlar_[0], "") or ""
+    # SOAK-FIX: birden çok çerçevede YALNIZ pencere başlığıyla BİREBİR eşleşen TEK çerçeve. AT-SPI çerçevesinde pencere
+    # kimliği yok; içerme/benzerlik ve "active" ile tahmin, gezinen öbür pencerenin geçici "Mozilla Firefox" adlı
+    # çerçevesini seçiyordu (F1 penceresi → F3'ün sayfası; yasak pencerenin içeriği izinli pencerenin çıktısına girebilir).
+    tam = [i for i in range(len(adaylar)) if puan(i)[1] == 2.0]
+    if tam:
+        ust = max(puan(i)[0] for i in tam)
+        tam = [i for i in tam if puan(i)[0] == ust]
+    if len(tam) != 1:
+        raise Dur(BULUNAMADI, _("sayfa belirsiz: bu pencerenin süreç ağacında {n} erişilebilirlik çerçevesi var ve "
+                                "pencere başlığıyla ({baslik}) birebir eşleşen tek çerçeve yok (sayfa geçişi ya da aynı "
+                                "başlıklı pencereler); başka pencerenin sayfası okunmasın diye durduruldu, kısa süre "
+                                "sonra yeniden dene").format(n=len(adaylar), baslik=baslik_goster(baslik)))
+    b_, y, ap, an = adaylar[tam[0]]
+    return b_, y, ap, an, _ozd(adlar_[tam[0]], "") or ""
 
 
 # ---------------------------------------------------------------- ağaç yürüyüşü
@@ -556,7 +569,9 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
         for i, o in enumerate(ogeler):
             o["no"] = atla + i + 1
         ust = min(belgeler, key=lambda b: b["derinlik"]) if belgeler else None
-        sayfa = _sayfa_ozeti(ust, au.baslik(k), len(belgeler))
+        pencere_basligi = au.baslik(k)
+        _belge_pencereye_ait(ust, pencere_basligi)
+        sayfa = _sayfa_ozeti(ust, pencere_basligi, len(belgeler))
         sayfa["konum"] = konum  # hangi koordinat çerçevesinde geldiği (None = doğrulanamadı)
         ic = [{"ad": b["ad"], "adres": b["adres"], "kutu": list(b["kutu"]) if b.get("kutu") else None}
               for b in belgeler if b["derinlik"] > 1][:12]
@@ -568,6 +583,23 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
                 "sayfa": sayfa, "sure": round(time.monotonic() - t0, 3), "dugum": dugum}
     finally:
         yol.kapat()
+
+
+def _belge_pencereye_ait(belge, pencere_basligi) -> None:
+    """SOAK-FIX ikinci kilit: okunan üst belgenin başlığı (doluysa) pencerenin GÜNCEL başlığında geçmeli (tarayıcı
+    pencere başlığı = "<sayfa başlığı> — Mozilla Firefox" / "… - Chromium"). Geçmiyorsa sayfa başka pencereye ait
+    olabilir (çerçeve seçimiyle okuma arasında geçiş): içerik çıktıya girmeden Dur 6 (yeniden dene)."""
+    from .guvenlik import baslik_goster
+    from .ocr import katla
+
+    def norm(s):
+        return " ".join(katla(s or "").split())
+    ad = norm(belge["ad"]) if belge else ""
+    if ad and ad not in norm(pencere_basligi):
+        raise Dur(BULUNAMADI, _("sayfa belirsiz: okunan sayfanın başlığı ({sayfa}) pencere başlığında ({pencere}) yok; "
+                                "sayfa geçişi sürüyor ya da sayfa başka pencereye ait; içerik verilmedi, kısa süre sonra "
+                                "yeniden dene").format(sayfa=baslik_goster(belge["ad"]),
+                                                       pencere=baslik_goster(pencere_basligi)))
 
 
 def _sayfa_ozeti(belge, pencere_basligi, belge_sayisi) -> dict:

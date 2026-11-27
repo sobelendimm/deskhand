@@ -319,6 +319,13 @@ def _cerceve_bul(Atspi, pid, baslik):
         raise Dur(6, _("aynı süreçte bu başlığı taşıyan {n} erişilebilirlik çerçevesi var (pid {pid}): hangisinin bu "
                        "pencere olduğu belirlenemiyor; okuma/eylem başka pencereye gitmesin diye durduruldu").format(
             n=esit, pid=pid))
+    if len(adaylar) > 1 and secim[1] < 2.0:
+        # SOAK-FIX: birden çok çerçevede birebir başlık eşleşmesi yoksa tahmin yok: içerme ("Mozilla Firefox" ⊂
+        # "Sayfa — Mozilla Firefox") ya da benzerlik, sayfa geçişindeki ÖBÜR pencerenin çerçevesini seçebiliyordu
+        raise Dur(6, _("sayfa belirsiz: bu pencerenin süreç ağacında {n} erişilebilirlik çerçevesi var ve "
+                       "pencere başlığıyla ({baslik}) birebir eşleşen tek çerçeve yok (sayfa geçişi ya da aynı "
+                       "başlıklı pencereler); başka pencerenin sayfası okunmasın diye durduruldu, kısa süre "
+                       "sonra yeniden dene").format(n=len(adaylar), baslik=baslik_goster(baslik)))
     return secim[2], secim[3], secim[4]
 
 
