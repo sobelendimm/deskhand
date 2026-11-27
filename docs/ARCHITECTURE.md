@@ -1,1212 +1,1131 @@
-# Deskhand — Mimari ve modüller arası sözleşme
+# Deskhand — Architecture and the contract between modules
 
-> **English summary.** This document is the internal contract of Deskhand: the package layout, the `ArkaUc`
-> (backend) interface shared by the real-desktop (KDE) and virtual-desktop (Xvfb) backends, the input language,
-> target selection, the safety rules, the exit codes, the working rules for contributors, and the human-approval
-> protocol. Source code refers to sections by number (§2, §4, §5, §6, §8), so the numbering is stable. The text
-> is in Turkish, like the project's code comments.
+> **Türkçe sürüm:** [ARCHITECTURE.tr.md](ARCHITECTURE.tr.md) (the original text; the code comments and most identifiers are in Turkish).
+> This document is the internal contract of Deskhand: the package layout, the `ArkaUc` (backend) interface shared
+> by the real-desktop (KDE) and virtual-desktop (Xvfb/KWin) backends, the input language, target selection, the
+> safety rules, the exit codes, the working rules for contributors, and the human-approval protocol. Source code
+> refers to sections by number (§2, §4, §5, §6, §8), so the numbering is stable. Module, function and file names
+> are kept exactly as in the code (many are Turkish: `arka_uc` = backend, `guvenlik` = safety, `eylem` = action,
+> `onay` = approval, `masalar` = desktops).
 
-Arayüzü değiştiren bir ihtiyaç doğarsa kodu tek taraflı değiştirmeyin: önce §7'ye bir tasarım kararı olarak
-yazın ve proje bakımcısıyla netleştirin.
+If a need arises that changes an interface, do not change the code unilaterally: first write it into §7 as a design
+decision and settle it with the project maintainer.
 
-## 1. Paket düzeni
+## 1. Package layout
 
 ```
 deskhand/
   __init__.py      __version__
   __main__.py      python -m deskhand → cli.main()
-  yollar.py        TÜM dosya yolları burada. Ortam değişkeniyle değiştirilebilir (testler için):
-                   DESKHAND_CONFIG_DIR (vars. ~/.config/deskhand), DESKHAND_STATE_DIR (~/.local/state/deskhand),
+  yollar.py        ALL file paths live here. Overridable through environment variables (for tests):
+                   DESKHAND_CONFIG_DIR (default ~/.config/deskhand), DESKHAND_STATE_DIR (~/.local/state/deskhand),
                    DESKHAND_CACHE_DIR (~/.cache/deskhand), DESKHAND_DATA_DIR (~/.local/share/deskhand),
                    DESKHAND_RUNTIME_DIR ($XDG_RUNTIME_DIR/deskhand).
-                   GEÇİŞ: selefi `ekran` aracının ~/.config/ekran, ~/.local/share/ekran/simgeler ve
-                   ~/.local/state/ekran dizinleri varsa ve yenisi yoksa ilk açılışta KOPYALANIR (taşınmaz;
-                   eski araç çalışmaya devam eder).
-  hata.py          Dur(kod, mesaj) + çıkış kodları (§5)
-  gunluk.py        günlük (0600; STATE/CACHE dizinleri 0700, açılışta düzeltilir) + temizlik
-  guvenlik.py      yasak pencereler, hassas düğme, ödeme sayfası, riskli tuş/uçbirim komutu onayı, uygulama erişim
-                   seviyeleri, başlık/sınıf kilidi, denetle(), DUR anahtarı
-  insan.py         Wayland etkinlik izleyici (ekran-etkinlik C yardımcısı) + insan_bekle
-  kendi.py         ajanın kendi istemcisi: ata süreç kümesi (/proc), tmux istemcileri, ön plan süreci (§4)
-  ucbirim.py       uçbirim Enter kapısı: giriş satırı okuma (AT-SPI/OCR) + yazı tamponu (§4)
-  ocr.py           oku, satirla, ara, derin_oku, önbellek, ön işleme
-  gorsel.py        simge (NCC), renk alanları, ızgara
-  eylem.py         tikla/yaz/tus/kaydir/bas/surukle/dizi: arka uçtan BAĞIMSIZ üst katman
+                   MIGRATION: if the directories of the predecessor `ekran` tool (~/.config/ekran,
+                   ~/.local/share/ekran/simgeler and ~/.local/state/ekran) exist and the new ones do not, they are
+                   COPIED on first start (not moved; the old tool keeps working).
+  hata.py          Dur(kod, mesaj) + exit codes (§5)
+  gunluk.py        log (0600; the STATE/CACHE directories are 0700, fixed at start-up) + cleanup
+  guvenlik.py      forbidden windows, sensitive button, payment page, approval for risky keys/terminal commands,
+                   application access levels, title/class lock, denetle(), the DUR (stop) switch
+  insan.py         Wayland activity watcher (ekran-etkinlik C helper) + insan_bekle
+  kendi.py         the agent's own client: ancestor process set (/proc), tmux clients, foreground process (§4)
+  ucbirim.py       terminal Enter gate: reading the input line (AT-SPI/OCR) + typing buffer (§4)
+  ocr.py           oku, satirla, ara, derin_oku, cache, preprocessing
+  gorsel.py        icon (NCC), colour regions, grid
+  eylem.py         tikla/yaz/tus/kaydir/bas/surukle/dizi: the upper layer, INDEPENDENT of the backend
   akis.py, erisim.py (AT-SPI), uygulama.py (ac)
-  web.py           web sayfası ögeleri: tarayıcının erişilebilirlik ağacından okuma (§9); MCP read_text(source="web"),
-                   CLI `web`, click-element'in web yolu
-  cli.py           argparse; komut adları İngilizce + Türkçe takma adlar. `deskhand --help` alt komut tablosu
-                   (`KISA_ACIKLAMA`); `screenshot` kimliksiz (`varsayilan_foto_hedefi`: görünmez masaüstünde tüm
-                   masaüstü, ön planda etkin pencere + gerçek ekran kilidi 17), `windows` desensiz (yasak pencere
-                   başlığı maskeli)
-  gezin.py         `goto KİMLİK ADRES`: adres çubuğu yolu (ctrl+l → adres → Return) `api.tus`/`api.yaz` üzerinden; yeni
-                   güvenlik yolu YOK (başlık kilidi, hassas sayfa, CAPTCHA kapısı, DUR, insan önceliği aynen); yalnız http(s)
-  dosya_sec.py     `choose-file KİMLİK YOL`: ctrl+l → AT-SPI odaklı girdi (erisim.odakli_metin) → yol → değer GERİ
-                   okunur (≠ yol → Dur 8, Enter yok) → Return → diyalog kapandı mı; arka planda yalnız XDG/test paylaşımı
-  surum.py         diskteki kurulum sürümü ↔ çalışan kod: get_status `stale_server`, doctor `deskhand mcp` süreçleri
-  ipucu.py         ipuçlarında çalıştırılabilir tam komut (`deskhand --desktop-name AD --background tree K`)
-  arka_uc/__init__.py   ArkaUc arayüzü + sec(hedef)
-  arka_uc/kde.py        kdotool + dotool + kscreen-doctor (+ spectacle yalnız görüntü kurtarması)
-  arka_uc/kde_goruntu.py  ekran görüntüsü: yardimci/deskhand-goruntu (C, sd-bus) → KWin ScreenShot2
-                        (org.kde.KWin.ScreenShot2, ham piksel borudan; ~8 ms). Yetki: KWin < 6.8 çağıranın
-                        /proc/<pid>/exe yolunu Exec= ilk sözcüğü aynı .desktop dosyasıyla eşleştirir ve
-                        X-KDE-DBUS-Restricted-Interfaces'te arayüzü arar → install.sh
-                        ~/.local/share/applications/deskhand-goruntu.desktop kurar (KWin 6.8 denetimi kaldırdı).
-                        Yardımcı derlenmemiş/yetkisizse iç kurtarma: spectacle (günlüğe yazılır).
-  arka_uc/sanal.py      arka plan masaüstünün Xvfb türü: Xvfb + python-xlib
-  arka_uc/kwin.py       arka plan masaüstünün KWin türü: kdotool (+ KWin betikleri) + yardimci/deskhand-eis (EIS girdi)
-                        + deskhand-goruntu + wl-copy/wl-paste, hepsi oturumun özel veri yolu / Wayland soketiyle
-  masaustu.py      arka plan masaüstü yaşam döngüsü (TEK giriş noktası, iki tür): tür seçimi, başlat/durdur/durum/
-                   liste, uygulama başlatma; durum masalar.durum_yolu() ("tur": "kwin" | "xvfb"; varsayılan masaüstü
-                   RUNTIME_DIR/sanal.json); `ad` parametresi (None = bağlam), oto masaüstü temizliği
-  masalar.py       çoklu görünmez masaüstü: ad doğrulama (`[a-z0-9][a-z0-9-]{0,15}`, "" = varsayılan, `gorev`
-                   ayrılmış), bağlam (`secili()`: masa_sabit > DESKHAND_MASAUSTU > ""), masaüstü başına yollar
-                   ("" → eski yollar AYNEN; adlı → RUNTIME_DIR/masa/<ad>/{sanal.json, sanal.lock, devral, girdi.lock,
-                   sahip, oturum/}), sahiplik + erişim kapısı, `[masaustu] azami`. Tekil yol sabitleri ("sanal.json",
-                   "sanal.lock", "devral") YALNIZ masaustu.py/masalar.py'de (tests/test_masalar.py denetler)
-  kwin_oturum.py   KWin türünün yapı taşları: kwin_wayland --virtual + özel D-Bus + özel Wayland soketi + XWayland,
-                   güvenlik kapıları (guvenlik_kapilari, baglanti_denetle), GPU seçimi, hazır olma denetimi, Eis sınıfı
-  arka_ortak.py    iki türün ORTAK iç yapı taşları: bellek kafesi, öncelik, boş ses çıkışı, uygulama ortamı tabanı
-                   (ortam_tabani), özel D-Bus yapılandırması, Xauthority, öncelik bekçisi başlatma
-  oncelik_bekcisi.py  kafesteki her iş parçacığını nice >= 10 / gerçek zamanlı olmayan / idle G/Ç'de tutan bekçi;
-                   ekran sunucusu (KWin/Xvfb) SIGKILL/OOM ile ölürse oturumu kapatır (kafes, X soket/kilit, dizin)
-  ses_bekcisi.py   (artık başlatılmıyor: arka plan uygulamaları kullanıcının ses sunucusuna hiç erişmez)
-  ses.py           oturuma ÖZEL ses sunucusu (pipewire + wireplumber `policy` + pipewire-pulse; donanımsız, yalnız
-                   `deskhand-sessiz` boş çıkışı + monitörü): kurma/kapatma/sağlık, istemci ortamı
-  dinleme.py       `listen` çekirdeği: özel çıkışın monitöründen bellekte kayıt (parec) → whisper-cli → metin
-  pano_sahibi.py   sanal masaüstünün CLIPBOARD seçimini sunan yardımcı süreç (kafeste, ilk pano yazımında başlar)
-  oturum/          oturum köprüsü (bkz. docs/SESSIONS.md)
-  mesgul.py        kullanıcı meşgul mü (oyun / film) koruması
-  onay.py          insan onayı protokolü (§8): istek dosyası + panelin doğrulanmış onay kanalı (Unix soketi)
-  onay_hedef.py    onay verilen hedefin özeti (kimlik, başlık, geometri, bölge görüntüsü) + onay sonrası doğrulama (§8)
-  liste_koruma.py  yasak/seviye listeleri, onay kapsamı, hesap oturumları: panel yetkili kaynak (bellek, geri yazma,
-                   işaret, kanaldan okuma; §4)
-  girdi_merkezi.py panelin içinde hazır bekleyen tek dotool + RUNTIME_DIR/girdi.sock (Qt'siz; §2, §4)
-  gui/             panel, tepsi, onay diyaloğu; gui/gorev.py = "Görev" sekmesi (görev kutusu, canlı adımlar, görünmez
-                   masaüstünün canlı görüntüsü, geçmiş). Panel girişinde genel istisna yakalayıcı
-                   (panel.istisna_yakalayici_kur: sys/threading excepthook → günlük + tepsi uyarısı; PyQt6'nın SIGABRT'i yok)
-  gorev.py         görev yürütücü (Qt'siz): kullanıcının yazdığı görevi `claude -p --output-format stream-json` ile
-                   YALNIZ `deskhand mcp --desktop background` araçlarıyla yaptırır. Ayrıcalık sınırı argv'de:
-                   geçici --mcp-config (tek sunucu deskhand-gorev, env DESKHAND_GERCEK_EKRAN=kapali) + --strict-mcp-config +
-                   --allowedTools mcp__deskhand-gorev__* + yerleşik araçlar --disallowedTools + --permission-mode dontAsk +
-                   --setting-sources project; boş geçici çalışma dizini; istem stdin'den; olaylar {tur, zaman, ozet};
-                   geçmiş STATE_DIR/gorevler/*.jsonl (0600, son 50); aynı anda tek görev (flock RUNTIME_DIR/gorev.lock);
-                   ayarlar [gorev] model / azami_dakika / azami_tur; MCP sunucusu GÖREV KİPİNDE (§11)
-  gorev_kipi.py    görev kipi kuralları (DESKHAND_GOREV=1): tarayıcı ilkesi, site izni, open_app süzgeci, maskeleme,
-                   görev masaüstü kapısı, pencere sınırı, kimlik değişkeni süzgeci (§11)
-  fark.py          eylem öncesi/sonrası ekran farkı (changed, changed_region, changed_ratio; NumPy, imleç dayanıklı)
-  dongu.py         döngü kesici: aynı eylem 3. sonuçsuzda uyarı, 5'ten sonra ret (MCP, oturum başına bellek)
-  gozlem.py        MCP observe: ögeleri tek biçime getirme, sorgu/atalar, OCR ayıklama, anlık görüntü önbelleği
-                   (snapshot_id, ref), fark (since), numaralı görüntü (§10)
-  gonderim.py      eylem sırasında gerçekten gönderilen girdinin sayacı (iş parçacığına özgü; MCP `sent`, §10)
-  mcp_sunucu.py    MCP yüzeyi
-bin/ekran          uyumluluk: `python3 -m deskhand "$@"` (Türkçe komutlar aynen)
-tests/             ekransız testler: test_ocr.py, test_mantik.py ...; ekranlı: tests/ekranli/ (yalnız elle)
+  web.py           elements of a web page: reading from the browser's accessibility tree (§9); MCP
+                   read_text(source="web"), CLI `web`, the web path of click-element
+  cli.py           argparse; command names in English + Turkish aliases. `deskhand --help` sub-command table
+                   (`KISA_ACIKLAMA`); `screenshot` without an id (`varsayilan_foto_hedefi`: the whole desktop on the
+                   invisible desktop, the active window + real-screen lock 17 in the foreground), `windows` without a
+                   pattern (forbidden window titles are masked)
+  gezin.py         `goto ID URL`: address-bar path (ctrl+l → address → Return) through `api.tus`/`api.yaz`; NO new
+                   safety path (title lock, sensitive page, CAPTCHA gate, DUR, human priority all unchanged); http(s) only
+  dosya_sec.py     `choose-file ID PATH`: ctrl+l → AT-SPI focused input (erisim.odakli_metin) → path → the value is
+                   READ BACK (≠ path → Dur 8, no Enter) → Return → did the dialog close; in the background only an
+                   XDG/test share
+  surum.py         installed version on disk ↔ running code: get_status `stale_server`, doctor `deskhand mcp` processes
+  ipucu.py         complete runnable command in hints (`deskhand --desktop-name NAME --background tree K`)
+  arka_uc/__init__.py   ArkaUc interface + sec(target)
+  arka_uc/kde.py        kdotool + dotool + kscreen-doctor (+ spectacle only as a screenshot fallback)
+  arka_uc/kde_goruntu.py  screenshots: yardimci/deskhand-goruntu (C, sd-bus) → KWin ScreenShot2
+                        (org.kde.KWin.ScreenShot2, raw pixels over a pipe; ~8 ms). Authorisation: KWin < 6.8 matches
+                        the caller's /proc/<pid>/exe path against the same .desktop file as the first word of Exec=
+                        and looks for the interface in X-KDE-DBUS-Restricted-Interfaces → install.sh installs
+                        ~/.local/share/applications/deskhand-goruntu.desktop (KWin 6.8 removed the check).
+                        If the helper is not built/not authorised, the internal fallback is spectacle (logged).
+  arka_uc/sanal.py      the Xvfb type of the background desktop: Xvfb + python-xlib
+  arka_uc/kwin.py       the KWin type of the background desktop: kdotool (+ KWin scripts) + yardimci/deskhand-eis (EIS input)
+                        + deskhand-goruntu + wl-copy/wl-paste, all through the session's private data path / Wayland socket
+  masaustu.py      lifecycle of the background desktop (the SINGLE entry point, two types): type selection,
+                   start/stop/status/list, application launch; state is masalar.durum_yolu() ("tur": "kwin" | "xvfb";
+                   the default desktop is RUNTIME_DIR/sanal.json); `ad` parameter (None = context), automatic desktop cleanup
+  masalar.py       multiple invisible desktops: name validation (`[a-z0-9][a-z0-9-]{0,15}`, "" = default, `gorev`
+                   reserved), context (`secili()`: masa_sabit > DESKHAND_MASAUSTU > ""), per-desktop paths
+                   ("" → the old paths UNCHANGED; named → RUNTIME_DIR/masa/<name>/{sanal.json, sanal.lock, devral,
+                   girdi.lock, sahip, oturum/}), ownership + access gate, `[masaustu] azami`. The singular path constants
+                   ("sanal.json", "sanal.lock", "devral") live ONLY in masaustu.py/masalar.py (tests/test_masalar.py checks)
+  kwin_oturum.py   building blocks of the KWin type: kwin_wayland --virtual + private D-Bus + private Wayland socket +
+                   XWayland, safety gates (guvenlik_kapilari, baglanti_denetle), GPU selection, readiness check, the Eis class
+  arka_ortak.py    internal building blocks COMMON to both types: memory cage, priority, empty audio output, base of the
+                   application environment (ortam_tabani), private D-Bus configuration, Xauthority, starting the priority guard
+  oncelik_bekcisi.py  guard that keeps every thread in the cage at nice >= 10 / non-realtime / idle I/O;
+                   if the display server (KWin/Xvfb) dies from SIGKILL/OOM it closes the session (cage, X socket/lock, directory)
+  ses_bekcisi.py   (no longer started: background applications never reach the user's sound server)
+  ses.py           SESSION-PRIVATE sound server (pipewire + wireplumber `policy` + pipewire-pulse; no hardware, only the
+                   empty `deskhand-sessiz` output + its monitor): set-up/tear-down/health, client environment
+  dinleme.py       core of `listen`: in-memory recording from the monitor of the private output (parec) → whisper-cli → text
+  pano_sahibi.py   helper process that serves the CLIPBOARD selection of the virtual desktop (in the cage, started on the
+                   first clipboard write)
+  oturum/          session bridge (see docs/SESSIONS.md)
+  mesgul.py        protection for "is the user busy" (game / film)
+  onay.py          human-approval protocol (§8): request file + the panel's verified approval channel (Unix socket)
+  onay_hedef.py    summary of the approved target (id, title, geometry, region image) + post-approval verification (§8)
+  liste_koruma.py  forbidden/level lists, approval scope, account sessions: the panel is the authoritative source (memory,
+                   write-back, marker, reading over the channel; §4)
+  girdi_merkezi.py the single dotool kept ready inside the panel + RUNTIME_DIR/girdi.sock (no Qt; §2, §4)
+  gui/             panel, tray, approval dialog; gui/gorev.py = the "Task" tab (task box, live steps, live image of the
+                   invisible desktop, history). A general exception catcher at panel start-up
+                   (panel.istisna_yakalayici_kur: sys/threading excepthook → log + tray warning; no PyQt6 SIGABRT)
+  gorev.py         task runner (no Qt): has the task the user typed carried out with `claude -p --output-format stream-json`
+                   ONLY through the `deskhand mcp --desktop background` tools. The privilege boundary is in argv:
+                   temporary --mcp-config (a single server deskhand-gorev, env DESKHAND_GERCEK_EKRAN=kapali) +
+                   --strict-mcp-config + --allowedTools mcp__deskhand-gorev__* + built-in tools via --disallowedTools +
+                   --permission-mode dontAsk + --setting-sources project; empty temporary working directory; prompt from
+                   stdin; events {tur, zaman, ozet}; history STATE_DIR/gorevler/*.jsonl (0600, last 50); only one task at a
+                   time (flock RUNTIME_DIR/gorev.lock); settings [gorev] model / azami_dakika / azami_tur; MCP server IN
+                   TASK MODE (§11)
+  gorev_kipi.py    task-mode rules (DESKHAND_GOREV=1): browser policy, site permission, open_app filter, masking,
+                   task-desktop gate, window limit, identity-variable filter (§11)
+  fark.py          screen difference before/after an action (changed, changed_region, changed_ratio; NumPy, cursor-tolerant)
+  dongu.py         loop breaker: warning at the 3rd fruitless repeat of the same action, refusal after 5 (MCP, per-session memory)
+  gozlem.py        MCP observe: normalising elements, query/ancestors, OCR extraction, snapshot cache
+                   (snapshot_id, ref), difference (since), numbered image (§10)
+  gonderim.py      counter of the input actually sent during an action (thread-specific; MCP `sent`, §10)
+  mcp_sunucu.py    MCP surface
+bin/ekran          compatibility: `python3 -m deskhand "$@"` (Turkish commands unchanged)
+tests/             screenless tests: test_ocr.py, test_mantik.py ...; with a screen: tests/ekranli/ (manual only)
 ```
 
-## 2. ArkaUc arayüzü (deskhand/arka_uc/__init__.py)
+## 2. The ArkaUc interface (deskhand/arka_uc/__init__.py)
 
-Koordinatlar: `geometri()` ve `goruntu()` EKRAN pikseli (arka ucun kendi ekranı). Üst katman pencere
-koordinatını `geometri()` ile ekrana çevirir.
+Coordinates: `geometri()` and `goruntu()` are SCREEN pixels (the backend's own screen). The upper layer converts window
+coordinates to screen coordinates with `geometri()`.
 
-Pencere kimliği: arka uca özgü dize. kde: `{uuid}`; sanal: Xvfb türünde `arka:0x1a00007`, KWin türünde
-`arka:{uuid}` (her zaman `arka:` önekli, böylece bir kimlik yanlış arka uca gidemez). Özel kimlik `EKRAN` = masaüstü
-kipi (tüm ekran).
+Window id: a backend-specific string. kde: `{uuid}`; sanal: `arka:0x1a00007` for the Xvfb type, `arka:{uuid}` for the
+KWin type (always with the `arka:` prefix, so an id cannot go to the wrong backend). The special id `EKRAN` = desktop
+mode (the whole screen).
 
-**Arka plan masaüstünün iki türü.** `sanal` hedefinin arkasında iki arka uç vardır: yalıtık KWin oturumu
-(`arka_uc/kwin.py`, `KwinArkaUc`) ve Xvfb + openbox (`arka_uc/sanal.py`, `SanalArkaUc`). İkisinin de `ad`ı `"sanal"`dır;
-tür `tur` özniteliğindedir ("kwin" | "xvfb"). Üst katman (eylem, guvenlik, erisim, MCP, CLI) türü bilmez; komutlar, MCP
-araçları, kimlik öneki ve çıkış kodları aynıdır. Geometri iki türde de İSTEMCİ alanıdır (başlık çubuğu/çerçeve hariç;
-KWin türünde KWin betiğiyle `clientGeometry`); `tasi`/`boyutlandir` istemci alanının köşesini/boyutunu verir.
+**The two types of the background desktop.** Two backends sit behind the `sanal` target: the isolated KWin session
+(`arka_uc/kwin.py`, `KwinArkaUc`) and Xvfb + openbox (`arka_uc/sanal.py`, `SanalArkaUc`). Both have `ad` = `"sanal"`;
+the type is in the `tur` attribute ("kwin" | "xvfb"). The upper layer (eylem, guvenlik, erisim, MCP, CLI) does not know
+the type; commands, MCP tools, id prefix and exit codes are the same. In both types the geometry is the CLIENT area
+(without title bar/frame; in the KWin type `clientGeometry` through a KWin script); `tasi`/`boyutlandir` give the corner/size
+of the client area.
 
-| Yöntem | Döner | Not |
+| Method | Returns | Note |
 |---|---|---|
-| `ad` | "kde" \| "sanal" | `sanal` arka uçlarında ayrıca `tur`: "kwin" \| "xvfb" |
-| `pencere_coz(arg)` | kimlik | ad deseni tek pencereye uymalı (yoksa Dur 8, çoksa Dur 5) |
-| `pencereler(desen=None)` | [(kimlik, başlık, (x,y,g,y))] | `bul` komutu |
-| `geometri(k)` | (x, y, g, y) | yoksa Dur 8 |
+| `ad` | "kde" \| "sanal" | `sanal` backends also have `tur`: "kwin" \| "xvfb" |
+| `pencere_coz(arg)` | id | the name pattern must match a single window (none: Dur 8, several: Dur 5) |
+| `pencereler(desen=None)` | [(id, title, (x,y,w,h))] | the `bul` (find) command |
+| `geometri(k)` | (x, y, w, h) | Dur 8 if missing |
 | `baslik(k)`, `sinif(k)` | str | |
-| `aktif()` | kimlik \| "" | boş = doğrulanamadı → çağıran DURUR |
-| `one_getir(k)` | None | aktif olmazsa Dur 3 |
+| `aktif()` | id \| "" | empty = could not be verified → the caller STOPS |
+| `one_getir(k)` | None | Dur 3 if it does not become active |
 | `kapat(k)` | None | |
-| `fare()` | (x, y, altındaki_kimlik) | |
-| `baslik_ve_fare(k)` | (başlık, fare()) | gözcü için tek çağrı |
+| `fare()` | (x, y, id_underneath) | |
+| `baslik_ve_fare(k)` | (title, fare()) | a single call for the watcher |
 | `ekran_alani()` | (x0, y0, x1, y1) | |
-| `goruntu()` | PIL.Image (RGB, tüm ekran) | pencere kırpımı üst katmanda |
-| `girdi(etiket, gizli, etk, denetle)` | Girdi nesnesi | `denetle(k, desen)` = üst katmanın güvenlik denetimi; her satırdan önce `hata.dur_denetle()` + `denetle()` |
-| `insan_var_mi()` | bool | kde: Wayland etkinliği; sanal: "Devral" açıksa True |
-| `baslat(argv, env=None, cikti=None)` | Popen | uygulamayı BU arka ucun oturumunda başlatır |
-| `atspi_adresi()` | str \| None | erişilebilirlik veri yolu |
+| `goruntu()` | PIL.Image (RGB, whole screen) | the window crop is made in the upper layer |
+| `girdi(etiket, gizli, etk, denetle)` | Girdi object | `denetle(k, desen)` = the upper layer's safety check; before every line `hata.dur_denetle()` + `denetle()` |
+| `insan_var_mi()` | bool | kde: Wayland activity; sanal: True if "Take over" (Devral) is on |
+| `baslat(argv, env=None, cikti=None)` | Popen | starts the application in THIS backend's session |
+| `atspi_adresi()` | str \| None | accessibility bus path |
 
-İsteğe bağlı (varsayılanlı) yöntemler: `kimlikler()`, `klavye_duzeni()`, `yazilabilir_mi(c)`, `gecerli_tuslar()`,
-`pid(k)`, `etkinlestir(k)`, `etkinlik()`, `oturum_veri_yolu()` (org.a11y.Bus'ın oturum veri yolu; None = kullanıcının
-oturumu), `ekran_korumasi(ne)` (kde: oyun/film → 15; girdi göndermeyen ama uygulamayı etkileyen yollar çağırır).
+Optional (defaulted) methods: `kimlikler()`, `klavye_duzeni()`, `yazilabilir_mi(c)`, `gecerli_tuslar()`,
+`pid(k)`, `etkinlestir(k)`, `etkinlik()`, `oturum_veri_yolu()` (the session data path of org.a11y.Bus; None = the user's
+session), `ekran_korumasi(ne)` (kde: game/film → 15; called by paths that send no input but still affect the application).
 
-Pencere yönetimi (isteğe bağlı; varsayılan = desteklenmiyor → Dur 9): `tasi(k, x, y)`, `boyutlandir(k, g, y)`,
-`kucult(k)`, `buyut(k)` (çalışma alanını kapla), `geri_yukle(k)` (küçültülmüş/büyütülmüşten normale); dönüş None.
-KWin türü: KWin betikleri (`kdotool kwinscript`, özel veri yolu) — istemci alanı ölçüsünde taşı/boyutlandır, durum
-(`pencere_durumu`: hidden/maximized) doğrulanır (Xvfb türü gibi en çok ~1 sn, olmazsa Dur 9).
-Koordinatlar ekran pikseli. Denetimler üst katmanda (`eylem.pencere_yonet`: DUR 13, yasak 10, -s/-b kilidi 4, hedef
-konum/boyut ekran alanı dışında 2); kde arka ucu ayrıca `one_getir` ile aynı ekran korumasını (15/12) uygular.
+Window management (optional; default = not supported → Dur 9): `tasi(k, x, y)`, `boyutlandir(k, w, h)`,
+`kucult(k)` (minimise), `buyut(k)` (fill the work area), `geri_yukle(k)` (from minimised/maximised back to normal); returns None.
+KWin type: KWin scripts (`kdotool kwinscript`, private data path) — move/resize in terms of the client area, the state
+(`pencere_durumu`: hidden/maximized) is verified (at most ~1 s, like the Xvfb type, otherwise Dur 9).
+Coordinates are screen pixels. The checks are in the upper layer (`eylem.pencere_yonet`: DUR 13, forbidden 10, -s/-b lock 4,
+target position/size outside the screen area 2); the kde backend additionally applies the same screen protection as
+`one_getir` (15/12).
 kde: kdotool `windowmove`/`windowsize`/`windowminimize`/`windowstate`; sanal: EWMH (`_NET_MOVERESIZE_WINDOW`,
 `_NET_WM_STATE`, `WM_CHANGE_STATE`).
 
-**Pano (isteğe bağlı; varsayılan Dur 9 "desteklenmiyor"):** `pano_oku() -> str | None` (metin; boş/metin dışı = None),
-`pano_yaz(metin, hassas=True)` ("" = temizle; `hassas` pano yöneticisi geçmişine yazılmasın; DUR ve ön plan koruması
-BURADA), `pano_yedekle()` → opak anlık görüntü (yapıştırarak yazmadan önce; okunamıyorsa Dur 9 → üst katman harf harf
-yazar) ve `pano_geri_yukle(yedek) -> uyarı | None` (DENETİMSİZ: DUR/kesintide de eski pano geri gelmeli). kde:
-`wl-paste`/`wl-copy` (`--sensitive`; metin dışı pano birincil MIME türüyle geri yüklenir). sanal: X11 seçimi sahibinde
-yaşar → masaüstünün kafesinde ilk kullanımda başlatılan `deskhand/pano_sahibi.py` yardımcısı (python-xlib, ICCCM +
-INCR; çalışma klasöründe 0600 `pano.sock`; bağlantı başına TOPLAM 5 sn süre, başlık ≤ 64 bayt, `YAZ n` n > AZAMI_VERI
-ise veri okunmadan "hata cok-buyuk"); okuma süreç içinde. KWin türü: `wl-copy`/`wl-paste` oturumun MUTLAK
-Wayland soketiyle ve asgari ortamla (kullanıcının değişkenleri yok); `wl-copy`'nin sunucu çocuğu masaüstünün kafesinde
-yaşar; okuma en çok 32 MB, yazma en çok 64 MB. Üç arka uç birbirinin panosuna dokunmaz.
+**Clipboard (optional; default Dur 9 "not supported"):** `pano_oku() -> str | None` (text; empty/non-text = None),
+`pano_yaz(metin, hassas=True)` ("" = clear; `hassas` = must not be written to the clipboard manager history; the DUR and
+foreground protection are HERE), `pano_yedekle()` → opaque snapshot (before typing by pasting; if it cannot be read, Dur 9 →
+the upper layer types letter by letter) and `pano_geri_yukle(yedek) -> warning | None` (UNCHECKED: the old clipboard must
+come back even on DUR/interruption). kde: `wl-paste`/`wl-copy` (`--sensitive`; a non-text clipboard is restored with its
+primary MIME type). sanal: the X11 selection lives in its owner → the helper `deskhand/pano_sahibi.py`, started on first
+use in the desktop's cage (python-xlib, ICCCM + INCR; 0600 `pano.sock` in the working folder; a TOTAL of 5 s per
+connection, header ≤ 64 bytes, if `YAZ n` has n > AZAMI_VERI then "hata cok-buyuk" without reading the data); reading is
+in-process. KWin type: `wl-copy`/`wl-paste` with the session's ABSOLUTE Wayland socket and a minimal environment (none of
+the user's variables); the server child of `wl-copy` lives in the desktop's cage; reading at most 32 MB, writing at most
+64 MB. The three backends never touch each other's clipboard.
 
-`baslat(argv, env, cikti)`: `env`, her iki arka uçta da `os.environ`'a EKLENECEK/değişecek değişkenlerdir (tam ortam
-değil). Sanalda masaüstü değerleri (DISPLAY, özel D-Bus, ses...) her zaman üstün gelir.
+`baslat(argv, env, cikti)`: in both backends `env` holds the variables to be ADDED to / changed in `os.environ` (not the full
+environment). For the virtual desktop, the desktop values (DISPLAY, private D-Bus, audio...) always take precedence.
 
-**Girdi nesnesi:** `gonder(k, desen, *satirlar)` (her çağrıdan önce `guvenlik.denetle`, hemen ardından
-`guvenlik.girdi_seviye_denetle(k, satirlar)`: uygulama erişim seviyesi, §4), `zorla(satir)` (bırakma;
-denetimsiz, kesintide bile), `ham(satir)`, `izle(k, desen)` / `izle_bitir()` (gözcü), `etk_denetle()`,
+**Girdi object:** `gonder(k, desen, *satirlar)` (before every call `guvenlik.denetle`, right after it
+`guvenlik.girdi_seviye_denetle(k, satirlar)`: application access level, §4), `zorla(satir)` (release;
+unchecked, even on interruption), `ham(satir)`, `izle(k, desen)` / `izle_bitir()` (watcher), `etk_denetle()`,
 `insan_kontrol()`, `kapat()`.
 
-**Girdi dili = dotool satır dili** (her iki arka uç da aynı satırları anlar):
-`mouseto FX FY` (0..1 kesir, tüm ekran), `buttondown|buttonup|click left|right|middle`, `key K`,
-`keydown K`, `keyup K` (K: `ctrl+s`, `enter`, `leftshift`…), `type METİN`, `wheel N` (artı=yukarı),
-`hwheel N` (artı=sağ), `typedelay MS`, `typehold MS`. Xvfb türü bunları XTEST'e çevirir (Türkçe karakterler
-dahil: xkb düzeni `tr` ya da keysym eşleme). KWin türü kalıcı `deskhand-eis` yardımcısına (libei, KWin EIS) verir:
-süreç başına TEK bağlantı (kilitli paylaşılır), `type` HEP YA DA HİÇ (oturumun klavye haritasında olmayan karakter →
-`hata yazilamaz` → Dur 1; `yazilabilir_mi` aynı haritadan, girdi göndermeden yanıtlar, üst katman bu karakterlerde
-pano yoluna düşer). Yardımcı: hareketten sonraki ilk düğme/kaydırma öncesi bekleme `hareketbekle MS` ile açılabilir
-(varsayılan 0: KWin 6.8.3'te 50 hızlı iki-pencere tıkında yanlış yüzey yok, bekleme tık başına +20 ms ekliyordu), imleç
-zaten hedefteyse önce 1 px komşuya gider ("park edilmiş imleç"; ucuz önlem), kaydırma ayrık 120'lik
-birim + `scroll_stop`, klavye aygıtı değişince (düzen değişimi) eskisiyle basılı kalanları yeni aygıttan bas+bırak ile
-temizler, kapanışta ei_ping eşitlemesi + `disconnect(çerez)`.
+**Input language = the dotool line language** (both backends understand the same lines):
+`mouseto FX FY` (0..1 fraction, whole screen), `buttondown|buttonup|click left|right|middle`, `key K`,
+`keydown K`, `keyup K` (K: `ctrl+s`, `enter`, `leftshift`…), `type TEXT`, `wheel N` (positive = up),
+`hwheel N` (positive = right), `typedelay MS`, `typehold MS`. The Xvfb type translates them to XTEST (including Turkish
+characters: xkb layout `tr` or keysym mapping). The KWin type hands them to the persistent `deskhand-eis` helper
+(libei, KWin EIS): ONE connection per process (shared under a lock), `type` is ALL OR NOTHING (a character not in the
+session's keyboard map → `hata yazilamaz` → Dur 1; `yazilabilir_mi` answers from the same map without sending input, and the
+upper layer falls back to the clipboard path for such characters). Helper: the wait before the first button/scroll after a
+movement can be enabled with `hareketbekle MS` (default 0: on KWin 6.8.3 there was no wrong surface in 50 fast two-window
+clicks, and the wait added +20 ms per click); if the cursor is already on the target it first moves to a neighbouring pixel
+("parked cursor"; a cheap precaution); scrolling uses discrete units of 120 + `scroll_stop`; when the keyboard device
+changes (layout change), anything still held down with the old one is released with press+release from the new device;
+on close, ei_ping synchronisation + `disconnect(cookie)`.
 
-**Atomiklik.** DUR denetimi satır başına değil `gonder()` çağrısı başına yapılır: bir çağrıdaki satırlar
-ATOMİKTİR (çift tıklamanın iki click'i bölünmez). Harf harf yazıda (`ham`) her harften önce denetlenir.
-Gözcü kesintisi (`kesildi` bayrağı) bir sonraki `izle()`ye dek kalır (iki arka uçta aynı).
+**Atomicity.** The DUR check is made per `gonder()` call, not per line: the lines of one call are ATOMIC (the two clicks
+of a double-click are not split). In letter-by-letter typing (`ham`) the check is made before every letter. A watcher
+interruption (the `kesildi` flag) stays until the next `izle()` (the same in both backends).
 
-**Girdi merkezi.** Panel açıkken içinde tek bir dotool HAZIR bekler (`deskhand/girdi_merkezi.py`); kde `Girdi`
-satırlarını `RUNTIME_DIR/girdi.sock` üzerinden ona gönderir, kendi dotool'unu açmaz (her komutta ~0,66 sn aygıt
-kurulumu yok). Protokol: `merhaba 1 <düzen> <varyant|->` → `tamam 1 <pid>`; `parti <n>` + n satır → `tamam` |
-`mesgul <sn>` | `hata <kod> <mesaj>`; `bekle` → girdi bitince `tamam <n>` + n dotool uyarısı. Bir `gonder()` çağrısı
-TEK partidir (atomik, başka bağlantının satırlarıyla karışmaz). İstemcideki denetimlerin HEPSİ (DUR, `denetle`, ön plan
-koruması, insan önceliği, gözcü, ajanın kendi istemcisi, oturum kilidi) aynen istemcide kalır; `mesgul` gelince istemci tüm
-denetimleri yeniden yapıp tekrar dener. Merkez yoksa ya da el sıkışma başarısızsa `Girdi` kendi dotool'unu açar
-(iç geri düşme: panel kapalıyken). Klavye düzeni farklıysa merkez boştayken dotool'u yeni düzenle yeniden açar.
+**Input hub.** While the panel is open a single dotool is kept READY inside it (`deskhand/girdi_merkezi.py`); kde sends its
+`Girdi` lines to it over `RUNTIME_DIR/girdi.sock` and does not open its own dotool (no ~0.66 s device set-up per command).
+Protocol: `merhaba 1 <layout> <variant|->` → `tamam 1 <pid>`; `parti <n>` + n lines → `tamam` | `mesgul <s>` |
+`hata <code> <message>`; `bekle` → when the input is finished, `tamam <n>` + n dotool warnings. One `gonder()` call is ONE
+batch (atomic, never mixed with the lines of another connection). ALL the checks on the client side (DUR, `denetle`,
+foreground protection, human priority, watcher, the agent's own client, session lock) stay on the client unchanged; on
+`mesgul` the client redoes all the checks and retries. If there is no hub or the handshake fails, `Girdi` opens its own dotool
+(internal fallback: when the panel is closed). If the keyboard layout differs, the hub reopens dotool with the new layout
+while idle.
 
-**Devral.** `RUNTIME_DIR/devral`: bir Girdi nesnesinin İLK `gonder()`'inde Devral açıksa en çok 8 sn beklenir,
-sonra 12 ile durulur; sonraki çağrılar beklemeden 12. Bildirimler `STATE_DIR/bildirimler.jsonl` dosyasına yazılır
-(2 MB'ı aşınca son 1 MB tutulur, `gunluk.temizle`).
+**Take over (Devral).** `RUNTIME_DIR/devral`: if Devral is on at the FIRST `gonder()` of a Girdi object, it waits at most
+8 s and then stops with 12; later calls stop with 12 without waiting. Notifications are written to
+`STATE_DIR/bildirimler.jsonl` (when it exceeds 2 MB the last 1 MB is kept, `gunluk.temizle`).
 
-## 3. Hedef seçimi
-`--arka` genel bayrağı / `DESKHAND_HEDEF=arka|on|oto` / kimlik `arka:` öneki → `arka_uc.sec()`. `sanal` hedefinde
-`sec()` durum kaydının türüne bakar (`arka_tur()`): KWin → `KwinArkaUc`, Xvfb (ya da kayıt yok) → `SanalArkaUc`.
+## 3. Target selection
+The global `--arka` flag / `DESKHAND_HEDEF=arka|on|oto` / the `arka:` id prefix → `arka_uc.sec()`. For the `sanal` target
+`sec()` looks at the type in the state record (`arka_tur()`): KWin → `KwinArkaUc`, Xvfb (or no record) → `SanalArkaUc`.
 
-**Tür seçimi (tek yol, seçenek sunulmaz).** `masaustu.secilen_tur()`: `kwin_oturum.kullanilabilir()` (KWin >= 6.8,
-erişilebilir render aygıtı, `deskhand-eis` + `deskhand-goruntu` derli, kdotool, dbus-daemon…) ise KWin; değilse Xvfb.
-Kendiliğinden seçilen KWin AÇILAMAZSA Xvfb'ye düşülür (uyarı + günlük). Yalnız test/tanılama için
-`DESKHAND_ARKA_TUR=kwin|xvfb` (zorlanan kwin kullanılamıyorsa Dur 9, sessiz düşme yok).
+**Type selection (a single path, no option is offered).** `masaustu.secilen_tur()`: if `kwin_oturum.kullanilabilir()` (KWin >= 6.8,
+an accessible render device, `deskhand-eis` + `deskhand-goruntu` built, kdotool, dbus-daemon…) then KWin; otherwise Xvfb.
+If a KWin that was chosen automatically CANNOT BE OPENED, it falls back to Xvfb (warning + log). Only for testing/diagnostics:
+`DESKHAND_ARKA_TUR=kwin|xvfb` (if a forced kwin is unusable, Dur 9; no silent fallback).
 
-**Çoklu görünmez masaüstü (Aşama 1 çekirdeği).** İLKE: bir süreç (MCP oturumu ya da CLI çağrısı) TEK görünmez
-masaüstüne bağlıdır; aynı anda en çok `[masaustu] azami` (1..6, varsayılan 3) masaüstü, aşılırsa Dur 7. Her masaüstünün
-kendi durum kaydı + kilidi + girdi kilidi + Devral bayrağı + oturum kopyası kökü vardır (`masalar`); alt katman
-(KWin oturumu `RUNTIME_DIR/kwin-<kimlik>`, kafes, Wayland soketi, D-Bus, özel PipeWire) zaten masaüstü başınadır.
-Adlı masaüstü YALNIZ KWin türünde (Xvfb türü yalnız varsayılan adla; ortak null sink adı). `arka_uc.sec()` önbelleği
-`(masa, tür)` anahtarlıdır. Bağlam: CLI `--desktop-name AD` (komuttan önce) / `desktop … --name AD` / ortam
-`DESKHAND_MASAUSTU`; MCP OTOMATİK bağlanır (ilk `desktop=background` çözümünde): `--desktop-name`/ortam sabitse o;
-yoksa varsayılanın canlı sahibi yoksa varsayılan; yoksa en küçük boş `oturum-N` (oto). Bağlanınca
-`os.environ["DESKHAND_MASAUSTU"]` yazılır (alt süreçler devralır; `erisim` yardımcı süreci isteğinde `masa` taşır);
-`get_status`/`manage_desktop` yanıtında `name`. Görev kipindeki MCP HEP varsayılan masaüstüne bağlanır (sahipliğe
-dokunmaz). MCP ilk ebeveynini saklar; ebeveyn ölüp systemd'ye geçtiyse bağlanmaz (Dur 14). SAHİPLİK: `sahip` dosyası
-(varsayılan için `RUNTIME_DIR/sanal-sahip`) = `mcp <pid> <başlangıç> <ilk_ebeveyn_pid> <ebeveyn_başlangıç> <oto>
-<pid ad alanı>`; KAPI `masalar.erisim_kapisi` (gorev_kipi kapılarından çağrılır, okuma dahil): varsayılan masaüstü
-göreve ayrılmışsa (görev işareti canlı) ÖNCE görev işareti: görev kipi → izin, panel → izin, diğer herkes (sahibi dahil)
-→ Dur 14 (görev masaüstü); görev bitince sahiplik aynen geri gelir. Sonra: sahibi ölü/bozuk/PID yeniden kullanılmış →
-serbest; sahip başka PID ad alanında (denetlenemez) → Dur 14; çağıran sahip → izin; çağıranın ata zincirinde sahibin
-ebeveyni (başlangıç zamanıyla) → izin (aynı Claude oturumunun Bash'i); ata zincirinde HİÇ `claude` süreci yok (insan:
-kendi terminali, KDE kısayolu) → izin; panel (GOZLEMCI) → izin; diğer → Dur 14. Bu bir KOORDİNASYON kuralıdır (ajan
-oturumları birbirinin masaüstünü bozmasın); aynı kullanıcının kabuk koduna karşı GÜVENLİK SINIRI DEĞİLDİR (aynı uid
-dosyayı silebilir, ata zincirini taklit edebilir). Panel onay devrinde (CAPTCHA) "Devral", Arka plan sekmesini
-isteğin masaüstüne çevirir (panel sürecinin bağlamı), karar verilince varsayılana döner; onay diyaloğu masaüstü adını
-gösterir. Flatpak örneği yalnız çocuk PID eşleşmesiyle kaydedilir (uygulama adıyla eşleşme yok: başka masaüstünün
-örneği kaydedilip öldürülmesin). ÖMÜR: MCP kapanışında yalnız sahiplik bırakılır; `oto` masaüstü için ayrık temizleyici
-(start_new_session, `DESKHAND_OTO_BEKLE` ya da 120 sn) sahipsizse durdurur; her başlatma ve `desktop list` sahipsiz
-otoları durdurur. Varsayılan ve sabit adlılar kendiliğinden kapanmaz. Durdurma (`masaustu_durdur(ad)`) YALNIZ o
-masaüstünün süreçlerini, oturum kopyalarını ve Flatpak örneklerini kapatır (`oturum.kapanis(ad)`,
-`politika.kopya_dizini(ad)`). Onay isteği `masa` alanı taşır; `onay.bekleyen_var(..., masa)` ve MCP
-`_BEKLEYEN[(arka uç, masa)]`: bir masaüstündeki bekleyen onay başkasını kilitlemez. Görev kipi işareti
-(`gorev-masaustu`) yalnız varsayılan masaüstünü ayırır (Aşama 2'de `gorev` adına taşınacak). Panel yalnız varsayılan
-masaüstünü gösterir (devir sırasındaki geçiş dışında; Aşama 2). GPU: birden çok render aygıtı varsa boot_vga=0 + tümleşik aygıt ("bağlı çıkış"
-bilgisine güvenilmez) (`KWIN_RENDER_NODES`); o aygıtla açılamazsa bir kez varsayılanla. Oturum "hazır" sayılmadan önce: Wayland soketi,
-`org.kde.KWin` adı, ScreenShot2 arayüzü, oturum boyutunda (ölçek 1) bir kare, aynı boyutta EIS aygıtları; KWin
-beklerken ölürse hemen hata.
-ÖLÇEK 2 (HiDPI, `desktop start --scale 2` / `manage_desktop(scale=2)`, yalnız KWin; kayıtta `olcek`, eski kayıt = 1):
-`kwin_wayland --virtual --width G --height Y --scale 2` çerçeve tamponunu 2G×2Y açar ama KWin'in çıkış deposu yeni
-sanal çıkışa ölçek 1 verir (ölçüldü: EIS bölgesi 2G×2Y, düzen büyür) → hazır denetiminden önce `kscreen-doctor
-output.<ad>.scale.2` oturumun KENDİ Wayland soketiyle (`_ekran_ortami`: mutlak WAYLAND_DISPLAY, özel veri yolu,
-KSCREEN_BACKEND_INPROCESS; kullanıcının ekranına ulaşamaz). Hazır: kare 2G×2Y, EIS bölgesi G×Y. SÖZLEŞME: pencere
-geometrisi, tıklama/EIS koordinatı, AT-SPI kutuları, OCR kutuları MANTIKSAL piksel (ölçek 1 ile aynı düzen);
-`ArkaUc.goruntu()` fiziksel kare. `gorsel.pencere_goruntusu(tam=False)` (varsayılan; OCR, observe, fark, onay)
-fiziksel kareyi mantıksala LANCZOS ile küçültür; `tam=True` küçültmez, `im.info["deskhand_olcek"]`
-(`gorsel.piksel_olcegi`) = görüntü pikseli / pencere pikseli. Tam çözünürlüğü kullananlar: CLI `screenshot`
-(`--out` dosyası 2×, `--width` küçültür; `son_foto.olcek` = toplam ölçek, `--foto` eşler) ve MCP `screenshot`
-(tam kare `max_edge`'e küçültülür; `shot_id` ölçeği = küçültme × piksel ölçeği → `cekim_noktasi` mantıksal koordinat
-verir; küçük bölgeler 2× ayrıntıyla döner). XWayland: KWin `[Xwayland] Scale=2` (istemciler kendileri ölçekler, X11
-koordinatı fiziksel) → oturum uygulamalarına `GDK_SCALE=2` (Firefox dpr 2), Chromium/Electron'a
-`--force-device-scale-factor=2`; AT-SPI kutuları YALNIZ ölçek > 1 masaüstünde (istekte `olcek`,
-`ArkaUc.masaustu_olcegi()`) ve çerçeve pencere geometrisinin ~ölçek katıysa (iki boyutta da |oran − ölçek| < 0,35;
-`erisim.xwayland_orani`) ölçeğe bölünür; ölçek 1'de hiç bölünmez (çerçevesini büyük bildiren uygulamada yanlış tık
-olmasın). Xvfb türünde ölçek 2 Dur(9) ile reddedilir (çıkış ölçeği yok; uygulama başına bayraklar Qt/GTK/X11
-karışımında tutarsız). Bellek: 2× kare ~4 kat çerçeve tamponu (1280x800'de Firefox'lu kafes ~500 MiB; 4 GB kafes
-yeter).
-Varsayılan `on` (kullanıcının gerçek masaüstü). `oto`, `deskhand decide` (karar) komutuna bağlanır: kullanıcı
-ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
+**Multiple invisible desktops (core of stage 1).** PRINCIPLE: a process (an MCP session or a CLI call) is bound to ONE
+invisible desktop; at most `[masaustu] azami` (1..6, default 3) desktops at the same time, Dur 7 if exceeded. Every desktop
+has its own state record + lock + input lock + Devral flag + session-copy root (`masalar`); the lower layer (KWin session
+`RUNTIME_DIR/kwin-<id>`, cage, Wayland socket, D-Bus, private PipeWire) is already per desktop. A named desktop exists
+ONLY in the KWin type (the Xvfb type only with the default name; shared null sink name). The `arka_uc.sec()` cache is keyed
+by `(desktop, type)`. Context: CLI `--desktop-name NAME` (before the command) / `desktop … --name NAME` / environment
+`DESKHAND_MASAUSTU`; MCP binds AUTOMATICALLY (at the first `desktop=background` resolution): if `--desktop-name`/the environment
+is fixed, that one; otherwise the default if the default has no live owner; otherwise the smallest free `oturum-N` (auto). On
+binding `os.environ["DESKHAND_MASAUSTU"]` is written (child processes inherit it; the `erisim` helper process carries `masa` in
+its request); `name` in the `get_status`/`manage_desktop` reply. An MCP in task mode ALWAYS binds to the default desktop (it
+does not touch ownership). The MCP remembers its first parent; if the parent died and was re-parented to systemd it does not
+bind (Dur 14). OWNERSHIP: the `sahip` file (`RUNTIME_DIR/sanal-sahip` for the default) = `mcp <pid> <start> <first_parent_pid>
+<parent_start> <auto> <pid namespace>`; the GATE is `masalar.erisim_kapisi` (called from the gorev_kipi gates, reading
+included): if the default desktop is reserved for a task (task marker alive) the task marker comes FIRST: task mode → allowed,
+panel → allowed, everyone else (the owner included) → Dur 14 (task desktop); when the task ends, ownership comes back as it
+was. Then: owner dead/corrupt/PID reused → free; owner in another PID namespace (cannot be checked) → Dur 14; the caller is the
+owner → allowed; the owner's parent is in the caller's ancestor chain (with start time) → allowed (the Bash of the same Claude
+session); NO `claude` process in the ancestor chain at all (a human: own terminal, KDE shortcut) → allowed; panel (GOZLEMCI) →
+allowed; anything else → Dur 14. This is a COORDINATION rule (agent sessions must not disturb each other's desktop); it is NOT A
+SECURITY BOUNDARY against shell code of the same user (the same uid can delete the file and forge the ancestor chain). In the
+panel's approval hand-over (CAPTCHA) "Take over" (Devral) switches the Background tab to the request's desktop (the panel
+process's context) and returns to the default when a decision is made; the approval dialog shows the desktop name. A Flatpak
+instance is recorded only by child-PID match (no match by application name: the instance of another desktop must not get
+recorded and killed). LIFETIME: when the MCP closes only ownership is released; for an `oto` (auto) desktop a detached cleaner
+(start_new_session, `DESKHAND_OTO_BEKLE` or 120 s) stops it if it is ownerless; every start and `desktop list` stops ownerless
+autos. The default and fixed-name desktops never close by themselves. Stopping (`masaustu_durdur(ad)`) closes ONLY that
+desktop's processes, session copies and Flatpak instances (`oturum.kapanis(ad)`, `politika.kopya_dizini(ad)`). An approval
+request carries a `masa` field; `onay.bekleyen_var(..., masa)` and the MCP `_BEKLEYEN[(backend, masa)]`: a pending approval on one
+desktop does not lock another. The task-mode marker (`gorev-masaustu`) reserves only the default desktop (it will move to the
+`gorev` name in stage 2). The panel shows only the default desktop (except for the switch during a hand-over; stage 2). GPU: if
+there are several render devices, boot_vga=0 + the integrated device (the "connected output" information is not trusted)
+(`KWIN_RENDER_NODES`); if it cannot be opened with that device, once more with the default. Before a session counts as "ready":
+Wayland socket, the `org.kde.KWin` name, the ScreenShot2 interface, one frame of the session size (scale 1), EIS devices of the
+same size; if KWin dies while waiting, an immediate error.
+SCALE 2 (HiDPI, `desktop start --scale 2` / `manage_desktop(scale=2)`, KWin only; `olcek` in the record, an old record = 1):
+`kwin_wayland --virtual --width W --height H --scale 2` opens the frame buffer at 2W×2H but KWin's output store gives the new
+virtual output scale 1 (measured: the EIS region is 2W×2H, the layout grows) → before the readiness check `kscreen-doctor
+output.<name>.scale.2` through the session's OWN Wayland socket (`_ekran_ortami`: absolute WAYLAND_DISPLAY, private data path,
+KSCREEN_BACKEND_INPROCESS; it cannot reach the user's screen). Ready: frame 2W×2H, EIS region W×H. CONTRACT: window geometry,
+click/EIS coordinates, AT-SPI boxes, OCR boxes are LOGICAL pixels (the same layout as scale 1); `ArkaUc.goruntu()` is the
+physical frame. `gorsel.pencere_goruntusu(tam=False)` (default; OCR, observe, difference, approval) shrinks the physical frame
+to logical with LANCZOS; `tam=True` does not shrink, `im.info["deskhand_olcek"]` (`gorsel.piksel_olcegi`) = image pixel / window
+pixel. Users of the full resolution: the CLI `screenshot` (the `--out` file is 2×, `--width` shrinks; `son_foto.olcek` = total
+scale, `--foto` maps it) and the MCP `screenshot` (the full frame is shrunk to `max_edge`; the `shot_id` scale = shrink × pixel
+scale → `cekim_noktasi` gives a logical coordinate; small regions come back with 2× detail). XWayland: KWin `[Xwayland] Scale=2`
+(clients scale themselves, the X11 coordinate is physical) → `GDK_SCALE=2` for session applications (Firefox dpr 2),
+`--force-device-scale-factor=2` for Chromium/Electron; AT-SPI boxes are divided by the scale ONLY on a desktop with scale > 1
+(`olcek` in the request, `ArkaUc.masaustu_olcegi()`) and if the frame window geometry is ~a multiple of the scale (|ratio − scale|
+< 0.35 in both dimensions; `erisim.xwayland_orani`); at scale 1 they are never divided (so that an application reporting an
+oversized frame does not cause a wrong click). On the Xvfb type scale 2 is refused with Dur(9) (no output scale; per-application
+flags are inconsistent in a Qt/GTK/X11 mix). Memory: a 2× frame is ~4× the frame buffer (a cage with Firefox at 1280x800 ~500 MiB;
+a 4 GB cage is enough).
+The default is `on` (the user's real desktop). `oto` is tied to the `deskhand decide` command: if the user's screen is busy it
+suggests doing the work in the background, otherwise in the foreground.
 
-## 4. Güvenlik (iki arka uçta da AYNEN)
-- Yasak pencereler (`yasak-pencereler.txt`): hiçbir girdi + başlatma yok (10). **Liste varsayılan olarak boştur**
-  (yalnız yerleşik panel/onay penceresi yasağı vardır); kullanıcı kendi yasaklarını ekler.
-- Hassas düğme / ödeme sayfası başlığı → `--onayli` yoksa 10. `--onayli` YALNIZ kullanıcı sohbette açıkça onayladıysa.
-- **Riskli tuş kombinasyonları → insan onayı** (yasak DEĞİL). `guvenlik.riskli_tus(kombinasyon) -> neden | None`:
-  ctrl+alt+delete, ctrl+alt+backspace, ctrl+alt+f1…f12 (sanal uçbirim), meta+l ve ctrl+alt+l (ekran kilidi),
-  alt+sysrq+tuş. `k_tus` / `k_bas` hassas-eylem yolunu kullanır (`riskli_tus_engel`): `--onayli` yoksa panelden onay,
-  panel kapalıysa 10; `dizi`/akış adımları aynı işlevlerden geçtiği için aynen kapsanır. Pencere sınıfından bağımsız.
-  `k_bas` tuşları aynı anda basılı tuttuğundan boşlukla ayrılmış tuşlar tek küme sayılır (`birlikte=True`).
-- **UÇBİRİMDE KOMUT ÇALIŞTIRMAK HER ZAMAN İNSAN ONAYI İSTER; kara liste (`riskli_komut`) yalnız UYARI içindir.**
-  Uçbirim (ya da gömülü uçbirim) barındıran pencereye giden HER Enter — enter, kpenter, linefeed, `x:Return`, `k:28`,
-  ctrl+j/ctrl+m/ctrl+o, yazının içindeki `\n`, AT-SPI değer yazmadaki satır sonları — satır içeriğinden BAĞIMSIZ panel
-  onayı ister (`ucbirim.enter_kapisi`): bir Enter = bir onay (aynı eylemdeki önceki onay taşınmaz; `yaz "a\nb\n"` iki onay,
-  `tus "l s enter p w d enter"` iki onay); gözetimsiz kipte ret (10); CLI'de `--onayli` (kullanıcı sohbette onayladı) geçer.
-  İstisna YOK: ön planda vim/less/REPL olsa da sorulur (tpgid ile bulunan ön plan süreci yalnız onay metnine "ön planda
-  kabuk değil: …" notu olarak girer). Onay isteği: "Uçbirimde komut çalıştırılacak (Enter)", o anki satır (okunabiliyorsa;
-  `--gizli`/parola ise yalnız uzunluk; okunamıyorsa "satır okunamadı"), `riskli_komut` ya da geçmiş açılımı (`!!`, `!n`,
-  `^a^b`, `fc`, `r`, `history -s`) eşleşirse "YIKICI OLABİLİR: <neden>", uçbirim türü (gömülü mü). Satır okuma: erişilebilirlik
-  ZATEN açıksa AT-SPI (rolü `terminal` olan ögenin imleç satırı + önceki iki satır; erişilebilirlik bunun için açılmaz),
-  yoksa pencerenin OCR'ı (en alttaki dört yazılı satır; istem işaretinden sonrası, sarılmış satırların birleşimi ve tek tek
-  satırlar aday); Deskhand'in yazdıklarının TAMPONU (`RUNTIME_DIR/ucbirim/<sha1(arka uç:pencere:pid)>.json`, 0600, dizin
-  0700, flock; yazdırılabilir tuş/`type` eklenir, BackSpace siler, Enter/ctrl+c/ctrl+u/Esc temizler; ok tuşları, ctrl+a/e/r/w,
-  Tab, tık, yapıştırma, başka uçbirime geçiş ve 120 sn hareketsizlik "kirli" yapar) uyarı adayına eklenir. Zamanlama:
-  `tus`/`bas` dizisi Enter'larda bölünerek gönderilir ve HER Enter'dan HEMEN önce pencere yeniden hesaplanır (dizinin
-  ortasında da); yazının içindeki Enter'lar yazmadan önce sırayla onaylanır, önceden onaylanmamış bir Enter gönderimden
-  hemen önce yeniden hesaplanıp gerekiyorsa o an sorulur. Kapsanan yollar: `tus`/`bas`, `yaz` (harf harf + yapıştırarak),
-  `dizi`/akış adımları, AT-SPI değer yazma. Uçbirim barındırmayan pencerede Enter'a dokunulmaz (onay sayısı değişmez).
-- **Uçbirime yıkıcı komut YAZMA** (Enter'sız): hedef uçbirim barındırıyorsa ve metin `riskli_komut` uyarısı üretiyorsa onay
-  istenir (`guvenlik.ucbirim_komut_engel`, `eylem._yazi_hassas`); yazıda Enter varsa bu ayrı sorulmaz (Enter onayı aynı
-  uyarıyı taşır: iki diyalog açılmaz). `riskli_komut` (uyarı) metni kabuk kurallarıyla sözcüklere ayırır (tırnak/ters bölü
-  kaldırılır, `$'…'` açılır, `$(…)`/`` `…` ``/`<(…)` içi ayrıca denetlenir; kabuk anahtar sözcükleri, atamalar atlanır;
-  aynı metindeki atama çözülür; küme açılımı; `busybox X` → X; sarmalayıcı seçenekleri; `env -S`); uyarı kalıpları: yıkım
-  (rm -r, find -delete/-exec, mkfs, dd, shred, truncate -s 0, git clean -f, rsync --delete ~, mv ~), yetki (sudo/doas/
-  pkexec/run0), güç/oturum (shutdown/reboot…, systemctl/loginctl, D-Bus `login1 … Reboot/PowerOff/Suspend`,
-  `org.kde.Shutdown`, ksmserver), masaüstünü/Deskhand'i sonlandırma (`killall`/`pkill`/`kquitapp*` plasmashell/kwin/
-  deskhand, `systemctl stop plasma-*`), Deskhand'in ayar/durum dosyalarına dokunma, dolaylı yürütme (`… | sh`, `base64 -d |
-  …`, kabuğa `<`/`<<`/`<<<`, `source`/`.`, `eval`, `alias`/`trap`, `PROMPT_COMMAND`/`PS0`/`BASH_ENV`/`LD_PRELOAD`, geçmiş,
-  komut adında `${…}`/`$(…)`), içeriği denetlenemeyen betik/program (`./x.sh`, `~/x.sh`, `bash x.sh`, `python3 x.py`, geçici
-  dizinden program), GTFOBins seçenekleri (`--checkpoint-action`, `ProxyCommand`, `rsync -e`, sed `e`, `man -P`, `zip -TT`,
-  vim `:!`), kalıcılık (başlangıç dosyaları, autostart, `~/.ssh`, `~/.local/bin`, crontab), ayrık başlatıcılar
-  (`systemd-run`, `at`, `tmux new`, `screen -dm`, `flock -c`, `watch`), indirileni kabuğa verme, çatal bombası, zorla git
-  push, `:w !sudo`. Uyarı listesi eksik olabilir: güvenlik sınırı yukarıdaki Enter onayıdır.
-- **Uçbirim tanıma** (`guvenlik.ucbirim_penceresi_mi`): pencere sınıfı uçbirim öykünücüsüyse; YA DA pencerenin sahibi
-  sürecin TORUNLARINDA denetim uçbirimi (tty) olan bir kabuk varsa (GÖMÜLÜ uçbirim: Dolphin F4, Kate uçbirim paneli,
-  VS Code/IDE — pencerenin tamamı uçbirim sayılır); PID bilinmiyorsa ve sınıf uçbirim gömebilen bir uygulamaysa
-  (`GOMULU_UCBIRIM_SINIFLARI`) güvenli tarafta; erişilebilirlik zaten açıksa pencerede rolü `terminal` olan öge varsa.
-  Yalnız "uçbirim" sonucu 2 sn önbellekte tutulur; "uçbirim DEĞİL" sonucu önbelleğe alınmaz (her Enter'dan önce yeniden
-  hesap). Gömebilen sınıftaki pencereye uçbirim açabilen bir tuş (F4, shift+F4, ctrl+`, ctrl+shift+`, ctrl+alt+t,
-  ctrl+shift+t, alt+F12) gönderildikten sonra pencere 30 sn "uçbirim olabilir" sayılır (`RUNTIME_DIR/ucbirim/ucbirim-<sha1>`;
-  o sürede her Enter onaylı); aynı çağrıda uçbirim açma tuşu Enter'dan önce geliyorsa o Enter da onay ister.
-- **Ajanın kendi istemcisi** (`deskhand/kendi.py`): Deskhand süreci (CLI ve MCP sunucusu) `/proc/<pid>/stat` ppid ile
-  1'e kadar yürür (oturum altyapısı — systemd, kwin, plasmashell, krunner… — hariç); MCP sunucusunda küme 15 sn'de bir
-  tazelenir. Penceresinin sahibi PID'i (kde: `kdotool getwindowpid`; sanal: `_NET_WM_PID`) bu kümedeyse o pencereye HER
-  girdi 10 ("ajanın kendi istemcisi"; ajan kendi izin istemini onaylayamasın); okuma/ekran görüntüsü serbest. Uçbirimler çoğu
-  zaman TEK süreçte çok pencere tutar (Ghostty, Konsole): o sürecin TÜM pencereleri kapsanır. Zincirde tmux varsa `$TMUX`
-  soketiyle salt okunur `tmux list-clients -F '#{client_pid}'` → istemcilerin ataları (öykünücü) eklenir; çözülemezse
-  (screen, zellij, dtach, tmux sorgusu başarısız) TÜM uçbirim sınıflı pencereler (kde). PID'i bilinmeyen pencereler (kde):
-  ortam ipuçları (`KONSOLE_DBUS_WINDOW`, `WINDOWID`, `TERM_PROGRAM`, `GHOSTTY_RESOURCES_DIR`, `KITTY_PID`,
-  `ALACRITTY_WINDOW_ID`) ve zincirdeki öykünücünün adı → o sınıftaki PID'siz uçbirim pencereleri de. PID ad alanında
-  çalışıyorsak (flatpak/bwrap: `/.flatpak-info`, zincirde bwrap ya da `/proc/<pid>/status` NSpid birden çok): ataların
-  dış PID'i (NSpid ilk alanı) kümeye eklenir ve PID'i eşleşmeyen aynı sınıftaki uçbirim pencereleri de kapsanır (pencere
-  yöneticisi dış PID'i görür). ssh üzerinden bağlanan
-  uzak istemci kapsam dışıdır. Görünmez masaüstündeki pencereler ajanın istemcisi olamaz: orada yalnız PID kuralı vardır
-  (doğal olarak boşa çıkar). Denetim yerleri: `denetle`, `pencere_denetle` (AT-SPI), `imlec_alti_denetle` (tıklamanın/
-  sürüklemenin düştüğü pencere), masaüstü kipinde klavye girdisinin gittiği etkin pencere (`girdi_seviye_denetle`),
-  `pencere_yonet`, `k_kapat`, AT-SPI çerçevesinin süreci; yapıştırarak yazma her parçada `denetle`'den geçer.
-- **Sistem yetki/parola/izin istemleri → insan onayı** (yasak değil): polkit kimlik doğrulama aracısı, KWallet
-  (`kwalletd5/6`, `ksecretd`), parola sorucuları (`ksshaskpass`, `pinentry-*`, `ssh-askpass`), `xdg-desktop-portal-*` izin
-  diyalogları (`org.freedesktop.impl.portal…`), `kdesu`/`sudo`/`pkexec` istemleri (`guvenlik.SISTEM_ISTEMLERI`, tek sabit
-  liste; pencere sınıfında ve sahibi sürecin adında). Bu pencerelere her tür girdi (fare, klavye, yapıştırma, AT-SPI
-  eylemi/değer yazma, sürükleme, pencere yönetimi, kapatma) eylem başında onay ister (`sistem_istemi_engel`; CLI
-  `--onayli`, MCP'de her zaman panel, gözetimsiz kipte ret); onay o eylem boyunca o pencere için geçerlidir. Her gönderimden
-  hemen önce `sistem_istemi_denetle` onaysız istemde 10 verir — girdinin DÜŞTÜĞÜ ekran noktasındaki pencere için de
-  (`imlec_alti_denetle`: başka pencere hedeflenip noktada istem açıksa izin olsa bile ret; masaüstü kipindeki tıkta noktadaki
-  isteme onay sorulur).
-- **Yapıştırma = pano okuma** (kde): `ctrl+v`, `ctrl+shift+v`, `shift+insert`/`shift+kpinsert`, Paste tuşu (`XF86Paste`, `k:207`),
-  klavye menüsüyle yapıştırma (`shift+F10` / `menu` / `alt+e` ardından `p`/`y` ya da menüde gezinip Enter — aynı çağrıda
-  ya da 3 sn içinde ayrı çağrıda), orta tık (birincil seçim), AT-SPI ögesinin adı/eylem adı "paste/yapıştır" İÇERİYORSA
-  (simgeli düğmenin erişilebilir adı) ve MENÜDEN
-  yapıştırma (tıklanan yazı ya da AT-SPI öge adı Yapıştır/Paste/Einfügen/Coller/Pegar…, "Panodan ekle", "Insert from
-  clipboard", "Paste as…", "Özel yapıştır", 📋 ya da "Ctrl+V" ipucu; kısa metin;
-  `guvenlik.hassas_engel` içinde — fare, AT-SPI eylemi ve aynı işlevi çağıran web yolları) kullanıcının
-  panosunu ajanın görebileceği yere taşır: pano boş değilse ve Deskhand'in bu oturumda yazdığı metin değilse
-  (`guvenlik.kendi_pano_ekle/kendi_pano_mu`: süreç belleği + `RUNTIME_DIR/pano-ozetleri`, 0600, yalnız sha256) onay ister
-  (okunamıyorsa da). Deskhand'in kendi yapıştırarak yazma yolu (`eylem._yapistirarak_yaz`) muaftır. Sanal masaüstünün
-  panosu ayrıdır: denetim yok. BİLİNEN SINIR: yazısı OCR'la okunamayan VE erişilebilir adı olmayan simgeli bir "yapıştır"
-  düğmesine fareyle tıklama tanınamaz (koordinatla tık; onay sorulmaz).
-- **Parola alanı** (AT-SPI rolü `password text`, değer yazmada hedef öge, klavyeyle yazmada odaklı öge — erişilebilirlik
-  açıksa): yazı / yapıştırma / değer yazma onay ister (CLI `--onayli`); değeri ASLA okunmaz (doğrulama için bile); metin
-  günlüğe, hata iletisine, onay isteğine yazılmaz (yalnız uzunluk), `--gizli` verilmemiş olsa bile kendiliğinden gizlidir.
-- **Oturum kilidi** (kde): `org.freedesktop.ScreenSaver.GetActive` (yoksa logind `LockedHint`) kilitli ya da okunamıyorsa
-  kullanıcının ekranına hiçbir girdi gitmez (15, "oturum kilitli"; kapalı-başarısız; `--ekranimda` aşmaz): kilit ekranına
-  yanlışlıkla giden yazı parola denemesi sayılır ve hesabı kilitleyebilir. Durum 0,5 sn önbellekte; sanal masaüstünde yok.
-- **Onay verilen hedef değişmesin**: hassas tık panelden onaylandıysa tıklamadan HEMEN önce noktadaki yazı yeniden OCR'lanıp
-  onay isteğindeki yazıyla bulanık karşılaştırılır (benzerlik < 0,85 → tık yapılmaz, 10 "onay verilen hedef değişti").
-  Ağaç ögesine tıkta (`click-element`, web ögesi dahil) öge ayrıca ağaçtan yeniden bulunur (`erisim._onay_sonrasi_oge`):
-  adı, rolü, merkezi (±3 px; web'de veri yolu adı + nesne yolu) aynı değilse ya da yoksa 10. Onay anında noktada OCR
-  yazısı yoksa (yazısız simge / `aria-label` düğmesi: öge adı OCR'da görünmez) nokta karşılaştırması "şimdi de yazı yok"
-  olur; kimlik ağaçtan doğrulanmıştır. Web erişilebilirlik eyleminde (`via="action"`) aynı öge denetimi eylemden önce.
-- **Sürükleme bitişi** başlangıç gibi denetlenir: tek onay iki noktanın yazısını taşır; ara hareketlerde gözcü (etkin
-  pencere + başlık kilidi); bırakmadan hemen önce bitiş noktasının altındaki pencere (yasak / kendi istemci / onaysız
-  sistem istemi / başka uygulama) — uymazsa imleç başlangıca götürülüp bırakılır (sürükleme iptal).
-- **Uygulama erişim seviyeleri** (varsayılan YOK): `CONFIG_DIR/uygulama-seviyeleri.txt`, satır `DESEN = goruntule | tikla |
-  tam` (DESEN yasak listesindeki gibi başlık/sınıf regex'i; İngilizce eş adlar view/click/full). goruntule = hiçbir
-  girdi yok (10; okuma/ekran görüntüsü serbest), tikla = fare serbest, klavye (yaz/tuş/bas) ve pencere kapatma yok (10),
-  tam = kısıt yok. Dosya yoksa/boşsa hiçbir kısıt yoktur (araç kendiliğinden uygulama kısıtlamaz); dosya okunurken
-  oluşturulmaz, yalnız panelden Kaydet yazar. Birden çok desen uyarsa EN KISITLAYICI geçerlidir; biçimi bozuk satır
-  (= yok, bilinmeyen seviye) güvenli tarafta goruntule sayılır (panel bozuk satırı kaydetmez). Denetim iki arka uçta
-  aynıdır: `Girdi.gonder`, `denetle(k, desen)`'ten hemen sonra `guvenlik.girdi_seviye_denetle(k, satirlar)` çağırır
-  (key/keydown/type = klavye; mouseto/click/button/wheel = fare; typedelay/typehold ayar satırı denetlenmez); masaüstü
-  kipinde klavye etkin pencereye, fare `imlec_alti_denetle` ile imlecin altındaki pencereye bakar. `ac` ile başlatma
-  etkilenmez. Seviye reddi onaydan ÖNCE verilir (boş diyalog açılmaz). Pencere yönetimi (`eylem.pencere_yonet`: taşı/
-  boyutlandır/küçült/büyüt/geri) "fare" girdisi sayılır (goruntule'de 10, tikla'da serbest); değiştirici tuşlu tık
-  ("keydown") ve yapıştırarak yazma klavye sayılır (tikla'da 10). Panonun kendisi (`clipboard`) pencereye bağlı olmadığından
-  seviye denetimi dışındadır.
-- **Riskli komut başlatma.** `ac --komut` ham komut satırı `guvenlik.riskli_komut`'tan geçer: yıkıcı kalıpta insan
-  onayı (CLI'de `--onayli`, gözetimsiz kipte geçmez), red → 10 ve hiçbir şey başlatılmaz. `ac --komut` kabuğu olan
-  kullanıcı/ajan içindir; MCP yüzeyi bu yola HİÇ ulaşmaz.
-- **MCP uygulama başlatma (`open_app`).** Kabuğu OLMAYAN bir MCP ajanı kod çalıştıramamalı (`uygulama.mcp_uygulama`,
-  tek giriş noktası; `api.uygulama_komutu` → `gio launch GIRDI.desktop [belgeler…]`): `app` yalnız kurulu bir
-  masaüstü girdisi (`uygulama_bul`); `/` içeren ad (yol/komut) → 10. Girdi reddedilir (10): Exec'in program konumunda
-  (geçirgen sarmalayıcılar nice/prime-run/gamemoderun… atlanarak) ya da herhangi bir öğesinde yol/yalın ad olarak
-  yorumlayıcı, kabuk, sarmalayıcı (`env setsid nohup systemd-run flatpak-spawn xargs`…), yetki yükseltici, başlatıcı
-  (`xdg-open gio kioclient`…), `deskhand`/`ekran`, uçbirim öykünücüsü (`guvenlik.ucbirim_mi` + ek liste) varsa;
-  `Terminal=true`, `Categories=…TerminalEmulator`; Flatpak'ta `run` dışı alt komut, uçbirim kimliği ya da yasak
-  `--command`; alt komut/seçenekle başka program çalıştıranlar (`git -c`, `flock -c`, `tmux`, `screen`, `setpriv`,
-  `script`, `expect`…); Exec öğesinde kabuk metakarakteri (`; | & $ \` < >`), `!`/`=!` ile başlayan ya da boşluklu
-  komut metni (var olan yol değilse) ve `--` sonrasında bir program. **İzin listesi:** kara listeden geçen girdi
-  ONAYSIZ yalnız şu koşulda başlar: dosya `SISTEM_UYGULAMA_DIZINLERI`'nde (`/usr/share/applications`,
-  `/usr/local/share/applications`, `/var/lib/flatpak/exports/share/applications`) ve kendisi + tüm üst dizinleri
-  (sembolik bağlar çözülerek) root sahipli, grup/diğerleri yazamaz; Exec'teki her program (geçirgen sarmalayıcılar
-  dahil, PATH ile çözülüp `os.stat`) root sahipli, yazılamaz, çalıştırılabilir bir ELF ikilisi ya da aynı koşuldaki
-  bir `#!` betik (sistemin kurduğu sarmalayıcılar: libreoffice, steam, vivaldi…) — betiğin yorumlayıcısı (mutlak yol)
-  ve `#!/usr/bin/env PROG` ise PROG da root sahipli, yazılamaz ELF olmalı; env'e seçenek (`-S`) ya da atama verilemez.
-  Kara liste aynen geçerlidir (Exec'in kendisi `bash`/`ldd`/… ise 10). Aksi halde (kullanıcı dizini
-  `~/.local/share/applications`, kullanıcı Flatpak'ı, kullanıcıya ait program ya da yorumlayıcı, PATH'te önce gelen
-  kullanıcı dosyası) panelden insan onayı istenir (`guvenlik._panelden_onay`; bir
-  eylem = bir onay; gözetimsiz kipte/panel kapalıyken/redde 10, tur "hassas"); onay isteği girdi yolunu ve Exec'i
-  gösterir; izinde girdi bir kez okunup onaylanan Exec ile aynı olduğu doğrulanır ve `RUNTIME_DIR/uygulama/` altındaki
-  0600 kopyasından başlatılır (onaydan sonra dosyayı değiştirmek işe yaramaz). Argümanlar yalnız belge: http/https URL'si (sorgudaki `=` serbest), yerel `file://` URL'si ya da var
-  olan dosya/klasörün MUTLAK yolu; `-` ile başlayan, `=` içeren (URL dışı), başka şemalı, denetim karakterli,
-  çalıştırılabilir dosya ya da `.desktop` gösteren argüman → 10 (en çok 16). Başlatılan sürecin ortamına ajan
-  değişken veremez (yalnız oturum politikasının `env_ek`'i). Görünmez masaüstünde oturum köprüsü yoksa hiçbir
-  uygulama başlatılmaz (10). **Kod barındıran uygulamalar** (`uygulama.KOD_BARINDIRAN`, tek sabit liste; .desktop
-  kimliğinin parçaları, Exec programları ve Flatpak kimliği sürüm ekleri atılarak karşılaştırılır: lutris,
-  protontricks, winetricks, wine, steam, heroic, gameconqueror/scanmem, libreoffice, gimp, blender, krita, inkscape,
-  godot, IDE'ler (code/codium/kdevelop/qtcreator/JetBrains…), jupyter, IDLE, obs, darktable…) sistem girdisi olsalar
-  da insan onayı ister (belgeyi kod olarak işler ya da arayüzünden kod çalıştırır). Belge argümanında yürütülebilir
-  türler (`YURUTULEBILIR_TURLER`: .bat .cmd .exe .msi .ps1 .py .sh .bash .lua .pl .rb .js .jar .AppImage .desktop
-  .yml/.yaml .docm .xlsm .pptm …; yol ve file:// URL'si) her uygulama için 10. Onaylı kullanıcı girdisinde Exec
-  programı kullanıcıya aitse içeriğinin sha256'sı onay anında alınır ve başlatmadan hemen önce (`api.uygulama_ac` →
-  `uygulama.onayli_program_denetle`) karşılaştırılır; değiştiyse 10. **Sınır:** MCP-yalnız ajan kod çalıştıramaz;
-  GUI betik konsolları (makro düzenleyici, Python konsolu, IDE uçbirimi) yalnız insanın onayladığı uygulamaların
-  içindedir. Gömülü uçbirimli uygulamalar (dosya yöneticisi, kate) onaysız açılır; uçbirim panellerine yazı Enter
-  kuralıyla korunur.
-- **Ayar dosyaları: panel yetkili kaynak** (`liste_koruma.py`). Yasak listesi ve seviye dosyası ajanın kendi
-  araçlarıyla (uçbirimde `rm`, dosya yöneticisinde silme, düzenleyicide boşaltma) kaldırılamaz: panel açılışta iki
-  dosyayı okuyup BELLEKTE tutar; dosyayı yalnız kendi Kaydet'i yazar; dosya dışarıdan değişir ya da silinirse
-  (QFileSystemWatcher + 2 sn yoklama) panel kendi içeriğini korur, dosyayı geri yazar ve uyarır (günlük satırı +
-  tepsi bildirimi). Panel her yazışta `STATE_DIR/liste-<tur>.isaret` {sha256, icerik} bırakır; açılırken dosya
-  işaretle uyuşmuyorsa işaretteki kayıt geri yüklenir. CLI ve MCP listeleri onay kanalından alır (`liste
-  yasak|seviye` → `icerik <n>` + metin | `yok`; kanal doğrulaması §8 ile aynı; istemci 0,3 sn önbellek). Panel
-  kapalıysa dosyadan okunur; işaret VAR ama dosya yok ya da işaretle uyuşmuyorsa Dur 10 ("Deskhand ayar dosyası kayıp
-  ya da panel dışında değişti; … paneli açın"), hiçbir girdi gönderilmez. İşaret yoksa (ilk kurulum) eski davranış.
-  Dosyayı elle düzenlemek desteklenmez: değişiklikler panelin Ayarlar'ından yapılır. Aynı panel yetkili desen
-  `ayarlar.toml`'daki iki gevşetici ayara da uygulanır: onay kapsamı (`liste onaylar`) ve hesap oturumları
-  (`liste kimlik`; aşağıda "Onay kapsamı" ve "Hesap oturumları").
-- **Bekleyen onay = girdi yok (MCP).** Bir masaüstünde (kde/sanal) insan onayı beklenirken O masaüstüne giden her
-  girdi aracı (click, type_text, press_key, scroll, drag, manage_window, clipboard write, run_flow, open_app) kilidi
-  alır almaz beklemeden `[7] onay bekleniyor` ile reddedilir (`mcp_sunucu.kilitli(girdi=True)`); kayıt kilit
-  bırakılmadan önce açılır, onaydan sonra kilit yeniden alındıktan sonra kapanır. Başka canlı Deskhand süreçlerinin
-  aynı masaüstündeki istekleri de sayılır (`onay.bekleyen_var`; ömrü olağandışı uzun sahte istek sayılmaz). Okuma
-  araçları ve DUR her zaman serbest. Aynı kapı CLI/akış girdisinde de vardır: `eylem.girdi_al` (her fare/klavye yolu)
-  ve erişilebilirlik eylem yolunun korumaları (`erisim._atspi_korumalari`, web eylemi dahil) BAŞKA bir canlı Deskhand
-  sürecinin o masaüstü için bekleyen onayında 7 verir (sürecin kendi istekleri sayılmaz). `bekleyen_var` masaüstünü
-  "ekran"/"arka" ya da arka uç adıyla ("kde"/"sanal") alır.
-- **Gözetimsiz kip.** `DESKHAND_GOZETIMSIZ=1` ya da genel bayrak `--unattended` (`--gozetimsiz`): onay gerektiren her
-  eylem panel diyaloğu açılmadan ve beklemeden reddedilir (10, "gözetimsiz çalışmada hassas eylem yapılmaz"). Tek nokta
-  `onay.iste_sonuc` (CLI, MCP, akış hepsi oradan geçer). Sohbet/insan olmadığından `--onayli` de geçersiz sayılır
-  (`guvenlik.onayli_gecerli`). Zamanlanmış akışlar için.
-- Başlık (`-b`) ve sınıf (`-s`) kilidi her girdiden hemen önce (4).
-- DUR anahtarı: `DESKHAND_RUNTIME_DIR/dur` varsa her girdi çağrısından önce Dur(13); basılı her şey bırakılır.
-  `deskhand dur` oluşturur, `deskhand devam` siler. Arayüz/tepsi/kısayol bunu kullanır.
-  `guvenlik.dur_ac(kaynak)` / `dur_kapat(kaynak)` / `dur_kaynagi()`: dur dosyasının ilk sözcüğü `kullanici` ya da
-  `cli`'dir. Kullanıcının koyduğu DUR'u CLI ezemez ve kaldıramaz (Dur 13); yalnızca arayüz kaldırır.
-- Girdi merkezi (§2) istemci denetimlerine EK güvenceler verir: soket 0600 / dizin 0700 ve SO_PEERCRED ile yalnız
-  aynı kullanıcı (istemci de sunucunun kullanıcısını ve soket iznini denetler); her partiden hemen önce DUR anahtarı
-  (açıksa basma satırları 13 ile reddedilir, `keyup`/`buttonup` ve gecikme ayarları geçer); yalnız dotool dilinin
-  bilinen fiilleri. Bağlantı başına basılı tuş/düğme izlenir: bağlantı kopunca (istemci öldü, SIGKILL) basılı kalanlar
-  bırakılır (başka bağlantının da tuttuğu tuş hariç); kopan bağlantının girdisi kuyrukta sürüyorsa dotool yeniden
-  başlatılır (denetimsiz girdi sürmez). DUR açılınca tüm bağlantıların basılıları bırakılır, kuyrukta girdi varsa
-  dotool yeniden başlatılır (kuyruk düşer). Panel ölürse dotool'un girişi kapanır, dotool çıkar, aygıt yok olur.
-- İnsan önceliği (12): kde arka ucunda kullanıcı klavye/fareyi kullanıyorsa; sanalda (iki tür) yalnız "Devral" açıkken.
-  Paneldeki Devral iki türde de çalışır (önizleme `goruntu()`, girdi `Girdi.insan_ham`; KWin türünde EIS üzerinden).
-- Pencere yönetimi, pencere kapatma ve (kde) pano yazma da insan önceliğine (12) uyar (`guvenlik.insan_onceligi`;
-  pano: CLI `pano yaz` ve MCP `clipboard(write)` → `api.pano_yaz`); kapatma DUR'a (13) bakar. Deskhand'in panoya yazdığı
-  metinlerin özeti TEK kaynaktadır (`guvenlik.kendi_pano_ekle/kendi_pano_mu`): CLI, MCP `clipboard(read)` ve yapıştırma
-  onayı aynı listeye bakar.
-- Kullanıcı meşgulken ön plan yok (15): kde arka ucu girdi, pencere öne getirme ve uygulama açmadan önce
-  `mesgul.ekran_korumasi()` çağırır. Etkin pencere tam ekran / oyun biçimli ya da MPRIS'te video çalıyorsa
-  Dur(15). İstisna yalnız kullanıcının açık izni (`--ekranimda`, `DESKHAND_EKRANIMDA=1` ya da bildirimdeki
-  "Ekranımda yap" düğmesi → 10 dk). Sanal masaüstü etkilenmez.
-- **AT-SPI çerçevesi yalnız hedef pencerenin PID'inden** seçilir; tam PID eşleşmesi yoksa YALNIZ pencere sürecinin
-  TORUNLARINDAN, aynı çalıştırılabilir dosyaya sahip ve başlığı ≥ 0,9 benzeyen çerçeve (çok süreçli uygulama). ATALAR asla
-  (pencerenin sahibini başlatan başka uygulamanın çerçevesine eylem gitmesin);
-  bulunamazsa ya da PID bilinmiyorsa Dur 6 — başka uygulamanın çerçevesine başlık benzerliğiyle düşülmez. Seçilen
-  çerçevenin kendi kimliği de denetlenir: Deskhand paneli/onay diyaloğu sürecine ait çerçeve her zaman 10 (okuma dahil),
-  yasak desen (uygulama adı/çerçeve adı) 10; eylem/değer yazmada ajanın kendi istemcisi ve uygulama erişim seviyesi.
-  Ağaç taramasında çerçevenin kimliği (veri yolu adı + nesne yolu, BİRLİKTE) saklanır; eylemde başka nesneyse Dur 8.
-- Erişilebilirlik eylem yolu (`ogeye-tikla --eylem`, `ogeye-yaz`; `erisim.py`): gerçek fare/klavye girdisi ve odak yoktur,
-  bu yüzden fare yolundaki denetimler (imleç altı hariç) AÇIKÇA uygulanır: DUR (13), yasak pencere (10), başlık/sınıf
-  kilidi (4), hassas düğme adı / ödeme sayfası (10 ya da panelden onay; onay isteği görüntüsüzdür), kde'de oyun/film
-  koruması (15), uygulama erişim seviyesi (eylem/tık = "fare" sınıfı: goruntule'de 10; değer yazma = "klavye": tikla'da da
-  10; onaydan ÖNCE), insan önceliği (12: kde'de kullanıcı klavye/fare kullanıyorsa en çok 8 sn durgunluk beklenir, sonra 12;
-  sanalda yalnız Devral açıkken), günlük. Değer yazmada uçbirime yıkıcı komut denetimi de aynen (`_yazi_hassas`). Eylemden
-  hemen önce (onay beklenmiş olabilir) bu denetimler yeniden yapılır. libatspi süreçte tek veri yoluna bağlanır; başka masaüstü için iş
-  yardımcı süreçte yürür. Sanal masaüstü açılırken `masaustu._erisim_hazirla_ic` özel veri yolunda IsEnabled=true yapar ve
-  kayıt defterini (at-spi2-registryd) kendi kafesinde başlatır.
-- Erişilebilirliğin kendiliğinden açılması (kde): kullanıcının oturum veri yolunda IsEnabled=true yazılır; bu kalıcı bir
-  masaüstü ayarını (`toolkit-accessibility`) değiştirebilir. Deskhand açtıysa `STATE_DIR/erisim-deskhand-acti` işareti
-  yazılır ve günlüğe BİR kez not düşülür; `deskhand doctor` "açık (Deskhand açtı)" / "açık" / "kapalı" ayrımını gösterir;
-  `deskhand a11y off` işareti de siler. Testler `_erisim_yaz`'ı taklit eder (gerçek oturum ayarına dokunulmaz).
-- Ham `dotool`/`xdotool` çağrısı YALNIZ arka uç içinde. Testler dahil başka yerde ASLA.
-- Sanal X bağlantısı yalnız `masaustu.guvenli_ekran()` ile açılır: boş ad Xlib'de `$DISPLAY`'e (kullanıcının gerçek
-  XWayland'i) düşer ve XTEST girdisi gerçek masaüstüne gidebilirdi. Yalnız `:N` biçiminde ve gerçek `DISPLAY`'den
-  farklı ekran kabul edilir.
-- **Durum kaydı güvenilmez (iki tür).** Kayıttan YALNIZ tür + kimlik/ekran numarası alınır; bütün yollar ve
-  adresler çalışma dizininden KURULUR (`kwin_oturum.guvenli_kayit`, `masaustu.guvenli_kayit`; `masaustu.durum()` bunu
-  uygular): KWin `RUNTIME_DIR/kwin-<8 hex>` (sembolik bağ değil, kullanıcının, 0700) → `unix:path=<dizin>/bus`,
-  `<dizin>/deskhand-<kimlik>`, Xauthority, XWayland `:120+`; Xvfb `RUNTIME_DIR/sanal-<no>`. Veri yolu adresinin katı
-  biçimi `unix:path=/yol[,guid=<32 hex>]` (Python `arka_ortak.bus_yolu_kati`, C `adres_coz`): `;` ile çoklu adres
-  (sd-bus/libdbus ilki olmazsa SONRAKİNE geçer) reddedilir. RUNTIME_DIR var olan dizinse sahibi kullanıcı, sembolik bağ
-  değil ve 0700 olmalı; gevşek izinli dizin sessizce sıkılaştırılMAZ (arada başkası dosya/soket bırakmış olabilir):
-  Dur 14, `deskhand doctor` "Çalışma dizini" satırında nedeni ve `chmod 700` önerisini gösterir.
-- **Karşı taraf doğrulaması (sert bağ / yer değiştirme).** Bağlanmadan önce (`kwin_oturum.baglanti_denetle`,
-  `masaustu.xvfb_karsi_denetle`): oturum soketlerinin SO_PEERCRED PID'i kayıttaki süreç (başlangıç zamanı aynı) —
-  veri yolu için dbus-daemon (komut satırında `--config-file=<dizin>/bus.conf`), Wayland için KWin, X için Xvfb;
-  soketin (st_dev, st_ino)'su kullanıcının gerçek soketlerinden biriyse ret. `deskhand-eis` bağlandıktan sonra aynısını
-  kendisi yapar (`--dbus-pid` + bus.conf; yoksa `hata bus-karsi`, çıkış 2).
-- **KWin türü kapıları.** `kwin_oturum.guvenlik_kapilari` (süreç başlamadan): veri yolu adresi kullanıcının gerçek
-  adresi (aynı inode dahil), Wayland soket adı kullanıcınınki, yapılandırma dizini gerçek `~/.config`, HOME/çalışma
-  dizini gerçek, XWayland ekranı gerçek `DISPLAY` ise Dur 14. `arka_uc/kwin.py` HER bağlantıdan önce
-  `baglanti_denetle`'nin döndürdüğü GÜVENLİ kaydı kullanır; `deskhand-eis` yalnız `--bus <özel adres>` ile bağlanır,
-  ortamdan devralmaz. KWin `env -i` eşdeğeri asgari ortamla, geçici HOME/XDG_*_HOME ile açılır (KWin kendi kwinrc /
-  kwinoutputconfig.json / kglobalshortcutsrc / kxkbrc dosyalarını buraya yazar); KDE_FULL_SESSION/KDE_SESSION_VERSION
-  KWin'e verilmez.
-- **Uygulama ad alanı (iki tür, TEK başlatma yolu: `arka_ortak.korumali_baslat` → `korumali_argv`).** Arka plan
-  uygulaması (KWin/Xvfb, dbus-daemon ve Deskhand'in kendi yardımcıları DIŞINDAKİ her şey: `ac --arka`, `open_app`, oturum
-  köprüsü komutları) `bwrap` ile başlar (denetim 12c sonrası model):
-  - **Ayrı kullanıcı + PID ad alanı** (`--unshare-user --unshare-pid`, kendi `/proc`): kullanıcının başka süreçleri
-    (gerçek KWin, oyun, terminal) görünmez; onlara sinyal, ptrace, `/proc/<pid>/root|environ|mem` erişimi yok (ESRCH).
-  - **Kök salt okunur** (`--ro-bind / /`); `/dev` bwrap'in asgari /dev'i (`null`, `zero`, `random`, `tty`, `pts`, `shm`…)
-    + yalnız `/dev/dri` (GPU; WebGL/GL donanımda). `/dev/uinput` (sanal klavye/fare), `/dev/input/event*` (tuş kaydı),
-    `/dev/snd` (doğrudan ALSA mikrofon/hoparlör), `hidraw`, `/dev/bus/usb`, kamera düğümleri YOK. `/dev/udmabuf`
-    verilmez (KWin kafes dışında zaten).
-  - **Boş tmpfs:** `/tmp` (kullanıcının /tmp'deki Steam/Chromium SingletonSocket'ları, `.ICE-unix` ksmserver, Kulak Kesil
-    soketleri, başka X soketleri görünmez), `/run/user/<UID>` (Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh,
-    xauth, at-spi, portal, systemd soketleri) ve (başka yerdeyse) Deskhand'in RUNTIME_DIR'i (girdi.sock, sanal.json,
-    diğer oturumlar).
-  - **Ev dizini BOŞ tmpfs + BEYAZ LİSTE** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` = min(2 GiB, kafes belleği/4), kafes varsayılanı 6G → 1,5 GiB; ad alanındaki `/tmp` de aynı sınırla): gerçek
-    ev dizininden YALNIZ masaüstü/araç takımı görünümü SALT OKUNUR görünür — `~/.config/kdeglobals`, `kdedefaults/`,
-    `kcminputrc`, `kcmfonts`, `Trolltech.conf`, `plasma-localerc`, `breezerc`, `Kvantum`, `qt5ct`/`qt6ct`, `gtk-3.0`,
-    `gtk-4.0`, `gtkrc`, `gtkrc-2.0`, `~/.gtkrc-2.0`, `xsettingsd`, `fontconfig`, `~/.local/share/fonts`, `~/.fonts`,
-    `~/.cache/fontconfig`, `~/.icons`, `~/.local/share/icons`, `~/.themes`, `~/.local/share/themes`,
-    `~/.local/share/color-schemes`, `user-dirs.dirs`, `user-dirs.locale`, `mimeapps.list`, `~/.local/share/mime`,
-    `~/.local/share/applications` ve `~/.local/share/flatpak` (kullanıcı .desktop girdileri ve Flatpak kurulumu). Hiçbir
-    uygulamanın KENDİ ayarı/verisi (jeton, oturum, geçmiş) görünmez: listede olmayan HER gizli dosya ve ev kökündeki
-    veri klasörü olmayan her dizin/dosya ad alanında YOKTUR (ölçüldü: `.config/<rastgele>/token`, `.netrc`,
-    `.git-credentials`, `gh/hosts.yml`, `.docker`, `.kube`, `.pypirc`, `.local/share/<bilinmeyen>`, `.cache/<uyg>`,
-    `~/projeler/.env`, `~/notlar.txt` okunamıyor; `tests/test_ev_beyaz_liste.py`). Sembolik bağ olan beyaz liste
-    girdisi HEDEFİNDEN bağlanır; hedefi ev dizininin kendisi/üstü ya da bir SIR_YOLLARI yolu olan girdi reddedilir.
-    Sembolik bağ kuralları (`_beyaz_ham`): kaynak (realpath) bir XDG veri klasörünün içinde/kendisi/üstü ise RET (veri
-    klasörü yazılabilir bağlanır: ad alanındaki uygulama orada `-> ~/.config` bağı kurup sonraki başlatmalarda tüm
-    yapılandırmayı açtırabilirdi); kaynak ev DIŞINDA ve `/tmp`, `/run/user/UID` ya da RUNTIME_DIR altındaysa RET; beyaz
-    liste girdisinin kaynağı ev içinde ve sözcüksel yoldan farklıysa YALNIZ kaynak beyaz listedeki (bağ olmayan) bir
-    girdinin altındaysa kabul (dotfiles yöneticisi bağları `~/dotfiles/...` reddedilir; gerekirse politika `ev`); politika
-    `ev` girdisi için yalnız ilk iki kural. İkinci hat (SIR_YOLLARI) kaynak→hedef eşlemesiyle de örter (kaynağın içindeki
-    sır `hedef + göreli yol`'da). Politika `ev` girdisi ayrıca `gecerli_politika_ev_girdisi` ile süzülür: glob karakteri,
-    derinliği 2'den az gizli girdi (`.ssh`, `.netrc`…) ve merkezlerin kendisi (`.config`, `.local`, `.local/share`,
-    `.local/state`, `.cache`, `.var`) RET. İnce örtüler (SIR_YOLLARI): `.local/share/flatpak/overrides` (boş dizin),
-    `.config/gtk-3.0/bookmarks` ve `servers` (/dev/null); `flatpak/repo/config` BİLEREK örtülmez (ölçüldü: /dev/null örtüsü
-    `flatpak --user` kurulumunu bozar). TOCTOU: kaynaklar `O_PATH|O_NOFOLLOW` fd'si olarak açılır, `(dev,ino)` ve
-    `/proc/self/fd` yolu denetlenir, bwrap `--ro-bind-fd` ile bağlar (fd'ler `pass_fds` ile geçer, uygulamaya sızmaz); bwrap
-    bunu bilmiyorsa çözülmüş gerçek yol `--ro-bind` edilir ve denetim-bağlama arasındaki yarış kalır (yalnız ev sahibinin
-    kendi hesabının yazabildiği yollarda). Paket/`sys.prefix` bağları veri klasörlerinden SONRA eklenir, bir `.git`
-    deposunun KÖKÜ olan yol reddedilir. Teşhis: çözülmüş exec (`gio launch` için .desktop Exec'i) ev altında ama ad
-    alanında görünmüyorsa `korumali_baslat` HEMEN `Dur(9)` verir (iletide `oturum.toml` `[uygulama.<ad>] ev = [...]`
-    ipucu; MCP `open_app` ve CLI `ac` aynı kapıdan geçer).
-    CLI `ac --background` MCP `open_app` gibi görünmez masaüstü kapalıysa onu kendiliğinden başlatır (`masaustu_baslat`:
-    aynı kafes, kilit ve görev kipi kapısı) ve oturum kopyası hazırlanmadan ÖNCE denetler (boşa kopya yok).
-    `ac APP [ADRES]` / `--url`: adres `uygulama.web_adresi_denetle`'den geçer (yalnız http/https, boşluk/denetim
-    karakteri/`-` yok; `file:`, `about:`, `javascript:`, `data:` → 10), politikanın komutunun SONUNA tek argüman olarak
-    eklenir (http(s):// ile başladığından seçenek konumunda olamaz; Chromium'da erişilebilirlik bayrağı adresten önce
-    gelir); `--komut` ile birlikte verilemez; görev kipinde `open_app_denetle` ve ham komut yasağı CLI'de de geçerlidir.
-    Uygulamanın yazdıkları (`~/.config/autostart`, `~/.bashrc`, `~/.config/systemd/user`, `~/.local/bin`, kendi
-    ayarı, önbelleği…) oturumla ATILIR → kalıcılık kaçışı yok. Bir uygulamanın kendi ayarı gerekiyorsa oturum
-    politikasında uygulama başına `ev = [...]` (ev dizinine göreli; salt okunur; VARSAYILAN hiçbir uygulamada YOK;
-    `_varsayilan`daki `ev` bilinmeyen uygulamalara verilmez; `..`/mutlak yol atılır; SIR_YOLLARI'nı açamaz):
-    `Hazirlik.ev` → `baslat(..., ev=)` → `korumali_argv(ev_ek=)`. Seçim ölçümü (0.6.1 sonrası; sahte ev, KWin
-    türü; 0 = boş ev, A = beyaz liste, B = katman + genişletilmiş kara liste, C = katman + bilinmeyen gizli dizinleri
-    örtme): KWrite, Dolphin, Konsole, Gwenview, Firefox, Chromium, zenity, Meld, Electron A'da açılıyor; KDE
-    uygulamaları kullanıcının teması/yazı tipiyle (koyu temada ortalama parlaklık A = B = C, beyaz listesiz 0'da açık
-    tema), OCR doğruluğu B/C ile aynı; B ve C listelenmemiş sırları sızdırdı, A sızdırmadı. Yazılabilir GERÇEK bağlar
-    yalnız: kullanıcının XDG veri klasörleri
-    (`~/.config/user-dirs.dirs`; yalnız ev dizininin İÇİNDE, ev kökü değil, yolunda nokta ile başlayan bileşen yok — ev
-    kökünü, gizli dizini, `/`'ı ya da dışarıyı gösteren girdi yok sayılır) ve uygulamanın kendi oturum kopyası. Veri
-    klasörlerinin İÇİNDEKİ var olan gizli dizin/dosyalar (`.git` — hooks/config, `.vscode`, `.envrc`, `.venv`…;
-    derinlik 6, en dıştakiler) salt okunur örtülür; bu sayı 3000'i aşan klasör bütünüyle salt okunur bağlanır. Ev
-    dizinindeki (derinlik 4) ve veri klasörlerindeki soket/FIFO'lar + bilinenler (`~/.steam/steam.pipe`) `/dev/null` ile
-    maskelenir (ölçüldü: katman üstünden gerçek sokete/FIFO'ya zaten bağlanılamıyor; maske ikinci hat).
-  - **Sır yolları OKUNAMAZ** (`arka_ortak.SIR_YOLLARI`, tek sabit liste; glob olabilir): `~/.ssh`, `~/.gnupg`,
-    `~/.local/share/keyrings`, `~/.local/share/kwalletd`, `~/.password-store`, gerçek Firefox profilleri
-    (`~/.config/mozilla`, `~/.mozilla`), Chromium ailesi profil kökleri (`~/.config/chromium`, `google-chrome*`,
-    `vivaldi*`, `BraveSoftware`, `microsoft-edge*`), ajan/bulut/depo kimlik bilgileri (`~/.claude`, `~/.claude.json`,
-    `~/.config/gh`, `~/.git-credentials`, `~/.netrc`, `~/.aws`, `~/.docker/config.json`, `~/.config/rclone`, `~/.kube`),
-    Deskhand'in kendi ayar/günlüğü (`~/.config/deskhand`, `~/.local/state/deskhand`), Flatpak uygulama verileri
-    (`~/.var/app`), mesajlaşma oturumları (`~/.local/share/TelegramDesktop`, `~/.config/discord*`, `Signal`,
-    `Element*`, `Slack`, `WhatsApp*`, `teams*`, `Mattermost`), oyun platformu jetonları (`~/.steam/steam/config`,
-    `~/.local/share/Steam/config`, `ssfn*`, `~/.config/heroic`, `~/.config/lutris`), KDE Connect eşleşme anahtarları,
-    qBittorrent (WebUI parolası; Flatpak'i de), Syncthing anahtarları, OBS yayın anahtarı
-    (`~/.config/obs-studio/basic/profiles`), RustDesk, Thunderbird, FileZilla, Remmina, paket deposu jetonları
-    (`~/.npmrc`, `~/.pypirc`, `~/.cargo/credentials*`) ve kabuk geçmişleri. Örtülen bir dizinin içindeki ayrıca
-    listelenmiş yol tekrar bağlanmaz. Dizin → boş tmpfs (uygulama yazabilir, atılır), dosya → `/dev/null`; sembolik bağsa (ör.
-    profile-sync-daemon) HEDEFİ örtülür (hedef ad alanında zaten boş olan /run/user ya da /tmp'deyse gerek yok). Örtü
-    veri klasörü bağlarından SONRA, oturum kopyası ondan da SONRA bağlanır: arka plan Firefox'u kendi kopyasıyla
-    (`--profile <kopya>`, `XDG_CONFIG_HOME=<kopya>/.xdg-config`), Flatpak Electron kopyası `--filesystem=<kopya>` + XDG_*
-    ile çalışır (ölçüldü: Firefox iki türde açılıyor/indiriyor; Flatpak çalışma zamanı ad alanında açılıyor).
-  - **Geri bağlananlar** yalnız oturumun kendi yolları (`uygulama_baglari`: kendi runtime dizini, özel veri yolu ve
-    Wayland soketi, erişilebilirlik veri yolu, kendi X soketi + Xauthority salt okunur) ve oturum kopyalarından YALNIZ
-    politikanın bu uygulamaya verdiği kopya (`Hazirlik.kopya_yolu` → `baslat(..., kopya=)` → `arka_ortak.kopya_bagi`:
-    kopya kökünün doğrudan alt dizini olmalı, değilse Dur 14). Kopya komut satırından/ortamdan ÇIKARILMAZ: komutta
-    başka kopyanın yolu geçse de o kopya görünmez. MCP `open_app`'in onaylı kullanıcı girdisi (izin listesi dışı .desktop)
-    `gio launch <RUNTIME_DIR/uygulama/özel kopya>` ile başlar: o TEK dosya salt okunur bağlanır (`baslat(...,
-    girdi=)` → `arka_ortak.girdi_kopyasi_bagi`: o dizinin doğrudan çocuğu, kullanıcıya ait düz `.desktop`, değilse
-    Dur 14); aynı dizindeki başka kopyalar görünmez. Sıra: `open_app` izin listesi + KOD_BARINDIRAN onayı + belge
-    argümanı kuralları (`uygulama.mcp_uygulama`) → onaylı programın özet denetimi (`onayli_program_denetle`) → bu
-    yalıtımlı başlatma (TEK yol: `masaustu.baslat` → `korumali_baslat`).
-  - Uygulamanın `PATH`'i ve `LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT`'i yalnız son komuta (`--setenv`) gider; yardımcı zincir
-    (sh, nice, ionice, bwrap) güvenli PATH ile ve mutlak yollarla çalışır (aşağıda "Güvenli yardımcı ikililer").
-  - `--new-session` (TIOCSTI yok). `--die-with-parent` YOK (masaüstü CLI'den uzun yaşar); kafes ve PID temizliği aynen;
-    ad alanının ilk süreci ölünce çekirdek içindekilerin hepsini öldürür. bwrap yoksa ya da güvenli yolda değilse
-    uygulama başlatılmaz (Dur 9).
-  - **Flatpak:** `flatpak run` ad alanında çalışır (iç içe bwrap; ölçüldü) ama kullanıcının systemd kullanıcı
-    yöneticisine giden veri yolu olmadığından kendi scope'una GEÇEMEZ: örnek masaüstünün bellek kafesinde ve PID ad
-    alanında kalır, masaüstü kapanınca kapanır (ölçüldü). Sarmalayıcı (`oturum/flatpak_ornek.py`) ad alanında bunu
-    doğrular ve ana makine kaydını yazmaz (`DESKHAND_AD_ALANI=1`); örnek kafesten çıkmışsa kapatır. Flatpak'in yazdıkları
-    (`~/.var/app`) boş ev tmpfs'inde kalır (atılır); kullanıcı kurulumu (`~/.local/share/flatpak`) salt okunur.
-  - **Ölçüldü:** Firefox (boş geçici profil + oturum kopyası benzeri kopya) iki türde açılıyor, sayfa yüklüyor, WebGL
-    KWin türünde donanımda (tümleşik GPU), erişilebilirlik ağacı sunuyor; Qt test penceresi; tık/yazı süreleri
-    değişmedi. Ayrıntı `tests/test_denetim12c.py`. İndirme: oturum KOPYASI Firefox'u kendi `XDG_CONFIG_HOME`'uyla
-    (`<kopya>/.xdg-config`) çalışır; oraya kullanıcının `user-dirs.dirs`/`user-dirs.locale`/`mimeapps.list` ve
-    GTK/fontconfig görünümü (0600) kopyalanır ve user.js `browser.download.dir` = XDG İndirilenler (görev kipinde görev
-    klasörü) yazar. 0.9.0'dan önce bu dosyalar yoktu ve indirmeler ad alanının geçici `~/Downloads`'ına gidip tarayıcı
-    kapanınca kayboluyordu (gerçek olay; ad alanında GLib sınaması `tests/test_oturum_tamir.py`).
-  - **Arka planda görünmeyenler:** `/tmp` (boş tmpfs: `/tmp/claude-*`, scratchpad dahil), XDG dışı ev klasörleri ve
-    kullanıcı `~/Downloads` (XDG adı başkaysa) uygulamaya GÖRÜNMEZ. Dosya seçiciye/yüklemeye verilecek dosyayı
-    `~/İndirilenler` gibi bir XDG klasörüne koyun ve tam yolu dosya iletişim kutusunda Ctrl+L ile yazın.
-  - **Önbellek:** kopyalar RUNTIME_DIR'da (bellek) durur; Firefox disk önbelleği 64 MB (user.js
-    `browser.cache.disk.capacity`), Chromium `--disk-cache-size`. Canlı kopyalar sayı/boyut sınırını aşınca silinmez,
-    açıklamaya uyarı eklenir.
+## 4. Safety (UNCHANGED in both backends)
+- Forbidden windows (`yasak-pencereler.txt`): no input + no launch (10). **The list is empty by default** (only the built-in
+  panel/approval window ban exists); the user adds their own bans.
+- Sensitive button / payment page title → 10 unless `--onayli`. `--onayli` ONLY if the user explicitly approved in the chat.
+- **Risky key combinations → human approval** (NOT a ban). `guvenlik.riskli_tus(combination) -> reason | None`:
+  ctrl+alt+delete, ctrl+alt+backspace, ctrl+alt+f1…f12 (virtual terminal), meta+l and ctrl+alt+l (screen lock),
+  alt+sysrq+key. `k_tus` / `k_bas` use the sensitive-action path (`riskli_tus_engel`): without `--onayli` approval from the
+  panel, 10 if the panel is closed; `dizi`/flow steps go through the same functions and are therefore covered unchanged.
+  Independent of the window class. Because `k_bas` holds keys down at the same time, space-separated keys count as a single set
+  (`birlikte=True`).
+- **RUNNING A COMMAND IN A TERMINAL ALWAYS REQUIRES HUMAN APPROVAL; the blacklist (`riskli_komut`) is only for WARNING.**
+  EVERY Enter going to a window that hosts a terminal (or an embedded terminal) — enter, kpenter, linefeed, `x:Return`, `k:28`,
+  ctrl+j/ctrl+m/ctrl+o, `\n` inside text, line breaks in AT-SPI value typing — asks for panel approval INDEPENDENT of the
+  line content (`ucbirim.enter_kapisi`): one Enter = one approval (an earlier approval in the same action is not carried over;
+  `yaz "a\nb\n"` is two approvals, `tus "l s enter p w d enter"` is two approvals); refusal in unattended mode (10); in the CLI
+  `--onayli` (the user approved in the chat) passes. NO exceptions: it asks even if vim/less/a REPL is in the foreground (the
+  foreground process found with tpgid only enters the approval text as the note "not a shell in the foreground: …"). The
+  approval request: "A command will be run in the terminal (Enter)", the current line (if readable; only the length for
+  `--gizli`/passwords; "line could not be read" if unreadable), "MAY BE DESTRUCTIVE: <reason>" if `riskli_komut` or a history
+  expansion (`!!`, `!n`, `^a^b`, `fc`, `r`, `history -s`) matches, the terminal type (embedded or not). Reading the line:
+  AT-SPI if accessibility is ALREADY on (the cursor line of the element whose role is `terminal` + the previous two lines;
+  accessibility is not turned on for this), otherwise the window's OCR (the bottom four written lines; the part after the prompt
+  marker, the union of wrapped lines and individual lines are candidates); the BUFFER of what Deskhand typed
+  (`RUNTIME_DIR/ucbirim/<sha1(backend:window:pid)>.json`, 0600, directory 0700, flock; printable keys/`type` are appended,
+  BackSpace deletes, Enter/ctrl+c/ctrl+u/Esc clear; arrow keys, ctrl+a/e/r/w, Tab, click, paste, switching to another terminal and
+  120 s of inactivity make it "dirty") is added to the warning candidates. Timing: a `tus`/`bas` sequence is sent split at Enters
+  and the window is recomputed IMMEDIATELY before EVERY Enter (also in the middle of the sequence); Enters inside text are
+  approved one by one before typing; an Enter not approved beforehand is recomputed right before sending and asked then if
+  necessary. Covered paths: `tus`/`bas`, `yaz` (letter by letter + by pasting), `dizi`/flow steps, AT-SPI value typing. A window
+  that does not host a terminal gets no Enter handling (the number of approvals does not change).
+- **Do not TYPE a destructive command into a terminal** (without Enter): if the target hosts a terminal and the text produces a
+  `riskli_komut` warning, approval is asked (`guvenlik.ucbirim_komut_engel`, `eylem._yazi_hassas`); if the text has an Enter this
+  is not asked separately (the Enter approval carries the same warning: two dialogs are not opened). `riskli_komut` (the
+  warning) splits the text into words with shell rules (quotes/backslashes removed, `$'…'` expanded, the insides of `$(…)`/`` `…` ``/
+  `<(…)` are checked separately; shell keywords and assignments skipped; an assignment in the same text is resolved; brace
+  expansion; `busybox X` → X; wrapper options; `env -S`); warning patterns: destruction (rm -r, find -delete/-exec, mkfs, dd,
+  shred, truncate -s 0, git clean -f, rsync --delete ~, mv ~), privilege (sudo/doas/pkexec/run0), power/session
+  (shutdown/reboot…, systemctl/loginctl, D-Bus `login1 … Reboot/PowerOff/Suspend`, `org.kde.Shutdown`, ksmserver), terminating the
+  desktop/Deskhand (`killall`/`pkill`/`kquitapp*` plasmashell/kwin/deskhand, `systemctl stop plasma-*`), touching Deskhand's
+  settings/state files, indirect execution (`… | sh`, `base64 -d | …`, `<`/`<<`/`<<<` into a shell, `source`/`.`, `eval`,
+  `alias`/`trap`, `PROMPT_COMMAND`/`PS0`/`BASH_ENV`/`LD_PRELOAD`, history, `${…}`/`$(…)` in the command name), scripts/programs
+  whose content cannot be checked (`./x.sh`, `~/x.sh`, `bash x.sh`, `python3 x.py`, a program from a temporary directory),
+  GTFOBins options (`--checkpoint-action`, `ProxyCommand`, `rsync -e`, sed `e`, `man -P`, `zip -TT`, vim `:!`), persistence
+  (start-up files, autostart, `~/.ssh`, `~/.local/bin`, crontab), detached launchers (`systemd-run`, `at`, `tmux new`,
+  `screen -dm`, `flock -c`, `watch`), piping a download into a shell, fork bomb, forced git push, `:w !sudo`. The warning list
+  may be incomplete: the safety boundary is the Enter approval above.
+- **Terminal recognition** (`guvenlik.ucbirim_penceresi_mi`): if the window class is a terminal emulator; OR among the
+  DESCENDANTS of the window's owner process there is a shell with a controlling terminal (tty) (an EMBEDDED terminal: Dolphin F4,
+  the Kate terminal panel, VS Code/IDE — the whole window counts as a terminal); if the PID is unknown and the class is an
+  application that can embed a terminal (`GOMULU_UCBIRIM_SINIFLARI`), the safe side; if accessibility is already on and the
+  window has an element with role `terminal`. Only a "terminal" result is cached for 2 s; a "NOT a terminal" result is not cached
+  (recomputed before every Enter). After a key that can open a terminal (F4, shift+F4, ctrl+`, ctrl+shift+`, ctrl+alt+t,
+  ctrl+shift+t, alt+F12) is sent to a window of an embedding class, the window counts as "may be a terminal" for 30 s
+  (`RUNTIME_DIR/ucbirim/ucbirim-<sha1>`; during that time every Enter is approved); if in the same call the terminal-opening key
+  comes before the Enter, that Enter also asks for approval.
+- **The agent's own client** (`deskhand/kendi.py`): the Deskhand process (CLI and MCP server) walks up through ppid in
+  `/proc/<pid>/stat` to 1 (session infrastructure — systemd, kwin, plasmashell, krunner… — excluded); in the MCP server the set
+  is refreshed every 15 s. If the owner PID of a window (kde: `kdotool getwindowpid`; sanal: `_NET_WM_PID`) is in this set, EVERY
+  input to that window is 10 ("the agent's own client"; the agent must not be able to approve its own permission prompt);
+  reading/screenshots are free. Terminals often keep many windows in ONE process (Ghostty, Konsole): ALL windows of that process
+  are covered. If tmux is in the chain, with read-only `tmux list-clients -F '#{client_pid}'` through `$TMUX` the ancestors of the
+  clients (the emulator) are added; if it cannot be resolved (screen, zellij, dtach, a failed tmux query) ALL windows of terminal
+  class (kde). Windows with an unknown PID (kde): environment hints (`KONSOLE_DBUS_WINDOW`, `WINDOWID`, `TERM_PROGRAM`,
+  `GHOSTTY_RESOURCES_DIR`, `KITTY_PID`, `ALACRITTY_WINDOW_ID`) and the name of the emulator in the chain → the PID-less terminal
+  windows of that class too. If we run in a PID namespace (flatpak/bwrap: `/.flatpak-info`, bwrap in the chain, or several NSpid
+  entries in `/proc/<pid>/status`): the outer PID of the ancestors (the first NSpid field) is added to the set and terminal
+  windows of the same class whose PID does not match are covered as well (the window manager sees the outer PID). A remote client
+  connecting over ssh is out of scope. Windows on the invisible desktop cannot be the agent's client: there only the PID rule
+  exists (which naturally comes to nothing). Check places: `denetle`, `pencere_denetle` (AT-SPI), `imlec_alti_denetle` (the window
+  under which a click/drag lands), in desktop mode the active window to which keyboard input goes (`girdi_seviye_denetle`),
+  `pencere_yonet`, `k_kapat`, the process of the AT-SPI frame; typing by pasting goes through `denetle` for every chunk.
+- **System privilege/password/permission prompts → human approval** (not a ban): the polkit authentication agent, KWallet
+  (`kwalletd5/6`, `ksecretd`), password askers (`ksshaskpass`, `pinentry-*`, `ssh-askpass`), `xdg-desktop-portal-*` permission
+  dialogs (`org.freedesktop.impl.portal…`), `kdesu`/`sudo`/`pkexec` prompts (`guvenlik.SISTEM_ISTEMLERI`, a single constant
+  list; on the window class and on the name of the owner process). Every kind of input to these windows (mouse, keyboard, paste,
+  AT-SPI action/value typing, drag, window management, closing) asks for approval at the start of the action
+  (`sistem_istemi_engel`; CLI `--onayli`, in MCP always the panel, refusal in unattended mode); the approval is valid for that
+  window during that action. Right before every send `sistem_istemi_denetle` gives 10 for an unapproved prompt — also for the
+  window at the screen point WHERE the input LANDS (`imlec_alti_denetle`: if another window was targeted and a prompt is open at
+  the point, refusal even if permission exists; on a click in desktop mode approval is asked for the prompt at the point).
+- **Pasting = reading the clipboard** (kde): `ctrl+v`, `ctrl+shift+v`, `shift+insert`/`shift+kpinsert`, the Paste key
+  (`XF86Paste`, `k:207`), pasting through the keyboard menu (`shift+F10` / `menu` / `alt+e` followed by `p`/`y` or navigating the
+  menu and Enter — in the same call or in a separate call within 3 s), middle click (primary selection), if the name/action name of
+  an AT-SPI element CONTAINS "paste/yapıştır" (the accessible name of an icon button) and pasting from a MENU (the clicked text or
+  AT-SPI element name Yapıştır/Paste/Einfügen/Coller/Pegar…, "Panodan ekle", "Insert from clipboard", "Paste as…", "Özel
+  yapıştır", 📋 or a "Ctrl+V" hint; short text; inside `guvenlik.hassas_engel` — mouse, AT-SPI action and the web paths that call
+  the same function) carries the user's clipboard to a place the agent can see: if the clipboard is not empty and is not text that
+  Deskhand wrote in this session (`guvenlik.kendi_pano_ekle/kendi_pano_mu`: process memory + `RUNTIME_DIR/pano-ozetleri`, 0600,
+  sha256 only) approval is asked (also if it cannot be read). Deskhand's own typing-by-pasting path (`eylem._yapistirarak_yaz`)
+  is exempt. The clipboard of the virtual desktop is separate: no check. KNOWN LIMIT: a mouse click on an icon "paste" button whose
+  text cannot be read by OCR AND which has no accessible name cannot be recognised (a click by coordinate; no approval is asked).
+- **Password field** (AT-SPI role `password text`, the target element for value typing, the focused element for keyboard typing —
+  if accessibility is on): typing / pasting / value typing ask for approval (CLI `--onayli`); its value is NEVER read (not even for
+  verification); the text is not written to the log, error message or approval request (length only), it is hidden automatically
+  even if `--gizli` was not given.
+- **Session lock** (kde): if `org.freedesktop.ScreenSaver.GetActive` (otherwise logind `LockedHint`) is locked or cannot be read,
+  no input goes to the user's screen (15, "session locked"; fail-closed; `--ekranimda` does not override): text that accidentally
+  goes to the lock screen counts as a password attempt and can lock the account. The state is cached for 0.5 s; absent on the
+  virtual desktop.
+- **The approved target must not change**: if a sensitive click was approved from the panel, right before the click the text at
+  the point is OCR'd again and fuzzily compared with the text in the approval request (similarity < 0.85 → the click is not made,
+  10 "approved target changed"). On a click on a tree element (`click-element`, web elements included) the element is additionally
+  found again in the tree (`erisim._onay_sonrasi_oge`): if its name, role, centre (±3 px; on the web the bus name + object path)
+  are not the same or it is missing, 10. If there was no OCR text at the point at approval time (a text-less icon / an
+  `aria-label` button: the element name is not visible in OCR) the point comparison becomes "there is no text now either"; the
+  identity is verified from the tree. In a web accessibility action (`via="action"`) the same element check comes before the action.
+- **The end of a drag** is checked like the start: one approval carries the text of both points; during intermediate movements the
+  watcher (active window + title lock); right before release the window under the end point (forbidden / own client / unapproved
+  system prompt / another application) — if it does not fit, the cursor is taken back to the start and released (the drag is cancelled).
+- **Application access levels** (default NONE): `CONFIG_DIR/uygulama-seviyeleri.txt`, line `PATTERN = goruntule | tikla | tam`
+  (PATTERN is a title/class regex like in the forbidden list; English aliases view/click/full). goruntule = no input at all (10;
+  reading/screenshots free), tikla = mouse free, keyboard (yaz/tus/bas) and closing the window not allowed (10), tam = no
+  restriction. If the file is missing/empty there is no restriction at all (the tool does not restrict applications on its own);
+  the file is not created while being read, only Save in the panel writes it. If several patterns match the MOST RESTRICTIVE wins;
+  a malformed line (= missing, unknown level) counts as goruntule on the safe side (the panel does not save a malformed line).
+  The check is the same in both backends: `Girdi.gonder` calls `guvenlik.girdi_seviye_denetle(k, satirlar)` right after
+  `denetle(k, desen)` (key/keydown/type = keyboard; mouseto/click/button/wheel = mouse; typedelay/typehold setting lines are not
+  checked); in desktop mode the keyboard looks at the active window, the mouse at the window under the cursor via `imlec_alti_denetle`.
+  Launching with `ac` is not affected. A level refusal is given BEFORE the approval (no empty dialog is opened). Window management
+  (`eylem.pencere_yonet`: move/resize/minimise/maximise/restore) counts as "mouse" input (10 at goruntule, free at tikla); a click
+  with a modifier key ("keydown") and typing by pasting count as keyboard (10 at tikla). The clipboard itself (`clipboard`) is not
+  tied to a window and is therefore outside the level check.
+- **Launching a risky command.** The raw command line of `ac --komut` goes through `guvenlik.riskli_komut`: human approval for a
+  destructive pattern (in the CLI `--onayli`, does not pass in unattended mode), refusal → 10 and nothing is started. `ac --komut`
+  is for a user/agent that has a shell; the MCP surface NEVER reaches this path.
+- **MCP application launch (`open_app`).** An MCP agent that has NO shell must not be able to run code (`uygulama.mcp_uygulama`,
+  the single entry point; `api.uygulama_komutu` → `gio launch ENTRY.desktop [documents…]`): `app` is only an installed desktop
+  entry (`uygulama_bul`); a name containing `/` (path/command) → 10. The entry is refused (10) if in the program position of Exec
+  (skipping pass-through wrappers nice/prime-run/gamemoderun…) or in any element, as a path/bare name, there is an interpreter, shell,
+  wrapper (`env setsid nohup systemd-run flatpak-spawn xargs`…), privilege escalator, launcher (`xdg-open gio kioclient`…),
+  `deskhand`/`ekran`, a terminal emulator (`guvenlik.ucbirim_mi` + an extra list); `Terminal=true`, `Categories=…TerminalEmulator`;
+  for Flatpak a sub-command other than `run`, a terminal id or a forbidden `--command`; those that run another program through a
+  sub-command/option (`git -c`, `flock -c`, `tmux`, `screen`, `setpriv`, `script`, `expect`…); shell metacharacters in an Exec
+  element (`; | & $ \` < >`), command text starting with `!`/`=!` or containing spaces (if it is not an existing path) and a program
+  after `--`. **Allow list:** an entry that passes the blacklist starts WITHOUT approval only under this condition: the file is in
+  `SISTEM_UYGULAMA_DIZINLERI` (`/usr/share/applications`, `/usr/local/share/applications`, `/var/lib/flatpak/exports/share/applications`)
+  and it itself + all its parent directories (symbolic links resolved) are root-owned and not writable by group/others; every program in
+  Exec (pass-through wrappers included, resolved through PATH and `os.stat`) is a root-owned, non-writable, executable ELF binary or a
+  `#!` script under the same condition (wrappers installed by the system: libreoffice, steam, vivaldi…) — the script's interpreter
+  (absolute path) and, for `#!/usr/bin/env PROG`, PROG too must be a root-owned, non-writable ELF; no option (`-S`) or assignment may be
+  given to env.
+  The blacklist applies unchanged (if the Exec itself is `bash`/`ldd`/…, 10). Otherwise (the user directory
+  `~/.local/share/applications`, a user Flatpak, a program or interpreter owned by the user, a user file that comes earlier in
+  PATH) human approval is requested from the panel (`guvenlik._panelden_onay`; one action = one approval; 10 in unattended
+  mode / when the panel is closed / on refusal, kind "hassas"); the approval request shows the entry path and the Exec; at
+  permission time the entry is read once and verified to be identical to the approved Exec, and it is launched from its 0600
+  copy under `RUNTIME_DIR/uygulama/` (changing the file after approval is useless). Arguments are documents only: an http/https
+  URL (`=` in the query is allowed), a local `file://` URL or the ABSOLUTE path of an existing file/folder; an argument that
+  starts with `-`, contains `=` (outside a URL), has another scheme, has control characters, or points to an executable file or
+  a `.desktop` → 10 (at most 16). The agent cannot give variables to the environment of the launched process (only the session
+  policy's `env_ek`). If there is no session bridge on the invisible desktop no application is started (10). **Applications
+  that host code** (`uygulama.KOD_BARINDIRAN`, a single constant list; compared after stripping the parts of the .desktop id,
+  the Exec programs and the version suffixes of the Flatpak id: lutris, protontricks, winetricks, wine, steam, heroic,
+  gameconqueror/scanmem, libreoffice, gimp, blender, krita, inkscape, godot, IDEs (code/codium/kdevelop/qtcreator/JetBrains…),
+  jupyter, IDLE, obs, darktable…) ask for human approval even if they are system entries (they process a document as code or run
+  code from their interface). Executable types in a document argument (`YURUTULEBILIR_TURLER`: .bat .cmd .exe .msi .ps1 .py .sh
+  .bash .lua .pl .rb .js .jar .AppImage .desktop .yml/.yaml .docm .xlsm .pptm …; path and file:// URL) are 10 for every
+  application. For an approved user entry, if the Exec program belongs to the user, the sha256 of its content is taken at approval
+  time and compared right before launch (`api.uygulama_ac` → `uygulama.onayli_program_denetle`); if it changed, 10. **Limit:** an
+  MCP-only agent cannot run code; GUI script consoles (macro editor, Python console, IDE terminal) are only inside applications
+  the human approved. Applications with an embedded terminal (file manager, kate) open without approval; typing into terminal
+  panels is protected by the Enter rule.
+- **Settings files: the panel is the authoritative source** (`liste_koruma.py`). The forbidden list and the level file cannot be
+  removed with the agent's own tools (`rm` in a terminal, deleting in a file manager, emptying in an editor): at start-up the
+  panel reads the two files and keeps them IN MEMORY; only its own Save writes the file; if the file is changed from outside or
+  deleted (QFileSystemWatcher + 2 s polling) the panel keeps its own content, writes the file back and warns (log line + tray
+  notification). On every write the panel leaves `STATE_DIR/liste-<kind>.isaret` {sha256, icerik} (the marker); at start-up if the
+  file does not match the marker, the record in the marker is restored. CLI and MCP take the lists from the approval channel
+  (`liste yasak|seviye` → `icerik <n>` + text | `yok`; channel verification is the same as §8; the client caches for 0.3 s). If the
+  panel is closed it is read from the file; if the marker EXISTS but the file is missing or does not match the marker, Dur 10
+  ("the Deskhand settings file is missing or was changed outside the panel; … open the panel"), no input is sent. If there is no
+  marker (first installation) the old behaviour. Editing the file by hand is not supported: changes are made from the panel's
+  Settings. The same panel-authoritative pattern applies to the two loosening settings in `ayarlar.toml`: the approval scope
+  (`liste onaylar`) and the account sessions (`liste kimlik`; see "Approval scope" and "Account sessions" below).
+- **Pending approval = no input (MCP).** While human approval is awaited on a desktop (kde/sanal), every input tool going to THAT
+  desktop (click, type_text, press_key, scroll, drag, manage_window, clipboard write, run_flow, open_app) is refused without
+  waiting, as soon as it takes the lock, with `[7] approval pending` (`mcp_sunucu.kilitli(girdi=True)`); the record is opened
+  before the lock is released and closed after the lock is taken again after approval. Requests of other live Deskhand processes
+  on the same desktop are also counted (`onay.bekleyen_var`; an unusually long-lived fake request is not counted). Reading tools
+  and DUR are always free. The same gate exists for CLI/flow input: `eylem.girdi_al` (every mouse/keyboard path) and the guards of
+  the accessibility action path (`erisim._atspi_korumalari`, the web action included) give 7 when ANOTHER live Deskhand process has
+  a pending approval for that desktop (the process's own requests are not counted). `bekleyen_var` takes the desktop as
+  "ekran"/"arka" or as a backend name ("kde"/"sanal").
+- **Unattended mode.** `DESKHAND_GOZETIMSIZ=1` or the global flag `--unattended` (`--gozetimsiz`): every action that requires
+  approval is refused without opening a panel dialog and without waiting (10, "no sensitive action is performed in unattended
+  operation"). A single point `onay.iste_sonuc` (CLI, MCP and flow all pass through it). Since there is no chat/human, `--onayli`
+  is also considered invalid (`guvenlik.onayli_gecerli`). For scheduled flows.
+- The title (`-b`) and class (`-s`) lock right before every input (4).
+- The DUR (stop) switch: if `DESKHAND_RUNTIME_DIR/dur` exists, Dur(13) before every input call; everything held down is released.
+  `deskhand dur` creates it, `deskhand devam` deletes it. The UI/tray/shortcut use this.
+  `guvenlik.dur_ac(source)` / `dur_kapat(source)` / `dur_kaynagi()`: the first word of the dur file is `kullanici` (user) or
+  `cli`. A DUR set by the user cannot be overridden or lifted by the CLI (Dur 13); only the UI lifts it.
+- The input hub (§2) gives guarantees IN ADDITION to the client checks: socket 0600 / directory 0700 and only the same user
+  through SO_PEERCRED (the client also checks the server's user and the socket permission); the DUR switch right before every
+  batch (if on, press lines are refused with 13, `keyup`/`buttonup` and delay settings pass); only the known verbs of the dotool
+  language. Held keys/buttons are tracked per connection: when the connection drops (client died, SIGKILL) whatever is held is
+  released (except a key another connection also holds); if the input of the dropped connection continues in the queue, dotool
+  is restarted (no unchecked input continues). When DUR is turned on the held keys of all connections are released, and if there
+  is input in the queue dotool is restarted (the queue is dropped). If the panel dies the input of dotool is closed, dotool exits,
+  the device disappears.
+- Human priority (12): in the kde backend if the user is using the keyboard/mouse; on the virtual desktop (both types) only while
+  "Take over" (Devral) is on. Take over in the panel works in both types (preview `goruntu()`, input `Girdi.insan_ham`; over EIS in
+  the KWin type).
+- Window management, closing windows and (kde) clipboard writing also obey human priority (12) (`guvenlik.insan_onceligi`;
+  clipboard: CLI `pano yaz` and MCP `clipboard(write)` → `api.pano_yaz`); closing checks DUR (13). The digests of the texts
+  Deskhand wrote to the clipboard are in a SINGLE place (`guvenlik.kendi_pano_ekle/kendi_pano_mu`): the CLI, MCP `clipboard(read)`
+  and the paste approval look at the same list.
+- No foreground while the user is busy (15): the kde backend calls `mesgul.ekran_korumasi()` before input, bringing a window to
+  the front and opening an application. If the active window is full screen / game-like or a video is playing on MPRIS,
+  Dur(15). The exception is only the user's explicit permission (`--ekranimda`, `DESKHAND_EKRANIMDA=1` or the "Do it on my screen"
+  button in the notification → 10 min). The virtual desktop is unaffected.
+- **The AT-SPI frame is chosen only from the PID of the target window**; if there is no exact PID match, ONLY among the
+  DESCENDANTS of the window process, a frame with the same executable and a title that is ≥ 0.9 similar (multi-process
+  application). NEVER the ANCESTORS (so that an action does not go to the frame of another application that launched the window's
+  owner); if none is found or the PID is unknown, Dur 6 — it never falls to the frame of another application by title similarity.
+  The identity of the chosen frame itself is also checked: a frame that belongs to the process of the Deskhand panel/approval
+  dialog is always 10 (reading included), a forbidden pattern (application name/frame name) 10; for action/value typing, the agent's
+  own client and the application access level. In the tree scan the identity of the frame (bus name + object path, TOGETHER) is
+  stored; if it is a different object at action time, Dur 8.
+- The accessibility action path (`ogeye-tikla --eylem`, `ogeye-yaz`; `erisim.py`): there is no real mouse/keyboard input and no
+  focus, so the checks of the mouse path (except under-cursor) are applied EXPLICITLY: DUR (13), forbidden window (10), title/class
+  lock (4), sensitive button name / payment page (10 or approval from the panel; the approval request has no image), game/film
+  protection in kde (15), application access level (action/click = "mouse" class: 10 at goruntule; value typing = "keyboard": 10
+  at tikla as well; BEFORE approval), human priority (12: in kde, if the user is using the keyboard/mouse, it waits at most 8 s for
+  idleness and then 12; on the virtual desktop only while Devral is on), log. In value typing the destructive-command check for
+  terminals is applied unchanged too (`_yazi_hassas`). These checks are redone right before the action (approval may have been
+  waited for). libatspi connects to a single bus in the process; the work for another desktop runs in a helper process. When a
+  virtual desktop is opened `masaustu._erisim_hazirla_ic` sets IsEnabled=true on the private bus and starts the registry
+  (at-spi2-registryd) in its own cage.
+- Automatic turning on of accessibility (kde): IsEnabled=true is written on the user's session bus; this can change a persistent
+  desktop setting (`toolkit-accessibility`). If Deskhand turned it on, the marker `STATE_DIR/erisim-deskhand-acti` is written and
+  ONE note is put in the log; `deskhand doctor` shows the difference "on (Deskhand turned it on)" / "on" / "off"; `deskhand a11y
+  off` also deletes the marker. Tests fake `_erisim_yaz` (the real session setting is not touched).
+- A raw `dotool`/`xdotool` call ONLY inside a backend. NEVER anywhere else, tests included.
+- A virtual X connection is opened only with `masaustu.guvenli_ekran()`: an empty name falls to `$DISPLAY` in Xlib (the user's real
+  XWayland) and XTEST input could go to the real desktop. Only a display of the form `:N` that differs from the real `DISPLAY` is
+  accepted.
+- **The state record is untrusted (both types).** From the record ONLY the type + id/display number is taken; all paths and
+  addresses are BUILT from the working directory (`kwin_oturum.guvenli_kayit`, `masaustu.guvenli_kayit`; `masaustu.durum()` applies
+  this): KWin `RUNTIME_DIR/kwin-<8 hex>` (not a symbolic link, the user's, 0700) → `unix:path=<dir>/bus`, `<dir>/deskhand-<id>`,
+  Xauthority, XWayland `:120+`; Xvfb `RUNTIME_DIR/sanal-<no>`. The strict form of the bus address is `unix:path=/path[,guid=<32 hex>]`
+  (Python `arka_ortak.bus_yolu_kati`, C `adres_coz`): multiple addresses with `;` (sd-bus/libdbus moves on to the NEXT one if the
+  first fails) are rejected. If RUNTIME_DIR is an existing directory it must be owned by the user, not a symbolic link and 0700;
+  a loosely-permissioned directory is NOT silently tightened (someone may have left a file/socket in between): Dur 14, `deskhand
+  doctor` shows the reason and a `chmod 700` suggestion in the "Working directory" line.
+- **Peer verification (hard link / replacement).** Before connecting (`kwin_oturum.baglanti_denetle`,
+  `masaustu.xvfb_karsi_denetle`): the SO_PEERCRED PID of the session sockets is the process in the record (same start time) —
+  dbus-daemon for the bus (`--config-file=<dir>/bus.conf` on its command line), KWin for Wayland, Xvfb for X; if the socket's
+  (st_dev, st_ino) is one of the user's real sockets, refusal. After connecting, `deskhand-eis` does the same itself (`--dbus-pid` +
+  bus.conf; otherwise `hata bus-karsi`, exit 2).
+- **KWin type gates.** `kwin_oturum.guvenlik_kapilari` (before the process starts): Dur 14 if the bus address is the user's real
+  address (the same inode included), the Wayland socket name is the user's, the configuration directory is the real `~/.config`,
+  HOME/working directory is the real one, or the XWayland display is the real `DISPLAY`. `arka_uc/kwin.py` uses the SAFE record
+  returned by `baglanti_denetle` before EVERY connection; `deskhand-eis` connects only with `--bus <private address>`, it does not
+  inherit from the environment. KWin is opened with a minimal environment equivalent to `env -i`, with a temporary
+  HOME/XDG_*_HOME (KWin writes its own kwinrc / kwinoutputconfig.json / kglobalshortcutsrc / kxkbrc files here);
+  KDE_FULL_SESSION/KDE_SESSION_VERSION are not given to KWin.
+- **Application namespace (both types, a SINGLE launch path: `arka_ortak.korumali_baslat` → `korumali_argv`).** A background
+  application (everything OTHER than KWin/Xvfb, dbus-daemon and Deskhand's own helpers: `ac --arka`, `open_app`, session-bridge
+  commands) starts with `bwrap` (the model after audit 12c):
+  - **Separate user + PID namespace** (`--unshare-user --unshare-pid`, its own `/proc`): the user's other processes (the real KWin,
+    a game, a terminal) are invisible; there is no signal, ptrace, `/proc/<pid>/root|environ|mem` access to them (ESRCH).
+  - **Read-only root** (`--ro-bind / /`); `/dev` is bwrap's minimal /dev (`null`, `zero`, `random`, `tty`, `pts`, `shm`…) + only
+    `/dev/dri` (GPU; WebGL/GL in hardware). NO `/dev/uinput` (virtual keyboard/mouse), `/dev/input/event*` (key recording),
+    `/dev/snd` (direct ALSA microphone/speakers), `hidraw`, `/dev/bus/usb`, camera nodes. `/dev/udmabuf` is not given (KWin is
+    outside the cage anyway).
+  - **Empty tmpfs:** `/tmp` (the user's Steam/Chromium SingletonSockets in /tmp, the `.ICE-unix` ksmserver, Kulak Kesil sockets,
+    other X sockets are invisible), `/run/user/<UID>` (Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh, xauth, at-spi, portal,
+    systemd sockets) and (if elsewhere) Deskhand's RUNTIME_DIR (girdi.sock, sanal.json, other sessions).
+  - **The home directory is an EMPTY tmpfs + a WHITELIST** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` = min(2 GiB,
+    cage memory/4), cage default 6G → 1.5 GiB; the `/tmp` in the namespace has the same limit): of the real home directory ONLY the
+    desktop/toolkit appearance is visible, READ-ONLY — `~/.config/kdeglobals`, `kdedefaults/`, `kcminputrc`, `kcmfonts`,
+    `Trolltech.conf`, `plasma-localerc`, `breezerc`, `Kvantum`, `qt5ct`/`qt6ct`, `gtk-3.0`, `gtk-4.0`, `gtkrc`, `gtkrc-2.0`,
+    `~/.gtkrc-2.0`, `xsettingsd`, `fontconfig`, `~/.local/share/fonts`, `~/.fonts`, `~/.cache/fontconfig`, `~/.icons`,
+    `~/.local/share/icons`, `~/.themes`, `~/.local/share/themes`, `~/.local/share/color-schemes`, `user-dirs.dirs`,
+    `user-dirs.locale`, `mimeapps.list`, `~/.local/share/mime`, `~/.local/share/applications` and `~/.local/share/flatpak` (user
+    .desktop entries and the Flatpak installation). The OWN settings/data of no application (token, session, history) are visible:
+    EVERY hidden file not in the list and every directory/file in the home root that is not a data folder DOES NOT EXIST in the
+    namespace (measured: `.config/<random>/token`, `.netrc`, `.git-credentials`, `gh/hosts.yml`, `.docker`, `.kube`, `.pypirc`,
+    `.local/share/<unknown>`, `.cache/<app>`, `~/projects/.env`, `~/notes.txt` cannot be read; `tests/test_ev_beyaz_liste.py`). A
+    whitelist entry that is a symbolic link is bound from its TARGET; an entry whose target is the home directory itself/above it or
+    a SIR_YOLLARI path is rejected. Symbolic-link rules (`_beyaz_ham`): if the source (realpath) is inside / is / is above an XDG
+    data folder it is REFUSED (data folders are bound writable: an application in the namespace could create a `-> ~/.config` link
+    there and have the whole configuration opened in later launches); if the source is OUTSIDE home and under `/tmp`,
+    `/run/user/UID` or RUNTIME_DIR it is REFUSED; if the source of a whitelist entry is inside home and lexically different, it is
+    accepted ONLY if the source is under an entry of the whitelist (not a link) (dotfiles-manager links `~/dotfiles/...` are
+    refused; policy `ev` if needed); for a policy `ev` entry only the first two rules. The second line (SIR_YOLLARI) also covers by
+    source→target mapping (a secret inside the source is at `target + relative path`). A policy `ev` entry is also filtered with
+    `gecerli_politika_ev_girdisi`: glob characters, a hidden entry with a depth below 2 (`.ssh`, `.netrc`…) and the hubs themselves
+    (`.config`, `.local`, `.local/share`, `.local/state`, `.cache`, `.var`) are REFUSED. Thin overlays (SIR_YOLLARI):
+    `.local/share/flatpak/overrides` (empty directory), `.config/gtk-3.0/bookmarks` and `servers` (/dev/null);
+    `flatpak/repo/config` is DELIBERATELY not overlaid (measured: a /dev/null overlay breaks a `flatpak --user` installation).
+    TOCTOU: sources are opened as an `O_PATH|O_NOFOLLOW` fd, `(dev,ino)` and the `/proc/self/fd` path are checked, bwrap binds with
+    `--ro-bind-fd` (the fds are passed with `pass_fds`, they do not leak to the application); if bwrap does not know it, the
+    resolved real path is `--ro-bind`ed and a race between check and bind remains (only on paths writable by the home owner's own
+    account). Package/`sys.prefix` binds are added AFTER the data folders, a path that is the ROOT of a `.git` repository is
+    refused. Diagnostics: if the resolved exec (the .desktop Exec for `gio launch`) is under home but not visible in the
+    namespace, `korumali_baslat` gives `Dur(9)` IMMEDIATELY (the message carries the hint `oturum.toml` `[uygulama.<name>] ev =
+    [...]`; MCP `open_app` and CLI `ac` pass through the same gate).
+    CLI `ac --background`, like MCP `open_app`, starts the invisible desktop itself if it is closed (`masaustu_baslat`: the same
+    cage, lock and task-mode gate) and checks BEFORE the session copy is prepared (no copy in vain).
+    `ac APP [ADDRESS]` / `--url`: the address goes through `uygulama.web_adresi_denetle` (http/https only, no space/control
+    character/`-`; `file:`, `about:`, `javascript:`, `data:` → 10), it is appended as a single argument to the END of the
+    policy's command (since it starts with http(s):// it cannot be in option position; in Chromium the accessibility flag comes
+    before the address); it cannot be given together with `--komut`; in task mode `open_app_denetle` and the ban on raw commands
+    also apply in the CLI.
+    What the application writes (`~/.config/autostart`, `~/.bashrc`, `~/.config/systemd/user`, `~/.local/bin`, its own settings,
+    cache…) is DISCARDED with the session → no persistence escape. If an application needs its own settings, `ev = [...]` per
+    application in the session policy (relative to the home directory; read-only; there is NO DEFAULT for any application; the
+    `ev` in `_varsayilan` is not given to unknown applications; `..`/absolute paths are dropped; it cannot open SIR_YOLLARI):
+    `Hazirlik.ev` → `baslat(..., ev=)` → `korumali_argv(ev_ek=)`. Selection measurement (after 0.6.1; fake home, KWin type; 0 =
+    empty home, A = whitelist, B = layer + extended blacklist, C = layer + covering unknown hidden directories): KWrite, Dolphin,
+    Konsole, Gwenview, Firefox, Chromium, zenity, Meld, Electron open in A; KDE applications with the user's theme/font (on a dark
+    theme the average brightness A = B = C, a light theme at 0 without a whitelist), OCR accuracy the same as B/C; B and C leaked
+    unlisted secrets, A did not. The only writable REAL binds: the user's XDG data folders (`~/.config/user-dirs.dirs`; only INSIDE
+    the home directory, not the home root, no component starting with a dot in the path — an entry pointing to the home root, a
+    hidden directory, `/` or the outside is ignored) and the application's own session copy. Existing hidden directories/files
+    INSIDE the data folders (`.git` — hooks/config, `.vscode`, `.envrc`, `.venv`…; depth 6, outermost ones) are overlaid read-only;
+    a folder where this count exceeds 3000 is bound entirely read-only. Sockets/FIFOs in the home directory (depth 4) and in data
+    folders + known ones (`~/.steam/steam.pipe`) are masked with `/dev/null` (measured: connecting to a real socket/FIFO through the
+    layer is not possible anyway; the mask is a second line).
+  - **Secret paths are UNREADABLE** (`arka_ortak.SIR_YOLLARI`, a single constant list; may be globs): `~/.ssh`, `~/.gnupg`,
+    `~/.local/share/keyrings`, `~/.local/share/kwalletd`, `~/.password-store`, real Firefox profiles (`~/.config/mozilla`,
+    `~/.mozilla`), profile roots of the Chromium family (`~/.config/chromium`, `google-chrome*`, `vivaldi*`, `BraveSoftware`,
+    `microsoft-edge*`), agent/cloud/repository credentials (`~/.claude`, `~/.claude.json`, `~/.config/gh`, `~/.git-credentials`,
+    `~/.netrc`, `~/.aws`, `~/.docker/config.json`, `~/.config/rclone`, `~/.kube`), Deskhand's own settings/log
+    (`~/.config/deskhand`, `~/.local/state/deskhand`), Flatpak application data (`~/.var/app`), messaging sessions
+    (`~/.local/share/TelegramDesktop`, `~/.config/discord*`, `Signal`, `Element*`, `Slack`, `WhatsApp*`, `teams*`, `Mattermost`),
+    game platform tokens (`~/.steam/steam/config`, `~/.local/share/Steam/config`, `ssfn*`, `~/.config/heroic`,
+    `~/.config/lutris`), KDE Connect pairing keys, qBittorrent (WebUI password; the Flatpak too), Syncthing keys, the OBS stream key
+    (`~/.config/obs-studio/basic/profiles`), RustDesk, Thunderbird, FileZilla, Remmina, package-registry tokens (`~/.npmrc`,
+    `~/.pypirc`, `~/.cargo/credentials*`) and shell histories. A separately listed path inside an overlaid directory is not bound
+    again. Directory → empty tmpfs (the application can write, it is discarded), file → `/dev/null`; if it is a symbolic link (e.g.
+    profile-sync-daemon) its TARGET is overlaid (not needed if the target is under /run/user or /tmp, which are already empty in the
+    namespace). The overlay is bound AFTER the data folder binds and the session copy AFTER that: the background Firefox runs with
+    its own copy (`--profile <copy>`, `XDG_CONFIG_HOME=<copy>/.xdg-config`), the Flatpak Electron copy with
+    `--filesystem=<copy>` + XDG_* (measured: Firefox opens/downloads in both types; the Flatpak runtime opens in the namespace).
+  - **What is bound back** is only the session's own paths (`uygulama_baglari`: its own runtime directory, private bus and Wayland
+    socket, the accessibility bus, its own X socket + Xauthority read-only) and, of the session copies, ONLY the copy that the
+    policy gave to this application (`Hazirlik.kopya_yolu` → `baslat(..., kopya=)` → `arka_ortak.kopya_bagi`: it must be a direct
+    subdirectory of the copy root, otherwise Dur 14). The copy is NOT taken from the command line/environment: even if the path of
+    another copy appears in the command, that copy is not visible. The approved user entry of MCP `open_app` (a .desktop outside the
+    allow list) starts with `gio launch <RUNTIME_DIR/uygulama/private copy>`: that SINGLE file is bound read-only (`baslat(...,
+    girdi=)` → `arka_ortak.girdi_kopyasi_bagi`: a direct child of that directory, a plain `.desktop` owned by the user, otherwise Dur
+    14); other copies in the same directory are invisible. The order: `open_app` allow list + KOD_BARINDIRAN approval + the document
+    argument rules (`uygulama.mcp_uygulama`) → the digest check of the approved program (`onayli_program_denetle`) → this isolated
+    launch (the SINGLE path: `masaustu.baslat` → `korumali_baslat`).
+  - The application's `PATH` and `LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT` go only to the final command (`--setenv`); the helper chain
+    (sh, nice, ionice, bwrap) runs with a safe PATH and absolute paths (see "Safe helper binaries" below).
+  - `--new-session` (no TIOCSTI). NO `--die-with-parent` (the desktop outlives the CLI); the cage and PID cleanup are unchanged; when
+    the first process of the namespace dies the kernel kills everything inside. If bwrap is missing or not on a safe path, the
+    application is not started (Dur 9).
+  - **Flatpak:** `flatpak run` works in the namespace (nested bwrap; measured) but since there is no bus path to the user's systemd
+    user manager it CANNOT move to its own scope: the instance stays in the desktop's memory cage and PID namespace and closes when
+    the desktop closes (measured). The wrapper (`oturum/flatpak_ornek.py`) verifies this in the namespace and does not write the
+    host-machine record (`DESKHAND_AD_ALANI=1`); if the instance left the cage it closes it. What Flatpak writes (`~/.var/app`)
+    stays in the empty home tmpfs (discarded); the user installation (`~/.local/share/flatpak`) is read-only.
+  - **Measured:** Firefox (empty temporary profile + a copy similar to a session copy) opens in both types, loads a page, WebGL is in
+    hardware in the KWin type (integrated GPU), it serves the accessibility tree; a Qt test window; click/typing times did not
+    change. Details in `tests/test_denetim12c.py`. Download: the session COPY Firefox runs with its own `XDG_CONFIG_HOME`
+    (`<copy>/.xdg-config`); the user's `user-dirs.dirs`/`user-dirs.locale`/`mimeapps.list` and the GTK/fontconfig appearance (0600)
+    are copied there and user.js writes `browser.download.dir` = the XDG Downloads (the task folder in task mode). Before 0.9.0 these
+    files did not exist and downloads went to the namespace's temporary `~/Downloads` and vanished when the browser closed (a real
+    incident; the GLib test in the namespace is `tests/test_oturum_tamir.py`).
+  - **Not visible in the background:** `/tmp` (empty tmpfs: `/tmp/claude-*`, scratchpad included), non-XDG home folders and the
+    user's `~/Downloads` (if the XDG name is different) are INVISIBLE to the application. Put the file to be given to a file picker/an
+    upload in an XDG folder such as `~/Downloads` and type the full path with Ctrl+L in the file dialog.
+  - **Cache:** copies live in RUNTIME_DIR (memory); the Firefox disk cache is 64 MB (user.js `browser.cache.disk.capacity`), Chromium
+    `--disk-cache-size`. Live copies are not deleted when they exceed the count/size limit, a warning is added to the description.
 
-  **Neyi korumaz (bilerek / kalan riskler):**
-  - **Okuma:** uygulama XDG veri klasörlerini (belgeler, indirilenler, masaüstü…) ve beyaz listedeki görünüm
-    ayarlarını OKUYABİLİR; veri klasörlerine konmuş sırlar (ör. `~/Masaüstü/parolalar.txt`) açıktır. Ev dizininin geri
-    kalanı (her uygulamanın ayar/oturum dosyası, ev kökündeki diğer dizinler) görünmez. Bedeli: ev dizinindeki
-    programlar (`~/.local/bin` betikleri, `~/Games`, `~/Applications` AppImage'ları) ve uygulamanın kendi ayarları
-    (Dolphin yer imleri, Kate oturumları, Konsole profilleri) arka planda YOK — gerekiyorsa politikada uygulama başına
-    `ev`. Hangi uygulamanın arka planda açılacağı oturum politikasının (kopya/bekle/kapali/on) işidir.
-  - **Veri klasörleri yazılabilir:** uygulama `~/İndirilenler`, `~/Belgeler`, `~/Projeler`… içindeki NORMAL dosyaları
-    değiştirebilir/silebilir; YENİ gizli girdi oluşturabilir (ör. `.git`'i olmayan bir alt dizinde yeni `.git/` ya da
-    `.envrc`: kullanıcı o dizinde git/direnv çalıştırırsa yalıtım dışında kod çalışabilir) ve `Makefile`, `*.desktop`
-    (Masaüstü klasöründe kullanıcının masaüstünde görünür) gibi kullanıcının sonradan çalıştırabileceği dosyalar
-    yazabilir. Var olan gizli girdiler salt okunurdur; açılıştan sonra oluşan yeni gizli girdiler ve derinlik 6'dan
-    aşağısı örtülmez.
-  - **Ağ:** ağ ad alanı paylaşılır (tarayıcı ağa çıkabilsin; `--unshare-net` yok): uygulama yerel ağ hizmetlerine
-    (127.0.0.1'deki portlar: ör. qBittorrent WebUI, geliştirme sunucuları) ve SOYUT (abstract) unix soketlerine
-    bağlanabilir. Bu makinede soyut soketler yalnız ICE ve X (`:0`, anahtarlı: Xauthority görünmediğinden bağlantı
-    REDDEDİLİR, ölçüldü) olarak bulundu; ICE (ksmserver) soyut soketi ICE kimlik doğrulaması ister.
-  - **IPC ad alanı paylaşılır** (X MIT-SHM için): SysV paylaşımlı bellek/semafor/ileti kuyrukları aynı kullanıcının
-    diğer süreçleriyle ortak.
-  - `/dev/dri` (GPU) açık: GPU sürücüsü saldırı yüzeyi.
-  - Açılıştan SONRA veri klasörlerinde ya da beyaz listedeki dizinlerde oluşan soket/FIFO'lar maskelenmez (gerçek dizin
-    olduğundan bağlanılabilir); ev dizininin geri kalanı ad alanında hiç yoktur.
-- **Ses (iki tür).** Arka plan uygulamaları kullanıcının ses sunucusuna (pipewire/pulse) HİÇ erişmez: çalma da kayıt
-  (mikrofon) da yok. Soketler ad alanında görünmez (`/run/user/UID` boş tmpfs). İki durum (`ses_ortami_uygula`):
-  (1) varsayılan: ortam var olmayan bir sokete yönlendirilir, uygulamalar sessiz çalışır; (2) DİNLEME (Tur 3): oturumun
-  özel ses sunucusu kurulmuşsa (`ses.kur`; `manage_desktop(start, audio=true)`, ilk `listen` çağrısı ya da ayar
-  `[dinleme] ozel_ses = true` ile) ortam YALNIZ onun PULSE soketini gösterir. Özel örnek: oturum dizininde `ses/` (0700;
-  PipeWire soketleri `pipewire-0`/`-manager`, yapılandırma, günlükler) ve `ses/pulse/` (0700; yalnız `native`), kendi
-  yapılandırması (ALSA/Bluetooth/kamera eklentisi ve aygıt fabrikaları YÜKLENMEZ, WirePlumber yalnız `policy` profili,
-  XDG/HOME oturum dizininde: kullanıcının ayarları/filtre zincirleri okunmaz). pipewire-pulse'ta modül yükleme KAPALI
-  (`pulse.allow-module-loading = false`, `pulse.cmd` boş): `load-module` (tünel, LADSPA, pipe, TCP…) reddedilir. İçinde
-  yalnız `deskhand-sessiz` çıkışı + monitörü vardır: mikrofon yok, ses kullanıcının hoparlörüne/kulaklığına ASLA gitmez,
-  kullanıcının varsayılan çıkışı/düzeyi/modülleri değişmez. Uygulamanın ad alanına YALNIZ `ses/pulse/` SALT OKUNUR
-  bağlanır (`ses_bagi`); PipeWire'ın tam yetkili soketleri, yapılandırma ve günlükler bağlanmaz, PIPEWIRE_REMOTE var
-  olmayan yoldur. Soket yolu kayıttan değil çalışma dizininden kurulur ve gerçek dosya sisteminden denetlenir
-  (`ses.soket_hazir`); Deskhand'in `parec`'i bağlanmadan önce `ses.soket_denetle` (dizin/soket türü, sahip, sert bağ, karşı
-  uç = kayıtlı `ses_pulse`). Derinlemesine savunma: üç ses süreci TEK bwrap ad alanında (`ses.sunucu_argv`: ayrı
-  kullanıcı/PID/ağ/IPC/UTS — ağ yok; kök salt okunur; /run, /tmp, /var/tmp, /home ve ev, /mnt, /media, /srv, RUNTIME_DIR
-  boş tmpfs; asgari /dev: snd/dri/video/hidraw yok; yazılabilir tek yol `ses/`; RLIMIT_NICE/RTPRIO 0), 1 numaralı süreç
-  küçük yönetici kabuk (`ses_pw`; ölünce çekirdek hepsini öldürür), masaüstünün bellek kafesinde nice 10 + ionice idle.
-  Üç süreç aynı PID ad alanındadır: ayrı PID ad alanlarında PipeWire veri akışı kurulamıyor (ölçüldü). Kurulamazsa (araç yok, açılmadı, beklenmeyen aygıt) özellik
-  kapalı kalır, uyarı döner. Flatpak uygulamaları `--nosocket=pulseaudio` ile kalır (kendi soketlerini ezerdi): sesleri
-  dinlenemez. Eski boş çıkış (null sink) düzeneği ve ses bekçisi artık kurulmaz.
-- **Dinleme (`listen`).** `dinleme.dinle`: özel çıkışın monitöründen `parec` ile 16 kHz mono s16 BELLEKTE kayıt (en çok 120 sn;
-  `until_silence`: ses duyulduktan sonra sessizlikte erken biter) → ses hiç duyulmadıysa motor çalışmaz → `whisper-cli`
-  (`-mc 0`, silero VAD varsa, model `[dinleme] model`; yoksa açık hata + kurulum ipucu, HİÇBİR ŞEY indirilmez) → `{text,
-  segments[{t0,t1,text}], language, duration}`. Geçici WAV/JSON yalnız `<oturum>/dinleme/` (0700, dosyalar 0600; uygulamalar
-  görmez) ve iş bitince silinir; çökmeden kalan eski kayıtlar sonraki tanımada silinir. whisper-cli masaüstünün bellek
-  kafesinde nice 10 + ionice idle ile çalışır; motor mutlak yolu yalnız root'a ait zincirden (`arka_ortak.arac`);
-  `HSA_OVERRIDE_GFX_VERSION` yalnız kullanıcı ortamında tanımlıysa aktarılır. Kullanıcı oyundaysa/tam ekrandaysa GPU
-  kullanılmaz (`-ng`, CPU, en çok 4 iş parçacığı). Tanınan metin günlüğe
-  YAZILMAZ (yalnız süre/dil/parça sayısı). Sonuç `warning` alanıyla "güvenilmeyen veri" etiketlidir (ses içinden komut
-  enjeksiyonu). Kullanıcının GERÇEK ekran sesi bu sürümde yoktur: `desktop="foreground"` reddedilir.
-- **Uygulama ortamı (iki tür).** `arka_ortak.ortam_tabani`: kullanıcının oturumuna ait değişkenler (gerçek veri yolu,
-  WAYLAND_DISPLAY/DISPLAY/XAUTHORITY, AT_SPI_BUS_ADDRESS, SSH_AUTH_SOCK/SSH_AGENT_PID, GNOME_KEYRING_CONTROL,
-  LIBEI_SOCKET/EIS_SOCKET, SESSION_MANAGER, KDE_FULL_SESSION, PULSE_*/PIPEWIRE_*/IBUS_*) birleştirmeden ÖNCE ve SONRA
-  silinir; `GSETTINGS_BACKEND=memory` (gerçek dconf'a yazılmaz), `ATSPI_DBUS_IMPLEMENTATION=dbus-daemon` (erişilebilirlik
-  başlatıcısı `dbus-broker --scope user` ile kullanıcının gerçek a11y veri yolunu yeniden kullanamasın).
-  `XDG_RUNTIME_DIR` masaüstünün kendi klasörüdür (`<çalışma>/run`, 0700). HOME değişkeni kullanıcınındır; dizinin
-  kendisi ad alanında boş tmpfs + beyaz listedir (yukarıda).
-- **Güvenli yardımcı ikililer (iki tür).** Deskhand'in çalıştırdığı her yardımcı (bwrap, nice, ionice, sh,
-  systemd-run, busctl, env, dbus-daemon, Xvfb, openbox, kwin_wayland, Xwayland, prlimit, setpriv, kdotool, wl-copy/
-  wl-paste, find, pactl, at-spi2-registryd, bekçileri/pano sahibini/bildirim yakalayıcıyı çalıştıran python3)
-  `arka_ortak.arac()` ile PATH'ten DEĞİL yalnız `/usr/bin`, `/bin`'den mutlak yolla bulunur; yol bileşen bileşen
-  çözülür ve her bileşen (zincirdeki her sembolik bağ dahil) root'a ait, dizinler grup/diğerleri tarafından yazılamaz,
-  son dosya root'a ait, başkası yazamaz, çalıştırılabilir olmalı; değilse Dur 9. Kafes kapısı `/usr/bin/sh` ile;
-  uygulamanın PATH'i yalnız son komuta. (Denetim 12c Y2: PATH'in başı yazılabilir `~/.local/bin` idi; oraya bırakılan
-  sahte `bwrap` sonraki bütün başlatmaları yalıtımsız yapıyordu.) Python yorumlayıcısı çalışan yorumlayıcı güvenliyse o,
-  değilse `/usr/bin/python3`. Flatpak sarmalayıcısı `flatpak`/`systemctl`'i yalnız `/usr/bin`, `/bin`'de arar.
-- **Test paylaşımı (yalnız test takımı).** `DESKHAND_TEST_PAYLASIM` (tests/_yalitim.py kurar) ad alanına yazılabilir
-  bağlanır — test pencerelerinin olay günlükleri teste ulaşsın (ad alanında /tmp boş). Yalnız geçici dizindeki
-  `deskhand-test-*/paylasim` adlı, kullanıcıya ait, 0700, sembolik bağ olmayan dizin kabul edilir; başka değer yok
-  sayılır (ev dizini, soketler bu yolla açılamaz).
-- **Bayat / oynanmış kayıtla kapatma (iki tür).** Bir PID'e yalnız başlangıç zamanı kayıttakiyle aynıysa
-  (`arka_ortak.pid_kaydet` / `pid_dogru`) ve kafes varsa kafesteyse sinyal gider; kafes yalnız
-  `deskhand-kwin-<kimlik>-N.scope` / `deskhand-sanal-<no>-N.scope` biçimindeyse boşaltılır; silinen dizin kayıttaki yol
-  değil `RUNTIME_DIR/kwin-<kimlik>` / `sanal-<no>`; X kilit/soketi yalnız :120+ (Xvfb :90+) ve kilit ölü ya da kayıttaki
-  sunucuya aitse.
-- **Ölü sunucu.** Öncelik bekçisi ekran sunucusunu (KWin/Xvfb; PID + başlangıç zamanı) izler: SIGKILL/OOM ile ölürse
-  kafesi boşaltır (SIGTERM, 2 sn, SIGKILL), kendi X soket/kilitlerini ve çalışma dizinini siler, çıkar. Yalnız "kesin
-  ölü"de (`oncelik_bekcisi.kesin_olu`: süreç yok/ESRCH, zombi, ya da başlangıç zamanı farklı); `/proc/<pid>/stat`
-  GEÇİCİ okunamıyorsa (EACCES, bellek baskısı…) canlı oturum kapatılmaz.
-- **Karşı taraf doğrulaması önbelleği (KWin).** `_karsi_denetle`'nin başarılı sonucu (soket inode'ları, PID'ler,
-  başlangıç zamanları) anahtarıyla ~1 sn geçerli: sık komutlarda her bağlantıda yeniden soket açılmaz; soket değişirse
-  ya da süreç yeniden doğarsa anahtar değişir, yeniden doğrulanır.
-- **Özel D-Bus sertleştirmesi (iki tür).** `UpdateActivationEnvironment` ve `ReloadConfig` reddedilir; standart
-  servis dizinleri yoktur, yalnız org.a11y.Bus etkinleştirilebilir.
-- **Düşük öncelik (iki tür).** Kafes nice 10 + ionice idle ile başlar; KWin `no_new_privs` (dosya yeteneği
-  cap_sys_nice VERİLMEZ), RLIMIT_RTPRIO=0 ve RLIMIT_NICE (en düşük nice 10) ile açılır; ad tabanlı sistem kurallarına
-  (ananicy: `kwin_wayland` → nice -12) karşı kafesin öncelik bekçisi (`oncelik_bekcisi.py`) her iş parçacığını ~0,5 sn
-  içinde nice >= 10, gerçek zamanlı olmayan zamanlama ve idle G/Ç'ye geri düşürür. XWayland takma adla
-  (`deskhand-xwayland`) çalışır.
-- **Onay kapsamı** (`ayarlar.toml` `[guvenlik] onaylar`; panel Ayarlar → "Onay soruları"; `guvenlik.onay_kapsami()` kipi
-  okuyan TEK yer, ~1 sn önbellek; okunamayan/geçersiz değer = `hepsi`). PANEL YETKİLİDİR (`liste_koruma.kapsam`): CLI/MCP
-  değeri dosyadan değil, panelin doğrulanmış onay kanalından alır (`liste onaylar`); panel kapalı / kanal doğrulanamıyor /
-  eski panel → `hepsi`. Panel açılışta dosyadaki `kart`'ı yalnız kendi işareti (`liste-onaylar.isaret`) da `kart` ise
-  kabul eder; işaretsiz `kart` → `hepsi` + dosya geri yazılır + uyarı. Panel açıkken dosya elle değişirse panelin değeri
-  korunur. Tek değiştirme yolu panelin Ayarlar'ı (ajan girdisi panel penceresine gidemez). Varsayılan **`hepsi`**: yukarıdaki TÜM onaylar
-  aynen (bugünkü davranış). **`kart`** (kullanıcının kendi bilgisayarı için bilinçli tercih: "yalnız kartla ödeme")
-  yalnız şu iki sınıfta onay sorar: (1) para düğmeleri (`guvenlik.PARA_DUGMESI`: satın al, hemen al, öde, ödemeyi
-  tamamla, siparişi onayla/tamamla, buy now, pay, place order, complete purchase, confirm payment… — HASSAS'ın para alt
-  kümesi + son sipariş/abonelik/bağış düğmeleri: place/submit/complete order, confirm (and) pay, siparişi ver/gönder/
-  onayla/tamamla, onayla ve öde, bağış yap/donate, ödemeyi yap/tamamla; "Devam Et"/"Continue", "Abone ol"/"Subscribe"/"Subscriptions",
-  "Onayla ve Bitir", durum yazısı "Siparişiniz onaylandı/gönderildi" para düğmesi SAYILMAZ (kullanıcı: yalnız kart
-  kullanırken sor); ödeme sayfası dışında da) ve ödeme/sipariş sayfasında HER tıklama ile Enter/boşluk — sayfa kalıbı
-  `kart` kipinde DAR (`guvenlik.HASSAS_SAYFA_KART`: checkout, ödeme [ödeme geçmişi/yöntemlerim hariç], sipariş özeti,
-  siparişi onayla/tamamla, order review/summary, place order, payment details/information/page/step, billing
-  details/information, 3D Secure/Doğrulama; `kasa`, tek başına `billing`/`payment` YOK: "PC Kasa Modelleri", "Payment
-  Request API", "Google Cloud Billing" sormaz), `hepsi` kipinde geniş `HASSAS_SAYFA` aynen (`hassas_sayfa_kalibi()`) — düğme yazısı
-  okunabilse de, ajanın verdiği ad ya da noktanın yanındaki yazı ("Toplam 249,90 TL") karara girmez, muafiyet YOKTUR
-  (kayıtlı kartta kart yazma kapısı hiç tetiklenmez; son sipariş tıklamasını bu kapı yakalar) (`hassas_engel`,
-  `hassas_sayfa_engel`, `hassas_nokta`, AT-SPI/web hassas öge); (2) kart bilgisi yazma
-  (`guvenlik.kart_bilgisi_engel`: yazı, yapıştırarak yazma, AT-SPI değer yazma; hedef alan kart alanıysa — AT-SPI/web ad,
-  etiket, açıklama ya da autocomplete/id/placeholder: kart numarası, card number, cc-number, cvc/cvv, güvenlik kodu, son
-  kullanma, expiry — ya da metinde 13–19 haneli, Luhn'dan geçen numara varsa: boşluk/nokta/tire/bölü ayırıcılı, çift
-  boşluklu, ek rakam/SKT/CVV bitişik). YANLIŞ ALARM kuralları (`guvenlik.kart_numarasi`): ayırıcı yalnız boşluk/nokta/tire/
-  bölü (en çok 3; satır sonu/Tab diziyi BİTİRİR, tampon da öyle); dizi ≤23 hane; pencere kart ailesi ön eki + uzunluğuna
-  (Visa/MC/Amex/Troy/Diners/JCB/Discover/UnionPay/Maestro) VE Luhn'a uymalı, yalnız GRUP BAŞINDA başlar, SON hariç her
-  grubu 4–6 haneli olmalı; tarih (`22.11.2026`) ve geçerli IBAN (mod-97, `TR33…`) aday değildir. Ölçüm (4000'er örnek):
-  rastgele 30/50 hane, TR/DE IBAN, iki tarih, 20 sayılık tablo, TC+telefon, boşluklu küçük sayılar %0; 10–14 haneli
-  sipariş no %0,03 (eskiden %69/94, %48, %10, %100, %38, %30, %4). Bilinen sınır: bitişik 16 haneli, kart ön ekli
-  (4/5/34/37/6…) bir sipariş numarası Luhn şansıyla (~%10 × önek olasılığı) hâlâ alarm verebilir.) Panoya YAZILAN metin de aynı denetimden geçer (`guvenlik.pano_yazma_engel`: API
-  `pano_yaz`, MCP `clipboard write`, CLI `pano yaz`); aynı pencereye 60 sn içinde yazılan parçalar ve rakam tuşları
-  (`tus`/`bas`) süreç içi küçük bir tamponda (yalnız metnin SONUNDAKİ ≤48 karakterlik rakam dizisi, yalnız bellek)
-  birleştirilip denenir (`guvenlik.kart_tampon_denetle`; CLI'de her çağrı ayrı süreç: tampon yalnız MCP/Python API
-  sürecinde işler; tıklama o pencerenin tamponunu boşaltır, süresi dolan kayıt okunurken silinir; metin uzunluğu
-  kesilmez). Onay isteğinde yalnız son 4 hane görünür; `kart` kipinde tampona rakam giren HER `yaz`/`tus` girdisi (ve ≥8
-  rakamlı yazı) `gizli` sayılır: günlükte `type ***(n)`, `key/keydown/keyup ***`, etiket `tus ***` (`guvenlik.gizli_satir`/
-  `gizli_etiket`; kde/kwin/sanal arka uçlar) — günlüğe tam numara ya da kart rakamı yazılmaz. Bu iki sınıfta CLI `--onayli`/`--approved`
-  YOK SAYILIR (`guvenlik.onayli_gecerli_kati`): onay her zaman panelden gelir (terminali serbest ajan CLI'yi `--onayli`
-  ile çağırıp atlatamasın); panel kapalıyken ya da gözetimsiz kipte ret (10). Onaysız serbest kalanlar
-  (`guvenlik.onaysiz_serbest`: tek koşul, tek satır günlük `onay kapsamı kart: onaysız geçti | …`): hesap silme ve OAuth
-  "Yetkilendir/İzin ver/Authorize" düğmeleri, sistem yetki/parola istemleri (`sistem_istemi_engel`/`_denetle`: polkit,
-  KWallet, askpass, portal), parola alanına yazma (`parola_alani_engel`), uçbirime/gömülü uçbirime Enter
-  (`ucbirim.enter_kapisi`; satır uyarısı yalnız günlüğe, OCR yapılmaz), uçbirime yıkıcı komut yazma, riskli tuş akorları,
-  yapıştırma tuşları/menü yapıştırma ve pano okuma (MCP `clipboard read`, CLI `pano oku`), MCP `open_app` doğrulanmamış
-  girdi onayı (`uygulama.mcp_uygulama`: özel kopya + YN5 içerik özeti denetimi aynen), CLI `ac --komut` yıkıcı komut
-  onayı. DEĞİŞMEYENLER (onay değil, ret/koruma): ajanın kendi istemcisi, `open_app` kara listesi, panel/onay penceresi
-  yasağı, liste koruma, yasak pencere listesi ve erişim seviyeleri, DUR, insan önceliği, oyun/film koruması (15), oturum
-  kilidi, parola alanı DEĞERİNİ okuma reddi, bekleyen onay kapısı, onay sonrası hedef doğrulaması, arka plan yalıtımı.
-  Sınırlar: `kart` kipinde kart onayı SERT SINIR DEĞİLDİR: uçbirim serbest olduğundan ham girdi araçlarıyla (dotool,
-  xdotool, wtype…) atlatılabilir; `alt+sysrq`, `ctrl+alt+backspace` gibi akorlar da serbesttir; gözetimsiz kipte kart dışı
-  her şey onaysız çalışır. Liste korumasındaki gibi, panel KAPALIYKEN hem ayar dosyasını hem işareti tutarlı biçimde
-  sahteleyen (sha256 hesaplayıp STATE_DIR'e yazan) bir süreç panelin bir sonraki açılışında `kart`'ı geçirebilir; ayrı
-  çağrılarda (CLI'de ayrı süreçlerde) parça parça yazılan numara, tampon süresi (60 sn) dışına yayılan ya da kart alanı
-  olarak işaretlenmemiş alana başka biçimde (kodlanmış, harflerle) yazılan numara yakalanamaz; `run_flow` önceden onaylı
-  (`--onayli`) adım onayı bu ayardan etkilenmez.
-- **Hesap oturumları** (`ayarlar.toml` `[guvenlik] hesap_oturumlari` = virgüllü `microsoft`/`google`/`edevlet` alt
-  kümesi; panel Ayarlar → "Hesap oturumları"; varsayılan **boş = hepsi kapalı**). Oturum politikasının site ret
-  listesi (`data/oturum.toml` `[site] reddet`) görünmez masaüstündeki Firefox kopyasında kimlik sağlayıcı oturumlarını
-  da süzer: `login.live.com` / `login.microsoftonline.com` (alan çerezi kuralıyla `.live.com` MSPAuth/WLSSC da),
-  `accounts.google.com` / `securetoken.googleapis.com` (`.google.com` SID…), devlet girdileri. Kullanıcı bir sağlayıcıya
-  izin verirse `firefox.hazirla` politikayı `Politika.kimlik_izni_uygula` ile kopyalar: YALNIZ o sağlayıcının tam
-  girdileri (`politika.KIMLIK_ALANLARI`: microsoft → 2 giriş alanı; google → 2; edevlet → `*e-devlet*`, `*edevlet*`,
-  `turkiye.gov.tr`, `gib.gov.tr`, `sgk.gov.tr`, `*.gov.tr`; ABD `*.gov` DEĞİL) ret listesinden çıkar → o alanların çerezi (oturum
-  çerezleri dahil), kayıtlı girişleri (`logins.json`/`logins.db`; parolayı Firefox doldurur, ajan okumaz; `key4.db`
-  zaten kopyalanır) ve `--site` verilmişse deposu kopyaya girer. Banka/ödeme desenleri (`*bank*`, `*odeme*`,
-  `*payment*`, `*checkout*`, `*paypal*`, `*stripe*`, bankalar, iyzico, PayTR…) hiçbir sağlayıcıda yoktur: bir alan
-  kalan herhangi bir girdiye uyarsa yine reddedilir (`ebank.gov.tr` e-Devlet izniyle de ret). **Görev kipinde
-  (`DESKHAND_GOREV=1`) izin HİÇ uygulanmaz**: `hazirla` izni sormaz, kimlik çerezleri her zaman süzülür. Kopya
-  açıklaması (`open` çıktısı, `oturum hazirla`) ve `doctor` satırı özet verir ("kimlik oturumları: Microsoft aktarıldı
-  (5 çerez, 1 kayıtlı giriş); Google süzüldü (… izin kapalı)"); son özet `RUNTIME_DIR/oturum/kimlik-son.json`'da (yalnız
-  bilgi, karar için okunmaz). İzin GEVŞETME yönünde olduğundan onay kapsamıyla aynı PANEL YETKİLİ model
-  (`liste_koruma` KIMLIK): CLI/MCP değeri dosyadan değil panelin doğrulanmış kanalından alır (`liste kimlik`; kanal
-  salt okunur, yazma komutu yok); panel kapalı / doğrulanamıyor / eski panel → izin YOK. Panel açılışta dosyadaki
-  sağlayıcılardan yalnız kendi işaretinde (`liste-kimlik.isaret`) de olanları kabul eder; işaretsiz sağlayıcı →
-  dosya geri yazılır + uyarı. Panel açıkken dosyaya elle eklenen sağlayıcı geri alınır (`denetle`); dosyadan çıkarmak
-  ya da dosyayı silmek kabul (sıkılaştırma). Tek açma yolu panelin Ayarlar'ı: ana anahtar ("Giriş yaptığım hesaplar …
-  banka ve ödeme siteleri hariç") üçünü birlikte, kutular tek tek açar; açarken onay diyaloğu (varsayılan Hayır),
-  kapatmak sorusuz. Sınır (onay kapsamıyla aynı): panel KAPALIYKEN hem ayar dosyasını hem işareti tutarlı biçimde
-  sahteleyen bir süreç panelin bir sonraki açılışında izni geçirebilir. İzin açıkken arka plandaki tarayıcı o hesabın
-  e-postasına/dosyalarına erişebilir; güvenilmeyen sayfa ajanı kandırabilir (panel uyarı metni bunu söyler).
+  **What it does not protect (deliberate / remaining risks):**
+  - **Reading:** the application CAN READ the XDG data folders (documents, downloads, desktop…) and the whitelisted appearance
+    settings; secrets placed in data folders (e.g. `~/Desktop/passwords.txt`) are open. The rest of the home directory (each
+    application's settings/session files, other directories in the home root) is invisible. The price: programs in the home
+    directory (`~/.local/bin` scripts, `~/Games`, `~/Applications` AppImages) and the application's own settings (Dolphin bookmarks,
+    Kate sessions, Konsole profiles) are NOT in the background — if needed `ev` per application in the policy. Which application opens
+    in the background is the business of the session policy (copy/wait/off/on).
+  - **Data folders are writable:** the application can change/delete the NORMAL files in `~/Downloads`, `~/Documents`, `~/Projects`…;
+    it can create NEW hidden entries (e.g. a new `.git/` or `.envrc` in a subdirectory that has no `.git`: if the user runs git/direnv in
+    that directory, code can run outside the isolation) and it can write files that the user may run later, such as `Makefile`, `*.desktop`
+    (in the Desktop folder, visible on the user's desktop). Existing hidden entries are read-only; new hidden entries created after
+    start-up and anything below depth 6 are not overlaid.
+  - **Network:** the network namespace is shared (so that a browser can reach the network; no `--unshare-net`): the application can
+    connect to local network services (ports on 127.0.0.1: e.g. the qBittorrent WebUI, development servers) and to ABSTRACT unix
+    sockets. On this machine abstract sockets were found only as ICE and X (`:0`, keyed: since the Xauthority is not visible the
+    connection is REFUSED, measured); the ICE (ksmserver) abstract socket requires ICE authentication.
+  - **The IPC namespace is shared** (for X MIT-SHM): SysV shared memory/semaphores/message queues are common with the same user's other
+    processes.
+  - `/dev/dri` (GPU) is open: the GPU driver is an attack surface.
+  - Sockets/FIFOs that appear AFTER start-up in data folders or in whitelisted directories are not masked (they can be connected to
+    because the directory is real); the rest of the home directory does not exist at all in the namespace.
+- **Audio (both types).** Background applications NEVER reach the user's sound server (pipewire/pulse): neither playback nor recording
+  (microphone). The sockets are invisible in the namespace (`/run/user/UID` is an empty tmpfs). Two cases (`ses_ortami_uygula`):
+  (1) default: the environment is redirected to a non-existent socket, applications play silently; (2) LISTENING (round 3): if the
+  session's private sound server was set up (`ses.kur`; with `manage_desktop(start, audio=true)`, the first `listen` call or the setting
+  `[dinleme] ozel_ses = true`) the environment points ONLY to its PULSE socket. The private instance: `ses/` in the session directory
+  (0700; PipeWire sockets `pipewire-0`/`-manager`, configuration, logs) and `ses/pulse/` (0700; only `native`), its own configuration
+  (ALSA/Bluetooth/camera plug-ins and device factories are NOT loaded, WirePlumber only the `policy` profile, XDG/HOME in the session
+  directory: the user's settings/filter chains are not read). Module loading in pipewire-pulse is OFF (`pulse.allow-module-loading =
+  false`, `pulse.cmd` empty): `load-module` (tunnel, LADSPA, pipe, TCP…) is refused. Inside there is only the `deskhand-sessiz` output +
+  its monitor: no microphone, sound NEVER goes to the user's speaker/headphones, the user's default output/level/modules do not change.
+  ONLY `ses/pulse/` is bound READ-ONLY into the application's namespace (`ses_bagi`); PipeWire's fully privileged sockets,
+  configuration and logs are not bound, PIPEWIRE_REMOTE is a non-existent path. The socket path is built from the working directory,
+  not from the record, and is checked against the real file system (`ses.soket_hazir`); before Deskhand's `parec` connects,
+  `ses.soket_denetle` (directory/socket type, owner, hard link, peer = the recorded `ses_pulse`). Defence in depth: the three sound
+  processes in a SINGLE bwrap namespace (`ses.sunucu_argv`: separate user/PID/network/IPC/UTS — no network; read-only root; /run, /tmp,
+  /var/tmp, /home and home, /mnt, /media, /srv, RUNTIME_DIR empty tmpfs; minimal /dev: no snd/dri/video/hidraw; the only writable path
+  is `ses/`; RLIMIT_NICE/RTPRIO 0), process number 1 a small supervisor shell (`ses_pw`; when it dies the kernel kills all), in the
+  desktop's memory cage with nice 10 + ionice idle. The three processes are in the same PID namespace: PipeWire data flow cannot be
+  established across separate PID namespaces (measured). If it cannot be set up (tool missing, did not start, unexpected device) the
+  feature stays off and a warning is returned. Flatpak applications stay with `--nosocket=pulseaudio` (it would override their own
+  sockets): their sound cannot be listened to. The old empty-output (null sink) arrangement and the sound guard are no longer set up.
+- **Listening (`listen`).** `dinleme.dinle`: recording IN MEMORY from the monitor of the private output with `parec` at 16 kHz mono s16
+  (at most 120 s; `until_silence`: ends early on silence after sound was heard) → if no sound was ever heard the engine does not run →
+  `whisper-cli` (`-mc 0`, silero VAD if present, model `[dinleme] model`; if missing an explicit error + an installation hint, NOTHING is
+  downloaded) → `{text, segments[{t0,t1,text}], language, duration}`. Temporary WAV/JSON only in `<session>/dinleme/` (0700, files 0600;
+  applications do not see it) and deleted when the job ends; old recordings left after a crash are deleted at the next recognition.
+  whisper-cli runs in the desktop's memory cage with nice 10 + ionice idle; the engine's absolute path only from a chain owned by root
+  (`arka_ortak.arac`); `HSA_OVERRIDE_GFX_VERSION` is passed on only if it is defined in the user's environment. If the user is in a game/
+  full screen the GPU is not used (`-ng`, CPU, at most 4 threads). The recognised text is NOT WRITTEN to the log (only duration/language/
+  segment count). The result is labelled "untrusted data" through the `warning` field (command injection through audio). The user's REAL
+  screen audio does not exist in this version: `desktop="foreground"` is refused.
+- **Application environment (both types).** `arka_ortak.ortam_tabani`: the variables that belong to the user's session (the real bus
+  path, WAYLAND_DISPLAY/DISPLAY/XAUTHORITY, AT_SPI_BUS_ADDRESS, SSH_AUTH_SOCK/SSH_AGENT_PID, GNOME_KEYRING_CONTROL,
+  LIBEI_SOCKET/EIS_SOCKET, SESSION_MANAGER, KDE_FULL_SESSION, PULSE_*/PIPEWIRE_*/IBUS_*) are removed BEFORE and AFTER merging;
+  `GSETTINGS_BACKEND=memory` (nothing is written to the real dconf), `ATSPI_DBUS_IMPLEMENTATION=dbus-daemon` (so that the accessibility
+  launcher cannot reuse the user's real a11y bus with `dbus-broker --scope user`). `XDG_RUNTIME_DIR` is the desktop's own folder
+  (`<work>/run`, 0700). The HOME variable is the user's; the directory itself is an empty tmpfs + whitelist in the namespace (above).
+- **Safe helper binaries (both types).** Every helper Deskhand runs (bwrap, nice, ionice, sh, systemd-run, busctl, env, dbus-daemon, Xvfb,
+  openbox, kwin_wayland, Xwayland, prlimit, setpriv, kdotool, wl-copy/wl-paste, find, pactl, at-spi2-registryd, the python3 that runs the
+  guards/the clipboard owner/the notification catcher) is found with `arka_ortak.arac()` NOT through PATH but with an absolute path only
+  from `/usr/bin`, `/bin`; the path is resolved component by component and every component (every symbolic link in the chain included) must
+  be owned by root, directories not writable by group/others, the final file owned by root, not writable by others, executable; otherwise
+  Dur 9. The cage gate with `/usr/bin/sh`; the application's PATH only to the final command. (Audit 12c Y2: the head of PATH was the
+  writable `~/.local/bin`; a fake `bwrap` left there made all later launches unisolated.) The Python interpreter is the running
+  interpreter if it is safe, otherwise `/usr/bin/python3`. The Flatpak wrapper looks for `flatpak`/`systemctl` only in `/usr/bin`, `/bin`.
+- **Test share (test suite only).** `DESKHAND_TEST_PAYLASIM` (set by tests/_yalitim.py) is bound writable into the namespace — so that the
+  event logs of the test windows reach the test (/tmp is empty in the namespace). Only a directory named `deskhand-test-*/paylasim` in the
+  temporary directory, owned by the user, 0700, not a symbolic link is accepted; any other value is ignored (the home directory and sockets
+  cannot be opened through this path).
+- **Closing with a stale/tampered record (both types).** A signal goes to a PID only if its start time is the same as in the record
+  (`arka_ortak.pid_kaydet` / `pid_dogru`) and, if there is a cage, it is in the cage; the cage is emptied only if it has the form
+  `deskhand-kwin-<id>-N.scope` / `deskhand-sanal-<no>-N.scope`; the deleted directory is `RUNTIME_DIR/kwin-<id>` / `sanal-<no>`, not the path
+  in the record; the X lock/socket only for :120+ (Xvfb :90+) and if the lock is dead or belongs to the server in the record.
+- **Dead server.** The priority guard watches the display server (KWin/Xvfb; PID + start time): if it dies from SIGKILL/OOM it empties the
+  cage (SIGTERM, 2 s, SIGKILL), deletes its own X socket/locks and the working directory, and exits. Only on "certainly dead"
+  (`oncelik_bekcisi.kesin_olu`: no process/ESRCH, zombie, or a different start time); if `/proc/<pid>/stat` is TEMPORARILY unreadable
+  (EACCES, memory pressure…) a live session is not closed.
+- **Peer verification cache (KWin).** The successful result of `_karsi_denetle` (socket inodes, PIDs, start times) is valid for ~1 s under its
+  key: with frequent commands a socket is not reopened for every connection; if the socket changes or the process is reborn the key changes
+  and it is verified again.
+- **Private D-Bus hardening (both types).** `UpdateActivationEnvironment` and `ReloadConfig` are refused; there are no standard service
+  directories, only org.a11y.Bus can be activated.
+- **Low priority (both types).** The cage starts with nice 10 + ionice idle; KWin is opened with `no_new_privs` (the file capability
+  cap_sys_nice is NOT GIVEN), RLIMIT_RTPRIO=0 and RLIMIT_NICE (lowest nice 10); against name-based system rules (ananicy: `kwin_wayland` →
+  nice -12) the cage's priority guard (`oncelik_bekcisi.py`) drops every thread within ~0.5 s back to nice >= 10, non-real-time scheduling
+  and idle I/O. XWayland runs under an alias (`deskhand-xwayland`).
+- **Approval scope** (`ayarlar.toml` `[guvenlik] onaylar`; panel Settings → "Approval questions"; `guvenlik.onay_kapsami()` is the ONLY place that
+  reads the mode, ~1 s cache; an unreadable/invalid value = `hepsi` (all)). THE PANEL IS AUTHORITATIVE (`liste_koruma.kapsam`): CLI/MCP get the
+  value not from the file but from the panel's verified approval channel (`liste onaylar`); panel closed / channel cannot be verified / old
+  panel → `hepsi`. At start-up the panel accepts the `kart` (card) in the file only if its own marker (`liste-onaylar.isaret`) is also `kart`;
+  `kart` without a marker → `hepsi` + the file is written back + a warning. If the file is changed by hand while the panel is open, the panel's
+  value is kept. The only way to change is the panel's Settings (agent input cannot go to the panel window). The default is **`hepsi`**: ALL the
+  approvals above unchanged (today's behaviour). **`kart`** (a conscious choice for the user's own computer: "ask only for card payments") asks for
+  approval only in these two classes: (1) money buttons (`guvenlik.PARA_DUGMESI`: satın al, hemen al, öde, ödemeyi tamamla, siparişi onayla/tamamla,
+  buy now, pay, place order, complete purchase, confirm payment… — the money subset of HASSAS + the final order/subscription/donation buttons:
+  place/submit/complete order, confirm (and) pay, siparişi ver/gönder/onayla/tamamla, onayla ve öde, bağış yap/donate, ödemeyi yap/tamamla;
+  "Devam Et"/"Continue", "Abone ol"/"Subscribe"/"Subscriptions", "Onayla ve Bitir", and the status text "Siparişiniz onaylandı/gönderildi" are NOT
+  counted as money buttons (the user: ask only when paying with a card); also outside the payment page) and EVERY click plus Enter/space on a
+  payment/order page — the page pattern is NARROW in `kart` mode (`guvenlik.HASSAS_SAYFA_KART`: checkout, ödeme [except payment history/my
+  methods], sipariş özeti, siparişi onayla/tamamla, order review/summary, place order, payment details/information/page/step, billing
+  details/information, 3D Secure/Doğrulama; NO `kasa`, and no `billing`/`payment` alone: "PC Kasa Modelleri", "Payment Request API", "Google Cloud
+  Billing" do not ask), in `hepsi` mode the broad `HASSAS_SAYFA` unchanged (`hassas_sayfa_kalibi()`) — even if the button text can be read, the name
+  the agent gives or the text next to the point ("Toplam 249,90 TL") does not enter the decision, there is NO exemption (with a saved card the
+  card-typing gate never triggers; this gate catches the final order click) (`hassas_engel`, `hassas_sayfa_engel`, `hassas_nokta`, AT-SPI/web
+  sensitive element); (2) typing card information (`guvenlik.kart_bilgisi_engel`: typing, typing by pasting, AT-SPI value typing; if the target
+  field is a card field — AT-SPI/web name, label, description or autocomplete/id/placeholder: kart numarası, card number, cc-number, cvc/cvv,
+  güvenlik kodu, son kullanma, expiry — or the text contains a 13–19 digit number that passes Luhn: with space/dot/dash/slash separators, double
+  spaces, with extra digits/expiry/CVV attached). FALSE ALARM rules (`guvenlik.kart_numarasi`): the separator is only space/dot/dash/slash (at
+  most 3; a line end/Tab ENDS the sequence, and so does the buffer); sequence ≤23 digits; the window must match a card-family prefix + length
+  (Visa/MC/Amex/Troy/Diners/JCB/Discover/UnionPay/Maestro) AND Luhn, starts only AT A GROUP START, every group except the LAST must be 4–6 digits;
+  a date (`22.11.2026`) and a valid IBAN (mod-97, `TR33…`) are not candidates. Measurement (4000 samples each): random 30/50 digits, TR/DE IBAN, two
+  dates, a table of 20 numbers, TC id + phone, small numbers with spaces 0%; an order number of 10–14 digits 0.03% (formerly 69%/94%, 48%, 10%,
+  100%, 38%, 30%, 4%). Known limit: an attached 16-digit order number with a card prefix (4/5/34/37/6…) can still raise an alarm by Luhn chance (~10%
+  × prefix probability).) Text WRITTEN to the clipboard also goes through the same check (`guvenlik.pano_yazma_engel`: API `pano_yaz`, MCP
+  `clipboard write`, CLI `pano yaz`); chunks written to the same window within 60 s and digit keys (`tus`/`bas`) are merged and tried in a small
+  in-process buffer (only the digit sequence of ≤48 characters at the END of the text, memory only) (`guvenlik.kart_tampon_denetle`; in the CLI every
+  call is a separate process: the buffer works only in the MCP/Python API process; a click empties the buffer of that window, an expired record is deleted
+  when read; the text length is not truncated). In the approval request only the last 4 digits are visible; in `kart` mode EVERY `yaz`/`tus` input that
+  puts a digit into the buffer (and text with ≥8 digits) counts as `gizli` (hidden): in the log `type ***(n)`, `key/keydown/keyup ***`, label `tus ***`
+  (`guvenlik.gizli_satir`/`gizli_etiket`; kde/kwin/sanal backends) — the full number or a card digit is not written to the log. In these two classes the CLI
+  `--onayli`/`--approved` is IGNORED (`guvenlik.onayli_gecerli_kati`): approval always comes from the panel (so that an agent with a free terminal cannot
+  bypass it by calling the CLI with `--onayli`); refusal (10) when the panel is closed or in unattended mode. What stays free without approval
+  (`guvenlik.onaysiz_serbest`: a single condition, a single log line `approval scope kart: passed without approval | …`): account deletion and OAuth
+  "Authorize/Allow/Yetkilendir/İzin ver" buttons, system privilege/password prompts (`sistem_istemi_engel`/`_denetle`: polkit, KWallet, askpass, portal),
+  typing into a password field (`parola_alani_engel`), Enter in a terminal/embedded terminal (`ucbirim.enter_kapisi`; the line warning only to the log, no
+  OCR), typing a destructive command into a terminal, risky key chords, paste keys/menu paste and clipboard reading (MCP `clipboard read`, CLI `pano oku`),
+  the MCP `open_app` approval of an unverified entry (`uygulama.mcp_uygulama`: the private copy + YN5 content digest check unchanged), the CLI `ac --komut`
+  destructive-command approval. UNCHANGED (not approvals, refusal/protection): the agent's own client, the `open_app` blacklist, the ban on the
+  panel/approval window, list protection, the forbidden window list and access levels, DUR, human priority, game/film protection (15), session lock,
+  the refusal to read the VALUE of a password field, the pending-approval gate, post-approval target verification, background isolation. Limits: in `kart`
+  mode the card approval IS NOT A HARD BOUNDARY: since the terminal is free it can be bypassed with raw input tools (dotool, xdotool, wtype…); chords
+  such as `alt+sysrq`, `ctrl+alt+backspace` are also free; in unattended mode everything other than cards runs without approval. As with list protection,
+  a process that, WHILE the panel is CLOSED, forges both the settings file and the marker consistently (computing the sha256 and writing it to STATE_DIR)
+  can get `kart` through the next time the panel opens; a number written piece by piece in separate calls (in the CLI, separate processes), spread beyond the
+  buffer time (60 s), or written in another form (encoded, in letters) into a field not marked as a card field cannot be caught; the pre-approved
+  (`--onayli`) step approval of `run_flow` is not affected by this setting.
+- **Account sessions** (`ayarlar.toml` `[guvenlik] hesap_oturumlari` = a comma-separated subset of `microsoft`/`google`/`edevlet`; panel Settings →
+  "Account sessions"; the default is **empty = all closed**). The site refusal list of the session policy (`data/oturum.toml` `[site] reddet`) also filters
+  identity-provider sessions in the Firefox copy on the invisible desktop: `login.live.com` / `login.microsoftonline.com` (with the domain-cookie rule
+  `.live.com` MSPAuth/WLSSC too), `accounts.google.com` / `securetoken.googleapis.com` (`.google.com` SID…), government entries. If the user permits a
+  provider, `firefox.hazirla` copies with the policy `Politika.kimlik_izni_uygula`: ONLY the full entries of that provider (`politika.KIMLIK_ALANLARI`:
+  microsoft → 2 sign-in domains; google → 2; edevlet → `*e-devlet*`, `*edevlet*`, `turkiye.gov.tr`, `gib.gov.tr`, `sgk.gov.tr`, `*.gov.tr`; the US `*.gov` is
+  NOT) leave the refusal list → the cookies of those domains (session cookies included), the saved logins (`logins.json`/`logins.db`; Firefox fills the
+  password, the agent does not read it; `key4.db` is copied anyway) and, if `--site` was given, its storage enter the copy. Bank/payment patterns (`*bank*`,
+  `*odeme*`, `*payment*`, `*checkout*`, `*paypal*`, `*stripe*`, banks, iyzico, PayTR…) are in no provider: if a domain matches any remaining entry it is
+  still refused (`ebank.gov.tr` is refused even with the e-Devlet permission). **In task mode (`DESKHAND_GOREV=1`) the permission is NEVER applied**: `hazirla`
+  does not ask for the permission, identity cookies are always filtered. The copy description (`open` output, `oturum hazirla`) and the `doctor` line give a
+  summary ("identity sessions: Microsoft transferred (5 cookies, 1 saved login); Google filtered (… permission off)"); the last summary is in
+  `RUNTIME_DIR/oturum/kimlik-son.json` (information only, not read for decisions). Since the permission goes in the direction of LOOSENING, the same PANEL
+  AUTHORITATIVE model as the approval scope (`liste_koruma` KIMLIK): CLI/MCP take the value not from the file but from the panel's verified channel (`liste
+  kimlik`; the channel is read-only, there is no write command); panel closed / cannot be verified / old panel → NO permission. At start-up the panel accepts of
+  the providers in the file only those that are also in its own marker (`liste-kimlik.isaret`); a provider without a marker → the file is written back +
+  a warning. A provider added to the file by hand while the panel is open is rolled back (`denetle`); removing it from the file or deleting the file is
+  accepted (tightening). The only way to turn it on is the panel's Settings: the master switch ("Accounts I am signed in to … except bank and payment sites")
+  opens the three together, the boxes one by one; on opening a confirmation dialog (default No), closing without a question. Limit (the same as the approval
+  scope): a process that, WHILE the panel is CLOSED, forges both the settings file and the marker consistently can get the permission through the next time the
+  panel opens. While the permission is on, the background browser can reach the e-mail/files of that account; an untrusted page can fool the agent (the panel's
+  warning text says this).
+### 4.z Input and privacy details (0.9.0)
 
-### 4.z Girdi ve gizlilik ayrıntıları (0.9.0)
+- **deskhand-eis character mapping**: first a key that exists in X11 (evdev ≤ 247; xkb code ≤ 255), then the fewest modifiers; if a
+  printable character is only on a non-X11 key it is `yazilamaz` (clipboard path). Diagnostics: `plan TEXT`, `--harita-sina`.
+- **Power/lock keys** (`guvenlik._GUC_TUSLARI`): power, sleep, wakeup, screenlock (coffee/XF86ScreenSaver), suspend, hibernate,
+  logoff — canonical names from `_TUS_ESANLAM`/`_EVDEV_AD`/`_KEYSYM_AD`; a single key without a modifier is also `riskli_tus`
+  (approval). So are `ctrl+alt+shift+delete/pageup/pagedown`.
+- **Control characters**: `eylem.denetim_karakteri_denetle` (k_yaz, yaz_ic, yazima_hazirla, erisim.k_ogeye_yaz); the backends'
+  `yazilabilir_mi` is False for Cc.
+- **Hidden text**: `yazima_hazirla(gizli=True)` does not change characters; a sequence/flow step is masked with `eylem.adim_metni`;
+  `girdi_merkezi.uyari_maskele` masks dotool character warnings always in the hub log and, for hidden sending, on the client; the log has
+  no hidden-chunk length (`gizli_satir` → `type ***`); `_gizli_pano_temizle` deletes the hidden chunk from a clipboard that cannot be restored.
+- **Unreadable browser page (R1)**: `dogrulama_sinamasi.okunamayan_klavye_engeli(k=…)`: input after Tab is always refused; if the sequence has
+  Enter/Space, `erisim.odak_bilgisi(k)` (a single bounded DFS, the value is not read: `rol`, `belge_ici`, `duzenlenebilir`) → outside the document
+  or editable: allowed; otherwise/unknown: refused.
+- **Real-screen lock and approval**: `onay.iste_sonuc` applies the lock only when the target is the user's screen; `guvenlik.sayfadan_cikis`
+  (only `gezin.adrese_git`): address + Enter, if the focus is outside the document it is exempt from the payment-page approval.
+- **Web value mask** (§9): `web._ayrinti_ekle` filters the input value with `erisim._deger_temizle`; since Firefox may give an empty attribute on the
+  first query it is asked once more. The `web.tarayici_mi` class is split by `. - _` and spaces.
+- **CLI read commands** `gorsel.korumali_goruntu` → `api.goruntu_al` (forbidden target 10, other forbidden ones black).
+- **Masked-image path rule (0.9.1, SINIF-MASKE)**: every frame whose pixels, or text derived from them (OCR, a colour-region coordinate,
+  `text at the point`, a match list, a Dur message), leave the process (to the agent, into an MCP result) is taken through the
+  `gorsel.korumali_goruntu` / `api.goruntu_al` path. This path reads the forbidden-window list BEFORE and AFTER the frame
+  (`maske_kare.iki_okumali_kare`). The union of the two positions is blacked out; the position before the frame of a window that became
+  forbidden after the frame also enters the union (`Geometriler.tum`). A window that closed or left the forbidden list during the frame and an
+  unreadable list give `Dur(8, tur=maske-yarisi|maske-okunamadi)`; the frame is not sent. In this case `korumali_goruntu` tries at most 3 frames
+  with a short wait; retrying starts only before a 2 s deadline and the stability wait (`son_tarih`) ends at that deadline (total ≈ 2 s + one
+  frame/list read); a long flow and `bekle` do not fall in a single race. In the terminal Enter gate the Dur messages returned to the agent (10 and
+  the real-screen lock 17) carry a generic action text, the line that was read stays only in the panel. The raw frame (`gorsel.pencere_goruntusu`,
+  `_pencere_goruntusu`, the backend `.goruntu`) is used only in internal work where the pixels do not leave the process. These are: the approval
+  target fingerprint (`onay_hedef._goruntu`), the image of the human approval panel (`guvenlik.hedef_goruntusu`), the line reading of the terminal
+  Enter gate (`ucbirim._ocr_satirlar`; the Dur message to the agent carries no word derived from OCR, the detail is only in the panel), the
+  re-check before a click in desktop mode (`eylem.k_metne_tikla`, bool only; an accepted 1-bit limit) and the panel preview. The allow list, its
+  justification and the number of references in each function are kept in `tests/test_guv_sinif_maske.py` (`IZINLI`). The test turns red however the
+  name appears: name, attribute, import alias, string constant or getattr/vars/`__dict__` (a new caller and a new frame added to an allowed
+  function included). Known limits: this gate is a trip wire, not a sandbox (a name built at run time is not seen); the intermediate position of a
+  forbidden window that is DRAGGED between the two reads is not blacked out; the cost of the two list reads was not measured.
+- **CLI automatic title lock**: `cli.otomatik_baslik_kilidi` (yaz/tus/tikla/dizi/kaydir given with an id and without `-b` → `^…$`; `--no-title-lock`).
+- **MCP result contract** (§10): the `arac` and `okuma_araci` wrappers also turn an unexpected exception into `hata_sonucu` (`[9]`); `mcp_adlari`
+  turns CLI options into MCP parameter names.
+- **Human priority**: after a window, settling is awaited for a single short 'active' (`YANSIMA_PAY` 0.5 s, `YANSIMA_SURE` 0.04 s); if the activity
+  helper reports v1 the watcher is ignored.
+### Desktop ownership (CLI) and desktop selection (0.9.0)
+- The desktop that `desktop start` and `open --background` open on their own is written to the nearest `claude` process in the caller's ancestor
+  chain (`masalar.cli_sahiplen`; the owner file kind is `cli`; human/task mode/panel excluded). Another Claude session → 14; a named `cli` desktop
+  whose owner died is swept like `oto` (`masaustu.oto_temizle`). `desktop stop` deletes the `masa/<name>` directory of a named desktop (if there
+  is no live MCP owner).
+- MCP automatic binding: if the default desktop is ownerless but alive and has an application in its cage (the topmost `bwrap` process,
+  `masaustu.uygulama_pidleri`) it counts as BUSY → `oturum-N` (if the same Claude session opened the desktop — `baslatan_ajan` in the state record
+  is in the ancestor chain — it is shared).
+- CLI: `--desktop-name NAME` is accepted in every position up to the command name and after the command; if given (or `DESKHAND_MASAUSTU`) the target
+  is automatically the background. zsh note: a variable with spaces is not split — use `export DESKHAND_HEDEF=arka DESKHAND_MASAUSTU=name` or an
+  array (`ENV="A=1 B=2"; $ENV command` does not work).
+- In an identity session copy, going to Microsoft/Google SIGN-OUT addresses does not yet ask for approval (an open item; signing out of the copy can
+  also close the main session at the provider — do not sign out in the copy while the identity permission is on).
 
-- **deskhand-eis karakter eşlemi**: önce X11'de var olan tuş (evdev ≤ 247; xkb kodu ≤ 255), sonra en az değiştirici;
-  yazdırılabilir karakter yalnız X11 dışı tuştaysa `yazilamaz` (pano yolu). Tanılama: `plan METİN`, `--harita-sina`.
-- **Güç/kilit tuşları** (`guvenlik._GUC_TUSLARI`): power, sleep, wakeup, screenlock (coffee/XF86ScreenSaver), suspend,
-  hibernate, logoff — kanonik adlar `_TUS_ESANLAM`/`_EVDEV_AD`/`_KEYSYM_AD`'dan; değiştiricisiz tek tuş da `riskli_tus`
-  (onay). `ctrl+alt+shift+delete/pageup/pagedown` da.
-- **Denetim karakterleri**: `eylem.denetim_karakteri_denetle` (k_yaz, yaz_ic, yazima_hazirla, erisim.k_ogeye_yaz);
-  arka uçların `yazilabilir_mi`'si Cc için False.
-- **Gizli yazı**: `yazima_hazirla(gizli=True)` karakter değiştirmez; dizi/akış adımı `eylem.adim_metni` ile maskelenir;
-  `girdi_merkezi.uyari_maskele` dotool karakter uyarılarını merkez günlüğünde her zaman, istemcide gizli gönderimde
-  maskeler; günlükte gizli parça uzunluğu yok (`gizli_satir` → `type ***`); `_gizli_pano_temizle` geri yüklenemeyen
-  panoda gizli parçayı siler.
-- **Okunamayan tarayıcı sayfası (R1)**: `dogrulama_sinamasi.okunamayan_klavye_engeli(k=…)`: Tab sonrası girdi her zaman
-  ret; dizide Enter/Boşluk varsa `erisim.odak_bilgisi(k)` (tek sınırlı DFS, değer okunmaz: `rol`, `belge_ici`,
-  `duzenlenebilir`) → belge dışı ya da düzenlenebilir: izin; aksi/bilinmiyor: ret.
-- **Gerçek ekran kilidi ve onay**: `onay.iste_sonuc` kilidi yalnız hedef kullanıcının ekranıyken uygular;
-  `guvenlik.sayfadan_cikis` (yalnız `gezin.adrese_git`): adres + Enter, odak belge dışındaysa ödeme sayfası onayından muaf.
-- **Web değer maskesi** (§9): `web._ayrinti_ekle` giriş değerini `erisim._deger_temizle` ile süzer; Firefox ilk sorguda
-  boş nitelik verebildiği için bir kez daha sorulur. `web.tarayici_mi` sınıfı `. - _` ve boşlukla parçalar.
-- **CLI okuma komutları** `gorsel.korumali_goruntu` → `api.goruntu_al` (yasak hedef 10, diğer yasaklar siyah).
-- **Maskeli görüntü yolu kuralı (0.9.1, SINIF-MASKE)**: pikseli ya da ondan türeyen metni (OCR, renk alanı koordinatı,
-  `noktadaki yazı`, eşleşme listesi, Dur iletisi) süreç DIŞINA (ajana, MCP sonucuna) giden her kare
-  `gorsel.korumali_goruntu` / `api.goruntu_al` yolundan alınır. Bu yol yasak pencere listesini karenin ÖNÜNDE ve
-  ARKASINDA okur (`maske_kare.iki_okumali_kare`). İki konumun birleşimi karartılır; kareden sonra yasaklanan pencerenin
-  kareden önceki konumu da birleşime girer (`Geometriler.tum`). Kare sırasında kapanan ya da yasaktan çıkan pencere ve
-  okunamayan liste `Dur(8, tur=maske-yarisi|maske-okunamadi)` verir; kare gönderilmez. `korumali_goruntu` bu durumda
-  kısa beklemeyle en çok 3 kare dener; yeniden deneme yalnız 2 sn son tarihinden önce başlar ve kararlılık beklemesi
-  (`son_tarih`) o tarihte biter (toplam ≈ 2 sn + bir kare/liste okuması); uzun akış ve `bekle` tek yarışta düşmez.
-  Uçbirim Enter kapısında ajana dönen Dur iletileri (10 ve gerçek ekran kilidi 17) genel eylem metni taşır, okunan
-  satır yalnız panelde kalır. Ham kare
-  (`gorsel.pencere_goruntusu`, `_pencere_goruntusu`, arka uç `.goruntu`) yalnız pikseli süreçten çıkmayan iç işlerde
-  kullanılır. Bunlar: onay hedefi parmak izi (`onay_hedef._goruntu`), insan onay panelinin görüntüsü
-  (`guvenlik.hedef_goruntusu`), uçbirim Enter kapısının satır okuması (`ucbirim._ocr_satirlar`; ajana giden Dur iletisi
-  OCR'dan türeyen sözcük taşımaz, ayrıntı yalnız panelde), masaüstü kipinde tıklama öncesi yeniden denetim
-  (`eylem.k_metne_tikla`, yalnız bool; kabul edilen 1 bitlik sınır) ve panel önizlemesi. İzin listesi, gerekçesi ve
-  her işlevdeki başvuru sayısı `tests/test_guv_sinif_maske.py` (`IZINLI`) içinde tutulur. Ad hangi biçimde geçerse
-  geçsin test kırmızı verir: ad, öznitelik, içe aktarma takma adı, dizge sabiti ya da getattr/vars/`__dict__`
-  (yeni çağıran ve izinli işleve eklenen yeni kare dahil). Bilinen sınırlar: bu kapı bir tetik teli, kum havuzu
-  değildir (çalışma anında kurulan ad görülmez); iki okuma arasında SÜRÜKLENEN yasak pencerenin ara konumu
-  karartılmaz; iki liste okumasının maliyeti ölçülmedi.
-- **CLI otomatik başlık kilidi**: `cli.otomatik_baslik_kilidi` (kimlikle verilen yaz/tus/tikla/dizi/kaydir, `-b` yok →
-  `^…$`; `--no-title-lock`).
-- **MCP sonuç sözleşmesi** (§10): `arac` ve `okuma_araci` sarmalayıcıları beklenmeyen istisnayı da `hata_sonucu`'na
-  çevirir (`[9]`); `mcp_adlari` CLI seçeneklerini MCP parametre adlarına çevirir.
-- **İnsan önceliği**: pencere sonrası tek kısa 'aktif' (`YANSIMA_PAY` 0,5 sn, `YANSIMA_SURE` 0,04 sn) için yerleşme
-  beklenir; etkinlik yardımcısı v1 bildirirse izleyici yok sayılır.
-### Masaüstü sahipliği (CLI) ve masaüstü seçimi (0.9.0)
-- `desktop start` ve `open --background`'ın kendiliğinden açtığı masaüstü, çağıranın ata zincirindeki en yakın
-  `claude` sürecine yazılır (`masalar.cli_sahiplen`; sahip dosyası türü `cli`; insan/görev kipi/panel hariç). Başka
-  Claude oturumu → 14; sahibi ölen adlı `cli` masaüstü `oto` gibi süpürülür (`masaustu.oto_temizle`). `desktop stop`
-  adlı masaüstünün `masa/<ad>` dizinini siler (canlı MCP sahibi yoksa).
-- MCP otomatik bağlanma: varsayılan masaüstü sahipsiz ama canlı ve kafesinde uygulama (en üst `bwrap` süreci,
-  `masaustu.uygulama_pidleri`) varsa DOLU sayılır → `oturum-N` (masaüstünü aynı Claude oturumu açtıysa — durum
-  kaydındaki `baslatan_ajan` ata zincirinde — paylaşılır).
-- CLI: `--desktop-name AD` komut adına kadar her konumda ve komuttan sonra kabul; verilmişse (ya da
-  `DESKHAND_MASAUSTU`) hedef kendiliğinden arka plandır. zsh notu: boşluklu değişken bölünmez —
-  `export DESKHAND_HEDEF=arka DESKHAND_MASAUSTU=ad` ya da dizi kullanın (`ENV="A=1 B=2"; $ENV komut` çalışmaz).
-- Kimlik oturumu kopyasında Microsoft/Google ÇIKIŞ adreslerine gitme henüz onay istemiyor (açık iş; kopyadan çıkış
-  sağlayıcıda asıl oturumu da kapatabilir — kimlik izni açıkken kopyada çıkış yapmayın).
+## 5. Exit codes
+0 ok · 1 usage error · 2 point outside window/screen · 3 not active/another window · 4 title/class lock did not match · 5 ambiguous (several matches) ·
+6 not found · 7 timeout · 8 window missing/moved · 9 tool missing (dotool/tesseract/Xvfb…) · 10 forbidden/sensitive · 11 flow error screen ·
+12 a human is using it ·
+**13 the user said STOP (DUR)** · **14 virtual desktop closed** · **15 the user is in a game/watching a film, no interference with their screen** ·
+**16 the application cannot be opened in the background** (open on the user's screen or foreground only) ·
+**17 the real screen is closed in this process** (`DESKHAND_GERCEK_EKRAN`, see §6) ·
+**18 human verification (CAPTCHA) pending: agent input refused, hand over to the user (`request_human`)** ·
+20 / 21 `decide` decision codes: 0 = the user's screen, 20 = background, 21 = later.
 
-## 5. Çıkış kodları
-0 tamam · 1 kullanım hatası · 2 nokta pencere/ekran dışında · 3 aktif değil/başka pencere · 4 başlık/sınıf kilidi
-uymadı · 5 belirsiz (birden çok eşleşme) · 6 bulunamadı · 7 zaman aşımı · 8 pencere yok/taşındı ·
-9 araç eksik (dotool/tesseract/Xvfb…) · 10 yasak/hassas · 11 akış hata ekranı · 12 insan kullanıyor ·
-**13 kullanıcı DUR dedi** · **14 sanal masaüstü kapalı** · **15 kullanıcı oyunda/film izliyor, ekranına müdahale yok** ·
-**16 uygulama arka planda açılamaz** (kullanıcının ekranında açık ya da yalnız ön plan) ·
-**17 gerçek ekran bu süreçte kapalı** (`DESKHAND_GERCEK_EKRAN`, bkz. §6) ·
-**18 insan doğrulaması (CAPTCHA) bekliyor: ajan girdisi reddedildi, kullanıcıya devret (`request_human`)** ·
-20 / 21 `decide` karar kodları: 0 = kullanıcının ekranı, 20 = arka plan, 21 = sonra.
+Calling automation must stop at 10, 12, 13, 15, 16, 17 and 18 and notify the user. On the MCP surface the same codes appear as an error
+`[code] name: detail`. This table is kept consistent with the "Exit codes" table in the README.
 
-Çağıran otomasyon 10, 12, 13, 15, 16, 17 ve 18'de durmalı ve kullanıcıya haber vermelidir. MCP yüzeyinde aynı kodlar
-`[kod] ad: ayrıntı` hatası olarak görünür. Bu tablo README'deki "Exit codes" tablosuyla tutarlı tutulur.
+## 6. Working rules
+- Tests redirect the `DESKHAND_*_DIR`s to a temporary folder; the real `~/.config`, `~/.local/state` etc. are not written.
+  Compare the sha1 of `~/.config/deskhand` (and the old `~/.config/ekran` if it exists) before/after a long run.
+  When adding a new write path, verify that the tests really simulate it.
+- Real-screen tests: no test/command that sends input to the REAL screen (tikla/yaz/tus with the kde backend, `tests/ekranli/`) is run while the user is
+  using the computer (film, game…); they are run only by hand, when the machine is idle. Virtual desktop (Xvfb) tests are free.
+- **Real-screen lock (structural):** if `DESKHAND_GERCEK_EKRAN=kapali` is set, every path that affects the user's REAL session is refused with
+  `hata.gercek_ekran_denetle()` IMMEDIATELY before the real tool is run (Dur 17, explicit message): input (the `kde.Girdi` set-up, `kde.dotool_ac`,
+  the input-hub connection), `kdotool` words with side effects (activate/move/resize/minimise/close… `kde.calis`), application launch (`kde.baslat`),
+  clipboard writing (`kde._wl`), notification (`mesgul.sor`), the accessibility setting on the user's session bus and AT-SPI action/writing (`erisim`).
+  Paths that read the CONTENT of the user's screen/clipboard (screenshot, `wl-paste`) are also closed; the value `salt-okuma` (read-only) leaves these
+  (reading only) free. Window list/title/geometry, lock/idle state and AT-SPI reading stay open. An unrecognised value counts as `kapali`. When it is
+  not set the behaviour is exactly the same; `doctor` shows the "Real screen" line if it is set. The invisible desktop (`sanal`, `kwin`) and the
+  test fake backends are not affected. RULE: measurement/test scripts import `tests/_yalitim` (which sets the lock) or set the variable themselves; only
+  `tests/ekranli/`, which deliberately touches the real screen, removes it. Tests that replace the real tool with a fake binary set the lock to `acik`
+  themselves.
+- Do not use `pkill -f PATTERN` (it can kill your own shell); stop processes by PID.
+- Personal data: no user name, real home directory, account name or dated personal incident note in code, comments, tests and documents. The design
+  reason may remain in a comment; without date and person.
+- Run heavy jobs (long scans, big tests) in a cage with limited memory (e.g. `systemd-run --user -p MemoryMax=…`) and one at a time.
+- Git: run the tests before committing changes; if several people/tools work in parallel, each commits only its own files.
 
-## 6. Çalışma kuralları
-- Testler `DESKHAND_*_DIR`'leri geçici klasöre yönlendirir; gerçek `~/.config`, `~/.local/state` vb. yazılmaz.
-  Uzun koşudan önce/sonra `~/.config/deskhand` (ve varsa eski `~/.config/ekran`) için sha1 karşılaştırın.
-  Yeni bir yazma yolu eklerken testlerin onu gerçekten taklit ettiğini doğrulayın.
-- Gerçek ekran testleri: GERÇEK ekrana girdi gönderen hiçbir test/komut (kde arka ucu ile tikla/yaz/tus,
-  `tests/ekranli/`) kullanıcı bilgisayarı kullanırken (film, oyun…) çalıştırılmaz; yalnız elle, makine boştayken
-  koşulur. Sanal masaüstü (Xvfb) testleri serbesttir.
-- **Gerçek ekran kilidi (yapısal):** `DESKHAND_GERCEK_EKRAN=kapali` ayarlıysa kullanıcının GERÇEK oturumuna etki eden her
-  yol, gerçek aracı çalıştırmadan HEMEN önce `hata.gercek_ekran_denetle()` ile reddedilir (Dur 17, açık ileti): girdi
-  (`kde.Girdi` kurulumu, `kde.dotool_ac`, girdi merkezi bağlantısı), yan etkili `kdotool` sözleri (etkinleştir/taşı/
-  boyutlandır/küçült/kapat… `kde.calis`), uygulama başlatma (`kde.baslat`), pano yazma (`kde._wl`), bildirim
-  (`mesgul.sor`), kullanıcının oturum veri yolunda erişilebilirlik ayarı ve AT-SPI eylem/yazma (`erisim`).
-  Kullanıcının ekran/pano İÇERİĞİNİ okuyan yollar (ekran görüntüsü, `wl-paste`) da kapanır; `salt-okuma` değeri bunları
-  (yalnız okumayı) serbest bırakır. Pencere listesi/başlık/geometri, kilit/boşta durumu ve AT-SPI okuma açık kalır.
-  Tanınmayan değer `kapali` sayılır. Ayarsızken davranış birebir aynıdır; `doctor` ayarlıysa "Gerçek ekran" satırını
-  gösterir. Görünmez masaüstü (`sanal`, `kwin`) ve test sahte arka uçları etkilenmez. KURAL: ölçüm/test betikleri
-  `tests/_yalitim`'i içe aktarır (kilidi koyar) ya da değişkeni kendileri ayarlar; yalnız bilerek gerçek ekrana
-  dokunan `tests/ekranli/` kaldırır. Gerçek aracı sahte ikiliyle değiştiren testler kilidi kendi içinde `acik` yapar.
-- `pkill -f DESEN` kullanmayın (kendi kabuğunuzu öldürebilir); süreçleri PID ile durdurun.
-- Kişisel veri: kodda, yorumlarda, testlerde ve belgelerde kullanıcı adı, gerçek ev dizini, hesap adı, tarihli kişisel
-  olay notu olmaz. Tasarım nedeni yorumda kalabilir; tarih ve kişi olmadan.
-- Ağır işleri (uzun taramalar, büyük testler) belleği sınırlı bir kafeste (ör. `systemd-run --user -p MemoryMax=…`)
-  ve tek seferde çalıştırın.
-- Git: değişiklikleri commit etmeden önce testleri çalıştırın; birden çok kişi/araç paralel çalışıyorsa her biri
-  yalnız kendi dosyalarını commit eder.
+## 7. Design decisions
+A summary of the decisions that entered the interface contract over time (details in the relevant sections):
+- **ArkaUc extension.** Optional methods have defaults (`kimlikler`, `klavye_duzeni`, `yazilabilir_mi`, `gecerli_tuslar`, `pid`, `etkinlestir`,
+  `etkinlik`); `baslat` takes a `cikti` parameter and `env` is ADDED to the current environment in both backends (§2).
+- **DUR atomicity.** DUR is checked per `gonder()` call, not per line; so sequences that must not be split, such as a double-click, are not left half
+  done (§2).
+- **DUR ownership.** A DUR set by the user cannot be lifted by the CLI; the dur file carries the source (`kullanici`/`cli`) (§4).
+- **Clipboard + typing by pasting (phase 9a).** `eylem.yaz_ic`: a character not in the keyboard layout (emoji…) or text longer than 200 characters is put
+  on the clipboard and pasted (ctrl+shift+v in a terminal, otherwise ctrl+v); `\n` stays Enter and `\t` stays the Tab key (between the chunks). The old
+  clipboard is taken first and restored also on error/DUR/interruption; all safety checks (sensitive-page approval on the full text, title/class lock,
+  DUR, watcher, human priority, foreground protection) run in every `gonder()`; the paste key goes through `Girdi`. MCP `clipboard`, CLI `pano`: reading
+  in the foreground asks for human approval (except for text Deskhand wrote in this session), free in the background (§2, §4).
+- **No foreground during a game/film.** While the user plays a game or watches a video Deskhand does not interfere with the real screen (code 15); the
+  only exception is explicit user permission. The virtual desktop is not affected (§4).
+- **The forbidden list is empty by default.** Deskhand is a "click tool"; the user decides what to forbid. Only Deskhand's own panel/approval window is
+  always forbidden (§4).
+- **Risky action = approval, not a ban.** Forbidden lists stay empty by default; keys that end the session and destructive commands typed into a terminal
+  ask for human approval (against indirect command injection), and application access levels also do not exist by default (§4). In unattended mode
+  approval is never asked, it becomes a refusal.
+- **Virtual screen safety.** A virtual X connection is opened only to a verified `:N` display; an empty `DISPLAY` never falls to the real desktop (§4).
+- **Take over and notifications.** On the virtual desktop the user can take control with "Take over" (Devral); this state and the notifications are kept in
+  the state directory (§2).
+- **Input hub.** The kde backend sends input through the panel's ready dotool (no set-up wait); the safety checks stay on the client unchanged, the hub
+  checks DUR separately and releases the held keys of a dropped connection (§2, §4).
+- **KWin type of the background desktop (phase 12b).** When the conditions are met the background desktop is an isolated KWin session (Wayland-native
+  applications, GPU acceleration, those wanting X11 use the session's XWayland); otherwise Xvfb. The external surface does not change (§2, §3, §4). Known
+  limits: a Wayland pop-up menu/drop-down list (xdg_popup) opens only with a real input event → the AT-SPI "Show Menu" action cannot open a menu (the mouse
+  path works), the items of a drop-down list are not visible in the tree; a Wayland client can set the clipboard only after an input event; the root
+  background is KWin's (not grey).
+- **Session bridge.** Letting applications in the background use the user's account sessions is managed with a per-application policy (copy / share / wait /
+  on / off); if the application is open in the user's session and cannot be opened in the background, code 16 is returned (see docs/SESSIONS.md).
+- **Observe + ref + batch step (phase 10).** The MCP agent gets numbered elements and a `ref` with `observe`; in an action with a `ref` the element is
+  re-verified BY ITS IDENTITY in the current tree and then goes through the EXISTING safe path. `batch` calls the same tool cores in order; no parallel gate
+  is written. Every input result carries `effect`, every error `sent` + `next` (§10).
 
-## 7. Tasarım kararları
-Arayüz sözleşmesine zamanla giren kararların özeti (ayrıntılar ilgili bölümlerde):
-- **ArkaUc genişlemesi.** İsteğe bağlı yöntemler varsayılanlıdır (`kimlikler`, `klavye_duzeni`, `yazilabilir_mi`,
-  `gecerli_tuslar`, `pid`, `etkinlestir`, `etkinlik`); `baslat` bir `cikti` parametresi alır ve `env` her iki arka
-  uçta da mevcut ortama EKLENİR (§2).
-- **DUR atomikliği.** DUR, satır başına değil `gonder()` çağrısı başına denetlenir; böylece çift tıklama gibi
-  bölünmemesi gereken diziler yarım kalmaz (§2).
-- **DUR sahipliği.** Kullanıcının koyduğu DUR'u CLI kaldıramaz; dur dosyası kaynağı (`kullanici`/`cli`) taşır (§4).
-- **Pano + yapıştırarak yazma (Faz 9a).** `eylem.yaz_ic`: klavye düzeninde olmayan karakter (emoji…) ya da 200
-  karakterden uzun yazı panoya konup yapıştırılır (uçbirimde ctrl+shift+v, yoksa ctrl+v); `\n` Enter, `\t` Tab tuşu
-  olarak aynen kalır (parçalar arasında). Eski pano önce alınır, hata/DUR/kesintide de geri yüklenir; tüm güvenlik
-  denetimleri (hassas sayfa onayı tam metinde, başlık/sınıf kilidi, DUR, gözcü, insan önceliği, ön plan koruması) her
-  `gonder()`'de çalışır; yapıştır tuşu `Girdi` üzerinden gider. MCP `clipboard`, CLI `pano`: ön planda okuma insan
-  onayı ister (Deskhand'in bu oturumda yazdığı metin hariç), arka planda serbest (§2, §4).
-- **Oyun/film sırasında ön plan yok.** Kullanıcı oyun oynarken ya da video izlerken Deskhand gerçek ekrana
-  müdahale etmez (kod 15); yalnız açık kullanıcı izniyle istisna vardır. Sanal masaüstü bundan etkilenmez (§4).
-- **Yasak listesi varsayılan boş.** Deskhand bir "tıklama aracıdır"; kullanıcı neyi yasaklayacağına kendisi karar
-  verir. Yalnız Deskhand'in kendi panel/onay penceresi daima yasaktır (§4).
-- **Riskli eylem = onay, yasak değil.** Yasak listeleri varsayılan boş kalır; oturumu sonlandıran tuşlar ve uçbirime
-  yazılan yıkıcı komutlar insan onayı ister (dolaylı komut enjeksiyonuna karşı), uygulama erişim seviyeleri de varsayılan
-  olarak yoktur (§4). Gözetimsiz kipte onay asla sorulmaz, red olur.
-- **Sanal ekran güvenliği.** Sanal X bağlantısı yalnız doğrulanmış `:N` ekranına açılır; boş `DISPLAY` asla
-  gerçek masaüstüne düşmez (§4).
-- **Devral ve bildirimler.** Sanal masaüstünde kullanıcı "Devral" ile denetimi alabilir; bu durum ve bildirimler
-  durum dizininde tutulur (§2).
-- **Girdi merkezi.** kde arka ucu girdiyi panelin hazır dotool'u üzerinden gönderir (kurulum beklemesi yok); güvenlik
-  denetimleri istemcide aynen kalır, merkez DUR'u ayrıca denetler ve kopan bağlantının basılılarını bırakır (§2, §4).
-- **Arka plan masaüstü KWin türü (Faz 12b).** Koşullar uygunsa arka plan masaüstü yalıtık KWin oturumudur (Wayland
-  yerel uygulamalar, GPU hızlandırma, X11 isteyenler oturumun XWayland'ine); değilse Xvfb. Dış yüzey değişmez (§2, §3,
-  §4). Bilinen sınırlar: Wayland açılır menü/açılır liste (xdg_popup) yalnız gerçek girdi olayıyla açılır → AT-SPI
-  "Show Menu" eylemi menü açamaz (fare yolu çalışır), açılır listenin ögeleri ağaçta görünmez; Wayland istemcisi panoyu
-  yalnız bir girdi olayından sonra ayarlayabilir; kök zemin KWin'in (gri değil).
-- **Oturum köprüsü.** Arka plandaki uygulamaların kullanıcının hesap oturumlarını kullanabilmesi, uygulama başına
-  bir politikayla (kopya / paylas / bekle / on / kapali) yönetilir; uygulama kullanıcı oturumunda açık ve
-  arka planda açılamıyorsa kod 16 döner (bkz. docs/SESSIONS.md).
-- **Gözlem + ref + toplu adım (Faz 10).** MCP ajanı `observe` ile numaralı ögeler ve `ref` alır; `ref` ile eylemde öge
-  güncel ağaçta KİMLİĞİYLE yeniden doğrulanır, sonra MEVCUT güvenli yoldan gider. `batch` aynı araç çekirdeklerini
-  sırayla çağırır; paralel kapı yazılmaz. Her girdi sonucu `effect` taşır, her hata `sent` + `next` (§10).
-
-## 8. Onay protokolü (arayüz + MCP + CLI ortak)
-Hassas eylem (hassas düğme, ödeme sayfası, yasak dışı ama riskli `ac`, oturum aktarımı) için onay YALNIZ insandan:
+## 8. Approval protocol (common to UI + MCP + CLI)
+For a sensitive action (sensitive button, payment page, `ac` that is not forbidden but risky, session transfer) approval comes ONLY from a human:
 - `deskhand/onay.py`: `iste(eylem, hedef, ayrinti, masaustu, sure=120) -> bool`.
-  Panel kaydı: `RUNTIME_DIR/panel.pid` {pid, baslangic (/proc/<pid>/stat 22. alan), exe (/proc/<pid>/exe),
-  cmdline (/proc/<pid>/cmdline argv'si: exe Python yorumlayıcısı olduğundan panelin modül yolu/giriş noktası), zaman}.
-  **Onay kanalı:** panel `RUNTIME_DIR/onay/kanal.sock` Unix soketini dinler (0600, dizin 0700; `panel_kaydet` açar,
-  `panel_sil` kapatır; Qt'siz iş parçacıklı sunucu). İsteyen ÖNCE kanala bağlanır ve karşı tarafı doğrular: soket
-  dosyası ve dizin kendisinin ve başkalarına kapalı; SO_PEERCRED uid = kendi uid, pid = panel.pid'deki pid, aynı
-  başlangıç zamanı, aynı exe, kayıttakiyle BİREBİR aynı cmdline ve cwd, panelin yüklediği deskhand paket dizini
-  (kayıtta `paket`) isteyeninkiyle aynı. Doğrulanamazsa red ("onay kanalı doğrulanamadı", günlüğe neden).
-  İstek: `RUNTIME_DIR/onay/istek-<uuid>.json` {id, eylem, hedef, ayrinti, masaustu, zaman, son_zaman, pid, goruntu};
-  ardından kanala `bekle <uuid>`. Panel bağlananın SO_PEERCRED pid'ini isteğin `pid` alanıyla karşılaştırır (başka
-  süreç başkasının kararını alamaz). Panel (QFileSystemWatcher) diyalog açar: **Bir kez izin ver / Reddet** (+ hedefin
-  küçük ekran görüntüsü). Karar AYNI bağlantıdan döner: `karar izin|red <uuid>` (isteyen henüz bağlanmadıysa panel
-  saklar). **İzin yalnız kanaldan gelir;** `yanit-<uuid>.json` {id, karar: "red", kaynak: "arayuz", zaman} yalnız red
-  için yazılır ve isteyen her yanıt dosyasını (içeriği ne olursa olsun) RED sayar: aynı kullanıcıdaki, yalnız dosya
-  yazabilen bir süreç sahte izin üretemez. Süre dolarsa, panel kapalıysa/kapanırsa (bağlantı kopar) ya da DUR
-  açılırsa → red (mesaj: "Deskhand paneli kapalı, onay alınamadı"). Tek kullanımlık; istek/yanıt dosyaları kullanılınca
-  silinir. Panel izni göndermeden önce diyaloğu gizler (onay sonrası doğrulamada hedefi örtmesin).
-- **Onay sonrası yeniden doğrulama (MCP, `onay_hedef.py`).** Onay isteğinden hemen önce (kilit tutulurken)
-  `yakala(k, bolge)` → `OnayHedefi` {k, masaustu, baslik, geometri, bolge (pencere pikseli), ozet (fark.Once), zaman};
-  izinden sonra kilit altında, eylemden önce `dogrula_dur(h)`: pencere yok, başlık/geometri farklı ya da bölgenin
-  görüntüsü değiştiyse (fark.py eşiği; geçici örtü için 0/0,15/0,3 sn yeniden bakılır) → Dur 10 "onay verilen hedef
-  değişti; yeniden onay gerekir", eylem yapılmaz. Bölge: koordinatlı tıklamada noktanın çevresi (480×200, onay
-  görüntüsüyle aynı), çekirdeğin görüntüsü `info["deskhand_bolge"]` taşıyorsa o, yoksa tüm pencere. kde'de görüntü
-  yalnız çekirdek zaten hedef görüntüsünü aldıysa alınır (odak çalınmaz; yoksa yalnız kimlik/başlık/geometri);
-  bölgesiz tüm ekran görüntüyle karşılaştırılmaz.
-- CLI `--onayli` kalır (kullanıcı sohbette açıkça onayladıysa), MCP yüzeyinde YOK. Riskli tuş ve uçbirim komutu da bu
-  protokolü kullanır (eylem metni "Riskli tuş: …" / "Uçbirime komut yaz: …"); gözetimsiz kipte `iste_sonuc` hiç panele
-  yazmadan `gozetimsiz` nedeniyle red döner.
-- Onay diyaloğu penceresi yasak listesine (sınıf/başlık) otomatik eklenir: hiçbir otomasyon girdisi ona gitmez.
-- Tehdit modeli: onay, ajanın (yanlışlıkla ya da istem enjeksiyonuyla) kendi kendine izin vermesini ve yalnız dosya
-  yazabilen bir sürecin sahte izin üretmesini engeller. Kabuğu olan ajan için sandbox değildir: aynı kullanıcıyla
-  keyfi kod çalıştırabilen süreç paneli öldürüp yerine geçebilir ya da ptrace ile bağlanabilir.
+  Panel record: `RUNTIME_DIR/panel.pid` {pid, baslangic (field 22 of /proc/<pid>/stat), exe (/proc/<pid>/exe), cmdline (argv from /proc/<pid>/cmdline: since
+  exe is the Python interpreter, the panel's module path/entry point), zaman}.
+  **Approval channel:** the panel listens on the Unix socket `RUNTIME_DIR/onay/kanal.sock` (0600, directory 0700; `panel_kaydet` opens it, `panel_sil` closes it;
+  a Qt-free threaded server). The requester FIRST connects to the channel and verifies the other side: the socket file and directory are its own and closed to
+  others; SO_PEERCRED uid = its own uid, pid = the pid in panel.pid, the same start time, the same exe, EXACTLY the same cmdline and cwd as in the record, the
+  deskhand package directory loaded by the panel (`paket` in the record) the same as the requester's. If it cannot be verified, refusal ("approval channel
+  could not be verified", the reason in the log).
+  The request: `RUNTIME_DIR/onay/istek-<uuid>.json` {id, eylem, hedef, ayrinti, masaustu, zaman, son_zaman, pid, goruntu}; then `bekle <uuid>` on the channel.
+  The panel compares the SO_PEERCRED pid of the connecting party with the `pid` field of the request (another process cannot take someone else's decision). The
+  panel (QFileSystemWatcher) opens a dialog: **Allow once / Refuse** (+ a small screenshot of the target). The decision comes back over the SAME connection:
+  `karar izin|red <uuid>` (if the requester has not connected yet the panel stores it). **Permission comes only from the channel;** `yanit-<uuid>.json` {id,
+  karar: "red", kaynak: "arayuz", zaman} is written only for a refusal and the requester counts every reply file (whatever its content) as a REFUSAL: a process
+  of the same user that can only write files cannot produce a fake permission. If the time runs out, if the panel is closed/closes (the connection drops) or if DUR
+  is turned on → refusal (message: "the Deskhand panel is closed, approval could not be obtained"). Single use; request/reply files are deleted when used. The panel
+  hides the dialog before sending the permission (so that it does not cover the target during post-approval verification).
+- **Re-verification after approval (MCP, `onay_hedef.py`).** Right before the approval request (while holding the lock) `yakala(k, bolge)` → `OnayHedefi` {k,
+  masaustu, baslik, geometri, bolge (window pixels), ozet (fark.Once), zaman}; after the permission, under the lock, before the action `dogrula_dur(h)`: if the window
+  is missing, the title/geometry differ or the image of the region changed (fark.py threshold; for a temporary overlay it looks again at 0/0.15/0.3 s) → Dur 10
+  "the approved target changed; re-approval is required", the action is not performed. The region: for a click with coordinates the surroundings of the point (480×200,
+  the same as the approval image), if the core's image carries `info["deskhand_bolge"]` that one, otherwise the whole window. In kde the image is taken only if the core
+  already took the target image (focus is not stolen; otherwise only id/title/geometry); the full screen without a region is not compared with an image.
+- CLI `--onayli` remains (if the user explicitly approved in the chat), NOT on the MCP surface. A risky key and terminal command also use this protocol (action text "Risky
+  key: …" / "Type a command into the terminal: …"); in unattended mode `iste_sonuc` returns a refusal for the reason `gozetimsiz` without writing to the panel at all.
+- The approval dialog window is automatically added to the forbidden list (class/title): no automation input goes to it.
+- Threat model: approval prevents the agent (by mistake or through prompt injection) from giving itself permission and prevents a process that can only write files from
+  producing a fake permission. It is not a sandbox for an agent that has a shell: a process that can run arbitrary code as the same user can kill the panel and take its
+  place, or attach with ptrace.
 
-## 9. Web sayfası ögeleri (tarayıcı erişilebilirlik ağacı)
-**Yol.** `deskhand/web.py` tarayıcı penceresindeki sayfanın etkileşimli ögelerini (bağlantı, düğme, alan, onay/radyo/seçim
-kutusu, sekme, menü ögesi; ad, rol, durum, PENCERE koordinatlı kutu, bağlantı adresi, alan değeri) AT-SPI ağacından okur.
-Araçlar: MCP `read_text(source="web")` (+ `role`, `offset`/`next`, `hidden`; sayfa başlığı, adres, `sensitive_page`),
-CLI `web <kimlik> [sorgu] [--rol R] [--hepsi] [--sayfa N]`, MCP `click(element=…, role=…)` ve CLI `click-element`.
-**Tık yolu (`erisim._web_sec/_web_tikla`).** Hedef pencere sınıfı tarayıcı/Electron ise `element` önce sayfada aranır
-(önce görünürler, yoksa görünmeyenler; bulunamazsa genel ağaç yolu = tarayıcı arayüzü). Bulunan ögenin `merkez`i
-MEVCUT `tikla_ic` yoluna verilir: gerçek fare tıklaması, bu yüzden DUR 13, yasak 10, başlık/sınıf kilidi 4, erişim seviyesi
-10, kde'de oyun/film 15, insan önceliği 12, imleç altı denetimi (`tikla_ic` → `Girdi.gonder`, `imlec_alti_denetle`)
-aynen çalışır; döngü kesici ve fark özeti MCP `click` sarmalayıcısındadır. Hassas denetim `eylem.hassas_nokta`'da: ögenin ADI
-hedef metne eklenir (yazısız `aria-label` düğmesinde OCR yazıyı okumasa da onay istenir), belge başlığı ağaçtan gelir ve
-pencere başlığına EK denetlenir (`hassas_sayfa_engel(ek_basliklar=…)`). Devre dışı öge 6 (genel `ogeye-tikla` iletisiyle
-aynı); görüş alanı dışındaki öge mevcut kaydırma yoluyla (`kaydir_ic`, tüm girdi denetimleriyle, en çok 8 tur, ilerleme
-yoksa hata) görüş alanına getirilip tıklanır. `via="action"`: Action arayüzü (NActions + GetName) üzerinden, fare/odak yok;
-denetimler `_ogeye_eylem` ile aynı (öge kimliği veri yolu adı + nesne yolu BİRLİKTE tutulur; sistem istemi onayı da).
-**Çerçeve (B2 kuralı web'de de).** `web._cerceve_bul` çerçeveyi YALNIZ pencerenin süreç ağacındaki bağlantılardan seçer
-(pencerenin süreci ya da torunları; atalar — pencereyi başlatan uçbirim/başlatıcı — ve Deskhand'in kendi bağlantısı
-sayılmaz); PID bilinmiyor ya da ağaçta uygulama yoksa 6, başlık benzerliğiyle başka uygulamaya düşülmez. Seçilen çerçeve
-`erisim._cerceve_denetle` ile denetlenir: okumada (`read_text(source="web")`, CLI `web`, tık öncesi arama) panel süreci /
-yasak desen 10; eylemde (`web.eylem_yap`, çerçeve DoAction'dan hemen önce yeniden seçilir, öge o çerçevenin bağlantısında
-olmalı, yoksa 8) ek olarak ajanın kendi istemcisi ve uygulama erişim seviyesi 10. Parola alanının (`password text`)
-değeri okunmaz. Fare yolunda pencere düzeyi denetimler `tikla_ic`'te (kendi istemci, sistem istemi, seviye, B3).
-**Konum doğrulama (fail-closed).** Wayland'de ögeler uygulamaya göre pencere-yerel, küresel istemci alanı ya da küresel
-dekorlu çerçeve koordinatında gelebilir. `web.konum_coz`, üst düzey çerçevenin sınırını (GetExtents SCREEN ve WINDOW)
-pencerenin bilinen geometrisiyle ±1 px karşılaştırıp çerçeveyi belirler; hiçbirine uymuyorsa okuma `konum_dogrulandi=false`
-bildirir ve tık REDDEDİLİR (kod 2: "öge konumu doğrulanamadı; OCR ile metne tıklamayı dene"). Sanal masaüstünde (X11, tek
-çerçeve) denetim otomatik uyar.
-**Neden erişilebilirlik ağacı.** Uzaktan denetim protokolü (Marionette/BiDi) kimliksiz yerel kapı açar ve sayfa otomasyon
-görür (`navigator.webdriver`); AT-SPI yeni kapı açmaz, sayfaya görünmez, Chromium/Electron'da da aynıdır. Ölçüm
-(tests/web_olcum.py): kapsama %100, kutu farkı ≤ 1 px, 1.000 öge ~0,25 sn. Marionette istemcisi YALNIZ ölçüm betiğindedir.
-**Arka plan Firefox.** Sanal masaüstü uygulamalardan önce kendi erişilebilirlik kayıt defterini başlatıp `IsEnabled=true`
-yazdığı için `ac --arka` ile açılan Firefox ek ortam değişkeni (GNOME_ACCESSIBILITY) olmadan ağacı sunar (test_web_bag.py).
-**Sınırlar.** Başka bir ögenin ÜSTÜNÜ örten öge (modal, yapışkan başlık) ağaçtan ayırt edilemez; imleç altı denetimi yalnız
-pencere düzeyindedir. Gerçek (kde, Wayland) ekranda koordinat çerçevesi henüz gerçek ekranda doğrulanmadı: `konum_coz`
-varsayımları (üç çerçeve, ±1 px, dekorasyon payı sınırları) elle denenmelidir. Pencere sınıfı bilinen tarayıcı listesinde
-değilse `click-element` sayfaya bakmaz (`web` okuması ve koordinatlı tık yine çalışır). `ogeye-yaz` web alanlarında yoktur.
+## 9. Web page elements (the browser accessibility tree)
+**Path.** `deskhand/web.py` reads the interactive elements of the page in a browser window (link, button, field, check/radio/select box, tab, menu item; name, role, state, a
+box in WINDOW coordinates, link address, field value) from the AT-SPI tree. Tools: MCP `read_text(source="web")` (+ `role`, `offset`/`next`, `hidden`; page title, address,
+`sensitive_page`), CLI `web <id> [query] [--rol R] [--hepsi] [--sayfa N]`, MCP `click(element=…, role=…)` and CLI `click-element`.
+**Click path (`erisim._web_sec/_web_tikla`).** If the target window class is a browser/Electron, `element` is first looked for in the page (visible ones first, then invisible
+ones; if not found, the general tree path = the browser UI). The `merkez` (centre) of the found element is given to the EXISTING `tikla_ic` path: a real mouse click, so DUR 13,
+forbidden 10, title/class lock 4, access level 10, game/film 15 in kde, human priority 12 and the under-cursor check (`tikla_ic` → `Girdi.gonder`, `imlec_alti_denetle`) work
+unchanged; the loop breaker and the difference summary are in the MCP `click` wrapper. The sensitive check is in `eylem.hassas_nokta`: the element's NAME is appended to the
+target text (for a text-less `aria-label` button approval is asked even if OCR does not read the text), the document title comes from the tree and is checked IN ADDITION to
+the window title (`hassas_sayfa_engel(ek_basliklar=…)`). A disabled element 6 (the same as the message of the general `ogeye-tikla`); an element outside the viewport is brought
+into view with the existing scrolling path (`kaydir_ic`, with all input checks, at most 8 rounds, an error if there is no progress) and clicked. `via="action"`: through the Action
+interface (NActions + GetName), no mouse/focus; the checks are the same as `_ogeye_eylem` (the element identity is kept as bus name + object path TOGETHER; also the system-prompt
+approval).
+**Frame (rule B2 on the web as well).** `web._cerceve_bul` chooses the frame ONLY among the connections in the window's process tree (the window's process or its descendants;
+ancestors — the terminal/launcher that started the window — and Deskhand's own connection do not count); if the PID is unknown or there is no application in the tree 6, it does
+not fall to another application by title similarity. The chosen frame is checked with `erisim._cerceve_denetle`: for reading (`read_text(source="web")`, CLI `web`, the search
+before a click) the panel process / forbidden pattern 10; for an action (`web.eylem_yap`, the frame is re-chosen right before DoAction, the element must be in that frame's
+connection, otherwise 8) additionally the agent's own client and the application access level 10. The value of a password field (`password text`) is not read. In the mouse path
+the window-level checks are in `tikla_ic` (own client, system prompt, level, B3).
+**Position verification (fail-closed).** On Wayland, elements can come in window-local coordinates, global client-area coordinates or global decorated-frame coordinates,
+depending on the application. `web.konum_coz` determines the frame by comparing the bounds of the top-level frame (GetExtents SCREEN and WINDOW) with the window's known geometry
+within ±1 px; if none matches the reading reports `konum_dogrulandi=false` and the click is REFUSED (code 2: "element position could not be verified; try clicking the text with
+OCR"). On the virtual desktop (X11, a single frame) the check passes automatically.
+**Why the accessibility tree.** A remote-control protocol (Marionette/BiDi) opens an unauthenticated local door and the page sees automation (`navigator.webdriver`); AT-SPI opens no
+new door, is invisible to the page, and is the same in Chromium/Electron. Measurement (tests/web_olcum.py): coverage 100%, box difference ≤ 1 px, 1,000 elements ~0.25 s. The
+Marionette client is ONLY in the measurement script.
+**Background Firefox.** Since the virtual desktop starts its own accessibility registry before the applications and writes `IsEnabled=true`, Firefox opened with `ac --arka` serves
+the tree without an extra environment variable (GNOME_ACCESSIBILITY) (test_web_bag.py).
+**Limits.** An element that covers the TOP of another element (modal, sticky header) cannot be told apart from the tree; the under-cursor check is only at window level. On a real
+(kde, Wayland) screen the coordinate frame has not yet been verified on the real screen: the assumptions of `konum_coz` (three frames, ±1 px, decoration margin limits) must be tried by
+hand. If the window class is not in the list of known browsers `click-element` does not look at the page (the `web` reading and a click with coordinates still work). `ogeye-yaz` does
+not exist for web fields.
 
-## 10. MCP gözlem yüzeyi: observe, ref, batch, wait_for, sonuç sözleşmesi
-**`observe` (salt okunur, `deskhand/gozlem.py` + `mcp_sunucu.observe`).** Tek çağrıda pencerenin ögeleri: tarayıcıda
-sayfa (`web.oku`, `yol_ver=True`), değilse genel ağaç (`erisim.erisim_ogeleri(ayrinti=True)`: durumlar, eylem adları,
-değer), ağaç yoksa/çok küçükse (adı olan < 3 öge) ya da `include_ocr=true` ise OCR satırları (`api.metin_oku`; ağaçtaki
-ögenin kutusunda aynı yazı atılır). Yeni okuma yolu YOKTUR: çerçeve seçimi ve denetimi (§4, §9: süreç ağacı, panel/yasak
-10) aynen; yasak pencere 10; parola alanının (`password text`) değeri hiçbir yolda okunmaz. Pencere verilmezse tüm ekranın
-OCR'ı. Çıktı: başlık satırı (`snapshot <id> | window … | sources tree+ocr | N items`), web'de sayfa satırı (ödeme sayfası
-uyarısı, konum doğrulanmadıysa "element clicks are refused"), her öge `[N] rol "ad" durum = "değer" !sensitive (ocr)`;
-yapılandırılmış alanlar `ref`, `role`, `name`, `value`, `states`, `frame` (pencere pikseli), `actions`, `sensitive`,
-`href`, `source`; boş/varsayılan alanlar atılır, U+FFFC ve yalnız boşluk metinler atılır. `query="a|b"`: adı/değeri/rolü
-eşleşen ögeler + ADI OLAN ataları (çocuk-sıra yolu öneki). `max_elements` (150, ≤1000) + `offset` → `next_offset`.
-`since=<snapshot_id>` (aynı pencere): yalnız `+` eklenen, `~` değişen (ad, değer, durum, kutu > 3 px), `-` kaybolan.
-`include_screenshot`: maskeli pencere görüntüsüne öge kutuları + numaraları çizilir (Set-of-Marks) ve `shot_id` kaydedilir.
-**Anlık görüntü önbelleği.** `snapshot_id` = sunucu (süreç) başına rastgele 4 hex önek + sayaç; pencere başına en çok 4,
-toplam 16 FARKLI içerik, ömür 120 sn (içeriği bir öncekiyle aynı gözlem, ör. sayfalı `observe(offset=…)`, aynı gruba
-katılır: ilk sayfanın ref'leri düşmez). Öge kimliği: erişilebilirlik ögesinde veri yolu adı + nesne yolu (BİRLİKTE; `_tara` libatspi
-nesnesinin alanlarından okur, okunamazsa çocuk-sıra yolu) + pencere; OCR satırında metin + kutu.
-**`ref` ile eylem.** `click(ref)`, `type_text(ref)` (önce alan tıklanır, sonra klavye yolu), `scroll(ref)`,
-`drag(from_ref, to_ref)`. Bayatlık üç ayrı nedenle, HİÇBİR girdi gönderilmeden reddedilir (`[8]`, `error.reason`):
-`snapshot` (bilinmiyor / süresi doldu / önbellekten düştü), `window` (başka masaüstü ya da pencere, pencere kapandı,
-boyutu değişti), `element` (öge yok, adı/rolü değişti, kutusu ±3 px'ten fazla oynadı, numara yok). Öge düzeyi doğrulama
-ÇEKİRDEKTE ve güncel ağaçtan yapılır (TOCTOU): `erisim.ref_oge_sec` ögeyi ADLA ARAMAZ, kimliğiyle bulur ve ad/rol/kutuyu
-karşılaştırır (aynı adlı başka düğmeye düşülmez); `k_ogeye_tikla` / `_ogeye_eylem` / `_web_sec` (`a.ref_oge`) bu
-seçimle MEVCUT yoldan devam eder: fare → `hassas_nokta` (öğe adı hedef metinde) + `_onay_sonrasi_oge` + `tikla_ic`
-(`Girdi.gonder`: DUR, `denetle`, seviye, kendi istemci, sistem istemi, imleç altı, insan önceliği, kde oyun/film);
-`via="action"` → `_atspi_korumalari` + `_hassas_oge` + sistem istemi onayı; web → `_web_tikla` / `_web_eylem` (onay sonrası
-kimlikle yeniden bulma `_web_yeniden`). OCR satırı ref'i → `k_metne_tikla` (yazı ref kutusunun ±12 px çevresinde yeniden
-okunur; yoksa `[8] element`). `scroll`/`drag` ref'in GÜNCEL merkezini kilit altında yeniden doğrular (`_ref_nokta`), sonra
-`kaydir_ic` / `k_surukle`. `ref` yolunda onay parametresi YOKTUR; bekleyen onay kapısı (`kilitli(girdi=True)`), döngü
-kesici (hedef = öge kimliği) ve onay sonrası hedef doğrulaması (§8) aynen.
-**`batch` (en çok 20 adım).** Araçlar yalnız `click`, `type_text`, `press_key`, `scroll`, `drag`, `wait` (`{"seconds":
-0-10}`, DUR'u 0,1 sn'de denetler). Tüm adımlar HİÇBİR şey gönderilmeden doğrulanır (aracın kendi argüman modeli, desktop
-batch'inkiyle aynı, wait süresi). Her adım modüldeki ÇEKİRDEK araç işlevini çağırır (`arac()` MCP'ye yalnız sarmalayıcıyı
-kaydeder; çekirdek aynı kilit/kapı/onay/döngü kesicidir). İkinci adımdan itibaren her adımdan önce DUR, bekleyen onay ve
-insan önceliği (`guvenlik.insan_onceligi`, en çok 8 sn) yeniden denetlenir. İlk hatada durulur: `failed_step`,
-`not_sent`, adımın ve batch'in `sent` değeri. Bir adım onay isterse batch o adımda bekler; red = dur. `observe_after`
-son adımın penceresini gözler.
-**`wait_for` (salt okunur).** `text` (ağaçta ad/değer, yoksa OCR), `gone`, `element` (ad + isteğe bağlı rol), `window`
-(başlık deseni, yasak pencere sayılmaz), `stable` (pencere görüntüsü `stable_ms` boyunca aynı, fark.py). Kilit her
-yoklamada alınıp bırakılır; zaman aşımı hata değil `satisfied:false`.
-Ön planda (kde) `text`/`gone`/`stable` pencereyi ÖNE GETİRMEZ: hedef etkinse görüntü/OCR; değilse yalnız AT-SPI ağacı
-(ağaç yoksa `satisfied:false` + bir kez `note`); kullanıcı etkinken (`insan_var_mi`) yoklama atlanır, süre sayılır.
-Arka planda davranış aynıdır. `batch` `desktop=auto`'yu başta BİR kez çözer; `click`/`type_text`/`scroll`/`drag` ref'i
-anlık görüntüdeki pencere başlığı değiştiyse reddeder ([8]) ve başlık kilidini o başlıktan kurar.
-**Sonuç sözleşmesi.** Girdi araçlarının sonucu `effect`: `confirmed` (beklenen değişim görüldü: tıklanan ref ögesinin
-checked/selected/expanded durumu değişti, yazılan metin değişen bölgenin OCR'ında görüldü ya da değer geri okundu,
-kaydırmada görünüm değişti, pencere geometrisi değişti), `changed`, `no_change` (döngü kesiciyle uyumlu), `unverifiable`
-(ölçülemedi: kde'de `via=action`, `verify=false`), `refused` (hata ve hiçbir şey gönderilmedi). Hata sonucu (`isError`)
-metni: `[kod] ne oldu` + `sent: nothing_sent | maybe_partial` + `next: ne yapmalı (araç adıyla)`; aynısı
-`structuredContent.error` {code, message, reason, next}, `sent`, `effect` alanlarında. `sent` sayacı (`gonderim.py`)
-`api.arka()` girdi nesnesinin `gonder()`/`ham()` dönüşünde ve erişilebilirlik eylemi/değer yazma çağrısından hemen önce
-artar; bırakma (`zorla`) sayılmaz. outputSchema: `wait_for`, `click` için alanlı TypedDict, diğer girdi araçlarında
-genel nesne; `observe` ve `batch`'te outputSchema YOK ve başarılı sonuç YALNIZ kısa metindir (structuredContent
-gönderilmez: yapılandırılmış kopya metnin ~5 katı token'dı). observe satırı `[N] rol "ad" @x,y,w,h durumlar = "değer"
-!sensitive (ocr) (offscreen) href="…"`; başlıkta snapshot_id, pencere kimliği, kaynaklar; include_screenshot'ta
-`shot_id` satırı. batch metni adım başına etki/changed_region/approved_by_user/warning ve durma satırını taşır. Hata
-sonuçları (her araçta) küçük structuredContent'i korur. Şemalardaki otomatik `title` metinleri silinir.
-**Sınırlar.** Tarayıcı penceresinde observe yalnız sayfayı (belge) listeler: adres çubuğu/sekmeler için `press_key`
-(ctrl+l) ya da `read_text(source="tree")`. Web ögeleri yalnız görünenler (kaydırma alanı dışındakiler `read_text(source=
-"web", hidden=true)`). Sistem istemi penceresinde (polkit, KWallet, parola sorucusu) her tıklama türü — ref, text,
-element, simge, renk, koordinat, `via=action` — hedef aranmadan önce insan onayı ister (`eylem.sistem_istemi_on`;
-gözetimsiz kipte ret → 10). `type_text(ref=…)` iki çekirdek eylemdir (alan tıklaması + yazı): sistem isteminde iki
-onay sorulur.
+## 10. The MCP observation surface: observe, ref, batch, wait_for, the result contract
+**`observe` (read-only, `deskhand/gozlem.py` + `mcp_sunucu.observe`).** The elements of a window in a single call: in a browser the page (`web.oku`, `yol_ver=True`), otherwise the general
+tree (`erisim.erisim_ogeleri(ayrinti=True)`: states, action names, value); if there is no tree / it is too small (< 3 elements with a name) or `include_ocr=true`, the OCR lines
+(`api.metin_oku`; the same text is dropped in the box of an element in the tree). There is NO new read path: frame selection and its check (§4, §9: process tree, panel/forbidden
+10) unchanged; a forbidden window 10; the value of a password field (`password text`) is never read on any path. If no window is given, the OCR of the whole screen. Output: a header line
+(`snapshot <id> | window … | sources tree+ocr | N items`), on the web a page line (payment-page warning, "element clicks are refused" if the position was not verified), every element
+`[N] role "name" state = "value" !sensitive (ocr)`; structured fields `ref`, `role`, `name`, `value`, `states`, `frame` (window pixels), `actions`, `sensitive`, `href`, `source`;
+empty/default fields are dropped, U+FFFC and whitespace-only texts are dropped. `query="a|b"`: elements whose name/value/role matches + their ancestors THAT HAVE A NAME (child-order path
+prefix). `max_elements` (150, ≤1000) + `offset` → `next_offset`. `since=<snapshot_id>` (same window): only `+` added, `~` changed (name, value, state, box > 3 px), `-` disappeared.
+`include_screenshot`: element boxes + numbers are drawn on the masked window image (Set-of-Marks) and a `shot_id` is saved.
+**Snapshot cache.** `snapshot_id` = a random 4-hex prefix per server (process) + a counter; at most 4 per window, 16 DIFFERENT contents in total, lifetime 120 s (an observation with the same
+content as the previous one, e.g. a paged `observe(offset=…)`, joins the same group: the refs of the first page do not drop). Element identity: for an accessibility element bus name + object
+path (TOGETHER; `_tara` reads them from the fields of the libatspi object, if unreadable the child-order path) + window; for an OCR line text + box.
+**Action with `ref`.** `click(ref)`, `type_text(ref)` (the field is clicked first, then the keyboard path), `scroll(ref)`, `drag(from_ref, to_ref)`. Staleness is refused for three separate
+reasons, WITHOUT sending any input (`[8]`, `error.reason`): `snapshot` (unknown / expired / dropped from the cache), `window` (another desktop or window, the window closed, its size changed),
+`element` (the element is missing, its name/role changed, its box moved more than ±3 px, no such number). Element-level verification is done IN THE CORE and from the current tree (TOCTOU):
+`erisim.ref_oge_sec` does NOT SEARCH the element BY NAME, it finds it by identity and compares name/role/box (it never falls to another button with the same name); `k_ogeye_tikla` / `_ogeye_eylem` /
+`_web_sec` (`a.ref_oge`) continue with this selection through the EXISTING path: mouse → `hassas_nokta` (the element name in the target text) + `_onay_sonrasi_oge` + `tikla_ic` (`Girdi.gonder`: DUR,
+`denetle`, level, own client, system prompt, under-cursor, human priority, kde game/film); `via="action"` → `_atspi_korumalari` + `_hassas_oge` + system-prompt approval; web → `_web_tikla` /
+`_web_eylem` (re-finding by identity after approval `_web_yeniden`). The ref of an OCR line → `k_metne_tikla` (the text is read again within ±12 px around the ref box; if absent `[8] element`).
+`scroll`/`drag` re-verify the ref's CURRENT centre under the lock (`_ref_nokta`), then `kaydir_ic` / `k_surukle`. There is NO approval parameter on the `ref` path; the pending-approval gate
+(`kilitli(girdi=True)`), the loop breaker (target = element identity) and post-approval target verification (§8) apply unchanged.
+**`batch` (at most 20 steps).** Tools only `click`, `type_text`, `press_key`, `scroll`, `drag`, `wait` (`{"seconds": 0-10}`, checks DUR every 0.1 s). All steps are verified WITHOUT sending anything
+(the tool's own argument model, the same as the desktop batch's, the wait duration). Every step calls the CORE tool function in the module (`arac()` registers only the wrapper with MCP; the core
+is the same lock/gate/approval/loop breaker). From the second step on, before every step DUR, a pending approval and human priority (`guvenlik.insan_onceligi`, at most 8 s) are checked again.
+It stops at the first error: `failed_step`, `not_sent`, the `sent` value of the step and of the batch. If a step asks for approval the batch waits at that step; refusal = stop. `observe_after`
+observes the window of the last step.
+**`wait_for` (read-only).** `text` (name/value in the tree, otherwise OCR), `gone`, `element` (name + optional role), `window` (title pattern, a forbidden window does not count), `stable` (the
+window image is the same for `stable_ms`, fark.py). The lock is taken and released at every poll; a timeout is not an error but `satisfied:false`.
+In the foreground (kde) `text`/`gone`/`stable` do NOT BRING THE WINDOW TO THE FRONT: if the target is active, image/OCR; otherwise only the AT-SPI tree (if there is no tree `satisfied:false` + a
+`note` once); while the user is active (`insan_var_mi`) polling is skipped and the time is counted. The behaviour is the same in the background. `batch` resolves `desktop=auto` ONCE at the start;
+`click`/`type_text`/`scroll`/`drag` refuse a ref ([8]) if the window title changed since the snapshot and set up the title lock from that title.
+**Result contract.** The result of the input tools has `effect`: `confirmed` (the expected change was seen: the checked/selected/expanded state of the clicked ref element changed, the typed text was
+seen in the OCR of the changed region or the value was read back, the view changed on scrolling, the window geometry changed), `changed`, `no_change` (consistent with the loop breaker),
+`unverifiable` (could not be measured: `via=action` in kde, `verify=false`), `refused` (error and nothing was sent). The error result (`isError`) text: `[code] what happened` + `sent:
+nothing_sent | maybe_partial` + `next: what to do (with the tool name)`; the same in the fields `structuredContent.error` {code, message, reason, next}, `sent`, `effect`. The `sent` counter
+(`gonderim.py`) increases on the return of `gonder()`/`ham()` of the `api.arka()` input object and right before an accessibility action/value-typing call; releasing (`zorla`) is not counted.
+outputSchema: a TypedDict with fields for `wait_for` and `click`, a general object for the other input tools; NO outputSchema in `observe` and `batch` and a successful result is ONLY a short text
+(structuredContent is not sent: the structured copy was ~5 times the tokens of the text). The observe line `[N] role "name" @x,y,w,h states = "value" !sensitive (ocr) (offscreen) href="…"`; in the
+header snapshot_id, window id, sources; a `shot_id` line with include_screenshot. The batch text carries per step effect/changed_region/approved_by_user/warning and the stopping line. Error results
+(in every tool) keep a small structuredContent. The automatic `title` texts in the schemas are removed.
+**Limits.** In a browser window observe lists only the page (document): for the address bar/tabs `press_key` (ctrl+l) or `read_text(source="tree")`. Web elements are only the visible ones (those
+outside the scroll area `read_text(source="web", hidden=true)`). In a system-prompt window (polkit, KWallet, a password asker) every kind of click — ref, text, element, icon, colour, coordinate,
+`via=action` — asks for human approval before the target is searched (`eylem.sistem_istemi_on`; in unattended mode refusal → 10). `type_text(ref=…)` is two core actions (a field click + typing):
+on a system prompt two approvals are asked.
 
-## 11. Görev kipi (panel "Görev" sekmesi; `deskhand/gorev_kipi.py`)
+## 11. Task mode (the panel's "Task" tab; `deskhand/gorev_kipi.py`)
 
-Görev ajanı (`claude -p`) GÜVENİLMEZ web içeriği okur (istem enjeksiyonu): kip yerel dosya ve kayıtlı parola/oturum
-sızıntısını sınırlar. `gorev.mcp_ortami()` → mcp.json `env` YALNIZ `{"DESKHAND_GERCEK_EKRAN": "kapali",
-"DESKHAND_GOREV": "1"}`; görevde izin verilen siteler `DESKHAND_GOREV_SITELER` ile claude'un ortamından gelir.
-- **open_app** yalnız tarayıcı: yerel paket Firefox; Chromium ailesi yalnız ilke kökü (/etc/chromium vb.) varsa (oturum
-  politikası zaten `on`); Flatpak/Snap tarayıcı, uçbirim, dosya yöneticisi, düzenleyici, yorumlayıcı → 10. Belge
-  argümanı yalnız http(s).
-- **Ev dizini**: arka plan uygulamasına XDG veri klasörleri (Masaüstü, Belgeler, İndirilenler…) BAĞLANMAZ; yalnız görünüm
-  beyaz listesi + `RUNTIME_DIR/gorev-indirilenler` (kullanıcının XDG_DOWNLOAD_DIR yolunda, yazılabilir). Görev bitince
-  indirilenler kullanıcıya bildirilir (`bitti` olayı: `indirilenler`, `indirme_dizini`).
-- **Tarayıcı ilkesi** ad alanında salt okunur bağlanır: Firefox `<kurulum>/distribution/` yerine `policies.json` (+ özgün
-  distribution.ini): BlockAboutConfig/Profiles/Addons/Support, PasswordManagerEnabled=false (about:logins engelli),
-  DisableDeveloperTools (about:debugging), WebsiteFilter `file:///*`, uzantı kurulumu kapalı, indirme dizini sabit.
-  Chromium ailesi: `/etc/chromium` vb. yerine `policies/managed/deskhand-gorev.json` (URLBlocklist `file://*`,
-  `chrome://*`, parola yöneticisi ve geliştirici araçları kapalı).
-- **Oturum kopyası** (Firefox): logins.json, logins-backup.json, logins.db, key4.db, uzantılar ve verileri KOPYALANMAZ;
-  çerez/oturum çerezi/depo YALNIZ izinli sitelerin (boşsa ÇEREZSİZ temiz profil); user.js `signon.rememberSignons=false`.
-- **Onay**: kapsam `kart` olsa bile parola alanı + sistem istemi onayları AÇIK (`guvenlik.onaysiz_serbest` istisnası).
-- **Savunma derinliği**: observe/read_text/screenshot, tarayıcı belgesi `file:`/`about:`/`chrome:`… ise reddeder (10).
-- **claude argv**: `--tools ""` (yerleşik araç yok; kara liste ikinci katman), `--no-chrome`, `--max-turns`
-  (`[gorev] azami_tur`, varsayılan 60). Ortam: `ANTHROPIC_*` silinir; `ENABLE_CLAUDEAI_MCP_SERVERS=false`,
-  `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. Geçici çalışma dizini `XDG_RUNTIME_DIR` altında.
-- **Geçmiş**: `type_text` metni `[N karakter]`; görev metnindeki parola/kart kalıpları maskelenir; görev kutusunda "parola
-  yazmayın" ipucu, Başlat'tan önce kısa onay (görev + izinli siteler + "yalnız tarayıcı").
-- **Görev masaüstü (tek masaüstü mimarisinde ayrım)**: durum tek dosyada (`sanal.json`, `sanal.lock`, tek ses çıkışı,
-  panel izleyicisi/Devral aynı kayda bakar) olduğundan görev AYRI bir masaüstü açmaz; bunun yerine (1) görünmez masaüstü
-  AÇIKSA görev BAŞLAMAZ: `GorevHatasi(kod="masaustu_acik")` → panel "Görünmez masaüstü başka bir iş için açık; kapatıp
-  başlatılsın mı?" sorar, onayla `masaustu_durdur()` ve görev temiz masaüstüyle başlar (önceki oturumların kipsiz
-  Firefox/Dolphin pencereleri görevde YOK); (2) görev başlarken `RUNTIME_DIR/gorev-masaustu` işareti (sahip PID +
-  başlangıç zamanı) yazılır, ÖNCE işaret sonra açık-masaüstü denetimi (yarış yok); görev kipinde açılan masaüstünün
-  kaydı `"gorev": true`; (3) `gorev_kipi.masaustu_kapisi` her bağlantıda (arka_uc sanal/kwin, erişilebilirlik,
-  `masaustu.baslat`, `masaustu_baslat`): görev kipi `gorev` işaretsiz masaüstünü KULLANAMAZ (14); kipsiz istemci
-  (başka Claude oturumu, CLI `--background`) işaretli masaüstüne ya da işaret varken bağlanamaz/uygulama açamaz/masaüstü
-  açamaz (14, "görev bitince yeniden deneyin"). Panel önizlemesi `gorev_kipi.GOZLEMCI=True` ile serbest. Görev bitince
-  yalnız `gorev` işaretli masaüstü kapatılır, işaret kaldırılır.
-- **Pencere sınırı** (`gorev_kipi.pencere_denetle`, `guvenlik.yasak_denetle` + okuma araçlarından): görev kipinde her
-  girdi/okuma hedefi yalnız tarayıcı penceresi — sınıf beyaz listesi (firefox, navigator, chromium…) VE pencerenin
-  süreç ikilisi (`/proc/PID/exe`; PID X-Resource/KWin'den, istemci yazamaz) tarayıcı. Sınıf tek başına yetmez (taklit
-  edilebilir). Başka pencere (indirme panelinden "Aç" → Kate, Konsole…) → pencere kapatılır, süreci masaüstü kafesindeyse
-  SIGKILL, günlüğe olay, Dur 10. Tüm ekran (pencere verilmeyen) okuma/girdi: yalnız ekranda tarayıcı dışı pencere yokken
-  ve en az bir görev tarayıcı penceresi varken. Tarayıcı belgesi yasak adreste (`file:`, `jar:`, `about:preferences`
-  dahil `about:*`) okuma da girdi de reddedilir.
-- **Firefox ilkesi ek**: `browser.download.forbid_open_with` (kilitli true: indirilen dosya dış uygulamayla açılamaz),
-  `always_ask_before_handling_new_types` false, `open_pdf_attachments_inline` false, `alwaysOpenPanel` false; Linux
-  Firefox önce `/etc/firefox/policies`'e baktığından o dizin varsa aynı ilke oraya da bağlanır. WebsiteFilter
-  MatchPattern sözdizimindedir (Firefox 160 WebsiteFilter.sys.mjs): `file:///*` geçerli; `file://*/*`, `jar:`,
-  `about:` kalıpları GEÇERSİZ (Firefox atar) → `jar:file:` ve `about:preferences` için ilke yolu yok; adres denetimi
-  (yukarıda) kapatır. Ölçüm: `tests/test_gorev_kipi.py` başsız Firefox + Marionette (ölçümde yalnız
-  DisableDeveloperTools çıkarılır, çünkü o ilke uzaktan denetimi de kapatır).
-- **Ad alanı**: görev kipinde `xdotool`, `kdotool`, `ydotool`, `wtype`, `xauth`, `xdg-open`, `gio`, `kioclient`,
-  `kde-open` boş dosyayla örtülür (çalıştırılamaz); PATH `/usr/bin:/bin`.
-- **Kimlik değişkenleri**: `gorev_kipi.KIMLIK_ORTAM_DENEN` (TOKEN, SECRET, PASSWORD, KEY, AUTH, COOKIE…) claude'un
-  ortamından (yalnız `CLAUDE_CODE_OAUTH_TOKEN` kalır; claude girişini `~/.claude/.credentials.json`'dan okur), MCP
-  sunucusunun ortamından (açılışta) ve uygulama ortamından (`ortam_tabani`) silinir.
-- **Site listesi**: joker (`*`), tek başına genel son ek (`com`, `com.tr`, `co.uk`, `gov.tr`…; küçük liste
-  `GENEL_SON_EKLER`) ve geçersiz ad RET; panel açık iletiyle görevi başlatmaz. Arayüz uyarısı: "Bu sitelerde ajan
-  sizin adınıza işlem yapabilir (ayar değiştirme, gönderi, silme); güvenilmeyen sayfa içeriği ajanı kandırabilir."
-- **İndirme klasörü** her görev başında boşaltılır. **Geçmiş**: `batch(steps=[{"text": …}])` gibi iç içe girdilerde
-  gizli anahtarlar yinelemeli maskelenir.
-- Kalan risk: görev sürerken kullanıcı CLI ile `deskhand masaustu durdur` diyebilir (yalnız kapatma; erişim yok).
-  Pencere sınırı denetim anında uygulanır: Firefox'un açtığı yabancı pencere bir sonraki araç çağrısına kadar
-  (milisaniye–saniye) ekranda yaşar; o arada kendi başına çalışabilir (ör. Kate) ama ad alanı (boş ev, XDG yok, girdi
-  araçları örtülü) ve ilke (`forbid_open_with`) bu yolu zaten kapatır. `about:preferences` sayfası açılabilir ama
-  okunamaz/girdi alamaz.
+The task agent (`claude -p`) reads UNTRUSTED web content (prompt injection): the mode limits the leakage of local files and saved passwords/sessions. `gorev.mcp_ortami()` → the mcp.json `env` is
+ONLY `{"DESKHAND_GERCEK_EKRAN": "kapali", "DESKHAND_GOREV": "1"}`; the sites allowed in the task come from claude's environment through `DESKHAND_GOREV_SITELER`.
+- **open_app** only a browser: a local package Firefox; the Chromium family only if a policy root (/etc/chromium etc.) exists (the session policy is already `on`); a Flatpak/Snap browser, terminal,
+  file manager, editor, interpreter → 10. A document argument only http(s).
+- **Home directory**: the XDG data folders (Desktop, Documents, Downloads…) are NOT BOUND to the background application; only the appearance whitelist + `RUNTIME_DIR/gorev-indirilenler` (at the user's
+  XDG_DOWNLOAD_DIR path, writable). When the task ends the downloads are reported to the user (the `bitti` event: `indirilenler`, `indirme_dizini`).
+- **Browser policy** is bound read-only into the namespace: for Firefox, in place of `<installation>/distribution/` a `policies.json` (+ the original distribution.ini): BlockAboutConfig/Profiles/Addons/Support,
+  PasswordManagerEnabled=false (about:logins blocked), DisableDeveloperTools (about:debugging), WebsiteFilter `file:///*`, extension installation closed, a fixed download directory. The Chromium family: in place
+  of `/etc/chromium` etc., `policies/managed/deskhand-gorev.json` (URLBlocklist `file://*`, `chrome://*`, password manager and developer tools closed).
+- **Session copy** (Firefox): logins.json, logins-backup.json, logins.db, key4.db, extensions and their data are NOT COPIED; cookies/session cookies/storage ONLY of the allowed sites (if empty a COOKIE-LESS clean
+  profile); user.js `signon.rememberSignons=false`.
+- **Approval**: even if the scope is `kart`, the password-field + system-prompt approvals are ON (an exception to `guvenlik.onaysiz_serbest`).
+- **Defence in depth**: observe/read_text/screenshot refuse (10) if the browser document is `file:`/`about:`/`chrome:`…
+- **claude argv**: `--tools ""` (no built-in tools; the blacklist is a second layer), `--no-chrome`, `--max-turns` (`[gorev] azami_tur`, default 60). Environment: `ANTHROPIC_*` is removed;
+  `ENABLE_CLAUDEAI_MCP_SERVERS=false`, `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. The temporary working directory is under `XDG_RUNTIME_DIR`.
+- **History**: the `type_text` text is `[N characters]`; password/card patterns in the task text are masked; in the task box a "do not type passwords" hint, a short confirmation before Start (task +
+  allowed sites + "browser only").
+- **Task desktop (the distinction in the single-desktop architecture)**: since the state is in a single file (`sanal.json`, `sanal.lock`, a single audio output, the panel's watcher/Devral look at the same
+  record) the task does NOT open a SEPARATE desktop; instead (1) if the invisible desktop is OPEN the task DOES NOT START: `GorevHatasi(kod="masaustu_acik")` → the panel asks "The invisible desktop is
+  open for another job; close it and start?", with approval `masaustu_durdur()` and the task starts with a clean desktop (the mode-less Firefox/Dolphin windows of earlier sessions are NOT in the task); (2)
+  when the task starts the marker `RUNTIME_DIR/gorev-masaustu` (owner PID + start time) is written, FIRST the marker then the open-desktop check (no race); the record of a desktop opened in task mode is
+  `"gorev": true`; (3) `gorev_kipi.masaustu_kapisi` on every connection (arka_uc sanal/kwin, accessibility, `masaustu.baslat`, `masaustu_baslat`): task mode CANNOT USE a desktop without the `gorev` mark (14);
+  a mode-less client (another Claude session, CLI `--background`) cannot connect to the marked desktop or while the marker exists / open an application / open a desktop (14, "try again when the task ends").
+  The panel preview is free with `gorev_kipi.GOZLEMCI=True`. When the task ends only the desktop marked `gorev` is closed, the marker is removed.
+- **Window limit** (`gorev_kipi.pencere_denetle`, `guvenlik.yasak_denetle` + from the reading tools): in task mode every input/read target is only a browser window — a class whitelist (firefox, navigator,
+  chromium…) AND the window's process binary (`/proc/PID/exe`; the PID from X-Resource/KWin, the client cannot write it) is a browser. The class alone is not enough (it can be imitated). Another window
+  ("Open" from the downloads panel → Kate, Konsole…) → the window is closed, if its process is in the desktop cage SIGKILL, an event in the log, Dur 10. Whole-screen (no window given) reading/input: only when
+  there is no non-browser window on the screen and at least one task browser window. If the browser document is at a forbidden address (`file:`, `jar:`, `about:*` including `about:preferences`) both reading
+  and input are refused.
+- **Firefox policy addition**: `browser.download.forbid_open_with` (locked true: a downloaded file cannot be opened with an external application), `always_ask_before_handling_new_types` false,
+  `open_pdf_attachments_inline` false, `alwaysOpenPanel` false; since Linux Firefox looks at `/etc/firefox/policies` first, if that directory exists the same policy is bound there as well. WebsiteFilter is in
+  MatchPattern syntax (Firefox 160 WebsiteFilter.sys.mjs): `file:///*` is valid; the patterns `file://*/*`, `jar:`, `about:` are INVALID (Firefox discards them) → there is no policy path for `jar:file:` and
+  `about:preferences`; the address check (above) closes them. Measurement: `tests/test_gorev_kipi.py` headless Firefox + Marionette (in the measurement only DisableDeveloperTools is removed, because that policy
+  also closes remote control).
+- **Namespace**: in task mode `xdotool`, `kdotool`, `ydotool`, `wtype`, `xauth`, `xdg-open`, `gio`, `kioclient`, `kde-open` are covered with an empty file (cannot be run); PATH `/usr/bin:/bin`.
+- **Identity variables**: `gorev_kipi.KIMLIK_ORTAM_DENEN` (TOKEN, SECRET, PASSWORD, KEY, AUTH, COOKIE…) is removed from claude's environment (only `CLAUDE_CODE_OAUTH_TOKEN` stays; claude reads its login from
+  `~/.claude/.credentials.json`), from the MCP server's environment (at start-up) and from the application environment (`ortam_tabani`).
+- **Site list**: a wildcard (`*`), a generic suffix alone (`com`, `com.tr`, `co.uk`, `gov.tr`…; a small list `GENEL_SON_EKLER`) and an invalid name are REFUSED; the panel does not start the task, with an explicit
+  message. UI warning: "On these sites the agent can act on your behalf (change settings, post, delete); untrusted page content can fool the agent."
+- **The download folder** is emptied at the start of every task. **History**: in nested inputs such as `batch(steps=[{"text": …}])` secret keys are masked recursively.
+- Remaining risk: while the task runs, the user can say `deskhand masaustu durdur` (`desktop stop`) with the CLI (closing only; no access). The window limit is applied at check time: a foreign window opened by
+  Firefox lives on the screen until the next tool call (milliseconds–seconds); in the meantime it can run on its own (e.g. Kate) but the namespace (empty home, no XDG, input tools covered) and the policy
+  (`forbid_open_with`) already close this path. The `about:preferences` page can open but cannot be read/take input.
 
-## 12. İnsan doğrulaması (CAPTCHA) devri: algıla, reddet, devret, devam et
+## 12. Human verification (CAPTCHA) hand-over: detect, refuse, hand over, continue
 
-**Politika (değişmez):** CAPTCHA / "insan olduğunuzu doğrulayın" sınamaları ÇÖZÜLMEZ ve atlatılmaz (görsel, sesli ya da
-başka yolla). Deskhand yalnız algılar, ajan girdisini reddeder, kullanıcıya devreder, çözülünce devam eder.
+**Policy (unchanging):** CAPTCHA / "verify you are human" challenges are NOT solved and not bypassed (visually, by audio or any other way). Deskhand only detects, refuses agent input, hands over to the user, and continues when it is solved.
 
-- **Algı** (`deskhand/dogrulama_sinamasi.py`; `incele` saf; yalnız metin geçmesi YETMEZ). Kaynaklar: (1) gömülü belge
-  (iframe) adresi: `google.com/recaptcha`, `hcaptcha.com`, `challenges.cloudflare.com`, `arkoselabs`/`funcaptcha`,
-  `geetest` (görünmez reCAPTCHA v3 rozeti `size=invisible` ve hCaptcha `#frame=checkbox-invisible` muaf). `web.oku` her
-  ÖGEYE ait belgenin adresini (`_belge_adres`) taşır: yalnız sınama belgesinin ögeleri işaretlenir (YouTube gömmesi,
-  Stripe kart alanı, sohbet kutusu etkilenmez) ve o iframe'in TÜM kutusu sınama alanıdır (onay kutusunun yanındaki etikete
-  tıklamak da kutuyu işaretler); (2) öge adı + rol: "I'm not a robot", "Ben robot değilim", "Verify you are human",
-  "Slide to verify"… (çerçeve DIŞINDA en çok 6 sözcüklü etiket; "Require human verification" / "Move the slider to set the
-  price" / "Enable CAPTCHA" ayarları sayılmaz), satıcı adı (reCAPTCHA, hCaptcha, Turnstile…) yalnız gömülü belgede;
-  (3) klasik resimli metin CAPTCHA'sı: "Güvenlik kodu / Doğrulama kodu / captcha" adlı giriş alanı + yakında resim (ya da
-  "resimdeki karakterler" ifadesi); SMS/e-posta/uygulama (2FA) bağlamındaki resimsiz kod alanı sayılmaz; (4) başlık
-  "Just a moment…", "Attention Required"… TEK BAŞINA yetmez: sınama çerçevesi/ögesi ya da Cloudflare adresi (`/cdn-cgi/`,
-  `__cf_chl`) ile birlikte sayfanın tamamı sınama olur (`cloudflare_interstitial`); (5) OCR: yalnız kısa satır, kalıp
-  satırın ≥%60'ı (düşük güven). ÇÖZÜLMÜŞ sınama (işaretli onay kutusu, Turnstile "Success!") sayılmaz.
-  Sonuç `human_verification: {detected, kind, window, hint}`; `observe`, `read_text`, `wait_for`, `click`, `type_text`,
-  `press_key`, `drag` sonuçlarında. `read_text` iframe'lerin TAM adresini vermez (yalnız tür + alan adı); kritik
-  bildirimde sayfa başlığı değil alan adı yazılır.
-- **Durum**: pencere kimliği + başlık/adres anahtarıyla `RUNTIME_DIR/insan-dogrulama.json` (0600, flock) — CLI ve MCP
-  süreçleri aynı kutuları görür. Dosya YALNIZ ENGEL EKLER: algılanmış sınama kutuları (`sinama`), uyarı bastırma
-  (`bastir`) ve pencerenin son girdi zamanı (`girdi`; yalnız YENİDEN TARAMA zorlar). "Sınama yok" ve "okunamadı" kararları
-  YALNIZ süreç belleğindedir (dosyaya yazılmaz, dosyadan OKUNMAZ; ~3 sn / ~10 sn): "engel yok" kararı için sürecin KENDİ
-  taraması gerekir. Dosya her okunuşta doğrulanır (tip, 0 ≤ yaş ≤ TTL, önyükleme kimliği), ama kapıyı kalıcı açık tutmaya
-  karşı güvence dosyanın doğruluğuna değil bu kurala dayanır: dosyaya sahte "yok" yazmak ya da sınama kaydını silmek kapıyı
-  AÇMAZ (süreç yeniden tarar); en kötü ihtimal fazladan ret ya da tarama. Başlık/adres değişince ya da 300 sn sonra silinir.
-  **Bayat kutu yok:** her girdi (tık, tuş, yazı, kaydırma, pencere taşıma/boyutlandırma/büyütme, erişilebilirlik eylemi) o
-  pencerenin sınama kaydını "kirli" işaretler (son girdi zamanı, süreçler arası; masaüstü kipinde pencere bilinmediği için
-  tüm pencereler); sonraki girdiden önce kayıt son girdiden eskiyse (ya da 15 sn'den eskiyse) sayfa YENİDEN taranır
-  (kaydırma animasyonu için ~0,25 sn yerleşme beklenir). Kirli kayıt yeniden OKUNAMAZSA o pencerede TÜM fare girdisi
-  reddedilir (`page_wide` gibi) ve klavyede Tab sonrası girdi + tek başına Boşluk/Enter reddedilir.
-- **Reddetme (ÇEKİRDEK kapı)**: fare yollarının TEK ortak noktası `eylem.hassas_nokta` (koordinat, metin, öge, simge,
-  renk, web, sürükleme başlangıcı; sürükleme bitişi ve `erisim._hassas_oge` ile `ogeye-yaz` de) `nokta_engeli`'ni çağırır:
-  tıklanan NOKTA sınama kutusundaysa (ya da kısa metin sınama cümlesiyse) **Dur(18)** — gözlemsiz çağrı, CLI (`ekran
-  click`), MCP ve akış adımları hep aynı kapıdan geçer. Klavye (`k_tus`/`k_yaz`/`k_bas`): sayfanın tamamı sınamaysa ya da
-  ODAK sınama kutusundaysa (Tab+Boşluk ile işaretleme dahil) 18. Durum yoksa ve pencere tarayıcıysa girdiden ÖNCE bir kez
-  taranır (tarama ~`hazir`; "yok" 10 sn önbellek). MCP'de ek olarak ref bayrağı (`!human-verification`) ve metin hedefi;
-  `batch` adım hatasında `human_verification`. **kod 18**, `sent: nothing_sent`.
-- **Devir** (`request_human(reason, window, timeout_s=600)`): KDE bildirimi (`mesgul.bildir`, kritik) + onay
-  kanalında `tur="devir"` isteği (panel diyaloğu: **Devral** [yalnız arka plan masaüstü; panelin mevcut Devral'ı:
-  önizleme + girdi aktarımı], **Bitti**, **Vazgeç**). Bekleme boyunca o masaüstüne ajan girdisi kapalıdır ([7]);
-  istek yalnız panelden (SO_PEERCRED ile doğrulanmış kanal, §8: Bitti = izin) ya da sayfanın kendisinden (başta var
-  olan sınama işareti sayfa OKUNURKEN ve ADRES değişmeden art arda 2 yoklamada yok → `resolved_by=challenge_cleared`;
-  okunamayan sayfa ya da değişen adres "kayboldu" sayılmaz) kapanır; ajan kendi isteğini kapatamaz. Sonuç: `resolved |
-  timeout | declined | unavailable`. `resolved` sonrası işaret hâlâ varsa `still_detected: true`; kullanıcı Bitti dedikten
-  sonra AYNI sınama (adres + çerçeve kümesi) için uyarı ve yeniden çağrı bastırılır (`suppressed`; girdi kapısı AÇIK kalır).
-  Kendiliğinden geçen sınamalar (Cloudflare ara sayfası, yönetilen Turnstile) için bildirimden önce ~10 sn yalnız
-  yoklanır; bildirim panel canlı/gözetimli/DUR yoksa gönderilir, kullanıcı oyunda/tam ekrandaysa sessizdir. Atomik devir
-  kaydı (eşzamanlı ikinci istek [7]); ret/zaman aşımından sonra aynı pencere için 60 sn içinde yeni istek ret
-  (`retry_after_s`). `bekleyen_var` devir isteklerini 3600 sn'ye kadar canlı sayar (bekleme boyunca BAŞKA süreçlerin
-  girdisi de kapalı). Günlük/geçmişte etiket `devir-tamam` ("onay izin" değil); "Bitti/Vazgeç/süre" ile diyaloğun açtığı
-  Devral kapanır.
-- **Okunamayan sayfa (fail-open yok):** erişilebilirlik ağacı okunamayan TARAYICI penceresinde (kapalı/yanıtsız, belge yok)
-  Tab'dan sonra gelen girdi ve tek başına Boşluk/Enter ya da boşluk içeren yazı reddedilir (odak sınama kutusunda olabilir);
-  sınama durumu VARKEN odak bilinemiyorsa (sorgu hata verdi, odakta kutulu öge yok) Boşluk/Enter/yazı içeren dizi reddedilir.
-  Kapı taraması erişilebilirlik kapalıyken tarayıcı penceresi için süreç başına BİR kez `erisim_ac_garanti` çağırır. **kde'de
-  yan etki:** bu, kullanıcının oturumunda erişilebilirliği (AT-SPI veri yolu `IsEnabled` + `toolkit-accessibility`) OTURUM
-  GENELİNDE açar ve açık kalır (tüm uygulamalar erişilebilirlik ağacı üretir; küçük performans maliyeti); günlükte ve durum
-  dizinindeki işaretle görünür, `deskhand a11y off` geri alır. Sanal (arka plan) masaüstünde yalnız o masaüstünün özel veri
-  yolu etkilenir. Ham tuş kodları (`k:N`) yalnız 1-255 (0x100+ BTN_* fare düğmeleridir). Masaüstü kipinde (EKRAN) kapının
-  sınadığı pencere kapıdan hemen sonra ve HER tık/basmadan önce yeniden denetlenir (imlecin altındaki pencere ve imleç aynı
-  değilse Dur 3); çift/üçlü tık ve `tekrar>1` tek tek gönderilir, sürüklemede `buttondown` öncesi de denetlenir.
-- **Tehdit modeli:** kapı, kazara ya da sayfa metniyle kandırılmış (prompt injection) bir ajanın CAPTCHA etkileşimini
-  durdurmak için EN-İYİ-ÇABA bir ikinci hattır; asıl güvence ajanın kuralıdır (CAPTCHA çözülmez, `request_human` ile
-  devredilir). Kabuğu olan bir ajan `girdi.sock`'a doğrudan yazarak bu kapıları (ve diğer araç düzeyi kapıları) zaten
-  atlayabilir; bu, belgedeki mevcut genel sınırdır (§2, §8) ve bu kapıların kapsamı dışındadır.
-- **Sınırlar:** yeni CAPTCHA türleri algıdan kaçabilir; ağaç okunamazsa (erişilebilirlik kapalı/yanıtsız) algı yoktur — bu
-  durumda tarayıcı yolları konumu doğrulanamayan ögeye tıklamaz (fail-closed) ve yukarıdaki klavye kuralları devreye girer.
-  Klavye odak sorgusu tarayıcı sayfaları içindir.
+- **Detection** (`deskhand/dogrulama_sinamasi.py`; `incele` is pure; text alone is NOT ENOUGH). Sources: (1) the address of an embedded document (iframe): `google.com/recaptcha`, `hcaptcha.com`,
+  `challenges.cloudflare.com`, `arkoselabs`/`funcaptcha`, `geetest` (the invisible reCAPTCHA v3 badge `size=invisible` and hCaptcha `#frame=checkbox-invisible` are exempt). `web.oku` carries the address of the document
+  each ELEMENT belongs to (`_belge_adres`): only the elements of the challenge document are marked (a YouTube embed, a Stripe card field, a chat box are not affected) and the WHOLE box of that iframe is the
+  challenge area (clicking the label next to the checkbox also ticks the box); (2) element name + role: "I'm not a robot", "Ben robot değilim", "Verify you are human", "Slide to verify"… (a label of at most 6 words
+  OUTSIDE a frame; the settings "Require human verification" / "Move the slider to set the price" / "Enable CAPTCHA" do not count), a vendor name (reCAPTCHA, hCaptcha, Turnstile…) only in an embedded document; (3) a
+  classic text-in-image CAPTCHA: an input field named "Security code / Verification code / captcha" + an image nearby (or the phrase "characters in the image"); an image-less code field in an SMS/e-mail/app (2FA)
+  context does not count; (4) a title "Just a moment…", "Attention Required"… is NOT enough ALONE: together with a challenge frame/element or a Cloudflare address (`/cdn-cgi/`, `__cf_chl`) the whole page becomes the
+  challenge (`cloudflare_interstitial`); (5) OCR: only a short line, ≥60% of the line is the pattern (low confidence). A SOLVED challenge (a ticked checkbox, Turnstile "Success!") does not count. The result is
+  `human_verification: {detected, kind, window, hint}`; in the results of `observe`, `read_text`, `wait_for`, `click`, `type_text`, `press_key`, `drag`. `read_text` does not give the FULL address of iframes (only kind +
+  domain name); in the critical notification the domain name is written, not the page title.
+- **State**: under a key of window id + title/address, `RUNTIME_DIR/insan-dogrulama.json` (0600, flock) — CLI and MCP processes see the same boxes. The file ONLY ADDS BLOCKS: detected challenge boxes (`sinama`), warning
+  suppression (`bastir`) and the window's last input time (`girdi`; it only forces a RESCAN). The decisions "no challenge" and "unreadable" are ONLY in process memory (not written to the file, NOT READ from the file;
+  ~3 s / ~10 s): for a "no block" decision the process's OWN scan is needed. The file is verified every time it is read (type, 0 ≤ age ≤ TTL, boot id), but the guarantee against keeping the gate permanently open rests
+  not on the correctness of the file but on this rule: writing a fake "none" into the file or deleting a challenge record does NOT open the gate (the process rescans); the worst case is an extra refusal or scan. It is
+  deleted when the title/address changes or after 300 s. **No stale box:** every input (click, key, text, scrolling, window move/resize/maximise, accessibility action) marks the challenge record of that window "dirty"
+  (last input time, across processes; in desktop mode all windows since the window is unknown); before the next input, if the record is older than the last input (or older than 15 s) the page is RESCANNED (~0.25 s settling
+  is awaited for scroll animation). If a dirty record CANNOT be read again, ALL mouse input in that window is refused (like `page_wide`) and on the keyboard input after Tab + a lone Space/Enter are refused.
+- **Refusal (CORE gate)**: the SINGLE common point of the mouse paths `eylem.hassas_nokta` (coordinate, text, element, icon, colour, web, drag start; drag end and `erisim._hassas_oge` and `ogeye-yaz` too) calls
+  `nokta_engeli`: if the clicked POINT is in a challenge box (or the short text is a challenge sentence) **Dur(18)** — an unobserved call, the CLI (`ekran click`), MCP and flow steps all pass through the same gate.
+  Keyboard (`k_tus`/`k_yaz`/`k_bas`): 18 if the whole page is a challenge or the FOCUS is in a challenge box (including ticking with Tab+Space). If there is no state and the window is a browser it is scanned once BEFORE
+  the input (the scan ~`hazir`; "none" is cached for 10 s). In MCP additionally the ref flag (`!human-verification`) and the text target; `human_verification` in a `batch` step error. **code 18**, `sent: nothing_sent`.
+- **Hand-over** (`request_human(reason, window, timeout_s=600)`): a KDE notification (`mesgul.bildir`, critical) + a `tur="devir"` request on the approval channel (panel dialog: **Take over** [background desktop only; the
+  panel's existing Devral: preview + input transfer], **Done**, **Cancel**). During the wait agent input to that desktop is closed ([7]); the request is closed only from the panel (a channel verified with SO_PEERCRED, §8:
+  Done = permission) or by the page itself (the challenge mark that existed at the start is absent in 2 consecutive polls while the page is READ and the ADDRESS has not changed → `resolved_by=challenge_cleared`; an unreadable
+  page or a changed address does not count as "disappeared"); the agent cannot close its own request. Result: `resolved | timeout | declined | unavailable`. If the mark is still there after `resolved`, `still_detected: true`;
+  after the user says Done, the warning and a re-call are suppressed for the SAME challenge (address + frame set) (`suppressed`; the input gate stays OPEN). For challenges that pass by themselves (the Cloudflare interstitial,
+  a managed Turnstile) it is only polled for ~10 s before the notification; the notification is sent unless the panel is alive/attended/DUR, and is silent if the user is in a game/full screen. An atomic hand-over record (a
+  concurrent second request [7]); after a refusal/timeout a new request for the same window within 60 s is refused (`retry_after_s`). `bekleyen_var` counts hand-over requests as live for up to 3600 s (during the wait the input
+  of OTHER processes is also closed). In the log/history the label is `devir-tamam` (hand-over done) (not "approval permitted"); with "Done/Cancel/time" the Devral that the dialog opened is closed.
+- **Unreadable page (no fail-open):** in a BROWSER window whose accessibility tree cannot be read (closed/unresponsive, no document) input after Tab and a lone Space/Enter or text containing spaces is refused (the focus may
+  be in a challenge box); if the focus cannot be known while a challenge state EXISTS (the query failed, there is no boxed element in the focus) a sequence containing Space/Enter/text is refused. The gate scan calls
+  `erisim_ac_garanti` ONCE per process for a browser window when accessibility is off. **Side effect in kde:** this turns accessibility on SESSION-WIDE in the user's session (the AT-SPI bus `IsEnabled` +
+  `toolkit-accessibility`) and it stays on (all applications produce an accessibility tree; a small performance cost); it is visible in the log and by the marker in the state directory, `deskhand a11y off` undoes it. On the
+  virtual (background) desktop only that desktop's private bus is affected. Raw key codes (`k:N`) only 1-255 (0x100+ are BTN_* mouse buttons). In desktop mode (EKRAN) the window that the gate tested is re-checked right after the
+  gate and BEFORE EVERY click/press (Dur 3 if the window under the cursor and the cursor are not the same); a double/triple click and `tekrar>1` are sent one by one, in a drag it is also checked before `buttondown`.
+- **Threat model:** the gate is a BEST-EFFORT second line to stop CAPTCHA interaction by an agent that has been fooled accidentally or by page text (prompt injection); the real guarantee is the agent's rule (a CAPTCHA is not solved, it
+  is handed over with `request_human`). An agent that has a shell can bypass these gates (and the other tool-level gates) anyway by writing directly to `girdi.sock`; this is the existing general limit in the document (§2, §8) and is
+  outside the scope of these gates.
+- **Limits:** new CAPTCHA types can escape detection; if the tree cannot be read (accessibility off/unresponsive) there is no detection — in that case the browser paths do not click an element whose position cannot be verified
+  (fail-closed) and the keyboard rules above come into play. The keyboard focus query is for browser pages.
