@@ -235,10 +235,15 @@ def masaustu_girdisi_eksigi(*kimlikler: str) -> str | None:
 # çekildikleri ortamın yazı tipi parmak izi REFERANS_ORTAM'da. Bu makinede Qt başka yazı tipi çözüyorsa birebir kıyas
 # anlamsızdır (aynı kod, başka glif ölçüleri).
 REFERANS_ORTAM = os.path.join(KOK, "tests", "gorsel_taban", "ORTAM.txt")
-_YAZI_KOD = ("import sys\nfrom PyQt6.QtCore import QT_VERSION_STR\nfrom PyQt6.QtGui import QFontDatabase, QFontInfo\n"
-             "from PyQt6.QtWidgets import QApplication\napp = QApplication(sys.argv[:1])\n"
-             "f = QFontInfo(app.font())\nm = QFontInfo(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))\n"
-             "print(f'qt={QT_VERSION_STR} yazi={f.family()}/{f.styleName()} sabit={m.family()}/{m.styleName()}')\n")
+_YAZI_KOD = ("import sys\nfrom PyQt6.QtCore import QT_VERSION_STR\n"
+             "from PyQt6.QtGui import QFontDatabase, QFontInfo, QFontMetrics\n"
+             "from PyQt6.QtWidgets import QApplication, QPushButton\napp = QApplication(sys.argv[:1])\n"
+             "app.setStyle('Fusion')\nf = QFontInfo(app.font())\n"
+             "m = QFontInfo(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))\n"
+             "o = QFontMetrics(app.font())\nd = QPushButton('Görevi durdur').sizeHint()\n"
+             "print(f'qt={QT_VERSION_STR} yazi={f.family()}/{f.styleName()}/{f.pointSizeF()}pt "
+             "sabit={m.family()}/{m.styleName()} olcu={o.height()}/{o.horizontalAdvance(\"Görevi durdur 0123456789\")} "
+             "dugme={d.width()}x{d.height()}')\n")
 
 
 def yazi_ortami() -> str:

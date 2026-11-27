@@ -15,6 +15,7 @@ Y7 karşı taraf doğrulaması önbelleği; K4 gevşek izinli RUNTIME_DIR redded
 Gerçek ev dizini KULLANILMAZ: testler sahte ev dizini (arka_ortak._EV_ZORLA, süreç içi) kurar. Kullanıcının gerçek
 oturumuna bağlantı/girdi yok.   Çalıştır:  DESKHAND_ARKA_TUR=kwin python3 tests/test_denetim12c.py"""
 import json
+import glob
 import os
 import signal
 import socket
@@ -248,7 +249,10 @@ try:
     kontrol(f"Y1 ({TUR}): /dev/uinput, input, snd, hidraw, usb, video düğümü YOK",
             all(a_[k] == 0 for k in a_ if k != "/dev/dri/renderD*"), str(a_))
     kontrol(f"Y1 ({TUR}): /dev/uinput açılamaz", ic["uinput_acildi"] in ("ENOENT", "EACCES"), str(ic["uinput_acildi"]))
-    kontrol(f"Y1 ({TUR}): GPU render düğümü var (/dev/dri)", a_["/dev/dri/renderD*"] >= 1 or not os.path.isdir("/dev/dri"))
+    if not glob.glob("/dev/dri/renderD*"):  # ana makinede render düğümü yoksa (CI, GPU'suz VM) geçirilecek bir şey yok
+        _yalitim.atla(f"Y1 ({TUR}): GPU render düğümü var (/dev/dri)", "ana makinede /dev/dri/renderD* yok")
+    else:
+        kontrol(f"Y1 ({TUR}): GPU render düğümü var (/dev/dri)", a_["/dev/dri/renderD*"] >= 1)
     # Y3
     kontrol(f"Y3 ({TUR}): ana makine PID'leri görünmez (/proc'ta yalnız ad alanı süreçleri)",
             not ic["ana_gorunur"] and max(ic["proc_pidler"]) < 100, f"{ic['ana_gorunur']} {ic['proc_pidler'][:10]}")

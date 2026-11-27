@@ -455,7 +455,8 @@ def test_hazirla_kararlar():
     # chromium → ABM-F3: keyring rölesi yok; BOŞ profil kopyası (--password-store=basic, kayıtlı girişler yok)
     h = oturum.hazirla("chromium")
     kontrol("chromium hazirla kopya (boş profil, anahtarlıksız)", h.karar == "kopya" and h.kopya_yolu and
-            "--password-store=basic" in h.argv and not any("kwallet" in a for a in h.argv), h.karar)
+            "--password-store=basic" in h.argv and not any("kwallet" in a for a in h.argv),
+            f"{h.karar} {(h.ayrinti or {}).get('politikalar')} {(h.ayrinti or {}).get('cozum')}")
     kontrol("chromium açıklama 'kayıtlı girişler yok'", "kayıtlı girişler yok" in h.aciklama)
     if h.kopya_yolu:
         oturum.temizle(h.kopya_yolu)

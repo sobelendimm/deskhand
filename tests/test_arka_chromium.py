@@ -597,7 +597,9 @@ def gunluk_sonu(log, n=12):
     try:
         log.flush()
         with open(log.name, errors="replace") as f:
-            return " | son satırlar: " + " ⏎ ".join(f.read().splitlines()[-n:])
+            satirlar = f.read().splitlines()
+        onemli = [x for x in satirlar if "FATAL" in x or "Check failed" in x or ":ERROR:" in x][:6]
+        return " | önemli: " + " ⏎ ".join(onemli) + " | son satırlar: " + " ⏎ ".join(satirlar[-n:])
     except OSError as e:
         return f" | günlük okunamadı: {e}"
 
