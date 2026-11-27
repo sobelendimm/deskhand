@@ -67,9 +67,9 @@ for v, r in zip([*G.VARYANTLAR, "diyalog"], sonuclar, strict=True):
     kontrol(f"çekim: {ad} süreci başarılı", r.returncode == 0 and "CEKILDI" in r.stdout,
             f"rc {r.returncode}: {(r.stdout + r.stderr)[-400:]}")
 
-beklenen = sum(1 if v[5] else 7 for v in G.VARYANTLAR) + len(G.DIYALOGLAR)
+beklenen = sum(1 if v[5] else 6 for v in G.VARYANTLAR) + len(G.DIYALOGLAR)
 pngler = sorted(f for f in os.listdir(cikti) if f.endswith(".png"))
-kontrol(f"çekim: {beklenen} ekran (7 sekme × 3 varyant + DUR + 3 diyalog)", len(pngler) == beklenen, str(len(pngler)))
+kontrol(f"çekim: {beklenen} ekran (6 sekme × 3 varyant + DUR + 3 diyalog)", len(pngler) == beklenen, str(len(pngler)))
 
 os.makedirs(TABAN, exist_ok=True)
 yazilan, farkli = [], []

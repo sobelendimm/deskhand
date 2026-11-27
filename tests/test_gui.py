@@ -273,8 +273,8 @@ w = p.pencere
 kontrol("panel.pid yazıldı ve canlı", onay.panel_canli() and onay.panel_pid() == os.getpid())
 kontrol("panel açılışı sahipsiz Devral dosyasını sildi", not os.path.exists(D.devral_yolu()))
 kontrol("pencere başlığı sabit", w.windowTitle() == onay.PANEL_BASLIK == "Deskhand")
-kontrol("7 sekme (Görev ilk)", w.sekmeler.count() == 7 and [w.sekmeler.tabText(i) for i in range(7)][:2] == ["Görev", "Etkinlik"],
-        str([w.sekmeler.tabText(i) for i in range(7)]))
+kontrol("6 sekme (Görev ilk; Simgeler Ayarlar › Gelişmiş'te, UX-F O7)", w.sekmeler.count() == 6 and
+        [w.sekmeler.tabText(i) for i in range(6)][:2] == ["Görev", "Etkinlik"], str([w.sekmeler.tabText(i) for i in range(6)]))
 kontrol("kısayol varsayılan KAPALI: hiç kaydedilmedi", kis.cagri == [] and not w.ayarlar.k_acik.isChecked())
 kontrol("ilk günlük satırları Etkinlik'te", w.etkinlik.model.rowCount() == 2 and
         w.etkinlik.model.satirlar[1]["tur"] == "dur")
@@ -773,7 +773,7 @@ try:
             w.serit.b_devam.text() == "Resume" and w.serit.l_durum.text() == "Idle", w.serit.l_durum.text())
     kontrol("İngilizce: Ayarlar grup başlığı, Arka plan düğmesi, Sağlık", any(
         g.title() == "Language" for g in y.findChildren(QGroupBox)) and w.arka.b_baslat.text() == "Start" and
-        w.saglik.b_yenile.text() == "Check again" and w.saglik.tablo.item(0, 1).text() == "found")
+        w.saglik.b_yenile.text() == "Check again" and "found" in [w.saglik.tablo.item(i, 1).text() for i in range(w.saglik.tablo.rowCount())])
     kararlar = [w.onaylar.t_gecmis.item(i, 4).text() for i in range(w.onaylar.t_gecmis.rowCount())]
     kontrol("İngilizce: onay geçmişi kararı yeniden yazıldı", "allowed" in kararlar and
             "izin verildi" not in kararlar, str(kararlar))

@@ -69,10 +69,11 @@ def gruplar(i):
     return [g.title() for g in y.bolumler.widget(i).findChildren(QGroupBox)]
 
 
-kontrol("Temel: Dil (üstte), Onay soruları, Meşgulken", gruplar(0) == ["Dil", "Onay soruları", "Meşgulken davranış"],
+kontrol("Temel: Dil (üstte), Onay soruları, Meşgulken", gruplar(0) == ["Dil", "Onay soruları", "Meşgulken davranış", "Görev"],
         str(gruplar(0)))
 kontrol("Gelişmiş: Yasaklar, Seviyeler, Hesap oturumları, Kısayol, İzinler (yer tutucu)", gruplar(1) == [
-    "Yasak pencereler", "Uygulama erişim seviyeleri", "Hesap oturumları", "Genel kısayol", "İzinler"], str(gruplar(1)))
+    "Yasak pencereler", "Uygulama erişim seviyeleri", "Hesap oturumları", "Genel kısayol", "Kayıtlı simgeler", "İzinler"],
+    str(gruplar(1)))
 
 # ---------------------------------------------------------------- tek kaydetme modeli
 kontrol("başlangıç: bekleyen değişiklik yok, Uygula/Sıfırla kapalı, durum boş",
@@ -116,7 +117,7 @@ try:
     sonuc = y.uygula()
     kontrol("kayıt hatası → Uygula başarısız, görünür hata (ne oldu + ne yapmalı)",
             not sonuc and "kaydedilemedi" in y.durum_metni() and "yeniden deneyin" in y.durum_metni() and
-            "No space" in y.durum_metni(), y.durum_metni())
+            "No space" not in y.durum_metni() and "No space" in y.l_kisayol.ayrinti_metni(), y.durum_metni())
     kontrol("kayıt hatası → değer kayıtlı haline döndü", y.k_acik.isChecked() == kayitli_acik and
             not y.kaydedilmemis_var())
 finally:

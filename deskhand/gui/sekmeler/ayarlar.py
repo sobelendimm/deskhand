@@ -15,14 +15,17 @@ from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QFrame,
                              QGroupBox, QHBoxLayout, QHeaderView, QKeySequenceEdit, QLabel, QLineEdit, QListWidget,
                              QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSpinBox,
-                             QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
+                             QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QToolButton, QVBoxLayout,
+                             QWidget)
 
+from ... import ayarlar as AY
 from ... import i18n
 from ...i18n import N_, _
 from .. import ayar as A
 from .. import metinler as T
 from ..dil import Metinler, dil_secenekleri
 from ..kisayol import VARSAYILAN_TUS, cakismalar
+from .simgeler import SimgelerSekmesi
 
 Y_DOGRULANMADI = N_("DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı "
                     "geri yükler (imzalı kayıt yoksa girişleri yeniden sorar); o zamana kadar Deskhand durdu (Dur 10).")
@@ -94,17 +97,90 @@ def acik_pencereler() -> list[tuple[str, str]]:
     return sorted(cik, key=lambda x: x[0].lower())
 
 
-class _Ileti(QLabel):
-    """Bölüm iletisi (hata/uyarı): boşken yer kaplamaz."""
+class _Ileti(QWidget):
+    """Bölüm iletisi (hata/uyarı), iki katman (UX-F O5): üstte sade cümle + ne yapılacak; ham ayrıntı (istisna
+    metni) yalnız katlı "Ayrıntı" altında. Boşken yer kaplamaz. QLabel gibi text()/setText() verir."""
 
     def __init__(self):
-        super().__init__("")
-        self.setWordWrap(True)
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(_BOSLUK // 2)
+        sat = QHBoxLayout()
+        sat.setSpacing(_BOSLUK)
+        self.l = QLabel("")
+        self.l.setWordWrap(True)
+        sat.addWidget(self.l, 1)
+        self.b_ayrinti = QToolButton()
+        self.b_ayrinti.setCheckable(True)
+        self.b_ayrinti.setMinimumHeight(_HEDEF)
+        self.b_ayrinti.setText(_(T.D_AYRINTI_DUGME))
+        self.b_ayrinti.toggled.connect(lambda acik: self.l_ayrinti.setVisible(acik and bool(self._ayrinti)))
+        self.b_ayrinti.setVisible(False)
+        sat.addWidget(self.b_ayrinti, 0, Qt.AlignmentFlag.AlignTop)
+        lay.addLayout(sat)
+        self.l_ayrinti = QLabel("")
+        self.l_ayrinti.setWordWrap(True)
+        self.l_ayrinti.setTextFormat(Qt.TextFormat.PlainText)
+        self.l_ayrinti.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.l_ayrinti.setVisible(False)
+        lay.addWidget(self.l_ayrinti)
+        self._ayrinti = ""
         self.setVisible(False)
 
-    def setText(self, metin):  # noqa: N802
-        super().setText(metin)
+    def setText(self, metin: str, ayrinti: str = "") -> None:  # noqa: N802
+        self.l.setText(metin)
+        self._ayrinti = ayrinti if metin else ""
+        self.l_ayrinti.setText(self._ayrinti)
+        self.b_ayrinti.setText(_(T.D_AYRINTI_DUGME))
+        self.b_ayrinti.setChecked(False)
+        self.b_ayrinti.setVisible(bool(self._ayrinti))
+        self.l_ayrinti.setVisible(False)
         self.setVisible(bool(metin))
+
+    def hata(self, ozet: str, e: BaseException) -> None:
+        """Sade cümle üstte, ham istisna katlı ayrıntıda."""
+        self.setText(ozet, T.hata_ayrinti(e))
+
+    def text(self) -> str:
+        return self.l.text()
+
+    def ayrinti_metni(self) -> str:
+        return self._ayrinti
+
+    def setTextFormat(self, bicim) -> None:  # noqa: N802
+        self.l.setTextFormat(bicim)
+
+
+class _Aciklama(QWidget):
+    """Ayar açıklaması, katlı (UX-F O9): "ⓘ Açıklama" düğmesi (ipucu = metin) tıklanınca metin açılır. Metin normal
+    renkte (soluk gri WCAG kontrastını geçmiyordu)."""
+
+    def __init__(self, mt: Metinler, msgid: str):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(_BOSLUK // 2)
+        self.b_bilgi = QToolButton()
+        self.b_bilgi.setCheckable(True)
+        self.b_bilgi.setMinimumHeight(_HEDEF)
+        self.b_bilgi.setAutoRaise(True)
+        mt(lambda m: self.b_bilgi.setText("ⓘ " + m), T.Y_ACIKLAMA)
+        mt(lambda m: self.b_bilgi.setAccessibleName(m), T.Y_ACIKLAMA)
+        lay.addWidget(self.b_bilgi, 0, Qt.AlignmentFlag.AlignLeft)
+        self.l_metin = QLabel()
+        self.l_metin.setWordWrap(True)
+        self.l_metin.setVisible(False)
+        lay.addWidget(self.l_metin)
+        mt(self._yaz, msgid)
+        self.b_bilgi.toggled.connect(self.l_metin.setVisible)
+
+    def _yaz(self, m: str) -> None:
+        self.l_metin.setText(m)
+        self.b_bilgi.setToolTip(m)
+
+    def text(self) -> str:
+        return self.l_metin.text()
 
 
 class PencereSecDiyalog(QDialog):
@@ -136,8 +212,11 @@ class AyarlarSekmesi(QWidget):
     kisayol_degisti = pyqtSignal(bool, str)
     dil_degisti = pyqtSignal(str)  # yeni etkin dil kodu (i18n yeniden yüklendikten SONRA)
 
-    def __init__(self, parent=None, karar: A.KararAyarlari | None = None, cakisma_f=cakismalar, pencere_f=None):
+    def __init__(self, parent=None, karar: A.KararAyarlari | None = None, cakisma_f=cakismalar, pencere_f=None,
+                 simge_sor=None):
         super().__init__(parent)
+        self.aciklamalar: list[_Aciklama] = []
+        self._simge_sor = simge_sor
         self.karar = karar if karar is not None else A.KararAyarlari()
         self.cakisma_f = cakisma_f
         self.pencere_f = pencere_f or acik_pencereler
@@ -176,13 +255,15 @@ class AyarlarSekmesi(QWidget):
         self._dil_kur(self._temel)
         self._onay_kur(self._temel)
         self._mesgul_kur(self._temel)
+        self._gorev_kur(self._temel)
         self._temel.addStretch(1)
         self._yasak_kur(self._gelismis)
         self._seviye_kur(self._gelismis)
         self._hesap_kur(self._gelismis)
         self._kisayol_kur(self._gelismis)
+        self._simge_kur(self._gelismis)
         g = self._grup(T.Y_IZINLER)  # ana planın P4'ü: yer tutucu (işlev yok)
-        _duzen(QVBoxLayout(g)).addWidget(self._not(T.Y_IZINLER_YAKINDA))
+        _duzen(QVBoxLayout(g)).addWidget(self._not_duz(T.Y_IZINLER_YAKINDA))
         self._gelismis.addWidget(g)
         self._gelismis.addStretch(1)
 
@@ -236,9 +317,7 @@ class AyarlarSekmesi(QWidget):
         self._dil_secili()
         self.c_dil.activated.connect(lambda _i: self._degisti())
         gl.addRow(self._etiket(T.Y_DIL), self.c_dil)
-        self.l_dil = QLabel("")
-        self.l_dil.setWordWrap(True)
-        self.l_dil.setVisible(False)
+        self.l_dil = _Ileti()
         gl.addRow(self.l_dil)
         gl.addRow(self._not(T.Y_DIL_NOT_UYGULA))
         kok.addWidget(g)
@@ -285,7 +364,7 @@ class AyarlarSekmesi(QWidget):
             self.l_karar = _Ileti()
             gl.addRow(self.l_karar)
         else:
-            gl.addRow(self._not(T.Y_MESGUL_YOK))
+            gl.addRow(self._not_duz(T.Y_MESGUL_YOK))
         kok.addWidget(g)
 
     def _liste_dugmeleri(self, gl, tur: str):
@@ -327,7 +406,7 @@ class AyarlarSekmesi(QWidget):
         gl.addWidget(self.yasak_liste)
         self.yasak = self._metin_alani(150)  # metin kipi (ileri düzey): tek doğruluk kaynağı
         self.mt(self.yasak.setAccessibleName, T.Y_YASAK)
-        self.yasak_metin_not = self._not(T.Y_YASAK_ACIKLAMA)
+        self.yasak_metin_not = self._not_duz(T.Y_YASAK_ACIKLAMA)
         self.yasak_metin_not.setVisible(False)
         gl.addWidget(self.yasak_metin_not)
         gl.addWidget(self.yasak)
@@ -355,7 +434,7 @@ class AyarlarSekmesi(QWidget):
         gl.addWidget(self.seviye_tablo)
         self.seviye = self._metin_alani(110)
         self.mt(self.seviye.setAccessibleName, T.Y_SEVIYE)
-        self.seviye_metin_not = self._not(T.Y_SEVIYE_ACIKLAMA)
+        self.seviye_metin_not = self._not_duz(T.Y_SEVIYE_ACIKLAMA)
         self.seviye_metin_not.setVisible(False)
         gl.addWidget(self.seviye_metin_not)
         gl.addWidget(self.seviye)
@@ -408,13 +487,66 @@ class AyarlarSekmesi(QWidget):
         self.k_tus.keySequenceChanged.connect(self._tus_degisti)
         self.k_tus.editingFinished.connect(self._tus_yaz)
         self._tus_yaz()
-        self.l_kisayol = QLabel("")
-        self.l_kisayol.setWordWrap(True)
+        self.l_kisayol = _Ileti()
         gl.addRow(self.k_acik)
         gl.addRow(self._etiket(T.Y_KISAYOL_TUS), self.k_tus)
         gl.addRow(self.l_kisayol)
         gl.addRow(self._not(T.Y_KISAYOL_NOT))
         self.k_acik.toggled.connect(lambda _d: self._degisti())
+        kok.addWidget(g)
+
+    def _gorev_kur(self, kok):
+        """Görev başlatma onayı (UX-F): Görev penceresinde "Bir daha sorma" denince buradan yeniden açılır."""
+        g = self._grup(T.Y_GOREV)
+        gl = _duzen(QVBoxLayout(g))
+        self.k_gorev_onay = self._kutu(T.Y_GOREV_ONAY)
+        self.k_gorev_onay.setChecked(self._gorev_onay_oku())
+        self.k_gorev_onay.toggled.connect(lambda _d: self._degisti())
+        gl.addWidget(self.k_gorev_onay)
+        self.l_gorev = _Ileti()
+        gl.addWidget(self.l_gorev)
+        gl.addWidget(self._not(T.Y_GOREV_ONAY_NOT))
+        kok.addWidget(g)
+
+    @staticmethod
+    def _gorev_onay_oku() -> bool:
+        try:
+            return AY.al("gorev", "baslat_onayi") is not False
+        except Exception:  # noqa: BLE001 - okunamadı: güvenli taraf (sorulur)
+            return True
+
+    def _gorev_onay_yukle(self) -> None:
+        """Görev penceresi tercihi değiştirmiş olabilir: bekleyen değişiklik yoksa kayıtlı değeri göster."""
+        if self._kayitli and "gorev" in self.degisenler():
+            return
+        v = self._gorev_onay_oku()
+        self._yukleniyor += 1
+        try:
+            self.k_gorev_onay.setChecked(v)
+        finally:
+            self._yukleniyor -= 1
+        self._kayitli["gorev"] = v
+        self._degisti()
+
+    def _gorev_onay_kaydet(self) -> bool:
+        v = self.k_gorev_onay.isChecked()
+        try:
+            AY.ayarla("gorev", "baslat_onayi", v)
+        except Exception as e:  # noqa: BLE001
+            self.l_gorev.hata(T.hata_ozeti(e), e)
+            return False
+        self.l_gorev.setText("")
+        self._kayitli["gorev"] = v
+        return True
+
+    def _simge_kur(self, kok):
+        """Kayıtlı simgeler (UX-F O7: ayrı sekme yerine Gelişmiş altında)."""
+        g = self._grup(T.Y_SIMGELER)
+        gl = _duzen(QVBoxLayout(g))
+        gl.addWidget(self._not(T.Y_SIMGELER_NOT))
+        self.simgeler = SimgelerSekmesi(sor=self._simge_sor)
+        self.simgeler.setMinimumHeight(220)
+        gl.addWidget(self.simgeler)
         kok.addWidget(g)
 
     # -------- metin yardımcıları (dil değişince tazele() hepsini yeniden yazar)
@@ -428,14 +560,20 @@ class AyarlarSekmesi(QWidget):
         self.mt(e.setText, msgid)
         return e
 
-    def _not(self, msgid: str) -> QLabel:
-        """Açıklama: normal renk (soluk gri WCAG kontrastını geçmiyordu, UX D5/O9)."""
+    def _not(self, msgid: str) -> _Aciklama:
+        """Açıklama: katlı "ⓘ Açıklama" (UX-F O9, yoğunluk); açılınca normal renk (D5/O9 kontrast)."""
+        a = _Aciklama(self.mt, msgid)
+        self.aciklamalar.append(a)
+        return a
+
+    def _not_duz(self, msgid: str) -> QLabel:
+        """Her zaman görünen kısa bilgi (durum iletisi, metin kipinin açıklaması): normal renk."""
         e = QLabel()
         e.setWordWrap(True)
         self.mt(e.setText, msgid)
         return e
 
-    _soluk = _not  # eski ad
+    _soluk = _not_duz  # eski ad
 
     def _kutu(self, msgid: str) -> QCheckBox:
         k = QCheckBox()
@@ -461,9 +599,10 @@ class AyarlarSekmesi(QWidget):
 
     def tazele(self) -> None:
         self.mt.tazele()
+        self.simgeler.tazele()
         self._tus_yaz()
         self.cakisma_goster()
-        etiketler = [getattr(self, "l_karar", None), self.l_onay]  # eski dildeki iletiler
+        etiketler = [getattr(self, "l_karar", None), self.l_onay, self.l_gorev]  # eski dildeki iletiler
         etiketler += [e for t, e in (("yasak", self.l_yasak), ("seviye", self.l_seviye))
                       if not self._liste_kilitli.get(t)]  # DOĞRULANMADI etiketi kalır
         for e in etiketler:
@@ -482,7 +621,7 @@ class AyarlarSekmesi(QWidget):
         d = {"dil": self.c_dil.currentData(), "onay": self.c_onay.currentData(),
              "hesap": frozenset(s for s, k in self.k_hesap.items() if k.isChecked()),
              "yasak": self.yasak.toPlainText(), "seviye": self.seviye.toPlainText(),
-             "kisayol": (self.k_acik.isChecked(), self.tus())}
+             "kisayol": (self.k_acik.isChecked(), self.tus()), "gorev": self.k_gorev_onay.isChecked()}
         if self.karar.var:
             d["karar"] = self._karar_degerleri()
         return d
@@ -490,7 +629,7 @@ class AyarlarSekmesi(QWidget):
     def degisenler(self) -> list[str]:
         """Kaydedilmemiş bölümler (Uygula sırası)."""
         a = self._anlik()
-        return [k for k in ("onay", "hesap", "karar", "yasak", "seviye", "kisayol", "dil")
+        return [k for k in ("onay", "hesap", "karar", "gorev", "yasak", "seviye", "kisayol", "dil")
                 if k in a and a[k] != self._kayitli.get(k)]
 
     def kaydedilmemis_var(self) -> bool:
@@ -540,7 +679,7 @@ class AyarlarSekmesi(QWidget):
         Yazılamayan bölüm kayıtlı değerine döner; geçersiz giriş (bozuk satır) düzeltilsin diye ekranda kalır.
         → hepsi kaydedildi mi."""
         iletiler, tamam = [], True
-        bolum_adi = {"onay": T.Y_ONAY, "hesap": T.Y_HESAP, "karar": T.Y_MESGUL, "yasak": T.Y_YASAK,
+        bolum_adi = {"onay": T.Y_ONAY, "hesap": T.Y_HESAP, "karar": T.Y_MESGUL, "gorev": T.Y_GOREV, "yasak": T.Y_YASAK,
                      "seviye": T.Y_SEVIYE, "kisayol": T.Y_KISAYOL, "dil": T.Y_DIL}
         for k in self.degisenler():
             sonuc, hata = self._bolum_uygula(k)
@@ -571,6 +710,8 @@ class AyarlarSekmesi(QWidget):
             return self.hesap_uygula()
         if k == "karar":
             return self._sonuc(self.karar_kaydet(), self.l_karar)
+        if k == "gorev":
+            return self._sonuc(self._gorev_onay_kaydet(), self.l_gorev)
         if k == "yasak":
             if self._liste_kilitli.get("yasak") or A.yasak_dogrula(self.yasak.toPlainText()):
                 self.yasak_kaydet()
@@ -611,6 +752,8 @@ class AyarlarSekmesi(QWidget):
                 self.yasak.setPlainText(v)
             elif k == "seviye":
                 self.seviye.setPlainText(v)
+            elif k == "gorev":
+                self.k_gorev_onay.setChecked(bool(v))
             elif k == "kisayol":
                 self.k_acik.setChecked(v[0])
                 self.k_tus.setKeySequence(QKeySequence(v[1]))
@@ -629,11 +772,12 @@ class AyarlarSekmesi(QWidget):
             self._hesap_kutulari()
             if self.karar.var:
                 self._karar_goster(self.karar.oku())
+            self.k_gorev_onay.setChecked(self._gorev_onay_oku())
             panel = A.panel_oku()
             self.k_acik.setChecked(panel["kisayol_acik"])
             self.k_tus.setKeySequence(QKeySequence(panel["kisayol"]))
             self._tus_yaz()
-            for e in (getattr(self, "l_karar", None), self.l_onay, self.l_hesap, self.l_kisayol):
+            for e in (getattr(self, "l_karar", None), self.l_onay, self.l_hesap, self.l_kisayol, self.l_gorev):
                 if e is not None:
                     e.setText("")
         finally:
@@ -727,8 +871,7 @@ class AyarlarSekmesi(QWidget):
             i18n.ayar_yaz(kod)
         except (OSError, ValueError) as e:
             self._dil_secili()
-            self.l_dil.setText(_(T.Y_DIL_HATA).format(hata=e))
-            self.l_dil.setVisible(True)
+            self.l_dil.hata(T.hata_ozeti(e), e)
             return False
         yeni = i18n.yeniden_yukle()
         istenen = i18n.sistem_dili() if kod == i18n.OTOMATIK else kod
@@ -737,10 +880,8 @@ class AyarlarSekmesi(QWidget):
         self.dil_degisti.emit(yeni)  # → AnaPencere.tazele → bu sekmenin tazele()'si
         if yeni != istenen:  # DESKHAND_DIL bu süreçte dili zorluyor
             self.l_dil.setText(_(T.Y_DIL_ZORLA).format(dil=i18n.DILLER.get(yeni, yeni)))
-            self.l_dil.setVisible(True)
         else:
             self.l_dil.setText("")
-            self.l_dil.setVisible(False)
         self._degisti()
         return True
 
@@ -787,6 +928,7 @@ class AyarlarSekmesi(QWidget):
     def showEvent(self, e):  # noqa: N802
         super().showEvent(e)
         self._ust_bagla()
+        self._gorev_onay_yukle()
         from ... import liste_koruma
         if liste_koruma.AKTIF is not None:  # panel sürecinde: bellek okuması (kanal çağrısı yok)
             self.panel_degerleri_yukle()
@@ -814,7 +956,7 @@ class AyarlarSekmesi(QWidget):
                 d["tam_ekranda_sor"] = self.k_tam.isChecked()
             self.karar.yaz(d)
         except Exception as e:  # noqa: BLE001
-            self.l_karar.setText(_(T.Y_KAYIT_HATA).format(hata=e))
+            self.l_karar.hata(T.hata_ozeti(e), e)
             return False
         self.l_karar.setText("")
         self._kayitli["karar"] = self._karar_degerleri()
@@ -826,7 +968,7 @@ class AyarlarSekmesi(QWidget):
             A.onay_kapsami_yaz(kapsam)  # panel: tek yetkili yazar (imzalı)
         except Exception as e:  # noqa: BLE001
             self._sec(self.c_onay, A.onay_kapsami_oku())
-            self.l_onay.setText(_(T.Y_ONAY_HATA).format(hata=e))
+            self.l_onay.hata(T.hata_ozeti(e), e)
             return False
         self.l_onay.setText("")
         self._kayitli["onay"] = kapsam
@@ -886,10 +1028,9 @@ class AyarlarSekmesi(QWidget):
                         if (sag in istenen) != (sag in kayitli):
                             A.hesap_oturumu_yaz(sag, sag in istenen)
         except Exception as e:  # noqa: BLE001
-            hata = _(T.Y_HESAP_HATA).format(hata=e)
-            self.l_hesap.setText(hata)
+            self.l_hesap.hata(T.hata_ozeti(e), e)
             self._kayitli["hesap"] = frozenset(A.hesap_oturumlari_oku())
-            return "hata", str(e)
+            return "hata", T.hata_ozeti(e)
         self._kayitli["hesap"] = frozenset(A.hesap_oturumlari_oku())
         self.l_hesap.setText("")
         self._yukleniyor += 1
@@ -1008,7 +1149,7 @@ class AyarlarSekmesi(QWidget):
         try:
             secenekler = self.pencere_f()
         except Exception as e:  # noqa: BLE001 - masaüstü okunamadı: panel çökmesin, görünür ileti
-            etiket.setText(_(T.Y_PENCERE_HATA).format(hata=e))
+            etiket.setText(_(T.Y_PENCERE_OKUNAMADI), T.hata_ayrinti(e))
             return None
         if not secenekler:
             etiket.setText(_(T.Y_PENCERE_YOK))
@@ -1068,7 +1209,7 @@ class AyarlarSekmesi(QWidget):
         try:
             A.yasak_kaydet(metin)  # panel: tek yetkili, imzalı kayıt
         except OSError as e:  # disk dolu / salt okunur: slottan fırlamasın (panel çökmesin)
-            self.l_yasak.setText(_(T.Y_KAYIT_HATA).format(hata=e))
+            self.l_yasak.hata(T.hata_ozeti(e), e)
             return False
         self.l_yasak.setText("")
         self._kayitli["yasak"] = metin
@@ -1098,7 +1239,7 @@ class AyarlarSekmesi(QWidget):
         try:
             A.seviye_kaydet(metin)  # panel: tek yetkili, imzalı kayıt
         except OSError as e:  # disk dolu / salt okunur: slottan fırlamasın (panel çökmesin)
-            self.l_seviye.setText(_(T.Y_KAYIT_HATA).format(hata=e))
+            self.l_seviye.hata(T.hata_ozeti(e), e)
             return False
         self.l_seviye.setText("")
         self._kayitli["seviye"] = metin
@@ -1126,7 +1267,7 @@ class AyarlarSekmesi(QWidget):
         try:
             A.panel_yaz(d)
         except OSError as e:  # disk dolu / salt okunur: slottan fırlamasın (panel çökmesin)
-            self.l_kisayol.setText(_(T.Y_KAYIT_HATA).format(hata=e))
+            self.l_kisayol.hata(T.hata_ozeti(e), e)
             return False
         self.cakisma_goster()
         self._kayitli["kisayol"] = (d["kisayol_acik"], d["kisayol"])

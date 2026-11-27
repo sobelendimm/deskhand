@@ -160,7 +160,7 @@ except ValueError:
     J = {}
 kontrol("CLI --json: bugünkü panel yalnız bilinen ihlal (çıkış 0)", p.returncode == 0 and J.get("yeni") == [],
         f"rc={p.returncode} yeni={len(J.get('yeni', []) or [])} {p.stderr[-400:]}")
-kontrol("CLI: panel sekmeleri ve diyaloglar denetlendi", J.get("ekran", 0) >= 10, str(J.get("ekran")))
+kontrol("CLI: panel sekmeleri ve diyaloglar denetlendi", J.get("ekran", 0) >= 9, str(J.get("ekran")))
 kontrol("CLI: denetim süresi ≤ 2 sn", 0 < J.get("sure_ms", 1e9) <= 2000, str(J.get("sure_ms")))
 bos = os.path.join(ev, "bos.json")
 with open(bos, "w") as f:
@@ -184,7 +184,7 @@ if os.path.isfile(cikti):
     with Image.open(cikti) as im:
         boyut = im.size
     kontrol("--pano uzun kenar ≤ 1600 px", max(boyut) <= 1600, str(boyut))
-    kontrol("--pano en az 10 ekran içerir", J3.get("pano", {}).get("ekran", 0) >= 10, str(J3.get("pano")))
+    kontrol("--pano en az 9 ekran içerir", J3.get("pano", {}).get("ekran", 0) >= 9, str(J3.get("pano")))
     kontrol("--pano süresi ≤ 3 sn", 0 < J3.get("pano", {}).get("sure_ms", 1e9) <= 3000, str(J3.get("pano")))
     print(f"pano: {boyut[0]}x{boyut[1]} {os.path.getsize(cikti)} bayt {J3.get('pano', {}).get('sure_ms')} ms")
 

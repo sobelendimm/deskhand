@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 import subprocess
 
@@ -25,6 +26,39 @@ MODULLER = {"PyQt6": N_("arayüz (python-pyqt6)"), "Xlib": N_("arka plan girdi/g
             "secretstorage": N_("kalıcı oturum anahtarı, KDE Cüzdanı (python-secretstorage)"),
             "cryptography": N_("kalıcı oturum şifrelemesi (python-cryptography)"),
             "mcp": N_("MCP sunucusu (python-mcp)")}
+
+# Sağlık sekmesinin üst satırı: insan adı (paket/araç adı yalnız ayrıntıda). Sıra _ARAC_ADLARI / DILLER / MODULLER ile aynı.
+INSAN_ADI = dict(zip(_ARAC_ADLARI, (
+    N_("Pencere bulma bileşeni"), N_("Fare ve klavye bileşeni"), N_("Ekran görüntüsü bileşeni"),
+    N_("Ekran okuma bileşeni"), N_("Arka plan masaüstü"), N_("Arka plan yedek girdi bileşeni"),
+    N_("Arka plan pencere yöneticisi"), N_("Uygulama yalıtımı"), N_("Hızlı (ekran kartlı) arka plan masaüstü")), strict=True))
+INSAN_ADI.update({"tesseract: tur": N_("Türkçe ekran okuma"), "tesseract: eng": N_("İngilizce ekran okuma")})
+INSAN_ADI.update(zip(MODULLER, (
+    N_("Arayüz bileşeni"), N_("Arka plan girdi ve görüntü bileşeni"), N_("Görüntü işleme bileşeni"),
+    N_("Simge eşleme bileşeni"), N_("Görüntü bileşeni"), N_("Sistem iletişim bileşeni"),
+    N_("Kalıcı oturum anahtarı (KDE Cüzdanı)"), N_("Kalıcı oturum şifrelemesi"), N_("Claude bağlantı bileşeni")), strict=True))
+_PAKET = re.compile(r"\((AUR: )?([a-z0-9][a-z0-9.+_-]*)\)$")
+
+
+def insan_adi(d: dict) -> str:
+    """Satırın üst satırda gösterilecek adı (msgid; doctor satırları zaten insan adıyla gelir)."""
+    return INSAN_ADI.get(d.get("ad", ""), d.get("ad", ""))
+
+
+def paket(d: dict) -> tuple[str, bool] | None:
+    """Kurulum paketi (ad, AUR mı) — açıklama msgid'inin sonundaki parantezden (çevrilmemiş kaynak); yoksa None."""
+    if d.get("tur") not in ("arac", "dil", "modul"):
+        return None
+    m = _PAKET.search(str(d.get("not") or ""))
+    return (m.group(2), bool(m.group(1))) if m else None
+
+
+def cozum_komutu(d: dict) -> str | None:
+    """Eksik bileşeni kuran komut (Arch/CachyOS): resmi depo pacman, AUR yay."""
+    p = paket(d)
+    if p is None:
+        return None
+    return f"yay -S --needed {p[0]}" if p[1] else f"sudo pacman -S --needed {p[0]}"
 
 
 def tesseract_dilleri(calistir=subprocess.run) -> set[str] | None:

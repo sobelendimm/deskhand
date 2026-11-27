@@ -7,6 +7,8 @@ masaüstünden alınır (arka_f = arka_uc.sec(arka_bayragi=True)); kullanıcın�
 """
 from __future__ import annotations
 
+import re
+
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
@@ -39,6 +41,9 @@ G_AYRINTI = N_("Ayrıntı")
 G_KUTU_AD = N_("Görev metni")
 G_SITELER_AD = N_("Oturumla girilebilecek siteler")
 G_SONUC_AD = N_("Görev sonucu")
+
+# ham istisna izi (kullanıcıya üst satırda gösterilmez; UX-F O5)
+_HAM_ILETI = re.compile(r"Errno|Error\b|Exception|Traceback|NoneType|No such file|Permission denied|`")
 
 ONAY_ANAHTARI = ("gorev", "baslat_onayi")  # true = her görevde sor (varsayılan); false = "Bir daha sorma"
 
@@ -130,6 +135,7 @@ class GorevSekmesi(QWidget):
         self._bos_uyari = False       # boş metinle Başlat → görünür ileti + kutu vurgusu
         self._model_kayitsiz: str | None = None  # kaydedilemeyen model seçimi (bu oturumda yine kullanılır)
         self._hata: tuple[str, str] | None = None  # (metin kimliği, ayrıntı)
+        self._care = ""  # üst satırdaki "ne yapılacak" (GorevHatasi ipucu)
 
         kok = QVBoxLayout(self)
         self.l_dur = QLabel()  # DUR açıkken görev başlatılamaz: görünür neden + ne yapmalı
@@ -221,11 +227,13 @@ class GorevSekmesi(QWidget):
         sl.setContentsMargins(0, 0, 0, 0)
         self.l_adimlar = QLabel()
         self.mt(self.l_adimlar.setText, T.G_ADIMLAR)
-        sl.addWidget(self.l_adimlar)
+        self.l_adimlar_bos = self._bos_etiket(T.G_ADIMLAR_BOS)  # boş durum: başlığın yanında (yer kaplamaz)
+        sl.addLayout(self._baslik_sirasi(self.l_adimlar, self.l_adimlar_bos))
         self.liste = QListWidget()
         self.liste.setUniformItemSizes(False)
         self.liste.setWordWrap(True)
         self.liste.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.liste.setMinimumHeight(72)  # UX-F O8d: boşken de anlamlı boy
         sl.addWidget(self.liste, 3)
         self.l_sonuc = QLabel()
         self.mt(self.l_sonuc.setText, T.G_SONUC)
@@ -233,13 +241,17 @@ class GorevSekmesi(QWidget):
         self.sonuc = QPlainTextEdit()
         self.sonuc.setReadOnly(True)
         self.mt(self.sonuc.setAccessibleName, G_SONUC_AD)
-        self.sonuc.setMaximumHeight(110)
+        self.sonuc.setMinimumHeight(72)
+        self.sonuc.setMaximumHeight(140)
+        self.mt(self.sonuc.setPlaceholderText, T.G_SONUC_BOS)
         sl.addWidget(self.sonuc)
         self.l_gecmis = QLabel()
         self.mt(self.l_gecmis.setText, T.G_GECMIS)
-        sl.addWidget(self.l_gecmis)
+        self.l_gecmis_bos = self._bos_etiket(T.G_GECMIS_BOS)
+        sl.addLayout(self._baslik_sirasi(self.l_gecmis, self.l_gecmis_bos))
         self.gecmis_liste = QListWidget()
-        self.gecmis_liste.setMaximumHeight(120)
+        self.gecmis_liste.setMinimumHeight(72)
+        self.gecmis_liste.setMaximumHeight(160)
         self.gecmis_liste.itemClicked.connect(self._gecmis_sec)
         self.gecmis_liste.itemDoubleClicked.connect(self._gecmis_kutuya)
         sl.addWidget(self.gecmis_liste)
@@ -259,6 +271,26 @@ class GorevSekmesi(QWidget):
         self.gecmis_yenile()
         self._durum_yaz()
         self._dugmeler()
+
+    def _bos_etiket(self, msgid: str) -> QLabel:
+        e = QLabel()
+        self.mt(lambda m: e.setText("— " + m), msgid)
+        return e
+
+    @staticmethod
+    def _baslik_sirasi(baslik: QLabel, bos: QLabel) -> QHBoxLayout:
+        sira = QHBoxLayout()
+        sira.setSpacing(8)
+        sira.addWidget(baslik)
+        sira.addWidget(bos, 1)
+        return sira
+
+    def _bos_durumlar(self) -> None:
+        """Boş kutunun altında ne göreceğini söyleyen tek satır (UX-F O8d); kutu dolunca kalkar."""
+        if hasattr(self, "l_adimlar_bos"):
+            self.l_adimlar_bos.setVisible(self.liste.count() == 0)
+        if hasattr(self, "l_gecmis_bos"):
+            self.l_gecmis_bos.setVisible(self.gecmis_liste.count() == 0)
 
     # -------- model
     def _model_adlari(self) -> None:
@@ -288,7 +320,15 @@ class GorevSekmesi(QWidget):
 
     # -------- görünür ayar hatası (ne oldu + ne yapmalı; ayrıntı katlı)
     def _hata_goster(self, kimlik: str | None, hata: BaseException | None = None) -> None:
-        self._hata = (kimlik, str(hata) or type(hata).__name__) if kimlik else None
+        """Üst satır: sade cümle + ne yapılacak (GorevHatasi'nin ipucu; yoksa ham olmayan kısa iletisi; o da yoksa
+        genel çare). Ham ileti (istisna metni) yalnız katlı Ayrıntı'da."""
+        ayrinti = T.hata_ayrinti(hata) if hata is not None else ""
+        ipucu = str(getattr(hata, "ipucu", "") or "")
+        mesaj = str(getattr(hata, "mesaj", "") or "")
+        if not ipucu and mesaj and not _HAM_ILETI.search(mesaj):
+            ipucu = mesaj
+        self._care = ipucu
+        self._hata = (kimlik, ayrinti) if kimlik else None
         self.b_ayrinti.setChecked(False)
         self._hata_yaz()
 
@@ -298,7 +338,8 @@ class GorevSekmesi(QWidget):
         self.b_ayrinti.setVisible(h is not None)
         self.l_ayrinti.setVisible(h is not None and self.b_ayrinti.isChecked())
         if h is not None:
-            self.l_hata.setText(_(h[0]))
+            m = _(h[0])
+            self.l_hata.setText(m.format(care=self._care or _(T.G_BASLATMA_CARE)) if "{care}" in m else m)
             self.l_ayrinti.setText(h[1])
             pal = self.l_hata.palette()
             pal.setColor(QPalette.ColorRole.WindowText, QColor(RENK["dur"]))
@@ -393,9 +434,12 @@ class GorevSekmesi(QWidget):
         if self.onay_iste and baslat_onayi_sorulsun() and not self._onayla(metin, siteler):
             return
         self.liste.clear()
+        self._bos_durumlar()
         self._adimlar.clear()
         self._dusunuyor = None
         self.sonuc.clear()
+        if self._hata and self._hata[0] == T.G_BASLATMA_HATA_SADE:
+            self._hata_goster(None)
         self.adim_sayisi = 0
         self._bitis_durumu = ""
         try:
@@ -410,9 +454,11 @@ class GorevSekmesi(QWidget):
                     raise
                 self.g.baslat(metin, masaustu_kapat=True, **ek)
         except gorev.GorevHatasi as e:
+            # UX-F O5: üstte sade cümle + ne yapılacak; ham ileti katlı "Ayrıntı" altında
             self.g = None
             self._bitis_durumu = "hata"
-            self.sonuc.setPlainText(_(T.G_BASLATMA_HATA).format(hata=str(e)))
+            self.sonuc.clear()
+            self._hata_goster(T.G_BASLATMA_HATA_SADE, e)
             self._durum_yaz()
             return
         self.calisiyor, self.durduruluyor = True, False
@@ -485,6 +531,7 @@ class GorevSekmesi(QWidget):
             it.setForeground(self.palette().color(QPalette.ColorRole.PlaceholderText))
         self.liste.addItem(it)
         self.liste.scrollToBottom()
+        self._bos_durumlar()
         return it
 
     def _olay(self, o: dict) -> None:
@@ -546,12 +593,14 @@ class GorevSekmesi(QWidget):
             it.setToolTip(g.get("ozet", ""))
             it.setData(Qt.ItemDataRole.UserRole, g)
             self.gecmis_liste.addItem(it)
+        self._bos_durumlar()
 
     def _gecmis_sec(self, it: QListWidgetItem) -> None:
         g = it.data(Qt.ItemDataRole.UserRole)
         if self.calisiyor or not g:
             return
         self.liste.clear()
+        self._bos_durumlar()
         self._adimlar.clear()
         self.sonuc.setPlainText(g.get("ozet", ""))
         try:

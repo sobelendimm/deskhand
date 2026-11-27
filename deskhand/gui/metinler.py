@@ -25,7 +25,7 @@ DUR_KAYNAK = {"kullanici": N_("siz durdurdunuz"), "cli": N_("ajan/komut satırı
 ONAY_BEKLIYOR = N_("{n} onay bekliyor")
 SANAL_ACIK = N_("Arka plan masaüstü açık ({ekran})")
 SANAL_KAPALI = N_("Arka plan masaüstü kapalı")
-DEVRAL_ACIK = N_("Arka plan masaüstünü siz kullanıyorsunuz (Devral)")
+DEVRAL_ACIK = N_("Kontrol sizde: arka plan masaüstünü siz kullanıyorsunuz")
 
 # ---- tepsi menüsü
 M_DUR = N_("DUR — tüm girdileri durdur")
@@ -52,7 +52,6 @@ S_ARKA = N_("Arka plan ekranı")
 S_ONAY = N_("Onaylar")
 S_ONAY_SAYI = N_("Onaylar ({n})")
 S_AYAR = N_("Ayarlar")
-S_SIMGE = N_("Simgeler")
 S_SAGLIK = N_("Sağlık")
 
 # ---- etkinlik
@@ -78,7 +77,7 @@ E_ONAY_SATIRI = N_("onay ({karar}): {eylem}")  # "onay izin: tıkla 'Öde'" → 
 A_ACIK = N_("Açık: {ekran} · {g}×{y}")
 A_KAPALI = N_("Arka plan masaüstü kapalı.")
 A_YOK = N_("Sanal masaüstü modülü yüklenemedi: {hata}")
-A_BASLAT_YOK = N_("masaustu_baslat işlevi yok")
+A_BASLAT_YOK = N_("bu kurulumda arka plan masaüstü başlatılamıyor")
 A_BASLAT = N_("Başlat")
 A_DURDUR = N_("Durdur")
 A_BASLATILIYOR = N_("Başlatılıyor…")
@@ -87,19 +86,19 @@ A_DEVRAL = N_("Devral")
 A_BIRAK = N_("Bırak")
 A_DEVRAL_IPUCU = N_("Fare ve klavyeniz önizleme üzerinden arka plan masaüstüne gider; bu sırada ajan bekler. "
                     "DUR açıkken girdi gönderilmez.")
-A_DEVRAL_NOT = N_("Devraldınız: önizlemeye tıklayın, yazın. Bitince Bırak.")
+A_DEVRAL_NOT = N_("Kontrol sizde: önizlemeye tıklayın, yazın. Bitince «Geri ver»e basın.")
 A_DEVRAL_HATA = N_("Devral açılamadı: {hata}")
 A_ONIZLEME_YOK = N_("Önizleme yok")
 A_ONIZLEME_HATA = N_("Önizleme yok: {hata}")
 A_GIRDI_HATA = N_("Girdi gönderilemedi: {hata}")
-A_TEKERLEK_YOK = N_("Kaydırma bu sanal arka uç sürümünde Devral sırasında desteklenmiyor")
+A_TEKERLEK_YOK = N_("Kontrol sizdeyken kaydırma bu arka plan masaüstü sürümünde desteklenmiyor")
 
 # ---- onaylar
 O_BEKLEYEN = N_("Bekleyen istekler")
 O_GECMIS = N_("Geçmiş")
 O_BEKLEYEN_SUTUNLAR = (N_("Zaman"), N_("Eylem"), N_("Hedef"), N_("Masaüstü"), N_("Kalan"))
 O_SUTUNLAR = (N_("Zaman"), N_("Eylem"), N_("Hedef"), N_("Masaüstü"), N_("Durum"))
-O_BOS = N_("Bekleyen onay isteği yok.")
+O_BOS = N_("Bekleyen onay yok")
 O_AC = N_("Diyaloğu aç")
 O_KARAR = {"izin": N_("izin verildi"), "red": N_("reddedildi"), "sure": N_("süre doldu"),
            "panel-yok": N_("panel kapalıydı"), "panel-kapandi": N_("panel kapandı"), "dur": N_("DUR nedeniyle red"),
@@ -128,14 +127,14 @@ D_NOT = N_("İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.")
 D_DEVIR_SORU = N_("Claude sizi bekliyor: insan doğrulaması gerekiyor")
 D_DEVIR_BITTI = N_("Bitti")
 D_DEVIR_VAZGEC = N_("Çözemiyorum / Vazgeç")
-D_DEVIR_DEVRAL = N_("Devral")
-D_DEVIR_NOT = N_("Sınamayı kendiniz çözün (Claude çözmez). Arka plan masaüstündeyse Devral'a basın; bitince Bitti. "
+D_DEVIR_DEVRAL = N_("Kontrolü al")
+D_DEVIR_NOT = N_("Sınamayı kendiniz çözün (Claude çözmez). Arka plan masaüstündeyse «Kontrolü al»a basın; bitince Bitti. "
                  "Sınama sayfadan kalkınca da devam edilir.")
 D_IZIN_IPUCU = N_("Kazara izne karşı: birkaç saniye sonra ve fareyi bu pencerenin üzerinde gezdirince etkinleşir.")
 
 # ---- ayarlar
 Y_MESGUL = N_("Meşgulken davranış")
-Y_MESGUL_YOK = N_("Meşgul algılama ayarları bu kurulumda bulunamadı (deskhand.ayarlar yüklenemedi).")
+Y_MESGUL_YOK = N_("Meşgulken davranış ayarları bu kurulumda kullanılamıyor. Deskhand'i yeniden kurmayı deneyin.")
 Y_MESGULKEN = N_("Meşgulken")
 Y_MESGUL_SECENEK = {"sor": N_("Sor (Arka planda / Ekranımda / Sonra)"), "arka": N_("Hep arka planda yap"),
                     "hep-arka": N_("Hep arka planda yap"), "bekle": N_("Bitmesini bekle")}
@@ -160,14 +159,13 @@ Y_METIN_KIPI = N_("Metin olarak düzenle (ileri düzey)")
 Y_PENCERE_SEC_BASLIK = N_("Uygulama ekle")
 Y_PENCERE_SEC = N_("Açık pencerelerden bir uygulama seçin:")
 Y_PENCERE_YOK = N_("Eklenebilecek açık pencere yok. Uygulamayı açıp yeniden deneyin.")
-Y_PENCERE_HATA = N_("Açık pencereler okunamadı ({hata}). Biraz sonra yeniden deneyin.")
 Y_TEMEL = N_("Temel")
 Y_GELISMIS = N_("Gelişmiş")
 Y_UYGULA = N_("Uygula")
 Y_SIFIRLA = N_("Sıfırla")
 Y_DEGISIKLIK_VAR = N_("Kaydedilmemiş değişiklikler var")
 Y_KAYDEDILDI_TIK = N_("Kaydedildi ✓")
-Y_UYGULA_HATA = N_("⚠ {bolum} kaydedilemedi: {hata}. Kayıtlı değer geri yüklendi; yeniden deneyin.")
+Y_UYGULA_HATA = N_("⚠ {bolum} kaydedilemedi. {hata} Kayıtlı değer geri yüklendi.")
 Y_UYGULA_GECERSIZ = N_("⚠ {bolum}: düzeltip yeniden Uygula'ya basın.")
 Y_UYGULA_RED = N_("{bolum}: izin vermediniz; bu değişiklik uygulanmadı.")
 Y_CIKIS_BASLIK = N_("Kaydedilmemiş değişiklikler")
@@ -195,7 +193,6 @@ Y_ONAY_NOT = N_("Hepsi: bugünkü davranış; tüm riskli eylemler (uçbirimde E
                 "sorar. Yalnız kartla ödeme: yalnızca satın alma/ödeme düğmeleri (ve ödeme sayfasında Enter) ile "
                 "kart bilgisi yazma sorar; diğerleri sormadan yapılır (günlüğe yazılır). Yasaklar, erişim "
                 "seviyeleri ve DUR bundan etkilenmez.")
-Y_ONAY_HATA = N_("Onay ayarı kaydedilemedi: {hata}")
 Y_HESAP = N_("Hesap oturumları")
 Y_HESAP_HEPSI = N_("Giriş yaptığım hesaplar görünmez masaüstünde de açık olsun (banka ve ödeme siteleri hariç)")
 Y_HESAP_SECENEK = {
@@ -220,7 +217,6 @@ Y_HESAP_SORU_BASLIK = N_("{hesap}: oturum izni açılsın mı?")
 Y_HESAP_SORU = N_("{hesap} görünmez masaüstündeki tarayıcıda oturum açık kullanılabilecek.\n\n"
                   "Arka plandaki tarayıcı bu hesabın e-postalarına ve dosyalarına erişebilir; güvenilmeyen bir sayfa "
                   "ajanı kandırabilir. Yalnız gerektiğinde açın, işiniz bitince kapatın.\n\nAçılsın mı?")
-Y_HESAP_HATA = N_("Hesap oturumu ayarı kaydedilemedi: {hata}")
 Y_DIL = N_("Dil")
 Y_DIL_OTOMATIK = N_("Otomatik (sistem dili: {dil})")
 Y_DIL_NOT = N_("Arayüzün dili. Panel ve tepsi menüsü hemen değişir; komut satırı ve ajanın (MCP) iletileri yeni "
@@ -229,7 +225,6 @@ Y_DIL_NOT_UYGULA = N_("Arayüzün dili. Uygula'ya basınca panel ve tepsi menüs
                       "(MCP) iletileri yeni başlatılan süreçlerde geçerli olur.")
 Y_DIL_ZORLA =N_("DESKHAND_DIL ortam değişkeni bu süreçte dili zorluyor ({dil}); seçim kaydedildi, sonraki "
                  "açılışta geçerli olur.")
-Y_DIL_HATA = N_("Dil kaydedilemedi: {hata}")
 Y_KISAYOL = N_("Genel kısayol")
 Y_KISAYOL_AC = N_("Klavye kısayoluyla DUR (KDE genel kısayolu)")
 Y_KISAYOL_TUS = N_("Tuş")
@@ -237,12 +232,11 @@ Y_KISAYOL_NOT = N_("Varsayılan kapalıdır. Açınca kısayol KDE'ye bu uygulam
                    "silinir. Çalışmazsa tepsi simgesindeki DUR yeterlidir.")
 Y_KISAYOL_CAKISMA = N_("Çakışma: {tus} şu an «{eylem}» ({bilesen}) için kullanılıyor.")
 Y_KISAYOL_BOS = N_("{tus} boşta görünüyor.")
-Y_KAYIT_HATA = N_("Kaydedilemedi: {hata}")
 Y_KISAYOL_HATA = N_("Kısayol kaydedilemedi: {hata}")
 Y_KISAYOL_TAMAM = N_("Kısayol etkin: {tus}")
 
 # ---- simgeler
-I_BOS = N_("Kayıtlı simge yok. Ajan `simge-kaydet` ile yazısız düğmeleri kaydettiğinde burada görünür.")
+I_BOS = N_("Kayıtlı simge yok. Ajan yazısı olmayan düğmeleri (yalnız simgesi olanları) kaydettiğinde burada görünür.")
 I_SIL = N_("Sil")
 I_YENILE = N_("Yenile")
 I_SIL_SORU = N_("«{ad}» simgesi silinsin mi? Bu simgeyi kullanan akışlar artık onu bulamaz.")
@@ -267,13 +261,12 @@ KAPAT = N_("Kapat")
 G_KUTU_IPUCU = N_("Ne yapılmasını istiyorsunuz? Örn: «Trendyol'da şu kasayı sepete ekle», «İndirilenler'i düzenle»")
 G_BASLAT = N_("Başlat")
 G_BASLAT_IPUCU = N_("Görevi Claude'a verir (Ctrl+Enter). Claude görünmez masaüstünde çalışır; ekranınıza dokunmaz.")
-G_DURDUR = N_("Durdur")
-G_DURDUR_IPUCU = N_("Görevi hemen durdurur. Görünmez masaüstü açık kalır.")
-G_DEVRAL = N_("Devral")
-G_BIRAK = N_("Bırak")
+G_DEVRAL = N_("Kontrolü al")
+G_BIRAK = N_("Geri ver")
 G_DEVRAL_IPUCU = N_("Görünmez masaüstünü siz kullanın (Arka plan ekranı sekmesi): giriş, CAPTCHA, doğrulama kodu…")
 G_MODEL = N_("Model")
-G_MODEL_AD = {"sonnet": N_("Sonnet (dengeli)"), "opus": N_("Opus (güçlü, yavaş)"), "haiku": N_("Haiku (hızlı, basit)")}
+G_MODEL_AD = {"sonnet": N_("Dengeli · Sonnet"), "opus": N_("Güçlü, daha yavaş · Opus"),
+              "haiku": N_("Hızlı, basit işler · Haiku")}
 G_MODEL_IPUCU = N_("Görevi yapan Claude modeli (Claude Code aboneliğiniz kullanılır).")
 G_ADIMLAR = N_("Adımlar")
 G_SONUC = N_("Sonuç")
@@ -287,7 +280,6 @@ G_DURDURULUYOR = N_("Durduruluyor…")
 G_SANAL_YOK = N_("Görünmez masaüstü henüz açık değil. Claude açınca burada canlı görünür.")
 G_ONIZLEME_BOS = N_("Görev çalışırken görünmez masaüstü burada canlı görünür.")
 G_ONIZLEME_HATA = N_("Görüntü alınamadı: {hata}")
-G_BASLATMA_HATA = N_("Görev başlatılamadı: {hata}")
 G_DUSUNUYOR = N_("Düşünüyor…")
 G_HATA_SATIRI = N_("Hata: {ozet}")
 G_GECMIS_SATIRI = N_("{zaman} · {durum} · {metin}")
@@ -356,6 +348,69 @@ A_SON_YOK = N_("—")
 A_EYLEM = N_("Ajan şu an: {eylem} · [{pencere}] · {once}")
 A_EYLEM_YOK = N_("Ajan şu an: bu masaüstünde henüz bir eylem yok")
 A_EYLEM_GIZLI = N_("gizli alana yazı (içerik gösterilmez)")
-A_DEVRAL_ADLI = N_("Bu, bir ajanın kendi masaüstü: burada yalnız izlersiniz. Devral varsayılan masaüstünde ya da bir "
-                   "onay devrinde açılır.")
+A_DEVRAL_ADLI = N_("Bu, bir ajanın kendi masaüstü: burada yalnız izlersiniz. «Kontrolü al» varsayılan masaüstünde ya da "
+                   "bir onay devrinde açılır.")
 A_MASKE_HATA = N_("Önizleme gizlendi: yasak pencereler denetlenemedi ({hata})")
+
+# ---------------------------------------------------------------- UX-F (O4–O9): iki katmanlı hata, Sağlık özeti, Görev
+# Hata iletisi iki katman: üstte sade cümle + ne yapılacak (hata_ozeti), ham istisna yalnız katlı "Ayrıntı" altında.
+D_AYRINTI_DUGME = N_("Ayrıntı")
+HATA_CARE = {
+    "izin": N_("Ayar dosyası yazılamıyor. Klasör izinlerini kontrol edin."),
+    "disk": N_("Disk dolu: kaydedilemedi. Biraz yer açıp yeniden deneyin."),
+    "salt": N_("Ayar klasörü salt okunur: kaydedilemedi. Klasörün yazılabilir olduğunu kontrol edin."),
+    "yok": N_("Gerekli bir dosya ya da klasör bulunamadı. Deskhand'i yeniden başlatıp yeniden deneyin."),
+    "dosya": N_("Ayar dosyası yazılamıyor. Disk dolu mu? Klasör izinlerini kontrol edin."),
+    "genel": N_("Beklenmeyen bir sorun oldu. Yeniden deneyin; sürerse Sağlık sekmesine bakın."),
+}
+
+
+def hata_turu(e: BaseException | None) -> str:
+    """İstisna → HATA_CARE anahtarı (Qt'siz; ham metin kullanıcıya gösterilmez)."""
+    import errno
+    if isinstance(e, PermissionError) or getattr(e, "errno", None) in (errno.EACCES, errno.EPERM):
+        return "izin"
+    if getattr(e, "errno", None) in (errno.ENOSPC, errno.EDQUOT):
+        return "disk"
+    if getattr(e, "errno", None) == errno.EROFS:
+        return "salt"
+    if isinstance(e, FileNotFoundError):
+        return "yok"
+    if isinstance(e, OSError):
+        return "dosya"
+    return "genel"
+
+
+def hata_ozeti(e: BaseException | None) -> str:
+    """Sade cümle + ne yapılacak (etkin dilde)."""
+    from ..i18n import _
+    return _(HATA_CARE[hata_turu(e)])
+
+
+def hata_ayrinti(e: BaseException | object) -> str:
+    """Katlı ayrıntı: ham istisna metni (tür adı yalnız metin boşsa)."""
+    m = str(getattr(e, "mesaj", None) or e) if e is not None else ""
+    return m or type(e).__name__
+
+
+Y_PENCERE_OKUNAMADI = N_("Açık pencereler okunamadı. Biraz sonra yeniden deneyin.")
+Y_GOREV = N_("Görev")
+Y_GOREV_ONAY = N_("Görev başlatmadan önce onay sor")
+Y_GOREV_ONAY_NOT = N_("Kapalıyken Görev sekmesindeki Başlat onay penceresi göstermeden çalışır. Görev penceresinde "
+                      "«Bir daha sorma» dediyseniz buradan yeniden açabilirsiniz.")
+Y_ACIKLAMA = N_("Açıklama")
+Y_SIMGELER = N_("Kayıtlı simgeler")
+Y_SIMGELER_NOT = N_("Ajanın tanıdığı yazısız düğmeler. Silerseniz ajan o düğmeyi yeniden öğrenmek zorunda kalır.")
+G_BASLATMA_HATA_SADE = N_("Görev başlatılamadı. {care}")
+G_BASLATMA_CARE = N_("Claude Code'un kurulu ve oturumunuzun açık olduğunu kontrol edip yeniden deneyin.")
+G_ADIMLAR_BOS = N_("görev başlayınca adımlar burada görünür")
+G_SONUC_BOS = N_("Görev bitince sonuç burada görünür.")
+G_GECMIS_BOS = N_("henüz görev yok")
+H_HEPSI_TAMAM = N_("Her şey hazır ✓")
+H_SORUN_VAR = N_("{n} sorun var")
+H_SORUN_TEK = N_("1 sorun var")
+H_SORUN_NOT = N_("Aşağıdaki bileşenler eksik. Komutu kopyalayıp bir uçbirimde çalıştırın, sonra «Yeniden denetle».")
+H_KOPYALA = N_("Kopyala")
+H_KOPYALA_IPUCU = N_("Kurulum komutunu panoya kopyalar: {komut}")
+H_KOPYALANDI = N_("Kopyalandı: {komut}")
+H_TUMU = N_("Tüm bileşenler")

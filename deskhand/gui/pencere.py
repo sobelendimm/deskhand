@@ -1,5 +1,5 @@
-"""Panel penceresi: durum şeridi (DUR/Devam) + sekmeler (Görev, Etkinlik, Arka plan ekranı, Onaylar, Ayarlar, Simgeler,
-Sağlık). Görünüm sistem paletinden (Breeze açık/koyu); sabit renk yalnız durum renklerinde."""
+"""Panel penceresi: durum şeridi (DUR/Devam) + sekmeler (Görev, Etkinlik, Arka plan ekranı, Onaylar, Ayarlar, Sağlık;
+kayıtlı simgeler Ayarlar › Gelişmiş altında). Görünüm sistem paletinden (Breeze açık/koyu); sabit renk yalnız durum renklerinde."""
 from __future__ import annotations
 
 
@@ -59,15 +59,14 @@ class AnaPencere(QMainWindow):
         self.arka.etkinlik_ekle(ilk)
         self.onaylar = OnaylarSekmesi()
         self.onaylar.gecmis_ekle(ilk)
-        self.ayarlar = AyarlarSekmesi(karar=karar, cakisma_f=cakisma_f)
-        self.simgeler = SimgelerSekmesi(sor=simge_sor)
+        self.ayarlar = AyarlarSekmesi(karar=karar, cakisma_f=cakisma_f, simge_sor=simge_sor)
+        self.simgeler = self.ayarlar.simgeler  # UX-F O7: ayrı sekme değil, Ayarlar › Gelişmiş'te
         self.saglik = SaglikSekmesi(denetle=saglik_f)
         for w, ad, ikon in ((self.gorev, T.S_GOREV, "system-run"),
                             (self.etkinlik, T.S_ETKINLIK, "view-list-details"),
                             (self.arka, T.S_ARKA, "video-display"),
                             (self.onaylar, T.S_ONAY, "dialog-question"),
                             (self.ayarlar, T.S_AYAR, "configure"),
-                            (self.simgeler, T.S_SIMGE, "folder-pictures"),
                             (self.saglik, T.S_SAGLIK, "checkmark")):
             i = self.sekmeler.addTab(w, QIcon.fromTheme(ikon), "")
             if w is not self.onaylar:  # Onaylar'ın adı bekleyen sayısını taşır: durum_guncelle yazar
@@ -95,7 +94,7 @@ class AnaPencere(QMainWindow):
         """Dil değişti (i18n yeniden yüklendi): tüm görünen metinler yeni dilde; içerik ve durum korunur."""
         self.mt.tazele()
         self.serit.tazele()
-        for sekme in (self.gorev, self.etkinlik, self.arka, self.onaylar, self.ayarlar, self.simgeler, self.saglik):
+        for sekme in (self.gorev, self.etkinlik, self.arka, self.onaylar, self.ayarlar, self.saglik):
             sekme.tazele()
         self._onay_sekmesi_yaz()
 

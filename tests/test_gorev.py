@@ -390,7 +390,7 @@ gec = [{"dosya": os.path.join(gorev.gecmis_dizini(), "x.jsonl"), "id": "x", "zam
 w = AnaPencere([], arka_f=SahteArka, masaustu_m=SahteMasaustu, gorev_f=SahteGorev)
 sek = w.gorev
 kontrol("pencere: Görev sekmesi İLK sekme", w.sekmeler.widget(0) is sek and w.sekmeler.tabText(0) == "Görev"
-        and w.sekmeler.count() == 7)
+        and w.sekmeler.count() == 6)
 tp = Tepsi()
 kontrol("tepsi menüsünde 'Görev ver…'", tp.a_gorev.text() == "Görev ver…")
 alinan = []
@@ -415,7 +415,7 @@ kontrol("boş görev başlamaz", SahteGorev.son is None and not sek.calisiyor)
 sek.kutu.setPlainText("HATA")
 sek.baslat()
 kontrol("başlatma hatası: açık Türkçe hata + ipucu, kilitlenmez",
-        not sek.calisiyor and "bulunamadı" in sek.sonuc.toPlainText() and "kurun" in sek.sonuc.toPlainText()
+        not sek.calisiyor and "kurun" in sek.l_hata.text() and "bulunamadı" in sek.l_ayrinti.text()
         and sek.b_baslat.isEnabled() and not sek.kutu.isReadOnly())
 
 sek.kutu.setPlainText("Trendyol'da şu kasayı sepete ekle")
@@ -477,11 +477,11 @@ kontrol("canlı görüntüde Devral girdisi kapalı (yalnız izleme)", not sek.o
 sek.b_devral.click()
 app.processEvents()
 kontrol("Devral düğmesi: Arka plan ekranı açılır, Devral AÇIK", w.sekmeler.currentWidget() is w.arka
-        and w.arka.b_devral.isChecked() and sek.b_devral.text() == "Bırak", sek.b_devral.text())
+        and w.arka.b_devral.isChecked() and sek.b_devral.text() == "Geri ver", sek.b_devral.text())
 w.sekmeler.setCurrentWidget(sek)
 sek.b_devral.click()
 app.processEvents()
-kontrol("Devral düğmesi tekrar: Devral kapanır", not w.arka.b_devral.isChecked() and sek.b_devral.text() == "Devral")
+kontrol("Devral düğmesi tekrar: Devral kapanır", not w.arka.b_devral.isChecked() and sek.b_devral.text() == "Kontrolü al")
 
 # durdur
 sek.b_durdur.click()
