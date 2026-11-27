@@ -22,8 +22,10 @@ desenleri ve diğer girdiler hiçbir izinle etkilenmez (bir alan kalan herhangi 
 from __future__ import annotations
 
 import fnmatch
+import functools
 import os
 import tomllib
+import unicodedata
 
 from .. import yollar
 
@@ -45,7 +47,7 @@ _VARSAYILAN_AD = "_varsayilan"
 def kimlik_alani_mi(alan: str) -> bool:
     """Alan (çerez alanı, baştaki nokta önemsiz) bir kimlik sağlayıcısının merkezi kimlik alanı ya da onun üst alanı mı
     (".google.com" çerezi accounts.google.com'a da gider). Kapanış uyarısı yalnız bunları kullanıcıya gösterir."""
-    alan = (alan or "").strip().lower().lstrip(".").rstrip(".")
+    alan = _alan_normu(alan or "")[0].lstrip(".")
     if not alan:
         return False
     for kaliplar in KIMLIK_ALANLARI.values():
@@ -167,8 +169,10 @@ class Politika:
         from ..arka_ortak import gecerli_politika_ev_girdisi
         self.ev = tuple(g for g in (ham.get("ev") or ()) if gecerli_politika_ev_girdisi(g)) \
             if isinstance(ham.get("ev"), (list, tuple)) else ()
-        self._reddet = tuple(site.get("reddet", ()))
-        self._izin = tuple(site.get("izin", ()))
+        # rules keep their written text; every comparison uses all their spellings (_bicimler, cached): equivalent
+        # spellings (trailing dot, case, IDNA dots, Unicode ↔ punycode) behave the same and none is lost
+        self._reddet = tuple(str(k).strip() for k in site.get("reddet", ()))
+        self._izin = tuple(str(k).strip() for k in site.get("izin", ()))
         self.bilinen = True
 
     def karar(self, calisiyor: bool) -> str:
@@ -179,16 +183,20 @@ class Politika:
         değişmez). Yalnız KIMLIK_ALANLARI'ndaki tam girdiler çıkar; desenler (`*bank*`, `*.gov.tr`) ve diğer alanlar
         aynen kalır. Bilinmeyen sağlayıcı adı yok sayılır. Çağıran görev kipinde ÇAĞIRMAZ."""
         import copy
-        cikar = {a for s in (saglayicilar or ()) for a in KIMLIK_ALANLARI.get(s, ())}
+        cikar = {_kural_anahtari(a) for s in (saglayicilar or ()) for a in KIMLIK_ALANLARI.get(s, ())}
         if not cikar:
             return self
         yeni = copy.copy(self)
-        yeni._reddet = tuple(k for k in self._reddet if str(k).strip().lower() not in cikar)
+        # equivalent spellings of the same entry (`login.live.com.`, `.LOGIN.LIVE.COM`) are the same entry
+        yeni._reddet = tuple(k for k in self._reddet if _kural_anahtari(k) not in cikar)
         return yeni
 
     # ---- site süzme ----
     def site_reddedildi(self, alan: str) -> bool:
-        """alan ret listesinde mi (kendisi ya da üst alanı)?"""
+        """alan ret listesinde mi (kendisi ya da üst alanı)? Any spelling (_bicimler: ANY spelling matching rejects); a host whose IDNA label cannot
+        be converted is rejected (closed-fail: its real name is unknown)."""
+        if alan and not _alan_normu(alan)[1]:
+            return True
         return _alan_eslesir(alan, self._reddet)
 
     def cerez_reddedildi(self, host: str, bilinen_konaklar=()) -> bool:
@@ -203,29 +211,41 @@ class Politika:
             literally it would drop every domain cookie, so it only rejects `.alan` with evidence: a host known from
             the profile (`bilinen_konaklar`: cookie hosts, site storage, session cookies, open tabs, places.sqlite
             history incl. its WAL) that is a subdomain of alan and is rejected.
+          The fixed part before the trailing `*`s is still decided from the rule alone (`*.bank.com*` → as
+          `*.bank.com`: `*` may match the empty string), so a trailing `*` never weakens a fixed-tail rule.
+        Every spelling of host and rules is tried (_bicimler: case, trailing dots, IDNA dots, Unicode and punycode);
+        a host with an unconvertible IDNA label is rejected (closed-fail).
         Residual limit: a trailing-`*` rule does not cover a subdomain the profile has never seen."""
-        h = (host or "").strip().lower()
-        alan = h.lstrip(".").rstrip(".")
+        r, u, a, tamam = _bicimler(str(host or ""))
+        alan = r.lstrip(".")
         if not alan:
             return False
-        if self.site_reddedildi(alan):
+        if not tamam or self.site_reddedildi(alan):
             return True
-        if not h.startswith("."):
+        if not r.startswith("."):
             return False
-        for k in self._reddet:
-            k = str(k).strip().lower()
-            if not k:
-                continue
-            # plain rule equal to / under alan (also a leading-dot rule `.bank.com` → `.bank.com`)
-            if "*" not in k and "?" not in k and "[" not in k and (k == alan or k.endswith("." + alan)):
-                return True
-            # the ONLY switch between "decided from the rule" and "needs evidence": the trailing `*`
-            if not k.endswith("*") and _alt_alana_uyabilir(k, alan):
-                return True
+        # every spelling of the domain (raw / unicode / ace, same index as _bicimler) against every spelling of a rule
+        alanlar = (alan, u.lstrip("."), a.lstrip(".") if a is not None else None)
+        adaylar = tuple(dict.fromkeys(x for x in alanlar if x))
+        for kural in self._reddet:
+            for k in _formlar(kural):
+                for al in adaylar:
+                    # plain rule equal to / under alan (also a leading-dot rule `.bank.com` → `.bank.com`)
+                    if "*" not in k and "?" not in k and "[" not in k and (k == al or k.endswith("." + al)):
+                        return True
+                    # the ONLY switch between "decided from the rule" and "needs evidence": the trailing `*`; its
+                    # fixed part (the rule with the trailing `*`s removed) is decided from the rule as well
+                    sabit = k.rstrip("*")
+                    if sabit and _alt_alana_uyabilir(sabit, al):
+                        return True
         for b in bilinen_konaklar or ():
-            b = str(b).strip().lower().lstrip(".").rstrip(".")
-            if b != alan and b.endswith("." + alan) and self.site_reddedildi(b):
-                return True
+            br, bu, ba, b_tamam = _bicimler(str(b))
+            for bx, ax in zip((br, bu, ba), alanlar, strict=True):  # the same spelling on both sides
+                if bx is None or ax is None:
+                    continue
+                bx = bx.lstrip(".")
+                if bx != ax and bx.endswith("." + ax) and (not b_tamam or self.site_reddedildi(bx)):
+                    return True
         return False
 
     def site_izinli(self, alan: str, gorev_siteleri=None) -> bool:
@@ -236,7 +256,7 @@ class Politika:
         izin = tuple(self._izin) + tuple(gorev_siteleri or ())
         if not izin:
             return True
-        return _alan_eslesir(alan, izin)
+        return _alan_eslesir(alan, izin, hepsi=True)  # allow: both spellings of alan must match
 
 
 def _glob_parcala(kural: str) -> list[tuple[str, str]]:
@@ -312,20 +332,113 @@ def _alt_alana_uyabilir(kural: str, alan: str) -> bool:
     return False
 
 
-def _alan_eslesir(alan: str, kaliplar) -> bool:
-    alan = (alan or "").strip().lower().rstrip(".")
+# IDNA label separators besides "." (UTS #46 / RFC 3490 §3.1): a rule or host written with them is the same name
+_IDNA_NOKTALARI = ("。", "．", "｡")
+
+
+_GLOB = ("*", "?", "[")
+
+
+@functools.lru_cache(maxsize=16384)
+def _bicimler(metin: str) -> tuple[str, str, str | None, bool]:
+    """The spellings of a host name or a reject/allow rule, so that equivalent spellings meet:
+      raw     whitespace trimmed, IDNA dots → ".", lower case, trailing dot(s) dropped (labels as written);
+      unicode every non-ASCII or ACE (`xn--…`) label → its nameprep'd Unicode form (`bankası`, `xn--bankas-u9a`);
+      ace     every label of the unicode form that is still non-ASCII → its ACE form (None when a label cannot be
+              encoded, or for a rule label mixing glob characters with non-ASCII text: no meaningful ACE pattern).
+    ASCII labels, empty labels (a leading dot keeps its meaning) and glob characters are left as they are. A REJECT
+    decision tries every spelling of the host against every spelling of the rule (any match rejects: a rule written
+    in ACE, `*xn--*`, and `*bank*` against `xn--bank-cpa` keep working); an ALLOW decision needs the unicode AND the
+    ace spelling of the host to match (_alan_eslesir hepsi=True).
+    converted=False when some label could not be converted (broken punycode, an ACE label that decodes to ASCII or to
+    upper-case / unnormalised text, a character nameprep prohibits, a label too long for ACE); that label is kept
+    lower-cased as written. Callers treat an unconvertible HOST as rejected (closed-fail)."""
+    s = str(metin or "").strip()
+    for n in _IDNA_NOKTALARI:
+        s = s.replace(n, ".")
+    s = s.lower().rstrip(".")
+    if s.isascii() and "xn--" not in s:
+        return s, s, s, True  # fast path: plain ASCII names (almost every host)
+    from encodings import idna
+    uni: list[str] = []
+    ace: list[str] | None = []
+    tamam = True
+    for e in s.split("."):
+        u = e
+        try:
+            if e.startswith("xn--"):
+                d = e[4:].encode("ascii").decode("punycode")
+                if not d or d.isascii():
+                    raise UnicodeError("ACE label without non-ASCII characters")
+                if unicodedata.normalize("NFC", d).lower() != d:  # IDNA never encodes upper case / unnormalised
+                    raise UnicodeError("non-canonical ACE label")   # text (`xn--bankas-n9a` = "bankasİ")
+                u = idna.nameprep(d)
+            elif not e.isascii():
+                u = idna.nameprep(e)
+        except (UnicodeError, ValueError):
+            tamam = False
+            u = e
+        uni.append(u)
+        if ace is None:
+            continue
+        if u.isascii():
+            ace.append(u)
+        elif any(g in u for g in _GLOB):
+            ace = None  # a glob inside a non-ASCII rule label has no ACE equivalent
+        else:
+            try:
+                ace.append(idna.ToASCII(u).decode("ascii"))
+            except (UnicodeError, ValueError):
+                ace, tamam = None, False
+    return s, ".".join(uni), (".".join(ace) if ace is not None else None), tamam
+
+
+@functools.lru_cache(maxsize=16384)
+def _formlar(metin: str) -> tuple[str, ...]:
+    """Distinct non-empty spellings (raw, unicode, ace) of _bicimler."""
+    r, u, a, _ = _bicimler(metin)
+    return tuple(dict.fromkeys(f for f in (r, u, a) if f))
+
+
+def _alan_normu(metin: str) -> tuple[str, bool]:
+    """(unicode spelling, converted) of _bicimler: one canonical form for display / equality."""
+    _, u, _, tamam = _bicimler(str(metin or ""))
+    return u, tamam
+
+
+def _kural_anahtari(kural) -> str:
+    """Identity of a rule for kimlik_izni_uygula: unicode spelling; a plain rule without its leading dot
+    (`.login.live.com` is the same entry as `login.live.com`)."""
+    u = _alan_normu(str(kural))[0]
+    return u if any(g in u for g in _GLOB) else u.lstrip(".")
+
+
+def _tek_eslesir(alan: str, k: str) -> bool:
+    """One spelling of a host against one spelling of a rule: fnmatch, or a plain rule (no `*`, `?`) covering
+    subdomains; a leading dot on a plain rule (`.bank.com`) means the same as `bank.com`."""
+    if fnmatch.fnmatchcase(alan, k):
+        return True
+    duz = k.lstrip(".")
+    return bool(duz) and "*" not in k and "?" not in k and (alan == duz or alan.endswith("." + duz))
+
+
+def _alan_eslesir(alan: str, kaliplar, hepsi: bool = False) -> bool:
+    """alan matches one of the fnmatch rules, every spelling (_bicimler) of the rules considered.
+    hepsi=False (reject lists): ANY spelling of alan matching rejects.
+    hepsi=True (allow lists): the unicode AND the ace spelling of alan must each match (no spelling widens access).
+    An unconvertible alan only matches as written: callers that reject decide closed-fail themselves
+    (Politika.site_reddedildi)."""
     if not alan:
         return False
-    for k in kaliplar:
-        k = str(k).strip().lower()
-        if not k:
-            continue
-        if fnmatch.fnmatch(alan, k):
-            return True
-        # kalıp düz alan adıysa alt alanları da yakala (github.com → api.github.com)
-        if "*" not in k and "?" not in k and (alan == k or alan.endswith("." + k)):
-            return True
-    return False
+    r, u, a, _ = _bicimler(str(alan))
+    if not r:
+        return False
+    kurallar = [f for k in kaliplar for f in _formlar(str(k))]
+    if not kurallar:
+        return False
+    adaylar = tuple(dict.fromkeys(f for f in (u, a) if f)) if hepsi else _formlar(str(alan))
+    sec = all if hepsi else any
+    return sec(any(_tek_eslesir(h, k) for k in kurallar) for h in adaylar)
 
 
 def coz(uygulama: str, yapilandirma: dict | None = None) -> Politika:
