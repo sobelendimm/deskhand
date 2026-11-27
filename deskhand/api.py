@@ -277,11 +277,6 @@ def _kutulara(geolar, kok_ekran: tuple[int, int], boyut: tuple[int, int]) -> lis
     return sonuc
 
 
-def _yasak_dikdortgenler(k: str, kok_ekran: tuple[int, int], boyut: tuple[int, int]) -> list[dict]:
-    """Görüntüye düşen yasak pencerelerin kutuları (görüntü pikseli, ölçeksiz; tek okuma)."""
-    return _kutulara(list(_yasak_geometriler(k).items()), kok_ekran, boyut)
-
-
 def _maske_okunamadi(e: BaseException) -> Dur:
     neden = getattr(e, "neden", e)
     kod = neden.kod if isinstance(neden, Dur) else ZAMAN_ASIMI
