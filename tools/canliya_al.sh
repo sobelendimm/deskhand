@@ -8,7 +8,8 @@ HEDEF_DAL="${1:?kullanım: canliya_al.sh HEDEF_DAL [--kuru]}"
 KURU=0; [[ "${2:-}" == "--kuru" ]] && KURU=1
 DH="$HOME/.local/bin/deskhand"
 HELPER="$DEPO/deskhand/yardimci"
-PANEL_RE="^/usr/bin/python3 ($HOME/.local/bin|$HOME/.local/src/deskhand/bin)/deskhand panel"
+# install.sh sarmalayıcısı `#!/usr/bin/python3 -I` (H3-R9) → -I isteğe bağlı; yoksa yeni panel "bulunamadı" sanılır
+PANEL_RE="^/usr/bin/python3( -I)? ($HOME/.local/bin|$HOME/.local/src/deskhand/bin)/deskhand panel"
 ESKI_SURUM="?"; ESKI_UC="?"; YEDEK_TAR=""
 
 adim() { echo; echo "=== [$(date +%H:%M:%S)] $* $( ((KURU)) && echo '(KURU)')==="; }
