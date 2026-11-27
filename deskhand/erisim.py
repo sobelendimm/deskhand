@@ -571,10 +571,14 @@ def _ayrinti(Atspi, o, rol, ss, S, eylem_hepsi=False):
         except Exception:  # noqa: BLE001
             deger = None
         if deger:
-            ipuclari, nit = _deger_ipuclari_nit(o)
-            deger = _deger_temizle(deger, *ipuclari, ipucusuz=not maske.tanitici_var(nit))
+            # masaüstü (Qt/GTK): id/placeholder/autocomplete HİÇ yok (OLCUM-QT-GTK) → web'in tanıtıcı kuralı UYGULANMAZ;
+            # içerik kuralları (Luhn, kısa kod, harf+rakam kod) her alanda, ad yalnız zararsız ipucu muafiyeti için
+            ipuclari, _nit = _deger_ipuclari_nit(o)
+            deger = _deger_temizle(deger, *ipuclari, ipucusuz=not maske.zararsiz(ipuclari))
         if deger:
             e["deger"] = deger if len(deger) <= DEGER_SINIRI else deger[:DEGER_SINIRI - 1] + "…"
+    elif rol == "password text":
+        e["deger"] = "***"  # değer ve uzunluğu (maske dizisi/character_count) OKUNMAZ; yalnız "dolu olabilir" işareti
     return e
 
 

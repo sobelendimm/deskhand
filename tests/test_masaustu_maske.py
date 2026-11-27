@@ -65,7 +65,14 @@ kontrol("masaüstü: ipucusuz 4 haneli PIN → ***", deger("Giriş", "4829") == 
 kontrol("masaüstü: ipucusuz 6 haneli OTP → ***", deger("Kod", "482913") == "***", str(deger("Kod", "482913")))
 kontrol("masaüstü: tam genişlikli rakam OTP → ***", deger("A1", "４８２９１３") == "***")
 kontrol("masaüstü: sıradan metin korunur", deger("Şehir", "Çınarlı") == "Çınarlı", str(deger("Şehir", "Çınarlı")))
-kontrol("masaüstü: parola rolü (niteliksiz) değeri okunmaz", deger("", "gizli-1", rol="password text") is None)
+kontrol("masaüstü: parola rolü (niteliksiz) değeri okunmaz, uzunluk vermez → ***",
+        deger("", "gizli-1", rol="password text") == "***" and deger("", "uzun-gizli-12", rol="password text") == "***")
+kontrol("masaüstü: zararsız ad (Adet/Yıl/Posta kodu) kısa sayıyı açar", deger("Adet", "250") == "250"
+        and deger("Yıl", "2026") == "2026" and deger("Posta kodu", "34000") == "34000")
+kontrol("masaüstü: zararsız ad Luhn'lu kartı açmaz",
+        deger("Adet", "4111111111111111") == "***" and deger("Posta kodu", "4111 1111 1111 1111") == "***")
+kontrol("masaüstü: GTK nitelikleri (toolkit, keyshortcuts) kısa kodu açmaz",
+        deger("Kod", "482913", {"toolkit": "gtk", "keyshortcuts": "Alt+K"}) == "***")
 
 # Ortak çekirdek (maske.py): poc2 A–P karşılıkları (INCELEME-maske-R2-A; id'li "nötr" alan: ipucusuz değil)
 for ad, v in (("A 9 hane OTP", "123456789"), ("B 6 hane", "482913"), ("C harf+rakam kod", "A7K9Q2"),
