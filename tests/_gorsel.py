@@ -127,10 +127,10 @@ def diyalog_istekleri(s: float = SABIT_SAAT) -> dict:
     işlev içinde içe aktarılır (modül Qt/deskhand içe aktarmaz)."""
     from deskhand import onay
     return {
-        "odeme": {"id": "a1", "eylem": "Düğmeye tıkla: “Öde”", "hedef": "Trendyol — Sepetim — Firefox",
+        "odeme": {"id": "a1", "konu": "odeme", "eylem": "Düğmeye tıkla: “Öde”", "hedef": "Trendyol — Sepetim — Firefox",
                   "masaustu": "arka", "masa": "", "ayrinti": "HASSAS düğme ('öde' ← ['Öde', 'Siparişi tamamla'])",
                   "zaman": s, "son_zaman": s + 118, "pid": 4242},
-        "tus": {"id": "a2", "eylem": "Riskli tuş: ctrl+w", "hedef": "Belge — KWrite", "masaustu": "ekran",
+        "tus": {"id": "a2", "konu": "tus", "eylem": "Riskli tuş: ctrl+w", "hedef": "Belge — KWrite", "masaustu": "ekran",
                 "ayrinti": "pencere kapatma kısayolu\ntuş: ctrl+w", "zaman": s, "son_zaman": s + 100},
         "devir": {"id": "a3", "tur": onay.TUR_DEVIR, "eylem": "CAPTCHA", "hedef": "Giriş — Firefox",
                   "masaustu": "arka", "zaman": s, "son_zaman": s + 300},

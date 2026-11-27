@@ -743,7 +743,7 @@
  ],
  "Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin.": [
   "guvenlik.py:2743",
-  "onay.py:952"
+  "onay.py:956"
  ],
  "Bir masaüstü seçin: önizleme onu gösterir (yalnız izleme).": [
   "gui/metinler.py:350"
@@ -972,7 +972,7 @@
  ],
  "DUR kaldırılsın mı?": [
   "guvenlik.py:2742",
-  "onay.py:951"
+  "onay.py:955"
  ],
  "DUR kaldırılsın mı? Ajan yeniden girdi gönderebilir.": [
   "gui/metinler.py:45"
@@ -1793,13 +1793,13 @@
   "gui/metinler.py:283"
  ],
  "Onay isteği gösterildikten sonra değişti; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1036"
+  "onay.py:1040"
  ],
  "Onay isteği isteyenin yazdığı hâliyle aynı değil (dosya panel okumadan önce değişti ya da aynı istek için farklı bir karma geldi); istek reddedildi.": [
-  "onay.py:1041"
+  "onay.py:1045"
  ],
  "Onay isteğinin panelde gösterilen hâli bilinmiyor; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1044"
+  "onay.py:1048"
  ],
  "Onay kapsamı": [
   "doktor.py:149",
@@ -4327,7 +4327,7 @@
   "guvenlik.py:1447"
  ],
  "onay iletişim kutusu": [
-  "onay.py:781"
+  "onay.py:783"
  ],
  "onay isteği başarısız ({hata})": [
   "mcp_sunucu.py:701"
@@ -6225,7 +6225,7 @@
   "guvenlik.py:1720"
  ],
  "İsteyenin yazdığı isteğin karması onay kanalından gelmedi; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1038"
+  "onay.py:1042"
  ],
  "İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.": [
   "gui/metinler.py:126"

@@ -760,7 +760,7 @@ def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str, tur
 
 def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran", sure: float = VARSAYILAN_SURE,
                goruntu=None, gunluge_yaz: bool = True, tur: str = "", kontrol=None, iptal=None,
-               dur_kaldirma: bool = False) -> OnaySonucu:
+               dur_kaldirma: bool = False, konu: str = "") -> OnaySonucu:
     """Paneldeki insandan bir kez izin iste ve bekle (en çok `sure` sn). → OnaySonucu.
     masaustu: "ekran" (kullanıcının ekranı) | "arka" (görünmez masaüstü).
     tur: "" (hassas eylem onayı) | "devir" (insan doğrulaması devri: panel "Devral/Bitti/Vazgeç" gösterir; izin = Bitti).
@@ -770,6 +770,8 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
     goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu.
     iptal: isteğe bağlı işlev; True dönerse (ör. MCP çağrısı istemcide iptal edildi) bekleme HEMEN biter, istek silinir,
     OnaySonucu(False, "iptal") — red; yalnız isteyenin kendi beklemesini bitirir (izin üretemez).
+    konu: the request's kind (guvenlik.ONAY_KONULARI) written as the structural field "konu" (covered by the request's
+    sha256); the panel takes the kind ONLY from it (guvenlik.onay_iletisi), never from the free-text action.
     dur_kaldirma: the question IS "remove the STOP switch?" (guvenlik.dur_kaldir_iste): an open DUR does not refuse
     it (every other request is refused while DUR is on); unattended mode and no panel still refuse."""
     masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
@@ -817,6 +819,8 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
                  "ayrinti": str(ayrinti or "")[:AYRINTI_SINIR], "masaustu": masaustu, "zaman": simdi,
                  "son_zaman": simdi + sure, "pid": os.getpid(), "pid_bas": _baslangic(os.getpid()), "goruntu": g_yol,
                  "masa": masalar.secili() if masaustu == "arka" else ""}
+        if konu and isinstance(konu, str):
+            istek["konu"] = konu[:32]
         if tur == TUR_DEVIR:
             istek["tur"] = TUR_DEVIR
         if dur_kaldirma:
