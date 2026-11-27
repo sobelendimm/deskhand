@@ -484,9 +484,9 @@ def satir_gpu_ocr():
         return _satir(ad, "tamam", _("ekran kartı yok: yalnız tesseract kullanılır"))
     neden = {"python": _("EasyOCR/torch yok"), "model": _("modeller indirilmemiş"),
              "hata": _("son açılış başarısız")}
-    return _satir(ad, "uyari", _("kurulu değil: {liste}").format(liste=", ".join(neden.get(e, e) for e in eksik
+    return _gpu_ocr_satiri(_satir(ad, "uyari", _("kurulu değil: {liste}").format(liste=", ".join(neden.get(e, e) for e in eksik
                                                                              if e != "gpu")),
-                  _("./install.sh eksikleri ve kurulum komutlarını listeler"))
+                  _("./install.sh eksikleri ve kurulum komutlarını listeler")), eksik)
 
 
 def satir_dinleme():
@@ -655,3 +655,52 @@ def _modul_onerisi(d: dict, dagitim_onerisi: str) -> str:
     if _pipx_venv():
         return shlex.join(["pipx", "reinstall", os.path.basename(sys.prefix)])
     return shlex.join([sys.executable, "-m", "pip", "install", "deskhand"])
+
+
+def _gpu_ocr_satiri(satir: dict, eksik: list[str]) -> dict:
+    """GPU OCR outside a source checkout (pip/pipx): install.sh's ocr-venv steps as commands (there is no
+    ./install.sh): a venv on the system Python that sees the distribution's torch, EasyOCR into it, then the models
+    (run with the package's parent directory as the current directory, like install.sh does in the source folder)."""
+    import shlex
+    import sys
+
+    from . import ocr_gpu
+    if _kaynak_kurulumu():
+        return satir
+    py = os.path.join(sys.base_prefix, "bin", "python3")
+    py = py if os.path.isfile(py) else "python3"
+    venv_py = os.path.join(ocr_gpu.venv_dizin(), "bin", "python")
+    adimlar = []
+    if "python" in eksik:
+        adimlar += [shlex.join([py, "-m", "venv", "--system-site-packages", ocr_gpu.venv_dizin()]),
+                    shlex.join([venv_py, "-m", "pip", "install", "--no-deps", "easyocr", "python-bidi"])]
+        satir["ayrinti"] += " — " + _("önce dağıtım paketleri: torch (ROCm ya da CUDA), torchvision, opencv, scikit-image, "
+                                      "shapely, pyclipper, scipy (Arch: python-pytorch-opt-rocm | python-pytorch-opt-cuda, "
+                                      "python-torchvision, python-opencv, python-scikit-image, python-shapely, "
+                                      "python-pyclipper, python-scipy)")
+    if "model" in eksik:
+        adimlar.append(shlex.join(["cd", os.path.dirname(yollar.PAKET_DIZIN)]) + " && " +
+                       shlex.join([venv_py, "-m", "deskhand.ocr_gpu", "indir", ocr_gpu.model_dizin()]))
+    satir["oneri"] = " && ".join(adimlar) if adimlar else _("günlüğe bakın: {yol}").format(yol=ocr_gpu.gunluk_yolu())
+    return satir
+
+
+def satir_masaustu():
+    """pip/pipx: menu entry and panel-at-login written by `deskhand install-desktop` (masaustu_kur)? In a source
+    checkout install.sh writes them: no row."""
+    if _kaynak_kurulumu():
+        return None
+    from . import masaustu_kur
+    ad = _("Masaüstü girdileri")
+    h = masaustu_kur.hedefler()
+    menu, acilis = os.path.isfile(h["menu"]), os.path.isfile(h["acilis"])
+    if menu and acilis:
+        return _satir(ad, "tamam", _("menü girdisi ve oturum açılışında panel var"))
+    if not menu:
+        return _satir(ad, "uyari", _("uygulama menüsünde Deskhand yok ({yol})").format(yol=h["menu"]),
+                      "deskhand install-desktop")
+    return _satir(ad, "uyari", _("panel oturum açılışında başlamıyor: onaylar için panel açık olmalı ({yol} yok)").format(
+        yol=h["acilis"]), _("deskhand install-desktop (ya da her oturumda: deskhand panel --tepsi)"))
+
+
+SATIRLAR = (*SATIRLAR, satir_masaustu)

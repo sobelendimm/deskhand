@@ -134,6 +134,8 @@ YARDIM_KOMUTLAR = (
     N_("  ekran doctor (doktor) [--json]          kurulum ve oturum sağlığı: bağımlılıklar, oturum, panel, yardımcılar "
        "(salt okunur;\n"
        "                                          zorunlu bağımlılık eksikse çıkış kodu 9)"),
+    N_("  ekran install-desktop (masaustu-kur) [--remove] [--no-autostart]   pip/pipx kurulumunda menü girdisi, simge ve\n"
+       "                                          oturum açılışında panel (install.sh kurulumunda gerekmez)"),
     N_("  ekran help (yardım)                     bu metin"),
 )
 YARDIM_ORTAK = (
@@ -946,6 +948,9 @@ def main(argv=None):
     if argv[0] in ("wallet", "cuzdan"):  # open KDE Wallet at login (cuzdan_ac; the login unit runs `wallet open`)
         from .cuzdan_ac import main as cuzdan_main
         sys.exit(cuzdan_main([{"ac": "open", "durum": "status", "kaldir": "remove"}.get(x, x) for x in argv[1:]]))
+    if argv[0] in ("install-desktop", "masaustu-kur"):  # pip/pipx: menu entry, icon, panel at login (masaustu_kur)
+        from .masaustu_kur import main as masaustu_kur_main
+        sys.exit(masaustu_kur_main(argv[1:]))
     a = ayristirici().parse_args(argv)
     if getattr(a, "masa", None) is not None:  # komuttan sonra verilen --desktop-name (arka uç seçilmeden ÖNCE)
         from . import masalar
