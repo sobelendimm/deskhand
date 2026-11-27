@@ -1053,13 +1053,16 @@ def _odak_bilgi(Atspi, cerceve):
     return {"rol": rol, "belge_ici": bool(belge_ici), "duzenlenebilir": bool(duzenlenebilir)}
 
 
-def _oge_nitelikleri(oge) -> str:
-    """Web ögesinin autocomplete/id/placeholder/xml-roles gibi nitelik DEĞERLERİ (boşlukla birleşik; yoksa "")."""
+def _oge_nitelikleri(oge, yukselt: bool = False) -> str:
+    """Web ögesinin autocomplete/id/placeholder/xml-roles gibi nitelik DEĞERLERİ (boşlukla birleşik; yoksa "").
+    yukselt: okunamazsa "" yerine hata yükselir (kart kararı bilinmiyor → açık-başarısız değil, Dur(9) zinciri)."""
     try:
         n = oge.get_attributes() or {}
         return " ".join(str(v) for k, v in dict(n).items() if k in ("autocomplete", "id", "placeholder", "name",
                                                                     "class", "xml-roles"))
     except Exception:  # noqa: BLE001
+        if yukselt:
+            raise
         return ""
 
 
@@ -1067,10 +1070,10 @@ def _odakli_kart(Atspi, cerceve):
     """Çerçevede odaklı yazma alanı kart bilgisi alanı mı (ad, açıklama, autocomplete/id/placeholder)? Değeri OKUNMAZ."""
     o = _uclar(Atspi, cerceve, lambda o, rol, ss, S: ss.contains(S.FOCUSED) and rol in ("password text", "text",
                                                                                           "entry"))
-    try:
-        return bool(o is not None and guvenlik.kart_alani_mi(o.get_name(), o.get_description(), _oge_nitelikleri(o)))
-    except Exception:  # noqa: BLE001
-        return False
+    # okuma hatası YUTULMAZ: "kart değil" sayılmasın (açık-başarısız); _yardimci_ana → Dur(9) → odakli_kart_mi None →
+    # eylem.gizli_karari parola gibi ele alır (gizli + onay)
+    return bool(o is not None and guvenlik.kart_alani_mi(o.get_name(), o.get_description(),
+                                                         _oge_nitelikleri(o, yukselt=True)))
 
 
 def odak_bilgisi(k):

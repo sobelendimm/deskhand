@@ -113,5 +113,28 @@ kontrol("bölünmüş kart: kutu (y, x) sırası", set(bol([k[1], k[3], k[0], k[
                                                     [(60, 0, 50, 20), (180, 0, 50, 20), (0, 0, 50, 20), (120, 0, 50, 20)]))
         == {0, 1, 2, 3})
 
+
+class BozukOge(Oge):
+    def get_attributes(self):
+        raise RuntimeError("AT-SPI yanıtsız")
+
+
+kontrol("masaüstü: nitelik okunamazsa _oge_nitelikleri yükseltir (yukselt=True), varsayılan \"\"",
+        erisim._oge_nitelikleri(BozukOge("Kart", "")) == "")
+try:
+    erisim._oge_nitelikleri(BozukOge("Kart", ""), yukselt=True)
+    kontrol("masaüstü: _oge_nitelikleri(yukselt=True) hata yükseltir", False)
+except RuntimeError:
+    kontrol("masaüstü: _oge_nitelikleri(yukselt=True) hata yükseltir", True)
+_uclar_eski = erisim._uclar
+erisim._uclar = lambda Atspi, cerceve, kosul: BozukOge("Not", "")
+try:
+    erisim._odakli_kart(Atspi, None)
+    kontrol("masaüstü: _odakli_kart nitelik hatasında yükseltir (kart değil sayılmaz)", False)
+except RuntimeError:
+    kontrol("masaüstü: _odakli_kart nitelik hatasında yükseltir (kart değil sayılmaz)", True)
+finally:
+    erisim._uclar = _uclar_eski
+
 print(f"\n{gecen}/{toplam} geçti")
 sys.exit(0 if gecen == toplam else 1)
