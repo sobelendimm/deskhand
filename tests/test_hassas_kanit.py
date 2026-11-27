@@ -1,7 +1,7 @@
 """Hassas düğme bağlamı, K2 inceleme turu (INCELEME-HASSAS O1/O2/D1): düzenleme alanı içeriği YALNIZ kanıtla ayıklanır.
 
 O1  ağaç kesilmesi (süre / öge sınırı / çocuk sınırı / okunamayan dal / düğüm sınırı) → kanıt yok → None (eski davranış).
-O2  alanı kapsayan öge, tıklanmadığı KANITLANMADIKÇA kap sayılmaz (sayfa düzeyi kap hariç); satırdaki hassas sözcük
+O2  alanı kapsayan öge, tıklanmadığı KANITLANMADIKÇA kap sayılmaz (SONKAPI: sayfa düzeyi istisnası yok); satırdaki hassas sözcük
     alanın kendi DEĞERİNDE olmalı (alanın üstüne/altına boyanmış "Pay" yazısı içerik değildir).
 D1  alanın erişilebilir adı hassassa ya da alanın kendi tıklama eylemi varsa alan sayılmaz.
 
@@ -48,9 +48,10 @@ kalan, cikan = ay([PAY], [TA], [], [], [(0, 0, 1200, 900)])
 kontrol("alanın değeri bilinmiyor → kalır (kanıt yok)", kalan == [PAY] and not cikan)
 kalan, cikan = ay([PAY], [(*TA, "Release notes: buttons now ask first")], [], [], [(0, 0, 1200, 900)])
 kontrol("hassas sözcük alanın değerinde yok (alana boyanmış yazı) → kalır", kalan == [PAY] and not cikan)
-kalan, cikan = ay([satir("Pay now", 110, 150, 200, 168)], [(*TA, "Notes:\nyou can pay now, or later")], [], [],
-                  [(0, 0, 1200, 900)])
-kontrol("değerde aynı hassas sözcük var → ayıklanır", len(cikan) == 1)
+# yeniden yazıldı (SONKAPI A3): bağlamsız tek "Pay now" satırı artık kanıt değil (P6); satır bağlamıyla verilir
+kalan, cikan = ay([satir("you can pay now, or", 110, 150, 300, 168)], [(*TA, "Notes:\nyou can pay now, or later")], [],
+                  [], [(0, 0, 1200, 900)])
+kontrol("değerde aynı hassas sözcük bağlamıyla var → ayıklanır", len(cikan) == 1)
 kalan, cikan = ay([satir("Pay now", 110, 150, 200, 168)], [(*TA, "Pay attention")], [], [], [(0, 0, 1200, 900)])
 kontrol("satırdaki hassas ifade (pay now) değerde yok (yalnız pay) → kalır", len(kalan) == 1 and not cikan, f"{kalan} {cikan}")
 kalan, cikan = ay([PAY], [TA_D], [], [], [(105, 105, 200, 90)])
@@ -63,21 +64,22 @@ kontrol("tiklanir_mi: bilinmiyor (None) → tıklanır sayılır", t(None) is Tr
 kontrol("tiklanir_mi: eylemsiz → tıklanmaz", t([]) is False)
 kontrol("tiklanir_mi: click → tıklanır", t(["click"]) is True)
 kontrol("tiklanir_mi: adı boş eylem → tıklanır (bilinmiyor)", t([""]) is True)
-kontrol("tiklanir_mi: 'click ancestor' / 'clickAncestor' (üst ögenin) → kendi tıklaması yok",
-        t(["click ancestor"]) is False and t(["clickAncestor"]) is False)
+# ters döndü (SONKAPI): eski beklenti P1/B4 açığını kilitliyordu (atanın tıklaması abs çocukla alanı örtebilir)
+kontrol("tiklanir_mi: 'click ancestor' / 'clickAncestor' (üst ögenin) → tıklanır sayılır",
+        t(["click ancestor"]) is True and t(["clickAncestor"]) is True)
 kontrol("tiklanir_mi: SetFocus → tıklanmaz", t(["SetFocus"]) is False)
 kontrol("tiklanir_mi: activate kap için tıklanır, alan için olağan", t(["activate"]) is True
         and t(["activate"], alan=True) is False)
 
 kap = guvenlik.duzenleme_kabi_mi
-GORUS = (0, 0, 1200, 900)
-kontrol("kap: eylemsiz ve alanı kapsıyor → kap", kap((90, 90, 320, 120), [], [TA], [GORUS]) is True)
-kontrol("kap: tıklanır ve alanı sarıyor (sayfa düzeyi değil) → kap DEĞİL",
-        kap((90, 90, 320, 120), ["click"], [TA], [GORUS]) is False)
-kontrol("kap: eylemleri okunamadı → kap DEĞİL", kap((90, 90, 320, 120), None, [TA], [GORUS]) is False)
-kontrol("kap: tıklanır ama görüş alanının tamamını kapsıyor (sayfa düzeyi, ör. React kökü) → kap",
-        kap((0, 0, 1200, 3000), ["click"], [TA], [GORUS]) is True)
-kontrol("kap: alanı kapsamıyor → kap DEĞİL", kap((105, 105, 200, 90), [], [TA], [GORUS]) is False)
+kontrol("kap: eylemsiz ve alanı kapsıyor → kap", kap((90, 90, 320, 120), [], [TA]) is True)
+kontrol("kap: tıklanır ve alanı sarıyor → kap DEĞİL",
+        kap((90, 90, 320, 120), ["click"], [TA]) is False)
+kontrol("kap: eylemleri okunamadı → kap DEĞİL", kap((90, 90, 320, 120), None, [TA]) is False)
+# ters döndü (SONKAPI): eski beklenti P1/B4 açığını kilitliyordu (tam ekran onclick sarmalayıcı = React kökü)
+kontrol("kap: tıklanır ve görüş alanının tamamını kapsıyor → kap DEĞİL",
+        kap((0, 0, 1200, 3000), ["click"], [TA]) is False)
+kontrol("kap: alanı kapsamıyor → kap DEĞİL", kap((105, 105, 200, 90), [], [TA]) is False)
 
 a = guvenlik.alan_kanitli_mi
 kontrol("D1: alan adı 'Pay now' → alan sayılmaz", a("Pay now", ["activate"]) is False)
@@ -341,14 +343,16 @@ try:
     kontrol("O2 web: alanı saran tıklanır div → kap değil (digerleri)",
             r is not None and (90, 90, 320, 120) in r[1] and (90, 90, 320, 120) not in r[3], str(r))
     r = _web_sahne({"/sar": {**sar, "eylemler": ["click ancestor"]}})
-    kontrol("web: yalnız üst ögenin tıklaması ('click ancestor') → kap", r is not None and r[3] == [(90, 90, 320, 120)],
-            str(r))
+    # ters döndü (SONKAPI): eski beklenti P1/B4 açığını kilitliyordu (atanın tıklaması: abs çocuk alanı örtebilir)
+    kontrol("web: yalnız üst ögenin tıklaması ('click ancestor') → kap değil (digerleri)", r is not None
+            and r[3] == [] and (90, 90, 320, 120) in r[1], str(r))
     r = _web_sahne({"/sar": {"rol": "section", "kutu": (90, 90, 320, 120)}})
     kontrol("web: Action arayüzü olmayan saran div → kap", r is not None and r[3] == [(90, 90, 320, 120)], str(r))
     r = _web_sahne({"/kok": {"rol": "section", "kutu": (0, 0, 1200, 2400), "arayuz": ["org.a11y.atspi.Action"],
                              "eylemler": ["click"]}})
-    kontrol("web: sayfa düzeyi tıklanır kök (görüş alanını kapsar) → kap", r is not None
-            and r[3] == [(0, 0, 1200, 2400)], str(r))
+    # ters döndü (SONKAPI): eski beklenti P1/B4 açığını kilitliyordu (tam ekran onclick sarmalayıcı = React kökü)
+    kontrol("web: görüş alanını kapsayan tıklanır kök → kap değil (digerleri)", r is not None
+            and r[3] == [] and (0, 0, 1200, 2400) in r[1], str(r))
     r = _web_sahne({"/es": {"rol": "canvas", "kutu": (100, 100, 300, 100), "arayuz": ["org.a11y.atspi.Action"],
                             "eylemler": ["click"]}})
     kontrol("O2 web: listede olmayan rol (canvas) üst örtü, tıklanır → digerleri", r is not None

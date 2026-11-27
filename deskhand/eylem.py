@@ -744,12 +744,11 @@ def insan_dogrulama_klavye(k, dizi=None):
 def duzenleme_icerigi_suz(k, yakin):
     """Noktadaki OCR satırlarından (ocr.NoktaYazisi) bir düzenlenebilir alanın (textarea/entry) İÇERİĞİ olduğu erişilebilirlik
     ağacıyla KANITLANANLARI ayıkla: alandaki "…Buy/Pay buttons…" yazısı tıklanan düğme değildir (gerçek olay: Glama
-    açıklama alanına tık → ödeme onayı). Ağaç yalnız hassas kalıba uyan kutulu bir satır varsa okunur (tık gecikmesi
+    açıklama alanına tık → ödeme onayı). Ağaç yalnız süzgecin baktığı kalıba (hassas/para/yapıştırma) uyan kutulu bir satır varsa okunur (tık gecikmesi
     yok); masaüstü kipi / ağaç okunamadı / kanıt yok → yakin aynen (eski davranış). Ödeme sayfası kuralı başlığa bakar,
     bundan etkilenmez; hedefin kendi adı ve aranan metin (ek_metinler) buraya hiç gelmez."""
     yakin = list(yakin)
-    if not k or k == EKRAN or not any(getattr(t, "kutu", None) and (guvenlik.hassas_mi(t) or guvenlik.para_mi(t))
-                                      for t in yakin):
+    if not k or k == EKRAN or not any(getattr(t, "kutu", None) and guvenlik._hassas_terimler(t) for t in yakin):
         return yakin
     from . import erisim
     try:

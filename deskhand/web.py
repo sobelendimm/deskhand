@@ -714,8 +714,8 @@ def duzenleme_alanlari(k):
     alanlar = (x, y, w, h, değer): rol entry (textarea dahil), durum editable, read_only değil, görünür, adı hassas değil
     ve kendi tıklama eylemi yok (guvenlik.alan_kanitli_mi; INCELEME-HASSAS D1); kutu görüş alanına kırpılır; değer alanın
     metni (Text.GetText; gizli alan adında — parola/OTP/PIN… — okunmaz, None). dugmeler = öbür etkileşimli ögeler (kanıtsız
-    alan dahil); kaplar = alanı kapsayan ve guvenlik.duzenleme_kabi_mi olan ögeler (tıklanmadığı kanıtlı ya da görüş
-    alanının tamamını kapsıyor); digerleri = geri kalan (alanı saran tıklanır öge dahil; INCELEME-HASSAS O2).
+    alan dahil); kaplar = alanı kapsayan ve guvenlik.duzenleme_kabi_mi olan ögeler (tıklanmadığı kanıtlı: kendi ya da
+    atasının tıklaması yok); digerleri = geri kalan (alanı saran tıklanır öge dahil; INCELEME-HASSAS O2).
     None (çağıran hiçbir satırı ayıklamaz: güvenli taraf): öge konumu doğrulanamadı, okunan sayfa bu pencereye ait
     kanıtlanamadı, ağaç KESİK (düğüm sınırı, okunamayan dal/kutu; INCELEME-HASSAS O1), okuma hatası."""
     from . import guvenlik
@@ -771,8 +771,7 @@ def duzenleme_alanlari(k):
         kutu = tuple(kutu)
         if o["rol"] in ETKILESIMLI:
             dugmeler.append(kutu)
-        elif guvenlik.duzenleme_kabi_mi(kutu, eylemler.get(o["_yol"]), kanitli,
-                                        [g for g in (o["_alan"], ust.get("kutu")) if g]):
+        elif guvenlik.duzenleme_kabi_mi(kutu, eylemler.get(o["_yol"]), kanitli):
             kaplar.append(kutu)
         else:
             digerleri.append(kutu)

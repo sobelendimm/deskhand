@@ -1336,7 +1336,6 @@ def duzenleme_alanlari(k):
     alan_ogeleri = [o for o in ogeler if o["rol"] in ("entry", "text") and "durumlar" in o
                     and "readonly" not in o["durumlar"] and guvenlik.alan_kanitli_mi(o.get("ad"), o.get("eylemler"))]
     alan_kutulari = [kutu_(o) for o in alan_ogeleri]
-    gorusler = [kutu_(o) for o in ogeler if o["rol"] in ("document web", "document frame")]
     alanlar, digerleri, dugmeler, kaplar = [], [], [], []
     for o in ogeler:
         kutu = kutu_(o)
@@ -1344,7 +1343,7 @@ def duzenleme_alanlari(k):
             alanlar.append((*kutu, o.get("deger")))
         elif o["rol"] in ETKILESIMLI:
             dugmeler.append(kutu)  # salt okunur / kanıtsız alan dahil
-        elif guvenlik.duzenleme_kabi_mi(kutu, o.get("eylemler"), alan_kutulari, gorusler):
+        elif guvenlik.duzenleme_kabi_mi(kutu, o.get("eylemler"), alan_kutulari):
             kaplar.append(kutu)
         else:
             digerleri.append(kutu)

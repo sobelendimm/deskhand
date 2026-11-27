@@ -513,12 +513,16 @@ def nokta_metni(k, x, y):
         t.start()
     for t in ipler:
         t.join()
-    yakin = []
+    yakin, gorulen = [], set()
     for ws in sonuc.values():
         for s in satirla(ws):
             s = kok_ekle(s, kok)
-            if s["x"] - 15 <= x <= s["x2"] + 15 and s["y"] - 15 <= y <= s["y2"] + 15 and s["t"] not in yakin:
-                yakin.append(NoktaYazisi(s["t"], (s["x"], s["y"], s["x2"], s["y2"])))
+            # tekilleştirme (yazı, kutu) çiftiyle: aynı yazılı İKİ satır (alandaki "Pay now" + altındaki gerçek
+            # "Pay now" düğmesi) iki ayrı ekran ögesidir; yazıya göre tekilleştirmek düğmeyi yutardı (SONKAPI-A B1)
+            anahtar = (s["t"], (s["x"], s["y"], s["x2"], s["y2"]))
+            if s["x"] - 15 <= x <= s["x2"] + 15 and s["y"] - 15 <= y <= s["y2"] + 15 and anahtar not in gorulen:
+                gorulen.add(anahtar)
+                yakin.append(NoktaYazisi(*anahtar))
     return yakin
 
 
