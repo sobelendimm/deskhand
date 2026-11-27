@@ -72,3 +72,10 @@ ignore = [
   "E702",
   "B904",
 ]
+
+[[tool.ty.overrides]]
+# Tests monkeypatch module functions with simplified fakes (sahte_*); their signatures differ on purpose.
+include = ["tests/**"]
+
+[tool.ty.overrides.rules]
+invalid-assignment = "ignore"
