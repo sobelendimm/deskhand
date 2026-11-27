@@ -21,7 +21,7 @@ os.environ["DESKHAND_DIL"] = "tr"
 from PyQt6.QtCore import Qt  # noqa: E402
 from PyQt6.QtGui import QPalette  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
-from PyQt6.QtWidgets import QAbstractButton, QApplication, QLabel, QWidget  # noqa: E402
+from PyQt6.QtWidgets import QAbstractButton, QApplication, QLabel, QPlainTextEdit, QWidget  # noqa: E402
 
 from deskhand import guvenlik, i18n, onay  # noqa: E402
 from deskhand.gui import tema  # noqa: E402
@@ -178,11 +178,15 @@ def tum_metin(d, pencere_basligi=True) -> str:
         parca.append(w.toolTip())
         if isinstance(w, (QLabel, QAbstractButton)):
             parca.append(w.text())
+        if isinstance(w, QPlainTextEdit):  # komut/tuş kutusu
+            parca.append(w.toPlainText())
     return "\n".join(parca)
 
 
 def gorunen_metin(d) -> str:
-    return "\n".join(w.text() for w in d.findChildren(QLabel) if w.isVisible())
+    """Görünen etiketler + görünen komut/tuş kutusu (QPlainTextEdit) metni."""
+    return "\n".join([w.text() for w in d.findChildren(QLabel) if w.isVisible()] +
+                     [w.toPlainText() for w in d.findChildren(QPlainTextEdit) if w.isVisible()])
 
 
 def diyalog(i, **k):
@@ -231,8 +235,9 @@ for ad, i in tr_istekler.items():
     gor = gorunen_metin(d)
     kontrol(f"{ad}: isteyen (PID) üstte görünür, katlı değil", "PID 4242" in gor and d.l_isteyen.isVisible(), gor[:300])
     kontrol(f"{ad}: içerik satırı (varsa) üstte görünür",
-            (not ileti["icerik"] and not d.l_icerik.isVisible()) or (d.l_icerik.isVisible()
-                                                                     and d.l_icerik.text() == ileti["icerik"]),
+            (not ileti["icerik"] and not d.l_icerik.isVisible()) or (d.l_icerik.isVisible() and (
+                d.l_icerik.text() == ileti["icerik"] if not ileti["icerik_kutu"] else
+                d.k_icerik.isVisible() and d.l_icerik.text() + " " + d.k_icerik.toPlainText() == ileti["icerik"])),
             f"{ileti['icerik']!r} | {d.l_icerik.text()!r}")
     kontrol(f"{ad}: ham ayrıntı kapalıyken görünmez",
             (len(i["ayrinti"].splitlines()[0] if i["ayrinti"] else "") < 12
@@ -323,15 +328,16 @@ for ad_, dugme in (("sahte cümle", SAHTE), ("U+202E", "Satın al\u202e\u200b\u2
     ileti = guvenlik.onay_iletisi(i)
     ic = ileti["icerik"]
     kontrol(f"ad ({ad_}): başlık sabit cümle", ileti["baslik"] == _(guvenlik._ONAY_TUR_CUMLE["odeme"]), ileti["baslik"])
-    kontrol(f"ad ({ad_}): içerik tek satır, tek tırnak çifti, yön/sıfır genişlik yok, ≤ 90 karakter",
+    kontrol(f"ad ({ad_}): içerik tek satır, tek tırnak çifti, yön/sıfır genişlik yok, ≤ 110 karakter",
             "\n" not in ic and "\r" not in ic and ic.count("“") == 1 and ic.count("”") == 1
-            and not re.search("[\u200b-\u200f\u202a-\u202e\u2066-\u2069]", ic) and len(ic) <= 90, repr(ic[:120]))
+            and not re.search("[\u200b-\u200f\u202a-\u202e\u2066-\u2069]", ic) and len(ic) <= 110, repr(ic[:120]))
     kontrol(f"ad ({ad_}): risk ödeme", ileti["tur"] == "odeme", ileti["tur"])
     d = diyalog(i)
     kontrol(f"ad ({ad_}): tüm etiketler PlainText", all(w.textFormat() == Qt.TextFormat.PlainText
                                                        for w in d.findChildren(QLabel) if w.text()))
     if ad_ == "uzun":
-        kontrol("uzun ad kısaltıldı ('…'), tamamı Ayrıntılar'da", ic.endswith("…”") and dugme.strip()[:200] in d.l_ayrinti.text())
+        kontrol("uzun ad kısaltıldı: görünür '(kısaltıldı)' eki, tamamı Ayrıntılar'da",
+                ic.endswith("…” " + _("(kısaltıldı)")) and d.l_icerik.text() == ic and dugme.strip()[:200] in d.l_ayrinti.text())
     d.close()
 
 # ORTA 3 + otomatik tarama: tür yapısal alandan; serbest metin türü belirlemez
@@ -373,6 +379,49 @@ kontrol("isteyen: başlangıç zamanı uymuyor (PID yeniden kullanımı) → yal
         d.l_isteyen.text() == f"PID {_os.getpid()}", d.l_isteyen.text())
 d.close()
 
+# UX-C-R1b (otomatik tarama ORTA): komut ve tuş ASLA kesilmez — tam metin, eş aralıklı, kaydırmalı kutuda
+UZUN = "echo " + "zararsiz-" * 33 + "; rm -rf ~"  # ~310 karakter: tehlikeli kısım SONDA
+kontrol("üretici: _yazilacak uzun komutu kesmez (son kısım isteğe gider)",
+        guvenlik._yazilacak(UZUN, False) == repr(UZUN), guvenlik._yazilacak(UZUN, False)[-40:])
+i = istek("k", konu="ucbirim", eylem=_("Uçbirime komut yaz: {komut}").format(komut=guvenlik._yazilacak(UZUN, False)),
+          hedef="~ : zsh — Konsole")
+ileti = guvenlik.onay_iletisi(i)
+kontrol("uzun komut: içerik kesilmez, kutuda", ileti["icerik_kutu"] and ileti["icerik_deger"].endswith("; rm -rf ~'")
+        and "…" not in ileti["icerik_deger"], ileti["icerik_deger"][-60:])
+d = diyalog(i)
+kontrol("uzun komut: sondaki 'rm -rf ~' görünür kutuda, Ayrıntılar kapalı",
+        d.k_icerik.isVisible() and "; rm -rf ~'" in d.k_icerik.toPlainText() and not d.w_ayrinti.isVisible(),
+        d.k_icerik.toPlainText()[-60:])
+kontrol("kutu salt okunur, eş aralıklı, satır kaydırır, odak almaz",
+        d.k_icerik.isReadOnly() and d.k_icerik.font().fixedPitch()
+        and d.k_icerik.lineWrapMode() == d.k_icerik.LineWrapMode.WidgetWidth
+        and d.k_icerik.focusPolicy() == Qt.FocusPolicy.NoFocus and d.focusWidget() is d.b_red)
+satir_px = d.k_icerik.fontMetrics().lineSpacing()
+kontrol("kutu en çok ~6 satır yüksekliğinde", d.k_icerik.height() <= 7 * satir_px + 20, f"{d.k_icerik.height()} / {satir_px}")
+d.close()
+COK_UZUN = "echo " + "zararsiz-" * 150 + "; rm -rf ~"
+d = diyalog(istek("k", konu="ucbirim", eylem=_("Uçbirime komut yaz: {komut}").format(
+    komut=guvenlik._yazilacak(COK_UZUN, False)), hedef="x"))
+kontrol("taşan komut: kaydırma çubuğu + görünür 'kaydırın' notu, son kısım kutuda",
+        d.k_icerik.verticalScrollBar().maximum() > 0 and d.l_kaydir.isVisible()
+        and d.l_kaydir.text() == _("Komutun tamamını görmek için kaydırın.")
+        and d.k_icerik.toPlainText().endswith("; rm -rf ~'"), d.l_kaydir.text())
+kontrol("taşan komut: izin düğmesi beklemesi aynı (kurma_ms=0 → etkin; Reddet varsayılan)",
+        d.b_izin.isEnabled() and d.b_red.isDefault())
+d.close()
+d = diyalog(istek("k", konu="ucbirim", eylem=_("Uçbirime komut yaz: {komut}").format(komut="'ls'"), hedef="x"))
+kontrol("kısa komut: kaydırma notu yok", d.k_icerik.isVisible() and not d.l_kaydir.isVisible())
+d.close()
+ileti = guvenlik.onay_iletisi(istek("k", konu="ucbirim", eylem=_("Uçbirime komut yaz: {komut}").format(
+    komut="'echo a\n\u202erm -rf ~\u200b'")))
+dg = ileti["icerik_deger"]
+kontrol("komut: satır sonu görünür kaçış, U+202E/sıfır genişlik yok", "\n" not in dg and "⏎" in dg
+        and not re.search("[\u200b-\u200f\u202a-\u202e\u2066-\u2069]", dg) and "rm -rf ~" in dg, repr(dg))
+d = diyalog(istek("k", konu="tus", eylem=_("Riskli tuş: {kombinasyon}").format(kombinasyon="ctrl+alt+" * 20 + "del"),
+                  hedef="x"))
+kontrol("uzun tuş dizisi de kesilmez (kutuda)", d.k_icerik.toPlainText().endswith("ctrl+alt+del") and d.k_icerik.isVisible())
+d.close()
+
 # gizli yazı: içerik satırında da yalnız yer tutucu
 SIR2 = "gizli-sir-Q7"
 i = istek("z", konu="ucbirim", eylem=_("Uçbirime komut yaz: {komut}").format(komut=f"***({len(SIR2)})"), hedef="vim x.txt",
@@ -380,7 +429,8 @@ i = istek("z", konu="ucbirim", eylem=_("Uçbirime komut yaz: {komut}").format(ko
 d = diyalog(i)
 d.ayrinti_ac(True)
 app.processEvents()
-kontrol("gizli: içerik satırı yer tutucu, başlık gizli", guvenlik.gizli_yer() in d.l_icerik.text()
+kontrol("gizli: içerik (kutu) yer tutucu, başlık gizli", guvenlik.gizli_yer() in gorunen_metin(d)
+        and SIR2 not in tum_metin(d)
         and "vim x.txt" not in tum_metin(d), d.l_icerik.text())
 d.close()
 

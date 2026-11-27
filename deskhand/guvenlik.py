@@ -1496,6 +1496,8 @@ _ONAY_ARAC = {"clipboard": "pano", "run_flow": "diger"}
 _ONAY_DUR_ONEK = (("HASSAS düğme", "dugme"), ("HASSAS sayfa", "odeme"), ("HASSAS: kart", "odeme"),
                   ("HASSAS: parola", "parola"), ("HASSAS pano", "pano"), ("RİSKLİ TUŞ", "tus"),
                   ("UÇBİRİM", "ucbirim"), ("RİSKLİ KOMUT", "ucbirim"), ("SİSTEM İSTEMİ", "sistem"))
+# fields shown WHOLE (never cut) in the dialog's monospace scroll box: what the terminal/keyboard will receive
+_ONAY_KUTU_ALAN = frozenset(("komut", "satir", "kombinasyon"))
 # content line label per captured template field (kind-specific for "ad")
 _ONAY_ICERIK_ETIKET = {"dugme": N_("Düğme"), "komut": N_("Komut"), "satir": N_("Komut"), "kombinasyon": N_("Tuş"),
                        "eylem": N_("İşlem"), ("sistem", "ad"): N_("İstem"), ("uygulama", "ad"): N_("Uygulama")}
@@ -1549,10 +1551,13 @@ def _gorunur(s: str, satir_sonu: str = " ⏎ ") -> str:
     return "".join(out)
 
 
-def onay_tek_satir(s: str, sinir: int = ONAY_ICERIK_SINIR) -> str:
-    """One display line: _gorunur + whitespace collapsed + cut at `sinir` characters ("…")."""
+def onay_tek_satir(s: str, sinir: int | None = ONAY_ICERIK_SINIR, kisaltma_eki: bool = False) -> str:
+    """One display line: _gorunur + whitespace collapsed + cut at `sinir` characters ("…"; None = never cut).
+    kisaltma_eki: a cut is announced visibly ("… (kısaltıldı)")."""
     s = " ".join(_gorunur(s).split())
-    return s if len(s) <= sinir else s[:sinir - 1].rstrip() + "…"
+    if sinir is None or len(s) <= sinir:
+        return s
+    return s[:sinir - 1].rstrip() + "…" + (" " + _("(kısaltıldı)") if kisaltma_eki else "")
 
 
 def _sablon_deseni(sablon: str):
@@ -1678,8 +1683,9 @@ def _surec_adi(pid, pid_bas) -> str:
 def onay_iletisi(istek: dict) -> dict:
     """Panel onay diyaloğunun metni (insan dili, panelin dilinde). → {"tur", "baslik", "risk", "icerik", "isteyen",
     "hedef", "ayrinti"}: baslik = türün SABİT cümlesi (istekten veri taşımaz), risk = tek satır risk, icerik = üstte
-    görünen tek satır "Düğme: “Öde”" / "Komut: 'rm -rf ~'" / "Tuş: ctrl+w" / (bilinmeyen, diğer) "Eylem: …" (temiz,
-    ≤ ONAY_ICERIK_SINIR), isteyen = "<süreç adı> (PID n)", hedef = gösterilecek pencere adı, ayrinti = katlanır alanın
+    görünen "Düğme: “Öde”" / "Komut: 'rm -rf ~'" / "Tuş: ctrl+w" / (bilinmeyen, diğer) "Eylem: …" (temiz; ad ve eylem
+    ≤ ONAY_ICERIK_SINIR + görünür "(kısaltıldı)"; komut/tuş ASLA kesilmez: icerik_kutu=True → diyalog kaydırmalı kutu;
+    icerik_etiket/icerik_deger ayrı), isteyen = "<süreç adı> (PID n)", hedef = gösterilecek pencere adı, ayrinti = katlanır alanın
     metni (ham eylem, hedef, ham ayrıntı, isteyen süreç; görünmez karakterler temiz). Gizli yazı yalnız sabit yer
     tutucuyla görünür (gizli_yer); gizli yazının eşlik ettiği istekte ya da yasak pencerede başlık "(başlık gizlendi)"
     olur ve hiçbir alanda geçmez."""
@@ -1696,16 +1702,25 @@ def onay_iletisi(istek: dict) -> dict:
             s = s.replace(hedef, gizli_baslik)
         return s
 
-    icerik = ""
+    icerik_etiket = icerik_deger = ""
+    kutu = False
     if tur in ("bilinmeyen", "diger"):
-        icerik = _("Eylem") + ": " + onay_tek_satir(temiz(eylem))
+        icerik_etiket, icerik_deger = _("Eylem"), onay_tek_satir(temiz(eylem), kisaltma_eki=True)
     elif tur not in ("devir", "dur"):
         for k, v in alan.items():
             etiket = _ONAY_ICERIK_ETIKET.get((tur, k)) or _ONAY_ICERIK_ETIKET.get(k)
             if etiket and v.strip():
-                deger = onay_tek_satir(temiz(v.strip()).translate(_ALINTI), ONAY_ICERIK_SINIR - 2)
-                icerik = _(etiket) + ": " + (f"“{deger}”" if k == "dugme" else deger)
+                kutu = k in _ONAY_KUTU_ALAN
+                if kutu:  # command / key: NEVER cut (the dangerous part may be at the end)
+                    icerik_deger = onay_tek_satir(temiz(v.strip()), None)
+                elif k == "dugme":  # page-controlled name: quoted, cut with a visible mark, whole in the details
+                    d = onay_tek_satir(temiz(v.strip()).translate(_ALINTI), ONAY_ICERIK_SINIR - 2)
+                    icerik_deger = f"“{d}”" + (" " + _("(kısaltıldı)") if d.endswith("…") else "")
+                else:
+                    icerik_deger = onay_tek_satir(temiz(v.strip()), kisaltma_eki=True)
+                icerik_etiket = _(etiket)
                 break
+    icerik = f"{icerik_etiket}: {icerik_deger}" if icerik_etiket else ""
     pid = istek.get("pid")
     isteyen = ""
     if pid:
@@ -1719,6 +1734,7 @@ def onay_iletisi(istek: dict) -> dict:
     if isteyen:
         satirlar.append(_("İsteyen süreç") + ": " + isteyen)
     return {"tur": tur, "baslik": _(_ONAY_TUR_CUMLE[tur]), "risk": _(_ONAY_RISK[tur]), "icerik": icerik,
+            "icerik_etiket": icerik_etiket, "icerik_deger": icerik_deger, "icerik_kutu": kutu,
             "isteyen": isteyen, "hedef": gizli_baslik if baslik_gizli else onay_tek_satir(hedef, 200),
             "ayrinti": "\n".join(satirlar)}
 
@@ -1896,8 +1912,9 @@ def hassas_engel(onayli, *metinler, hedef="", k=None, nokta=None):
 
 
 def _yazilacak(metin, gizli):
-    """Onay ayrıntısında gösterilecek (kısaltılmış) yazı; --gizli ise yalnız uzunluk."""
-    return f"***({len(metin)})" if gizli else repr(metin if len(metin) <= 120 else metin[:117] + "…")
+    """Onay isteğinde gösterilecek yazı: TAMAMI (repr; kesilmez — uzun komutun tehlikeli SON kısmı görünmeden izin
+    verilmesin, UX-C-R1b); --gizli ise yalnız uzunluk. Yalnız insan paneline gider (ajana dönen iletiye konmaz)."""
+    return f"***({len(metin)})" if gizli else repr(metin)
 
 
 def riskli_tus_engel(k, onayli, kombinasyon, birlikte=False):

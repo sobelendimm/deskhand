@@ -21,8 +21,9 @@ import os
 import time
 
 from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QPixmap
-from PyQt6.QtWidgets import (QDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton,
+from PyQt6.QtGui import QFont, QFontDatabase, QKeyEvent, QPixmap, QTextOption
+from PyQt6.QtWidgets import (QDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QPlainTextEdit, QProgressBar,
+                             QPushButton,
                              QSizePolicy, QStyle, QToolButton, QVBoxLayout, QWidget)
 
 from .. import guvenlik, onay
@@ -38,6 +39,8 @@ DUGME_EN = 150
 EN_AZ_EN = 460
 
 D_PENCERE = N_("Pencere")
+D_KAYDIR = N_("Komutun tamamını görmek için kaydırın.")
+KUTU_SATIR = 6  # komut/tuş kutusu en çok bu kadar satır yüksekliğinde; taşarsa kaydırma çubuğu + D_KAYDIR
 D_ISTEYEN = N_("İsteyen")
 D_AYRINTILAR = N_("Ayrıntılar")
 D_DUGME_SURE = N_("{dugme} ({sure})")                      # Reddet (1:58): geri sayım düğmede
@@ -112,6 +115,26 @@ class OnayDiyalog(QDialog):
         self.l_risk.setObjectName("risk")
         metin_kutu.addWidget(self.l_baslik)
         metin_kutu.addWidget(self.l_icerik)
+        # komut / tuş: TAMAMI (asla kesilmez; UX-C-R1b), eş aralıklı, salt okunur, satır kaydıran kutu
+        self.k_icerik = QPlainTextEdit()
+        self.k_icerik.setObjectName("icerikKutu")
+        self.k_icerik.setReadOnly(True)
+        self.k_icerik.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # odak Reddet'te kalır
+        self.k_icerik.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.k_icerik.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.k_icerik.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        ef = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        ef.setStyleHint(QFont.StyleHint.TypeWriter)
+        ef.setFixedPitch(True)  # eş aralıklı istenir (sistemde yoksa Qt en yakınını seçer)
+        self.k_icerik.setFont(ef)
+        self.k_icerik.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.k_icerik.setVisible(False)
+        metin_kutu.addWidget(self.k_icerik)
+        self.l_kaydir = deger()
+        self.l_kaydir.setObjectName("kaydir")
+        self.mt(self.l_kaydir.setText, D_KAYDIR)
+        self.l_kaydir.setVisible(False)
+        metin_kutu.addWidget(self.l_kaydir)
         metin_kutu.addWidget(self.l_risk)
         ust.addLayout(metin_kutu, 1)
         kok.addLayout(ust)
@@ -253,8 +276,12 @@ class OnayDiyalog(QDialog):
         ileti = guvenlik.onay_iletisi(self.istek)
         self.ileti = ileti
         self.l_baslik.setText(ileti["baslik"])
-        self.l_icerik.setText(ileti["icerik"])
+        kutu = bool(ileti.get("icerik_kutu"))
+        self.l_icerik.setText(ileti["icerik_etiket"] + ":" if kutu else ileti["icerik"])
         self.l_icerik.setVisible(bool(ileti["icerik"]))
+        self.k_icerik.setPlainText(ileti["icerik_deger"] if kutu else "")
+        self.k_icerik.setVisible(kutu)
+        self._kutu_boyu()
         self.l_risk.setText(ileti["risk"])
         self.l_isteyen.setText(ileti["isteyen"])
         self.l_isteyen.setVisible(bool(ileti["isteyen"]))
@@ -263,6 +290,28 @@ class OnayDiyalog(QDialog):
         self.l_hedef.setVisible(bool(ileti["hedef"].strip()))
         self._hedef_satiri.setVisible(bool(ileti["hedef"].strip()))
         self.l_ayrinti.setText(ileti["ayrinti"])
+
+    def _kutu_boyu(self):
+        """Komut kutusu: içeriğe göre 1..KUTU_SATIR satır yüksekliği; taşarsa kaydırma notu görünür."""
+        if not self.k_icerik.isVisible() and not self.k_icerik.toPlainText():
+            self.l_kaydir.setVisible(False)
+            return
+        fm = self.k_icerik.fontMetrics()
+        en = max(1, self.k_icerik.viewport().width() or (EN_AZ_EN - 120))
+        sutun = max(1, en // max(1, fm.horizontalAdvance("M")))
+        satir = sum(max(1, -(-len(p) // sutun)) for p in self.k_icerik.toPlainText().split("\n"))
+        ic = 2 * (self.k_icerik.frameWidth() + int(self.k_icerik.document().documentMargin()))
+        self.k_icerik.setFixedHeight(min(satir, KUTU_SATIR) * fm.lineSpacing() + ic + 2)
+        self.l_kaydir.setVisible(self.k_icerik.isVisibleTo(self) and
+                                 (satir > KUTU_SATIR or self.k_icerik.verticalScrollBar().maximum() > 0))
+
+    def resizeEvent(self, e):  # noqa: N802 - Qt API
+        super().resizeEvent(e)
+        self._kutu_boyu()
+
+    def showEvent(self, e):  # noqa: N802 - Qt API
+        super().showEvent(e)
+        self._kutu_boyu()
 
     def ayrinti_ac(self, acik: bool = True):
         """Ayrıntılar alanını aç/kapat (varsayılan kapalı)."""

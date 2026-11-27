@@ -1972,5 +1972,7 @@
  "Türü doğrulanamayan bu istek geri alınamaz bir iş yapabilir; tanımıyorsanız reddedin.": "This request's type could not be verified and it may do something irreversible; if you don't recognize it, deny.",
  "İstem": "Prompt",
  "İsteyen": "Requested by",
- "İşlem": "Operation"
+ "İşlem": "Operation",
+ "(kısaltıldı)": "(shortened)",
+ "Komutun tamamını görmek için kaydırın.": "Scroll to see the whole command."
 }
