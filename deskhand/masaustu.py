@@ -450,6 +450,11 @@ def bosta_neden(ad: str | None = None, simdi: float | None = None) -> str | None
 def bosta_kapat(ad: str | None = None, simdi: float | None = None) -> bool:
     """Boşta ise masaüstünü kapat ve günlüğe yaz. → kapatıldı mı."""
     ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
+    try:  # bellek bakımı (boşta: memory.reclaim / Firefox geri dönüşümü); masaüstünü kapatmaz, hatası kapanışı durdurmaz
+        from . import bellek_bekcisi
+        bellek_bekcisi.bakim(ad, simdi)
+    except Exception:  # noqa: BLE001
+        pass
     if bosta_neden(ad, simdi) is not None:
         return False
     son = son_kullanim(ad) or 0
@@ -1313,6 +1318,7 @@ def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, g
     d = baglanti_denetle(d)  # kapı: yollar çalışma dizininden, karşı taraf doğrulanmış
     if not argv or not (shutil.which(argv[0]) or os.path.isfile(argv[0])):
         raise Dur(ARAC_EKSIK, _("başlatılamadı: {komut} bulunamadı").format(komut=argv[0] if argv else _("(boş komut)")))
+    ilk_argv, ilk_env = list(argv), dict(env or {})
     popen.setdefault("stdin", subprocess.DEVNULL)
     if "stdout" not in popen or "stderr" not in popen:
         log = _gunluk_dosyasi(d["calisma"], "uygulamalar")
@@ -1337,8 +1343,11 @@ def baslat(argv: list[str], env: dict | None = None, kopya: str | None = None, g
         if o != 1 and chromium_env and not any(str(a).startswith("--force-device-scale-factor") for a in argv):
             argv.insert(argv.index(kwin_oturum.OZONE_X11_BAYRAGI) + 1, f"--force-device-scale-factor={o}")
     try:
-        return korumali_baslat(d, argv, uygulama_ortami(d, env), uygulama_baglari(d), kopya=kopya, girdi=girdi,
-                               ev=ev, **popen)
+        p = korumali_baslat(d, argv, uygulama_ortami(d, env), uygulama_baglari(d), kopya=kopya, girdi=girdi,
+                            ev=ev, **popen)
+        from . import bellek_bekcisi  # kopyalı Firefox: bellek bekçisi boşta yeniden başlatabilsin (aynı komut/kopya)
+        bellek_bekcisi.tarayici_kaydet(d, ilk_argv, ilk_env, kopya, ev, p.pid)
+        return p
     except FileNotFoundError as e:
         raise Dur(ARAC_EKSIK, _("başlatılamadı: {hata}").format(hata=e))
     finally:
