@@ -15,6 +15,7 @@ GERÇEK profille uçtan uca deneme AYRI dosyada (tests/ekranli/, elle): bu dosya
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import time
 import struct
@@ -453,6 +454,10 @@ def test_tespit_soyut_soket():
 
 def test_hazirla_kararlar():
     # chromium → ABM-F3: keyring rölesi yok; BOŞ profil kopyası (--password-store=basic, kayıtlı girişler yok)
+    _yol = os.path.realpath(shutil.which("chromium") or "")
+    if os.path.basename(_yol) == "chrome":  # upstream yapı (ör. GitHub runner): ikili "chrome" adını taşır → chrome politikası
+        _yalitim.atla("chromium hazirla kopya / açıklama", f"chromium dağıtım paketi değil, 'chrome' ikilisi: {_yol}")
+        return
     h = oturum.hazirla("chromium")
     kontrol("chromium hazirla kopya (boş profil, anahtarlıksız)", h.karar == "kopya" and h.kopya_yolu and
             "--password-store=basic" in h.argv and not any("kwallet" in a for a in h.argv),

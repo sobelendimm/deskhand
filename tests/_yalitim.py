@@ -16,6 +16,20 @@ import sys
 import tempfile
 
 KOK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# ---------------------------------------------------------------- CI KAPSAMI (tek yer)
+# GitHub'ın Ubuntu makinesinde gerçek KDE Plasma oturumu (kdotool/dotool/KWin), gerçek tarayıcı uçtan ucu ve OCR
+# zamanlaması yok: bu takımlar orada anlamlı sonuç vermez (ya da süre sınırına takılır). DESKHAND_CI=1 VE kdotool
+# PATH'te yoksa takım "ATLANDI" yazıp 0 ile çıkar. Yerelde (DESKHAND_CI yok) hiçbir şey değişmez: tam koşu gerçek kapı.
+MASAUSTU_TAKIMLARI = frozenset({
+    "test_arka_chromium", "test_belirsiz_kapali", "test_denetim_girdi", "test_dinleme", "test_dogrulama",
+    "test_dogrulama_devri", "test_girdi_merkezi", "test_gozlem", "test_mcp", "test_ocr", "test_ocr_gpu",
+    "test_onay_kapsami", "test_pano", "test_sanal", "test_web", "test_web_bag"})
+_TAKIM = os.path.splitext(os.path.basename(sys.argv[0] if sys.argv else ""))[0]
+if os.environ.get("DESKHAND_CI") == "1" and _TAKIM in MASAUSTU_TAKIMLARI and not shutil.which("kdotool"):
+    print(f"ATLANDI: {_TAKIM} gerçek KDE masaüstü / tarayıcı / OCR ister (DESKHAND_CI=1, kdotool yok); "
+          "yerel tam koşu: python3 tools/test_kos.py", flush=True)
+    sys.exit(0)
 GECICI = tempfile.mkdtemp(prefix="deskhand-test-")
 DIZINLER = {ad: os.path.join(GECICI, ad.split("_")[1].lower())
             for ad in ("DESKHAND_CONFIG_DIR", "DESKHAND_STATE_DIR", "DESKHAND_CACHE_DIR", "DESKHAND_DATA_DIR", "DESKHAND_RUNTIME_DIR")}

@@ -375,8 +375,12 @@ kontrol("cli: devam panel kapalı → ret (13), DUR açık kalır (yalnız kulla
 from deskhand import guvenlik as _guvenlik  # noqa: E402
 _guvenlik.dur_kapat("kullanici")  # the user's panel button (test cleanup)
 kontrol("panel düğmesi (kullanıcı) → DUR kalktı", not os.path.exists(hata.dur_dosyasi()))
-kod, out = deskhand("bas", "{00000000-0000-0000-0000-000000000000}", "w", "99")
-kontrol("cli: yok pencere → 8 (girdi açılmadan)", kod == 8, f"{kod} {out}")
+_neden = _yalitim.arac_eksigi("kdotool")  # pencere varlığı kde arka ucunda kdotool ile sorulur
+if _neden:
+    _yalitim.atla("cli: yok pencere → 8 (girdi açılmadan)", _neden)
+else:
+    kod, out = deskhand("bas", "{00000000-0000-0000-0000-000000000000}", "w", "99")
+    kontrol("cli: yok pencere → 8 (girdi açılmadan)", kod == 8, f"{kod} {out}")
 
 # komut satırında `type` kaçışları: kabuk çift tırnakta \\n'i olduğu gibi iletir → Enter'a çevrilmeli (MCP'de değil)
 from deskhand.cli import ayristirici, kacis_coz  # noqa: E402
