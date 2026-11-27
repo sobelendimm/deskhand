@@ -214,8 +214,13 @@ class Politika:
             return False
         for k in self._reddet:
             k = str(k).strip().lower()
+            if not k:
+                continue
+            # plain rule equal to / under alan (also a leading-dot rule `.bank.com` → `.bank.com`)
+            if "*" not in k and "?" not in k and "[" not in k and (k == alan or k.endswith("." + alan)):
+                return True
             # the ONLY switch between "decided from the rule" and "needs evidence": the trailing `*`
-            if k and not k.endswith("*") and _alt_alana_uyabilir(k, alan):
+            if not k.endswith("*") and _alt_alana_uyabilir(k, alan):
                 return True
         for b in bilinen_konaklar or ():
             b = str(b).strip().lower().lstrip(".").rstrip(".")

@@ -51,7 +51,7 @@ HEDEF = "hedef"        # a normal target window
 
 
 class SahteAu:
-    """Fake desktop 200x100. `listeler`: list per call number (1 = before the frame, 2 = after); an item that is an
+    """Fake desktop 200x100. `listeler`: [window list before the frame, window list after it]; an item that is an
     Exception is raised. The frame shows red wherever the forbidden window was at grab time (`kare_geo`)."""
 
     def __init__(self, listeler, kare_geo=(20, 10, 60, 50)):
@@ -64,9 +64,12 @@ class SahteAu:
         return (0, 0, 200, 100)
 
     def pencereler(self, desen=None):
+        # chosen by PHASE (before / after the grab), not by call count: a single read after the frame (the old code)
+        # sees the "after" state, as the real desktop would
         self.n += 1
+        evre = 1 if "kare" in self.olaylar else 0
         self.olaylar.append("liste")
-        sonuc = self.listeler[min(self.n, len(self.listeler)) - 1]
+        sonuc = self.listeler[min(evre, len(self.listeler) - 1)]
         if isinstance(sonuc, Exception):
             raise sonuc
         return sonuc
@@ -158,6 +161,8 @@ def test_o1_kural():
             _pol(["*.secure.example.com"]).cerez_reddedildi(".example.com"))
     kontrol("O1-1 `login?.example.com`: .example.com çerezi reddedilir",
             _pol(["login?.example.com"]).cerez_reddedildi(".example.com"))
+    kontrol("O1-1 baştaki noktalı düz kural `.bank.com`: .bank.com alan çerezi reddedilir (eski davranış korunur)",
+            _pol([".bank.com"]).cerez_reddedildi(".bank.com"))
     kontrol("O1-2 `*.gov.tr`: .example.com reddedilmez", not _pol(["*.gov.tr"]).cerez_reddedildi(".example.com"))
     kontrol("O1-2 `*.bank.com`: .notbank.com reddedilmez", not _pol(["*.bank.com"]).cerez_reddedildi(".notbank.com"))
     kontrol("O1-2 `*.bank.com`: konak çerezi example.com etkilenmez",
@@ -227,6 +232,18 @@ def test_o1_places_wal():
                 f"{once} → {durum()}")
         kontrol("O1-4 WAL'daki reddedilen alt alan: .wal.test alan çerezi taşınmaz",
                 _pol(["*bank*"]).cerez_reddedildi(".wal.test", bilinen))
+        from deskhand.oturum import kopya
+
+        def bozuk(*_a, **_k):
+            raise OSError(28, "No space left on device")
+        eski = kopya.sqlite_yedek
+        kopya.sqlite_yedek = bozuk
+        try:
+            yedeksiz = firefox._bilinen_konaklar(kaynak, db, {})
+        finally:
+            kopya.sqlite_yedek = eski
+        kontrol("O1-4 geçici kopya alınamazsa ana dosyadaki geçmiş yine okunur (profil değişmez)",
+                "eski.ornek.test" in yedeksiz and durum() == once, str(yedeksiz))
     finally:
         yazar.close()
 

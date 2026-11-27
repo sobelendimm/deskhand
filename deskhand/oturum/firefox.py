@@ -205,6 +205,15 @@ def _bilinen_konaklar(kaynak: str, cookies_db: str, recovery: dict) -> set[str]:
                 finally:
                     con.close()
             except (sqlite3.Error, OSError):
+                gecici = None
+        if gecici is None:  # copy failed (e.g. tmpfs full): the main file alone (no WAL) still gives older visits
+            try:
+                con = sqlite3.connect(f"file:{quote(yer)}?mode=ro&immutable=1", uri=True)
+                try:
+                    konaklar |= {str(r[0]).lower() for r in con.execute("SELECT DISTINCT host FROM moz_origins")}
+                finally:
+                    con.close()
+            except sqlite3.Error:
                 pass
     konaklar.discard("")
     return konaklar

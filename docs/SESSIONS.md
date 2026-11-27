@@ -592,7 +592,9 @@ alt alana gidebiliyorsa o da reddedilir (`Politika.cerez_reddedildi`). Kuralın 
 - **Sonu sabit kural** (düz alan `accounts.google.com`, `*.bank.com`, `*.gov.tr`, `login?.ornek.com`): kural alan
   çerezinin gidebileceği HERHANGİ bir alt alanla (`X.ornek.com`) eşleşebiliyorsa çerez reddedilir. Karar yalnız
   kuraldan verilir, profile bakılmaz (kapalı-güvenli): `accounts.google.com` → `.google.com`, `*.bank.com` →
-  `.bank.com`, `*.gizli.ornek.com` → `.ornek.com` reddedilir; `*.gov.tr` `.ornek.com`'a dokunmaz.
+  `.bank.com`, `*.gizli.ornek.com` → `.ornek.com` reddedilir; `*.gov.tr` `.ornek.com`'a dokunmaz. Ortasında `*`
+  olup sonu sabit kural geniş tutar: `*bank*.com.tr`, `.com.tr` ile biten BÜTÜN alanların alan çerezini düşürür
+  (`bank.ornek.com.tr` her biri için olası bir alt alandır).
 - **Sonu `*` olan kural** (`*bank*`, `*checkout*`, `bank.*`): bu kural her alanın bir alt alanıyla eşleşebilir
   (`bank.<alan>`). Harfiyen uygulanırsa varsayılan listede bütün alan çerezleri (hesap oturumu izni verilmiş
   `.google.com` / `.live.com` dahil) düşerdi. Bu yüzden ancak **kanıtla** reddeder: profilden bilinen, alanın alt

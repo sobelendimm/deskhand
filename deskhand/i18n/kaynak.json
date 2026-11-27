@@ -991,7 +991,7 @@
  ],
  "Firefox profili bulunamadı (profiles.ini)": [
   "oturum/denetle.py:313",
-  "oturum/firefox.py:250"
+  "oturum/firefox.py:259"
  ],
  "Firefox çalışırken açılan erişilebilirliği algılamıyor: Firefox'u kapatıp yeniden başlat": [
   "erisim.py:239"
@@ -3262,7 +3262,7 @@
   "guvenlik.py:778"
  ],
  "kimlik oturumları: {ozet}": [
-  "oturum/firefox.py:477"
+  "oturum/firefox.py:486"
  ],
  "kimlikle verilen girdi komutunda otomatik tam başlık kilidini kapat": [
   "cli.py:406"
@@ -4676,7 +4676,7 @@
   "guvenlik.py:840"
  ],
  "{ad} aktarıldı ({cerez} çerez, {giris} kayıtlı giriş)": [
-  "oturum/firefox.py:472"
+  "oturum/firefox.py:481"
  ],
  "{ad} arka planda çalıştırılmaz (ikinci örnek asıl veriyi/oturumu bozar).": [
   "oturum/__init__.py:42"
@@ -4691,10 +4691,10 @@
   "oturum/__init__.py:148"
  ],
  "{ad} süzüldü (görev kipinde aktarılmaz)": [
-  "oturum/firefox.py:470"
+  "oturum/firefox.py:479"
  ],
  "{ad} süzüldü ({cerez} çerez; izin kapalı: panel → Ayarlar → Hesap oturumları)": [
-  "oturum/firefox.py:475"
+  "oturum/firefox.py:484"
  ],
  "{ad} · {g}×{y}": [
   "gui/metinler.py:219"
