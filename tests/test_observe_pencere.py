@@ -85,17 +85,17 @@ class SahteYol:
         pass
 
 
-def web_sec(cerceveler, baslik):
-    r, v = sonuc(web._cerceve_bul, SahteYol(cerceveler), WPID, baslik)
+def web_sec(cerceveler, baslik, kardes=None):
+    r, v = sonuc(web._cerceve_bul, SahteYol(cerceveler), WPID, baslik, kardes)
     return (r, v[4]) if r == "ok" else (r, v)
 
 
 print("A) web._cerceve_bul: aynı süreçte 3 Firefox çerçevesi")
 S, AS = ("showing",), ("active", "showing")
-r, v = web_sec([(F1, S), (F2, S), (GECIS, AS)], F1)
+r, v = web_sec([(F1, S), (F2, S), (GECIS, AS)], F1, [F2, "Soak-F3-p1 — Mozilla Firefox"])
 kontrol("geçiş anı: F3 etkin ve adı 'Mozilla Firefox' (F1 başlığının içinde) → yine F1'in çerçevesi", r == "ok" and v == F1,
         f"{r} {v}")
-r, v = web_sec([(F1, S), (F2, S), ("Soak-loading — Mozilla Firefox", AS)], F1)
+r, v = web_sec([(F1, S), (F2, S), ("Soak-loading — Mozilla Firefox", AS)], F1, [F2, "Soak-loading — Mozilla Firefox"])
 kontrol("geçiş anı: F3 'Soak-loading' başlığında, etkin → F1", r == "ok" and v == F1, f"{r} {v}")
 r, v = web_sec([("Soak-F1-p3 — Mozilla Firefox", S), (F2, S), (GECIS, AS)], F1)
 kontrol("F1'in çerçeve adı pencere başlığının gerisinde (birebir eşleşme yok) → tahmin yok, Dur 6 (yeniden dene)",
@@ -105,7 +105,7 @@ kontrol("aynı süreçte aynı başlıklı iki çerçeve → etkin olan SEÇİLM
         f"{r} {v}")
 r, v = web_sec([("Soak-C1-p0 - Chromium", AS)], "Soak-C1-p0 - Chromium")
 kontrol("tek çerçeve, birebir → seçilir", r == "ok" and v == "Soak-C1-p0 - Chromium", f"{r} {v}")
-r, v = web_sec([("Soak-C1-p0", AS)], "Soak-C1-p0 - Chromium")
+r, v = web_sec([("Soak-C1-p0", AS)], "Soak-C1-p0 - Chromium", [])
 kontrol("tek çerçeve (karışacak başka pencere yok), ad pencere başlığının içinde → seçilir (gerileme yok)",
         r == "ok" and v == "Soak-C1-p0", f"{r} {v}")
 r, v = web_sec([(F2, S), (GECIS, AS)], "Gizli Banka — Mozilla Firefox")
@@ -139,13 +139,14 @@ class SahteAtspi:
     def get_desktop(self, i): return self.m
 
 
-def er_sec(adlar, baslik):
-    r, v = sonuc(erisim._cerceve_bul, SahteAtspi([Uyg(PID, "Firefox", [Cerceve(a) for a in adlar])]), PID, baslik)
+def er_sec(adlar, baslik, kardes=None):
+    r, v = sonuc(erisim._cerceve_bul, SahteAtspi([Uyg(PID, "Firefox", [Cerceve(a) for a in adlar])]), PID, baslik,
+                 kardes)
     return (r, v[0].ad) if r == "ok" else (r, v)
 
 
 print("B) erisim._cerceve_bul: aynı süreçte 3 çerçeve")
-r, v = er_sec([F1, F2, GECIS], F1)
+r, v = er_sec([F1, F2, GECIS], F1, [F2, "Soak-F3-p1 — Mozilla Firefox"])
 kontrol("birebir başlık → F1", r == "ok" and v == F1, f"{r} {v}")
 r, v = er_sec(["Soak-F1-p3 — Mozilla Firefox", F2, GECIS], F1)
 kontrol("F1 adı geride, F3 'Mozilla Firefox' (içerme) → F3 SEÇİLMEZ, Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
@@ -153,10 +154,10 @@ r, v = er_sec(["Soak-F1-p3 — Mozilla Firefox", F2], F1)
 kontrol("birebir eşleşme yok, benzerlikle tahmin yok → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
 r, v = er_sec(["Belge — KWrite"], "Belge — KWrite")
 kontrol("tek çerçeve → seçilir", r == "ok" and v == "Belge — KWrite", f"{r} {v}")
-r, v = er_sec(["Belge"], "Belge — KWrite")
+r, v = er_sec(["Belge"], "Belge — KWrite", [])
 kontrol("tek çerçeve, içerme → seçilir (gerileme yok)", r == "ok" and v == "Belge", f"{r} {v}")
 DIYALOG = "File Upload - Soak-F1-p4 — Mozilla Firefox"
-r, v = er_sec([F1, DIYALOG], DIYALOG)
+r, v = er_sec([F1, DIYALOG], DIYALOG, [F1])
 kontrol("GTK dosya diyaloğu (adı ana pencereyi içerir): birebir diyalog çerçevesi", r == "ok" and v == DIYALOG, f"{r} {v}")
 
 # ================================================================ web.oku: okunan üst belge pencereye ait mi
@@ -187,6 +188,167 @@ r, v = oku_belge("Soak-F1-p4")
 kontrol("belge başlığı pencere başlığında → okunur", r == "ok" and v["sayfa"]["baslik"] == "Soak-F1-p4", f"{r} {v}")
 r, v = oku_belge("")
 kontrol("başlıksız belge (yükleniyor) → okunur (karşılaştırılacak ad yok)", r == "ok", f"{r} {v}")
+
+# ================================================================ SOAK-FIX-R1: bağımsız kanal (KWin kardeş pencereleri)
+# Bağımsız K2 incelemesinin PoC'leri (SOAK-FIX-INC/poc.py P1–P4b) + ORTA 1 (belge adı gecikmesi) + ORTA 3 (sızıntı).
+# kardes = hedef pencereyle AYNI süreçteki ÖBÜR pencerelerin KWin başlıkları (sayfadan bağımsız: pencere listesi KWin'in);
+# None = bilinmiyor (güvenli yön: yalnız tartışmasız durumda seçilir).
+MF = " — Mozilla Firefox"
+
+
+def web_sec2(cerceveler, baslik, kardes):
+    r, v = sonuc(web._cerceve_bul, SahteYol(cerceveler), WPID, baslik, kardes)
+    return (r, v[4]) if r == "ok" else (r, v)
+
+
+def er_sec2(adlar, baslik, kardes, uyg_pid=None, pencere_pid=None):
+    u = Uyg(uyg_pid or PID, "Firefox", [Cerceve(a) for a in adlar])
+    r, v = sonuc(erisim._cerceve_bul, SahteAtspi([u]), pencere_pid or PID, baslik, kardes)
+    return (r, v[0].ad) if r == "ok" else (r, v)
+
+
+print("D) SOAK-FIX-R1: saldırgan sayfa başlığı (P1–P4b), kardeş pencere teklik kuralı")
+# P1: F1'in (saldırgan sayfa) çerçeve adı eski; F1 pencere başlığını F3'ün (banka) başlığına eşitledi → iki KWin penceresi
+# aynı başlıkta: başlık kimlik kanıtı değil → Dur (önce: F3'ün çerçevesi seçiliyordu = banka içeriği F1 adına)
+for ad_, k_ in (("kardeş listesiyle", ["Banka Giris" + MF]), ("kardeş bilinmiyor", None)):
+    r, v = web_sec2([("Eski sayfa" + MF, S), ("Banka Giris" + MF, AS)], "Banka Giris" + MF, k_)
+    kontrol(f"P1 web ({ad_}): saldırgan başlığı kopyaladı → banka çerçevesi SEÇİLMEZ, Dur 6", r == "dur" and v.kod == 6,
+            f"{r} {v}")
+    r, v = er_sec2(["Eski sayfa" + MF, "Banka Giris" + MF], "Banka Giris" + MF, k_)
+    kontrol(f"P1 erisim ({ad_}): aynı → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+# P2: hedefin çerçevesi henüz yayınlanmamış; tek çerçeve öbür pencerenin → Dur (önce: tek aday = seçilirdi)
+for ad_, k_ in (("kardeş listesiyle", ["Banka Giris" + MF]), ("kardeş bilinmiyor", None)):
+    r, v = web_sec2([("Banka Giris" + MF, AS)], "Odeme listesi" + MF, k_)
+    kontrol(f"P2 web ({ad_}): tek çerçeve başka pencerenin → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+    r, v = er_sec2(["Banka Giris" + MF], "Odeme listesi" + MF, k_)
+    kontrol(f"P2 erisim ({ad_}): aynı → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+# tek pencereli uygulama (kardeş YOK, KWin'den bilinir): ad gecikmesi karışıklık değil → seçilir (gerileme yok)
+r, v = web_sec2([("Mozilla Firefox", AS)], "Soak-F1-p4" + MF, [])
+kontrol("tek pencere (kardeş yok), çerçeve adı geride → seçilir", r == "ok" and v == "Mozilla Firefox", f"{r} {v}")
+r, v = er_sec2(["Belge"], "Belge — KWrite", [])
+kontrol("erisim tek pencere (kardeş yok), ad geride → seçilir", r == "ok" and v == "Belge", f"{r} {v}")
+# meşru çok pencere: F3 geçişte (genel ad), F2 güncel → F1
+r, v = web_sec2([(F1, S), (F2, S), (GECIS, AS)], F1, [F2, "Soak-F3-p1" + MF])
+kontrol("3 Firefox, F3 geçişte (genel ad), kardeşler KWin'de → F1 seçilir", r == "ok" and v == F1, f"{r} {v}")
+r, v = er_sec2([F1, F2, GECIS], F1, [F2, "Soak-F3-p1" + MF])
+kontrol("erisim: aynı → F1", r == "ok" and v == F1, f"{r} {v}")
+# öbür çerçevenin adı hiçbir güncel pencere başlığında yok (bayat, genel değil) → geçiş sürüyor: Dur (çift yarış kapısı)
+r, v = web_sec2([(F1, S), ("Soak-F2-p0" + MF, S)], F1, [F2])
+kontrol("kardeş çerçevenin adı bayat (KWin'de böyle pencere yok) → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+# boş/genel pencere başlığı + kardeş var → başlık kanıt değil
+# genel pencere başlığı (yeni boş pencere "Mozilla Firefox"): ad kanıt değil; ÖBÜR her çerçeve bir kardeşe, her kardeş bir
+# çerçeveye denk geliyorsa kalan çerçeve elemeyle bu pencerenin (ölçüldü: yeni pencerede adres yazma akışı buna dayanır)
+r, v = web_sec2([("Mozilla Firefox", AS), (F2, S)], "Mozilla Firefox", [F2])
+kontrol("genel başlık, tüm kardeşler çerçeveleriyle açıklanıyor → elemeyle seçilir", r == "ok" and v == "Mozilla Firefox",
+        f"{r} {v}")
+r, v = web_sec2([("Mozilla Firefox", AS)], "Mozilla Firefox", [F2])
+kontrol("genel başlık, kardeşin çerçevesi yok (o çerçeve geçişte olabilir) → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+r, v = web_sec2([("Mozilla Firefox", AS), (F2, S), ("Soak-F3-p0" + MF, S)], "Mozilla Firefox", [F2])
+kontrol("genel başlık, açıklanmayan ADLI çerçeve var → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+# ölçüldü (gerçek KWin, test_arka_chromium): Ctrl+L sonrası Chromium öneri listesi adsız üst düzey çerçeve
+r, v = er_sec2(["F3R2-CR-BIR - Chromium", "Yeni Sekme - Chromium", ""], "Yeni Sekme - Chromium", ["F3R2-CR-BIR - Chromium"])
+kontrol("Chromium yeni pencere + adsız öneri çerçevesi (gerçek ölçüm) → yeni pencerenin çerçevesi",
+        r == "ok" and v == "Yeni Sekme - Chromium", f"{r} {v}")
+r, v = er_sec2(["Yeni Sekme - Chromium", ""], "Yeni Sekme - Chromium", ["F3R2-CR-BIR - Chromium"])
+kontrol("genel başlık, kardeşin çerçevesi yok + adsız çerçeve (kardeşinki olabilir) → Dur 6", r == "dur" and v.kod == 6,
+        f"{r} {v}")
+r, v = web_sec2([("Mozilla Firefox", AS), ("Mozilla Firefox", S)], "Mozilla Firefox", ["Mozilla Firefox"])
+kontrol("iki boş pencere (aynı genel başlık) → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+r, v = er_sec2(["", F2], "", [F2])
+kontrol("boş pencere başlığı + kardeş → Dur 6 (SequenceMatcher('', '') = 1.0 benzerlik sayılmaz)", r == "dur" and v.kod == 6,
+        f"{r} {v}")
+r, v = er_sec2([""], "", None)
+kontrol("boş başlık, tek çerçeve, kardeş bilinmiyor → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+# GTK diyaloğu: diyalog ayrı KWin penceresi (kardeş) → ana pencere de diyalog da birebir seçilir
+r, v = er_sec2([F1, DIYALOG], DIYALOG, [F1])
+kontrol("GTK diyaloğu (kardeş = ana pencere) → diyalog çerçevesi", r == "ok" and v == DIYALOG, f"{r} {v}")
+r, v = er_sec2([F1, DIYALOG], F1, [DIYALOG])
+kontrol("ana pencere (kardeş = diyalog) → ana çerçeve", r == "ok" and v == F1, f"{r} {v}")
+# P4 / P4b: torun süreç (Chromium); süzgeç aday elemeden ÖNCE sayılır
+_eski = erisim._surec_akrabasi, erisim._exe
+erisim._surec_akrabasi, erisim._exe = (lambda a, b: True), (lambda p: "/usr/bin/chromium")
+try:
+    r, v = er_sec2(["Inbox - Gmail - Chromium", "Faturalar - Banka - Chromium"], "Faturalar - Banka - Chromiun",
+                   ["Faturalar - Banka - Chromium"], uyg_pid=777, pencere_pid=4242)
+    kontrol("P4 torun: hedef adı eski, öbürü benzer → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+    r, v = er_sec2(["Eski - Chromium", "Faturalar - Banka - Chromium"], "Faturalar - Banka 2 - Chromium",
+                   ["Faturalar - Banka - Chromium"], uyg_pid=777, pencere_pid=4242)
+    kontrol("P4b torun: hedef çerçevesi süzgeçte düşerdi, tek kalan öbürü → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+    r, v = er_sec2(["Eski - Chromium", "Faturalar - Banka - Chromium"], "Faturalar - Banka 2 - Chromium", None,
+                   uyg_pid=777, pencere_pid=4242)
+    kontrol("P4b torun, kardeş bilinmiyor → Dur 6", r == "dur" and v.kod == 6, f"{r} {v}")
+finally:
+    erisim._surec_akrabasi, erisim._exe = _eski
+
+
+class KardesAu:
+    ad = "sanal"
+
+    def __init__(self, pencereler): self.p = pencereler  # [(kimlik, başlık, pid)]
+    def pencereler(self, desen=None): return [(k, b, (0, 0, 10, 10)) for k, b, _p in self.p]
+    def pid(self, k): return next(p for k_, _b, p in self.p if k_ == k)
+    def baslik(self, k): return next(b for k_, b, _p in self.p if k_ == k)
+
+
+au_ = KardesAu([("arka:{a}", F1, 50), ("arka:{b}", F2, 50), ("arka:{c}", "Belge — KWrite", 60)])
+kontrol("kardes_basliklari: yalnız AYNI süreçteki öbür pencereler", erisim.kardes_basliklari(au_, "arka:{a}", 50) == [F2],
+        str(erisim.kardes_basliklari(au_, "arka:{a}", 50)))
+
+class KwinKardesAu:
+    tur = "kwin"
+
+    def _liste(self):
+        return [{"i": "00000000-0000-0000-0000-00000000000a", "t": F1, "p": 50},
+                {"i": "00000000-0000-0000-0000-00000000000b", "t": F2, "p": 50},
+                {"i": "00000000-0000-0000-0000-00000000000c", "t": "Belge — KWrite", "p": 60}]
+
+
+kontrol("kardes_basliklari (KWin: tek liste betiği, pid dahil): yalnız aynı süreçteki öbürleri",
+        erisim.kardes_basliklari(KwinKardesAu(), "arka:00000000-0000-0000-0000-00000000000a", 50) == [F2],
+        str(erisim.kardes_basliklari(KwinKardesAu(), "arka:00000000-0000-0000-0000-00000000000a", 50)))
+kontrol("kardes_basliklari: liste alınamazsa None (bilinmiyor)",
+        erisim.kardes_basliklari(object(), "arka:{a}", 50) is None)
+
+print("E) web.oku ikinci kilit: önek + ayraç, sızıntısız ileti, ≤1 sn yeniden deneme (ORTA 1, ORTA 3, DÜŞÜK 4)")
+for belge, pencere in [("a", "X" + MF), ("Firefox", "Odeme" + MF), ("—", "Odeme" + MF), ("!!!", "Odeme" + MF),
+                       ("🏦", "Odeme" + MF), ("Banka", "Banka odemeleri — Odeme" + MF)]:
+    r, v = sonuc(web._belge_pencereye_ait, {"ad": belge}, pencere)
+    kontrol(f"P3 belge {belge!r} / pencere {pencere!r} → Dur 6 (alt dizge kanıt değil)", r == "dur" and v.kod == 6,
+            f"{r} {v}")
+for belge, pencere in [("Banka odemeleri — Odeme", "Banka odemeleri — Odeme" + MF), ("Soak-C1-p0", "Soak-C1-p0 - Chromium"),
+                       ("Electron Belge", "Electron Belge")]:
+    r, v = sonuc(web._belge_pencereye_ait, {"ad": belge}, pencere)
+    kontrol(f"belge {belge!r} pencere başlığının başında + ayraç/marka → geçer", r == "ok", f"{r} {v}")
+r, v = sonuc(web._belge_pencereye_ait, {"ad": "Hesap Ozeti - Ali Veli 4421"}, "Odeme" + MF)
+kontrol("P3 sızıntı: Dur iletisi OKUNAN belgenin başlığını içermez", r == "dur" and "Ali Veli" not in v.mesaj and
+        "Hesap Ozeti" not in v.mesaj, f"{r} {v}")
+
+
+def oku_dizi(adlar, pencere):
+    """Her _yuru çağrısında sıradaki belge adı (son ad tekrarlanır): belge adı pencere başlığının gerisinde (ORTA 1)."""
+    eski = web._baglam, web._yuru
+    sayac = [0]
+
+    def yuru(*a, **k):
+        ad = adlar[min(sayac[0], len(adlar) - 1)]
+        sayac[0] += 1
+        return [], [{"ad": ad, "adres": "http://127.0.0.1/x", "durum": {"showing"}, "derinlik": 1, "kutu": None}], 3
+    web._baglam = lambda k, islem="tara": (SahteAu(pencere), SahteYol([]), ":1.50", "/c", 0, (0, 0), "c")
+    web._yuru = yuru
+    t = time.monotonic()
+    try:
+        r = sonuc(web.oku, "arka:{x}", ayrinti=False)
+        return r, sayac[0], time.monotonic() - t
+    finally:
+        web._baglam, web._yuru = eski
+
+
+(r, v), n, sure = oku_dizi(["TIK Bülten aboneliği #2", "TIK Bülten aboneliği #2", "TIK Kaydet #3"], "TIK Kaydet #3" + MF)
+kontrol("ORTA 1: tıklama sonrası belge adı 2 okuma geride → kısa yeniden denemeyle okunur (yanlış pozitif yok)",
+        r == "ok" and v["sayfa"]["baslik"] == "TIK Kaydet #3" and n == 3, f"{r} {v} n={n}")
+(r, v), n, sure = oku_dizi(["Soak-F3-p6"], F1)
+kontrol("kalıcı uyuşmazlık → Dur 6, üst sınır ≤ 1.5 sn", r == "dur" and v.kod == 6 and sure <= 1.5 and n >= 2,
+        f"{r} n={n} sure={sure:.2f}")
 
 t0 = time.monotonic()
 print(f"\n{gecen}/{toplam} test geçti ({time.monotonic() - t0:.1f} sn)")
