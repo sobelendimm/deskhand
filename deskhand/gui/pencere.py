@@ -851,6 +851,7 @@ class OnaylarSekmesi(QWidget):
 
 Y_DOGRULANMADI = N_("DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı "
                     "geri yükler (imzalı kayıt yoksa girişleri yeniden sorar); o zamana kadar Deskhand durdu (Dur 10).")
+Y_DOSYADA_FARKLI = N_("Ayar dosyasında doğrulanmamış değer var ({deger}); uygulanmıyor. Gösterilen, geçerli değerdir.")
 
 
 class AyarlarSekmesi(QScrollArea):
@@ -1126,6 +1127,34 @@ class AyarlarSekmesi(QScrollArea):
         i = c.findData(deger)
         if i >= 0:
             c.setCurrentIndex(i)
+
+    def panel_degerleri_yukle(self) -> None:
+        """Onay kapsamı + hesap oturumları: arka ucun UYGULADIĞI (panelin yetkili) değer, sinyal üretmeden. Sekme
+        panel koruyucusundan (liste_koruma.panel_baslat) ÖNCE kurulur: panel açılışta ve sekme her gösterildiğinde
+        bunu çağırır. Dosyada başka (doğrulanmamış) değer yazıyorsa boş kutuyla gizlenmez, etiketlenir."""
+        from .. import liste_koruma
+        kapsam = A.onay_kapsami_oku()
+        self._sec(self.c_onay, kapsam)
+        self._hesap_kutulari()
+        dosya_kapsam = liste_koruma._kapsam_dosyadan()
+        self._farkli_etiket(self.l_onay, dosya_kapsam != kapsam,
+                            _(T.Y_ONAY_SECENEK.get(dosya_kapsam, dosya_kapsam)))
+        dosya_kimlik = liste_koruma.kimlik_dosyada()
+        self._farkli_etiket(self.l_hesap, dosya_kimlik != A.hesap_oturumlari_oku(),
+                            ", ".join(_(T.Y_HESAP_AD[s]) for s in A.HESAP_SAGLAYICILARI if s in dosya_kimlik) or "—")
+
+    def _farkli_etiket(self, etiket: QLabel, farkli: bool, dosyadaki: str) -> None:
+        if farkli:
+            etiket.setText(_(Y_DOSYADA_FARKLI).format(deger=dosyadaki))
+        elif etiket.property("dosyada_farkli"):
+            etiket.setText("")
+        etiket.setProperty("dosyada_farkli", farkli)
+
+    def showEvent(self, e):  # noqa: N802
+        super().showEvent(e)
+        from .. import liste_koruma
+        if liste_koruma.AKTIF is not None:  # panel sürecinde: bellek okuması (kanal çağrısı yok)
+            self.panel_degerleri_yukle()
 
     def karar_kaydet(self):
         try:

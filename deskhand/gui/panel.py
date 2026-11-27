@@ -185,6 +185,8 @@ class Panel(QObject):
 
         onay.panel_kaydet()
         self._liste_koruma_baslat()
+        # Ayarlar sekmesi koruyucudan ÖNCE kuruldu (AKTIF yokken "hepsi"/boş okudu): etkin değeri şimdi göster
+        self.pencere.ayarlar.panel_degerleri_yukle()
         try:  # önceki (çökmüş / SIGKILL) panelden kalan sahipsiz Devral bayrağı ajanı bekletmesin
             from .durum import devral_sahipsiz_sil
             devral_sahipsiz_sil()

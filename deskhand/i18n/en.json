@@ -115,6 +115,7 @@
  "Arka planda yap": "Do it in the background",
  "Arka planda çalışıyor": "Running in the background",
  "Ayarlar": "Settings",
+ "Ayar dosyasında doğrulanmamış değer var ({deger}); uygulanmıyor. Gösterilen, geçerli değerdir.": "The settings file holds an unverified value ({deger}); it is not applied. The value shown is the one in effect.",
  "Ayrıntı": "Details",
  "AÇIK": "ON",
  "AÇIK ({yol})": "ON ({yol})",
