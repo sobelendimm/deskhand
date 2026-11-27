@@ -10,6 +10,10 @@ Covers:
   N2 a cookie domain that cannot be converted (broken ACE label) is rejected (closed-fail)
   N3 no false positive: non-bank domains stay allowed under the same rules and under the default list
   N4 identity-provider permit (kimlik_izni_uygula) still removes the equivalent spelling of its entries only
+  N5 review round 1: rules are also tried against the ACE spelling (`*xn--*`, `xn--*`, `*bank*` vs xn--bank-cpa);
+     allow lists need BOTH spellings of a host to match
+  N6 regression gate: every (rules, host, known hosts) the da2db0e code rejected is rejected here too (seeded
+     random + exhaustive single-rule set; the da2db0e decision is copied into this file)
   F1 places.sqlite: when the temporary directory cannot be created (OSError), the known hosts still come from the
      main file (no WAL) instead of crashing hazirla
 
@@ -113,6 +117,130 @@ def test_n4_kimlik_izni():
     kontrol("N4 izin eşdeğer yazımı da çıkarır", not acik.site_reddedildi("login.live.com"))
     kontrol("N4 izin banka desenine dokunmaz", acik.site_reddedildi("www.bank.example"))
     kontrol("N4 asıl nesne değişmez", p.site_reddedildi("login.live.com"))
+    p2 = politika.Politika("firefox", {}, {"reddet": [".login.live.com", "*bank*"]})
+    kontrol("N4 baştaki noktalı yazım reddeder", p2.site_reddedildi("login.live.com"))
+    kontrol("N4 baştaki noktalı yazımı izin de çıkarır", not p2.kimlik_izni_uygula(["microsoft"]).site_reddedildi(
+        "login.live.com"))
+    p3 = politika.Politika("firefox", {}, {"reddet": ["*.login.live.com", "login.live.com.evil.example"]})
+    acik3 = p3.kimlik_izni_uygula(["microsoft"])
+    kontrol("N4 izin desen/başka alan girdisini çıkarmaz", acik3.site_reddedildi("a.login.live.com")
+            and acik3.site_reddedildi("login.live.com.evil.example"))
+
+
+def test_n5_ace_bicimi():
+    """Review round 1 (HIGH): a rule must still be tried against the ACE (punycode) spelling of a host."""
+    vakalar = [
+        ("*xn--* (bütün IDN) → ACE alan çerezi", ["*xn--*"], f".{ACE}.com"),
+        ("*xn--* → Unicode alan çerezi", ["*xn--*"], ".bankası.com"),
+        ("xn--* → ACE konak", ["xn--*"], f"{ACE}.com"),
+        ("xn--* → Unicode konak", ["xn--*"], "bankası.com"),
+        ("*bank* → xn--bank-cpa.com (baénk.com)", ["*bank*"], "xn--bank-cpa.com"),
+        ("*bank* → .xn--bank-cpa.com alan çerezi", ["*bank*"], ".xn--bank-cpa.com"),
+        ("*bank* → baénk.com Unicode yazımı", ["*bank*"], "baénk.com"),
+        ("*xn--* → ß içeren IDNA2008 ACE", ["*xn--*"], ".xn--strae-oqa.example"),
+    ]
+    for ad, r, h in vakalar:
+        kontrol(f"N5 {ad}", pol(r).cerez_reddedildi(h), f"reddet={r} host={h!r}")
+    for ad, r, h in (("site: *xn--*", ["*xn--*"], f"www.{ACE}.com"), ("site: *bank*", ["*bank*"], "xn--bank-cpa.com")):
+        kontrol(f"N5 {ad} → {h}", pol(r).site_reddedildi(h))
+    for h in (".example.com", "www.example.com", "example.com", ".github.com"):
+        kontrol(f"N5 negatif: *xn--* / xn--* ASCII alana dokunmaz: {h}", not pol(["*xn--*", "xn--*"]).cerez_reddedildi(h))
+    # allow direction: a task site matches only when BOTH spellings of the host match
+    p = pol([])
+    kontrol("N5 izin: xn--* görev sitesi Unicode konağa izin vermez", not p.site_izinli("bankası.com", ["xn--*"]))
+    kontrol("N5 izin: ACE görev sitesi Unicode konağa izin verir", p.site_izinli("bankası.com", [f"{ACE}.com"]))
+    kontrol("N5 görev kipi: Unicode görev sitesi ACE konak", firefox.gorev_izinli(p, f"{ACE}.com", ["bankası.com"]))
+
+
+# ---- regression gate: every (rules, host) the da2db0e code rejected is still rejected -------------------------
+# The da2db0e decision, copied verbatim (raw lower-case spelling only); _alt_alana_uyabilir did not change.
+
+def _eski_alan_eslesir(alan, kaliplar):
+    import fnmatch
+    alan = (alan or "").strip().lower().rstrip(".")
+    if not alan:
+        return False
+    for k in kaliplar:
+        k = str(k).strip().lower()
+        if not k:
+            continue
+        if fnmatch.fnmatch(alan, k):
+            return True
+        if "*" not in k and "?" not in k and (alan == k or alan.endswith("." + k)):
+            return True
+    return False
+
+
+def _eski_cerez_reddedildi(reddet, host, bilinen_konaklar=()):
+    h = (host or "").strip().lower()
+    alan = h.lstrip(".").rstrip(".")
+    if not alan:
+        return False
+    if _eski_alan_eslesir(alan, reddet):
+        return True
+    if not h.startswith("."):
+        return False
+    for k in reddet:
+        k = str(k).strip().lower()
+        if not k:
+            continue
+        if "*" not in k and "?" not in k and "[" not in k and (k == alan or k.endswith("." + alan)):
+            return True
+        if not k.endswith("*") and politika._alt_alana_uyabilir(k, alan):
+            return True
+    for b in bilinen_konaklar or ():
+        b = str(b).strip().lower().lstrip(".").rstrip(".")
+        if b != alan and b.endswith("." + alan) and _eski_alan_eslesir(b, reddet):
+            return True
+    return False
+
+
+KURALLAR = ["*bank*", "*xn--*", "xn--*", "*.bank.com", "bank.com", "*.gov.tr", "*bankası*", f"*.{ACE}.com",
+            "login?.bank.com", "[l]ogin.bank.com", "*bank*.com", "pay*.com", ".bank.com", "*.bank.com.",
+            "accounts.google.com", "*e-devlet*", "*.xn--bank-cpa.com", "*BANK*", "*.bank.com*", "bank.*", "*ı*",
+            "xn--bank-cpa.com", "*.örnek.example", "*-cpa*", "*xn--b*"]
+ETIKETLER = ["bank", "xn--bank-cpa", "baénk", "bankası", ACE, "login", "www", "example", "com", "tr", "gov",
+             "xn--strae-oqa", "straße", "BANK", "xn--zz!!", "örnek", "xn--rnek-4qa", "google", "accounts", "e-devlet",
+             "pay", "cpa", "ı", "xn--bankas-n9a"]
+
+
+def _rastgele_konak(r):
+    ad = ".".join(r.choice(ETIKETLER) for _ in range(r.randint(1, 4)))
+    if r.random() < 0.5:
+        ad = "." + ad
+    if r.random() < 0.15:
+        ad += "."
+    return ad
+
+
+def test_n6_gerileme_kapisi():
+    import random
+    r = random.Random(20261127)  # noqa: S311 - test data, not cryptography
+    kacan, sayac, eski_ret = [], 0, 0
+    for _ in range(6000):
+        kurallar = r.sample(KURALLAR, r.randint(1, 3))
+        host = _rastgele_konak(r)
+        bilinen = {_rastgele_konak(r).lstrip(".") for _ in range(r.randint(0, 2))}
+        sayac += 1
+        if _eski_cerez_reddedildi(kurallar, host, bilinen):
+            eski_ret += 1
+            if not pol(kurallar).cerez_reddedildi(host, bilinen):
+                kacan.append((kurallar, host, sorted(bilinen)))
+        if _eski_alan_eslesir(host.lstrip("."), kurallar) and not pol(kurallar).site_reddedildi(host.lstrip(".")):
+            kacan.append((kurallar, "site:" + host))
+    # every single rule × every single-label / two-label host, exhaustively
+    for k in KURALLAR:
+        for a in ETIKETLER:
+            for b in ETIKETLER + [""]:
+                for nokta in ("", "."):
+                    host = nokta + a + ("." + b if b else "")
+                    sayac += 1
+                    if _eski_cerez_reddedildi([k], host):
+                        eski_ret += 1
+                        if not pol([k]).cerez_reddedildi(host):
+                            kacan.append(([k], host))
+    kontrol(f"N6 gerileme kapısı: eski kodun reddettiği her (kural, konak) yeni kodda da reddedilir "
+            f"({sayac} vaka, eski ret {eski_ret})", not kacan, repr(kacan[:5]))
 
 
 def test_f1_gecici_dizin_yok():
@@ -143,7 +271,7 @@ def test_f1_gecici_dizin_yok():
 def main():
     print("deskhand:", os.path.dirname(politika.__file__))
     for f in (test_n1_esdeger_yazim, test_n2_donusturulemeyen, test_n3_yanlis_pozitif_yok, test_n4_kimlik_izni,
-              test_f1_gecici_dizin_yok):
+              test_n5_ace_bicimi, test_n6_gerileme_kapisi, test_f1_gecici_dizin_yok):
         try:
             f()
         except Exception as e:  # noqa: BLE001 - a crashing case is a failure, the others still run

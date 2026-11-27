@@ -608,10 +608,12 @@ alt alana gidebiliyorsa o da reddedilir (`Politika.cerez_reddedildi`). Kuralın 
 - **Bilinen sınır (bilerek böyle kalır):** sonu `*` olan kural yalnız profilde GÖRÜLMÜŞ alt alanların alan
   çerezini düşürür; hiç görülmemiş (ziyaret edilmemiş, çerezi/deposu olmayan) bir alt alan kapsanmaz. Böyle bir alt
   alanı kesin dışarıda tutmak için sonu sabit bir kural ekleyin (`bank.ornek.com` ya da `*.bank.ornek.com`).
-- **Yazım eşdeğerliği:** kural yüklenirken ve konak/çerez alanı karşılaştırılırken aynı biçime indirilir: küçük harf,
-  sondaki nokta(lar) atılır, IDNA noktaları (`。` `．` `｡`) `.` olur, Unicode ve punycode (`xn--…`) etiketler aynı
-  (nameprep'li Unicode) biçimde karşılaştırılır: `*.bankası.com` kuralı `.xn--bankas-u9a.com` çerezini de reddeder
-  (tersi de). Düz kuraldaki baştaki nokta (`.bank.com`) `bank.com` ile aynı anlamdadır (alan + alt alanları).
+- **Yazım eşdeğerliği:** kural da konak/çerez alanı da aynı biçimlere indirilir: küçük harf, sondaki nokta(lar)
+  atılır, IDNA noktaları (`。` `．` `｡`) `.` olur; her ad üç yazımla ele alınır: yazıldığı gibi, nameprep'li Unicode
+  ve punycode (`xn--…`). Ret listesinde HERHANGİ bir yazımın eşleşmesi yeter: `*.bankası.com` kuralı
+  `.xn--bankas-u9a.com` çerezini de reddeder (tersi de), `*xn--*` bütün IDN alanlarını, `*bank*`
+  `xn--bank-cpa.com`'u (`baénk.com`) reddeder. İzin listesinde (görev siteleri) adın Unicode VE punycode yazımının
+  ikisi de eşleşmelidir. Düz kuraldaki baştaki nokta (`.bank.com`) `bank.com` ile aynı anlamdadır (alan + alt alanları).
   Çözülemeyen bir IDNA etiketi taşıyan konak/çerez alanı (bozuk punycode, büyük harf ya da normalleşmemiş metin
   kodlayan `xn--` etiketi) reddedilir (kapalı-başarısız).
 - **Banka/ödeme oturumları bu sürümde hiç taşınmaz:** varsayılan listedeki banka/ödeme girdileri hiçbir panel izniyle

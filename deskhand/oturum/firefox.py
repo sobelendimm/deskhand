@@ -98,7 +98,8 @@ user_pref("extensions.enabledScopes", 0);
 def gorev_izinli(politika: Politika, alan: str, gorev_siteleri) -> bool:
     """Görev kipi site izni: görev siteleri BOŞSA hiçbir site (çerezsiz profil); ret listesi her zaman kazanır."""
     from .politika import _alan_eslesir
-    return bool(gorev_siteleri) and not politika.site_reddedildi(alan) and _alan_eslesir(alan, gorev_siteleri)
+    return bool(gorev_siteleri) and not politika.site_reddedildi(alan) and _alan_eslesir(alan, gorev_siteleri,
+                                                                                           hepsi=True)
 
 
 def _cerez_say(cookies_db: str) -> int:
