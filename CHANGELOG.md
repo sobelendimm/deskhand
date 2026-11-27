@@ -56,9 +56,9 @@ panel "removes" or "lifts" something, the rules in this section and in the READM
 - Do not update a machine that runs unattended while nobody is at it: both the question and the Resume need you.
 - The memory-watch counters were reset by the new format; the first restart limits start from zero.
 
-## 0.10.0
+### Earlier unreleased changes (planned for the next version)
 
-Everything in 0.6.0–0.9.1 below, plus:
+Changes since 0.9.1:
 
 - **Security: MCP `open_app(args)` could run commands without approval in 0.5.4 and earlier; closed since
   0.6.0 (see below).** Updating is recommended.
