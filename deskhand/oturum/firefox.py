@@ -145,6 +145,92 @@ def _alan(host: str) -> str:
     return (host or "").lstrip(".").lower()
 
 
+def _recovery_oku(recovery: str) -> dict:
+    ham = mozlz4_coz(recovery) if recovery and os.path.isfile(recovery) else None
+    if ham is None:
+        return {}
+    try:
+        veri = json.loads(ham)
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    return veri if isinstance(veri, dict) else {}
+
+
+def _bilinen_konaklar(kaynak: str, cookies_db: str, recovery: dict) -> set[str]:
+    """Hosts known from the profile (read only; values are never read): cookie hosts of the copy, site storage
+    folders, session-cookie hosts and open-tab hosts of recovery.jsonlz4, and visited origins in places.sqlite
+    (opened read-only + immutable: no -wal/-shm is created in the user's profile). Used to decide whether a domain
+    cookie (`.example.com`) would also be sent to a rejected subdomain (`*bank*` -> bank.example.com)."""
+    from urllib.parse import quote, urlsplit
+    konaklar: set[str] = set()
+    try:
+        con = sqlite3.connect(cookies_db)
+        try:
+            konaklar |= {_alan(r[0]) for r in con.execute("SELECT DISTINCT host FROM moz_cookies")}
+        finally:
+            con.close()
+    except sqlite3.Error:
+        pass
+    try:
+        for ad in os.listdir(os.path.join(kaynak, "storage", "default")):
+            if "+++" in ad:
+                konaklar.add(ad.split("+++", 1)[1].split("^", 1)[0].split("+", 1)[0].lower())
+    except OSError:
+        pass
+    for c in recovery.get("cookies") or ():
+        if isinstance(c, dict):
+            konaklar.add(_alan(c.get("host", "")))
+    for p in recovery.get("windows") or ():
+        for sekme in (p.get("tabs") or ()) if isinstance(p, dict) else ():
+            for g in (sekme.get("entries") or ()) if isinstance(sekme, dict) else ():
+                try:
+                    konaklar.add((urlsplit(str(g.get("url", ""))).hostname or "").lower())
+                except (ValueError, AttributeError):
+                    pass
+    yer = os.path.join(kaynak, "places.sqlite")
+    if os.path.isfile(yer):
+        try:
+            con = sqlite3.connect(f"file:{quote(yer)}?mode=ro&immutable=1", uri=True)
+            try:
+                konaklar |= {str(r[0]).lower() for r in con.execute("SELECT DISTINCT host FROM moz_origins")}
+            finally:
+                con.close()
+        except sqlite3.Error:
+            pass
+    konaklar.discard("")
+    return konaklar
+
+
+def _cookies_yeniden_kur(cookies_db: str) -> bool:
+    """Rebuild the copied cookies.sqlite from its remaining rows only (VACUUM INTO a new file): rows removed with
+    DELETE can stay as raw bytes in free pages, in the WAL or in page slack when secure_delete is off. The old file
+    and its -wal/-shm/-journal are deleted. On any failure the cookie database is removed entirely (no session beats
+    leaking a rejected value). Returns True when the rebuilt database is in place."""
+    yeni = cookies_db + ".yeni"
+    yan = [cookies_db + e for e in ("-wal", "-shm", "-journal")]
+    try:
+        if os.path.exists(yeni):
+            os.remove(yeni)
+        con = sqlite3.connect(cookies_db)
+        try:
+            con.execute("PRAGMA secure_delete=ON")
+            con.execute("VACUUM INTO ?", (yeni,))
+        finally:
+            con.close()
+        for y in [cookies_db] + yan:
+            if os.path.exists(y):
+                os.remove(y)
+        os.replace(yeni, cookies_db)
+        return True
+    except (sqlite3.Error, OSError):
+        for y in [cookies_db, yeni] + yan:
+            try:
+                os.remove(y)
+            except OSError:
+                pass
+        return False
+
+
 # ------------------------------------------------------------------ ana kopya
 
 def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
@@ -208,20 +294,24 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
     kopya_cookies = os.path.join(hedef, "cookies.sqlite")
     izinli_alanlar: set[str] = set()
     kimlik_mevcut = _kimlik_cerez_say(kopya_cookies, orijinal) if os.path.isfile(kopya_cookies) else {}
+    rec = os.path.join(kaynak, "sessionstore-backups", "recovery.jsonlz4")
+    bilinen = _bilinen_konaklar(kaynak, kopya_cookies, _recovery_oku(rec)) if os.path.isfile(kopya_cookies) else set()
     if os.path.isfile(kopya_cookies):
         bilgi["cerez_sayisi"], bilgi["ret_silindi"], izinli_alanlar = _cookies_suz(
-            kopya_cookies, politika, gorev_siteleri)
+            kopya_cookies, politika, gorev_siteleri, bilinen)
 
     if gorev and os.path.isfile(kopya_cookies):  # görevde izin verilmeyen sitelerin çerezleri SİLİNİR (boş = hepsi)
         bilgi["gorev_cerez_silindi"] = _gorev_cerez_suz(kopya_cookies, politika, gorev_siteleri)
         izinli_alanlar = {a for a in izinli_alanlar if gorev_izinli(politika, a, gorev_siteleri)}
         bilgi["cerez_sayisi"] = _cerez_say(kopya_cookies)
     # 5) oturum çerezleri (recovery.jsonlz4 → kopya cookies.sqlite)
-    rec = os.path.join(kaynak, "sessionstore-backups", "recovery.jsonlz4")
     if os.path.isfile(rec) and os.path.isfile(kopya_cookies) and (not gorev or gorev_siteleri):
-        eklendi, ek_alanlar = _oturum_cerezleri_ekle(rec, kopya_cookies, politika, gorev_siteleri, gorev)
+        eklendi, ek_alanlar = _oturum_cerezleri_ekle(rec, kopya_cookies, politika, gorev_siteleri, gorev, bilinen)
         bilgi["oturum_cerez_eklendi"] = eklendi
         izinli_alanlar |= ek_alanlar
+    # 5a) the copy keeps only the allowed rows: rebuilt so that no removed value survives in the file bytes
+    if os.path.isfile(kopya_cookies) and not _cookies_yeniden_kur(kopya_cookies):
+        bilgi["cerez_sayisi"] = 0
 
     # 5b) kimlik oturumu özeti (kullanıcı/ajan neden giriş istendiğini görsün): izinle aktarılan / izinsiz süzülen
     bilgi["kimlik_ozet"] = _kimlik_ozet(kopya_cookies, hedef, orijinal, kimlik_izni, kimlik_mevcut)
@@ -407,13 +497,15 @@ def kimlik_son_oku() -> dict | None:
         return None
 
 
-def _cookies_suz(cookies_db: str, politika: Politika, gorev_siteleri) -> tuple[int, int, set]:
+def _cookies_suz(cookies_db: str, politika: Politika, gorev_siteleri, bilinen_konaklar=None) -> tuple[int, int, set]:
     """Kopya cookies.sqlite'ındaki ret alanlarını SİL; kalan çerez alanlarını (izinli) döndür.
-    Döner: (kalan_çerez, silinen, izinli_alanlar). Değer okunmaz; yalnız host."""
+    Döner: (kalan_çerez, silinen, izinli_alanlar). Değer okunmaz; yalnız host.
+    bilinen_konaklar: see Politika.cerez_reddedildi (the cookie hosts of this database are always added)."""
     con = sqlite3.connect(cookies_db)
     try:
         hostlar = [r[0] for r in con.execute("SELECT DISTINCT host FROM moz_cookies")]
-        silinecek = [h for h in hostlar if politika.cerez_reddedildi(h)]
+        bilinen = set(bilinen_konaklar or ()) | {_alan(h) for h in hostlar}
+        silinecek = [h for h in hostlar if politika.cerez_reddedildi(h, bilinen)]
         for h in silinecek:
             con.execute("DELETE FROM moz_cookies WHERE host=?", (h,))
         con.commit()
@@ -425,16 +517,26 @@ def _cookies_suz(cookies_db: str, politika: Politika, gorev_siteleri) -> tuple[i
         con.close()
 
 
-def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, gorev_siteleri, gorev: bool = False):
-    """recovery.jsonlz4 kökündeki `cookies` dizisini kopya cookies.sqlite'ına ekle (ret hariç).
-    Döner: (eklenen, eklenen_alanlar). Firefox oturum çerezi biçimi: {host,name,value,path,...}."""
-    ham = mozlz4_coz(recovery)
-    if ham is None:
-        return 0, set()
+def _kaynak_bitis(c: dict) -> float | None:
+    """Source expiry of a sessionstore cookie in SECONDS (None = no expiry given). Firefox writes nsICookie.expiry:
+    seconds in older releases, milliseconds in newer ones (values above 1e11 are taken as ms). A value that is not a
+    number counts as already expired (0) so the cookie is skipped."""
+    v = c.get("expiry")
+    if v is None:
+        return None
     try:
-        veri = json.loads(ham)
-    except (ValueError, UnicodeDecodeError):
-        return 0, set()
+        v = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return v / 1000 if v > 1e11 else v
+
+
+def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, gorev_siteleri, gorev: bool = False,
+                           bilinen_konaklar=None):
+    """recovery.jsonlz4 kökündeki `cookies` dizisini kopya cookies.sqlite'ına ekle (ret hariç).
+    Döner: (eklenen, eklenen_alanlar). Firefox oturum çerezi biçimi: {host,name,value,path,expiry?,...}.
+    A cookie whose source `expiry` has passed is skipped; the written lifetime never exceeds the source expiry."""
+    veri = _recovery_oku(recovery)
     cerezler = veri.get("cookies") or []
     if not cerezler:
         return 0, set()
@@ -452,13 +554,19 @@ def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, g
         simdi = time.time()
         bitis = int((simdi + 86400) * (1000 if ms else 1))
         mikro = int(simdi * 1e6)
+        bilinen = set(bilinen_konaklar or ()) | {_alan(c.get("host", "")) for c in cerezler if isinstance(c, dict)}
+        bilinen |= {_alan(r[0]) for r in con.execute("SELECT DISTINCT host FROM moz_cookies")}
         for c in cerezler:
             if not isinstance(c, dict):
                 continue
             host = c.get("host", "")
             alan = _alan(host)
-            if not alan or politika.cerez_reddedildi(host) or not politika.site_izinli(alan, gorev_siteleri):
+            if not alan or politika.cerez_reddedildi(host, bilinen) or not politika.site_izinli(alan, gorev_siteleri):
                 continue
+            kaynak_bitis = _kaynak_bitis(c)
+            if kaynak_bitis is not None and kaynak_bitis <= simdi:
+                continue  # expired in the source: must not come back to life in the copy
+            c_bitis = bitis if kaynak_bitis is None else min(bitis, int(kaynak_bitis * (1000 if ms else 1)))
             if gorev and not gorev_izinli(politika, alan, gorev_siteleri):
                 continue
             oa = oa_soneki(c.get("originAttributes", ""))
@@ -483,7 +591,7 @@ def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, g
                     f"isSecure,isHttpOnly,sameSite,schemeMap{ek_sutun}) "
                     f"VALUES (?,?,?,?,?,?,?,?,?,?,?,?{',?' * len(ek_deger)})",
                     (oa, ad, c.get("value", ""), host, yol_,
-                     bitis, mikro, mikro, int(bool(c.get("secure"))), int(bool(c.get("httponly"))),
+                     c_bitis, mikro, mikro, int(bool(c.get("secure"))), int(bool(c.get("httponly"))),
                      int(c.get("sameSite", 0) or 0), int(c.get("schemeMap", 0) or 0), *ek_deger))
                 if cur.rowcount > 0:  # IGNORE ile atlanan (zaten var) sayılmaz
                     eklenen += 1

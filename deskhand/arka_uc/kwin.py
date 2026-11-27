@@ -279,6 +279,19 @@ class KwinArkaUc(ArkaUc):
             sonuc.append((kimlik_yap(w["i"]), b, self._geo(w)))
         return sorted(sonuc)
 
+    def maske_pencereleri(self) -> list[tuple[str, str, str, tuple[int, int, int, int]]]:
+        """For masking forbidden windows: [(id, title, class, FRAME geometry)] from ONE listing. The frame includes the
+        title bar and borders (the client-area geometry of `pencereler` would leave a secret title visible), and the
+        class comes from the same snapshot (no separate read that can fail into an empty value)."""
+        sonuc = []
+        for w in self._liste():
+            b, c = w.get("t") or "", (w.get("c") or "").lower()
+            if not (b or c):
+                continue
+            ham = w.get("f") or w["g"]
+            sonuc.append((kimlik_yap(w["i"]), b, c, tuple(round(float(v)) for v in ham)))
+        return sonuc
+
     def pencere_coz(self, arg: str) -> str:
         if (arg or "").lower() in EKRAN_ADLARI or arg == EKRAN:
             return EKRAN

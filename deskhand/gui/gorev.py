@@ -17,7 +17,7 @@ from ..i18n import _
 from . import metinler as T
 from .dil import Metinler
 from .durum import Durum
-from .onizleme import Onizleme, maskele, pil_qimage, yasak_kutulari
+from .onizleme import MaskeHatasi, Onizleme, maskeli_goruntu, pil_qimage
 
 CANLI_MS = 1000  # ~1 kare/sn (yalnız görev çalışırken ve sekme görünürken)
 KIRMIZI, YESIL, GRI = "#e03131", "#2f9e44", "#8a8f98"
@@ -467,19 +467,17 @@ class GorevSekmesi(QWidget):
         if not self.calisiyor or self.sanal is None or not self._gorunur():
             self.zaman.stop()
             return
-        try:
+        if not hasattr(self, "_sinif_onb"):
+            self._sinif_onb = {}
+        try:  # 0.9.1: Görev sekmesi önizlemesi de yasak pencereleri karartır (Arka plan sekmesiyle aynı kural)
             au = self.arka_f()
-            im = au.goruntu()
-        except Exception as e:  # noqa: BLE001 - masaüstü kapandı / X hatası
-            self.onizleme.bos_metin = _(T.G_ONIZLEME_HATA).format(hata=getattr(e, "mesaj", None) or e)
+            im = maskeli_goruntu(au, self._sinif_onb)
+        except MaskeHatasi as e:  # denetlenemedi: kare HİÇ gösterilmez (güvenli taraf)
+            self.onizleme.bos_metin = _(T.A_MASKE_HATA).format(hata=e.mesaj)
             self.onizleme.goster(None)
             return
-        try:  # 0.9.1: Görev sekmesi önizlemesi de yasak pencereleri karartır (Arka plan sekmesiyle aynı kural)
-            if not hasattr(self, "_sinif_onb"):
-                self._sinif_onb = {}
-            im = maskele(im, yasak_kutulari(au, (im.width, im.height), self._sinif_onb))
-        except Exception as e:  # noqa: BLE001 - denetlenemedi: kare HİÇ gösterilmez (güvenli taraf)
-            self.onizleme.bos_metin = _(T.A_MASKE_HATA).format(hata=getattr(e, "mesaj", None) or e)
+        except Exception as e:  # noqa: BLE001 - masaüstü kapandı / X hatası
+            self.onizleme.bos_metin = _(T.G_ONIZLEME_HATA).format(hata=getattr(e, "mesaj", None) or e)
             self.onizleme.goster(None)
             return
         q, kaynak = pil_qimage(im, self.onizleme.hedef_boyut() if self.onizleme.kaynak.width() else None)

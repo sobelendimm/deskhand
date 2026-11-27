@@ -26,7 +26,7 @@ from .durum import RENK, Durum
 from .gorev import GorevSekmesi
 from .gunluk_okur import KUYRUK, onay_gecmisi
 from .kisayol import VARSAYILAN_TUS, cakismalar
-from .onizleme import Onizleme, maskele, pil_qimage, yasak_kutulari
+from .onizleme import MaskeHatasi, Onizleme, maskeli_goruntu, pil_qimage
 from .tepsi import durum_pixmap
 
 ONIZLEME_MS = 500  # ~2 fps (Devral açıkken: girdi geri bildirimi)
@@ -610,17 +610,15 @@ class ArkaPlanSekmesi(QWidget):
         if self.sanal is None or not self._gorunur():
             self.zaman.stop()
             return
-        try:
+        try:  # yasak pencereler önizlemede de karartılır (api.goruntu_al kuralı); liste karenin önü + arkası
             au = self.arka_f()
-            im = au.goruntu()
-        except Exception as e:  # noqa: BLE001 - masaüstü kapandı / X hatası
-            self.onizleme.bos_metin = _(T.A_ONIZLEME_HATA).format(hata=getattr(e, 'mesaj', None) or e)
+            im = maskeli_goruntu(au, self._sinif_onb)
+        except MaskeHatasi as e:  # denetlenemedi: kare HİÇ gösterilmez (güvenli taraf)
+            self.onizleme.bos_metin = _(T.A_MASKE_HATA).format(hata=e.mesaj)
             self.onizleme.goster(None)
             return
-        try:  # yasak pencereler önizlemede de karartılır (api.goruntu_al kuralı)
-            im = maskele(im, yasak_kutulari(au, (im.width, im.height), self._sinif_onb))
-        except Exception as e:  # noqa: BLE001 - denetlenemedi: kare HİÇ gösterilmez (güvenli taraf)
-            self.onizleme.bos_metin = _(T.A_MASKE_HATA).format(hata=getattr(e, 'mesaj', None) or e)
+        except Exception as e:  # noqa: BLE001 - masaüstü kapandı / X hatası
+            self.onizleme.bos_metin = _(T.A_ONIZLEME_HATA).format(hata=getattr(e, 'mesaj', None) or e)
             self.onizleme.goster(None)
             return
         q, kaynak = pil_qimage(im, self.onizleme.hedef_boyut() if self.onizleme.kaynak.width() else None)
