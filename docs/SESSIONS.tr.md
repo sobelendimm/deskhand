@@ -449,6 +449,30 @@ yöneticisi karışır, eşitleme birbirini ezer", çözüm olarak `signedInUser
 `firefox --profile KOPYA --no-remote --new-instance` (deneyle çalıştığı doğrulandı). Wayland/X11 uzaktan komut ve D-Bus
 `org.mozilla.firefox.*` adı özel oturumda olduğundan kullanıcının Firefox'u etkilenmez.
 
+### 3.8 Kalıcı arka plan oturumu (`[oturum] kalici`)
+
+Sorun: her arka plan Firefox'u gerçek profilin atılacak bir kopyasıdır. Kullanıcının YALNIZ arka planda giriş yaptığı bir
+site (satıcı paneli) kopya silinince oturumu kaybediyordu; her yeni kopya yeniden giriş istiyordu.
+
+Ayar (`ayarlar.toml`): `[oturum] kalici = "shopier.com, ornek.test"` (virgüllü alan adları; adres verilirse konağı alınır;
+`*` ve tek başına genel son ek reddedilir). Kod: `deskhand/oturum/kalici.py`.
+
+- **Kaydetme:** kopya silinmeden hemen önce (bekçi, süpürme, masaüstü kapanışı) kopyanın `cookies.sqlite`'ındaki (ve
+  Firefox yazdıysa kopyanın `sessionstore-backups/recovery.jsonlz4`'ündeki) listedeki sitelere ait çerezler
+  `DATA_DIR/oturum-kalici/<alan>.json` dosyasına yazılır (dizin 0700, dosya 0600, atomik). Sitede canlı çerez
+  kalmadıysa (çıkış yapıldıysa) kayıt silinir.
+- **Uygulama:** yeni Firefox kopyası hazırlanırken kayıt kopyanın `cookies.sqlite`'ına konur. Kopyada aynı anahtarda
+  geçerli ve daha SONRA kullanılmış bir satır varsa (kullanıcı gerçek profilde yeniden girdi) o kalır.
+- **Ömür:** kaynak çerezin ömrü, kayıttan itibaren en çok 1 gün (süresiz çerez: kayıt + 1 gün; §3.4.1 kuralı). Bir
+  günden eski ya da bütün çerezlerinin süresi geçmiş kayıt uygulanmaz ve silinir. Her kayıt günü tazeler.
+- **Asla:** banka/ödeme/devlet/merkezi kimlik alanları (§8 ret listesi, her yazım: büyük/küçük harf, sondaki nokta,
+  Unicode/ACE) liste de olsa ne kaydedilir ne uygulanır (elle yazılmış kayıt da süzülür; panelin hesap oturumu izni
+  burada açmaz); görev kipinde hiç uygulanmaz ve görev kopyası kaydedilmez. Banka/ödeme oturumları şimdilik taşınmaz;
+  1.0.0'da kullanıcı onaylı ayrı kilitli depo (Faz 4).
+- **Dürüst sınır:** sunucu tarafında biten oturum (ör. 2 saat kayan satıcı oturumu) geri gelmez. `deskhand sessions
+  check <alan>` "kalıcı depo:" satırında bunu söyler: depodaki giriş çerezinin süresi geçtiyse "giriş gerekir" (çıkış 1);
+  kopya yokken depoda geçerli oturum varsa çıkış 0. Sunucunun oturumu erken kapatması çerezden anlaşılamaz.
+
 ---
 
 ## 4. Jeton döndürme (refresh token rotation) riski

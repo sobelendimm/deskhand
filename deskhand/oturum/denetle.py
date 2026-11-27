@@ -21,7 +21,9 @@ deseni (_GIRIS_DESENI: session, sess, sid, auth, token, login, user, account, bu
           eski          : profildeki geçerli giriş çerezi kopyada yok ya da kopya alındıktan SONRA yenilenmiş
           oturumsuz     : kopyanın giriş çerezleri 'var' değil
           yok           : Firefox kopyası yok (önce bağlamdaki masaüstününkiler, sonra en yeni kopya aranır)
-Çıkış kodu: 0 = kopya 'guncel' ya da kopya yok ve profil 'var' (sonraki `open firefox` profildekini alır);
+Kalıcı depo ([oturum] kalici, kalici.py; docs/SESSIONS.md §3.8): listedeki sitede depodaki giriş çerezleri aynı ölçütle
+          sınıflanır (kalici.durum: listede_degil | gorev | politika_disi | var | suresi_gecmis | yok).
+Çıkış kodu: 0 = kopya 'guncel' ya da kopya yok ve profil ya da kalıcı depo 'var' (sonraki `open firefox` onu alır);
             1 = değil (kullanıcı giriş yapmalı ya da kopya tazelenmeli: `deskhand open firefox`); 2 = kullanım hatası.
 """
 from __future__ import annotations
@@ -254,9 +256,11 @@ def denetle(alan: str, desenler=None, kopya_yolu: str | None = None, simdi: floa
         sonuc["cerezler"].append(satir)
 
     sonuc["profil_durum"] = _siniflandir(prof, simdi_ms, tasinir)
+    sonuc["kalici"] = _kalici_durum(alan, desenler, simdi, {_anahtar(c) for c in prof if c["tur"] == "suresiz"})
     if sonuc["kopya"] is None:
         sonuc["kopya_durum"] = "yok"
-        sonuc["kod"] = 0 if sonuc["profil_durum"] == "var" else 1
+        # the next `open firefox` takes the profile's session, or the persistent store's ([oturum] kalici)
+        sonuc["kod"] = 0 if "var" in (sonuc["profil_durum"], sonuc["kalici"]["durum"]) else 1
     else:
         # kopya kendi çerezleriyle aynı ölçütten geçer (kopyada da süresi geçmiş kalıcı giriş çerezi + yalnız
         # süresiz PHPSESSID = oturumsuz); kullanıcı kopyada giriş yaptıysa profil oturumsuz olsa da kopya geçerlidir
@@ -269,6 +273,33 @@ def denetle(alan: str, desenler=None, kopya_yolu: str | None = None, simdi: floa
     sonuc["neden"] = "" if sonuc["kod"] == 0 else (
         "kopya_eski" if sonuc["kopya_durum"] == "eski" else sonuc["profil_durum"])
     return sonuc
+
+
+def _kalici_durum(alan: str, desenler, simdi: float, profil_suresiz: set) -> dict:
+    """The persistent store's answer for the site (kalici.durum, value-free): {listede, durum, cerez, kalan_sn}.
+    durum: listede_degil | gorev (not used in task mode) | politika_disi (reject list) | var | suresi_gecmis | yok,
+    the same login-cookie rules as the profile. A stored cookie that is session-only in the profile counts as
+    session-only (the copy wrote it with a one-day expiry), like the copy's own cookies."""
+    from .. import gorev_kipi
+    from . import kalici
+    kd = kalici.durum(alan, simdi=simdi)
+    giris = [{"ad": c["ad"], "konak": c["konak"], "oa": "", "yol": "",
+              "tur": "suresiz" if c["oturumluk"] else "kalici", "bitis_ms": c["bitis"] * 1000}
+             for c in kd["cerezler"] if _giris_mi(c["ad"], desenler)]
+    for c in giris:
+        if any(k[0] == c["ad"] and k[1] == c["konak"] for k in profil_suresiz):
+            c["tur"] = "suresiz"
+    if not kd["listede"]:
+        durum = "listede_degil"
+    elif gorev_kipi.etkin():
+        durum = "gorev"
+    elif kd["reddedildi"]:
+        durum = "politika_disi"
+    else:
+        durum = _siniflandir(giris, simdi * 1000, lambda *_a, **_k: True)
+    gecerli = [c["bitis_ms"] for c in giris if not _gecmis(c, simdi * 1000)]
+    return {"listede": kd["listede"], "durum": durum, "cerez": len(giris),
+            "kalan_sn": int((float(min(gecerli)) - simdi * 1000) / 1000) if gecerli and durum == "var" else None}
 
 
 def _gecmis(c: dict, simdi_ms: float) -> bool:
@@ -326,6 +357,17 @@ def metin(d: dict) -> list[str]:
             durum=kopya_adi.get(d["kopya_durum"], d["kopya_durum"]), ad=os.path.basename(d["kopya"]), zaman=zaman))
     else:
         satirlar.append(_("kopya: {durum}").format(durum=kopya_adi["yok"]))
+    k = d.get("kalici") or {}
+    if k.get("listede"):
+        kalici_adi = {"var": _("oturum var ({sayi} giriş çerezi)").format(sayi=k.get("cerez", 0)),
+                      "suresi_gecmis": _("giriş çerezlerinin süresi geçmiş (giriş gerekir)"),
+                      "yok": _("kayıt yok (giriş gerekir)"),
+                      "politika_disi": _("banka/ödeme/devlet/kimlik alanı: kalıcı depoya alınmaz"),
+                      "gorev": _("görev kipinde kullanılmaz")}
+        metin_ = kalici_adi.get(k.get("durum"), str(k.get("durum")))
+        if k.get("kalan_sn") is not None:
+            metin_ += ", " + _sure_metni(k["kalan_sn"])
+        satirlar.append(_("kalıcı depo: {durum}").format(durum=metin_))
     satirlar.append(_("sonuç: oturum VAR") if d["kod"] == 0 else _("sonuç: oturum YOK"))
     return satirlar
 

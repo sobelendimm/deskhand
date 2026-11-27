@@ -1669,5 +1669,11 @@
  "kalıcı çözüm: oturum ortamına GNOME_ACCESSIBILITY=1 ekle (ör. ~/.config/environment.d/a11y.conf dosyasına GNOME_ACCESSIBILITY=1 satırı; Chromium için --force-renderer-accessibility) ve tarayıcıyı yeniden başlat; Deskhand bu dosyayı kendisi yazmaz": "permanent fix: add GNOME_ACCESSIBILITY=1 to the session environment (e.g. a GNOME_ACCESSIBILITY=1 line in ~/.config/environment.d/a11y.conf; for Chromium --force-renderer-accessibility) and restart the browser; Deskhand does not write this file itself",
  "çalışan tarayıcı yok": "no browser running",
  "çalışan tarayıcılar erişilebilirlik ağacında": "running browsers are in the accessibility tree",
- "İpucu: tarayıcı erişilebilirlik açıkken başlamamış olabilir; kapatıp Deskhand ile yeniden aç (ac / open_app: Firefox GNOME_ACCESSIBILITY=1, Chromium --force-renderer-accessibility ile başlatılır; ön planda tarayıcı zaten açıksa yeni açılış çalışan sürece katılır, önce onu kapat). Kalıcı çözüm: deskhand doctor": "Tip: the browser may not have started with accessibility on; close it and reopen it with Deskhand (open / open_app: Firefox starts with GNOME_ACCESSIBILITY=1, Chromium with --force-renderer-accessibility; if the browser is already running on the foreground desktop, a new launch joins the running process, close it first). Permanent fix: deskhand doctor"
+ "İpucu: tarayıcı erişilebilirlik açıkken başlamamış olabilir; kapatıp Deskhand ile yeniden aç (ac / open_app: Firefox GNOME_ACCESSIBILITY=1, Chromium --force-renderer-accessibility ile başlatılır; ön planda tarayıcı zaten açıksa yeni açılış çalışan sürece katılır, önce onu kapat). Kalıcı çözüm: deskhand doctor": "Tip: the browser may not have started with accessibility on; close it and reopen it with Deskhand (open / open_app: Firefox starts with GNOME_ACCESSIBILITY=1, Chromium with --force-renderer-accessibility; if the browser is already running on the foreground desktop, a new launch joins the running process, close it first). Permanent fix: deskhand doctor",
+ "oturum var ({sayi} giriş çerezi)": "session present ({sayi} login cookies)",
+ "giriş çerezlerinin süresi geçmiş (giriş gerekir)": "login cookies have expired (login required)",
+ "kayıt yok (giriş gerekir)": "no record (login required)",
+ "banka/ödeme/devlet/kimlik alanı: kalıcı depoya alınmaz": "bank/payment/government/identity domain: never kept in the persistent store",
+ "görev kipinde kullanılmaz": "not used in task mode",
+ "kalıcı depo: {durum}": "persistent store: {durum}"
 }

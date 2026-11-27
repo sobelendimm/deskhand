@@ -17,6 +17,12 @@ Dosya yoksa varsayılanlar kullanılır; OKUMA dosya oluşturmaz. Bilinmeyen/yan
                            # asla). PANEL YETKİLİ: yalnız panelin Ayarlar → Hesap oturumları yazar; elle yazılan değer
                            # geçmez (liste_koruma)
 
+  [oturum]
+  kalici = ""              # virgüllü alan adları ("" = hiçbiri): görünmez masaüstündeki Firefox kopyası kapanınca bu
+                           # sitelerin oturum çerezleri saklanır, sonraki kopyaya geri konur (ömür kaynak çerezin
+                           # ömrü, en çok 1 gün; banka/ödeme/devlet/merkezi kimlik asla; görev kipinde hiç;
+                           # docs/SESSIONS.md §3.8)
+
   [gorev]
   model = "sonnet"         # sonnet | opus | haiku   (panelin "Görev" sekmesi: görevi yapan Claude modeli)
   azami_dakika = 20        # bir görev bu kadar dakikayı aşarsa durdurulur
@@ -55,6 +61,9 @@ VARSAYILAN = {
     "guvenlik": {
         "onaylar": "hepsi",
         "hesap_oturumlari": "",
+    },
+    "oturum": {
+        "kalici": "",
     },
     "gorev": {
         "model": "sonnet",
@@ -131,6 +140,8 @@ def dogrula(bolum: str, anahtar: str, deger):
     if not isinstance(deger, str):
         raise ValueError(_("{ayar} metin olmalı").format(ayar=f"{bolum}.{anahtar}"))
     deger = TAKMA.get((bolum, anahtar), {}).get(deger, deger)
+    if (bolum, anahtar) == ("oturum", "kalici"):
+        return _alan_listesi(bolum, anahtar, deger)
     kume = KUME.get((bolum, anahtar))
     if kume is not None:
         parcalar = {p.strip().lower() for p in deger.replace(" ", ",").split(",") if p.strip()}
@@ -144,6 +155,16 @@ def dogrula(bolum: str, anahtar: str, deger):
         raise ValueError(_("{ayar} şunlardan biri olmalı: {secenekler}").format(
             ayar=f"{bolum}.{anahtar}", secenekler=" | ".join(sorted(secenek))))
     return deger
+
+
+def _alan_listesi(bolum: str, anahtar: str, deger: str) -> str:
+    """Comma-separated domain names (gorev_kipi.site_ayristir_ayrintili rules: no `*`, no bare public suffix); a URL
+    is reduced to its host. Any rejected entry → ValueError (the whole value falls back to the default)."""
+    from .gorev_kipi import site_ayristir_ayrintili
+    siteler, ret = site_ayristir_ayrintili(deger)
+    if ret:
+        raise ValueError(f"{bolum}.{anahtar}: " + "; ".join(ret))  # the reasons are already translated
+    return ",".join(siteler)
 
 
 def oku() -> dict:

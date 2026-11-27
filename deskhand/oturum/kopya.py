@@ -307,6 +307,8 @@ def kopyalar(kok_listesi=None, boyut: bool = True) -> list[dict]:
 def _sil(g: dict) -> bool:
     from ..gunluk import gunluk
     mb = (g["boyut"] if g.get("boyut") is not None else _dizin_boyutu(g["yol"])) // (1024 * 1024)
+    if _bekci.silinebilir_yol(g["yol"], g["kok"]):
+        _bekci.kalici_kaydet(g["yol"])  # persistent sessions ([oturum] kalici) before the copy goes
     tamam = _bekci.guvenli_sil(g["yol"], g["kok"])
     if tamam:
         gunluk(f"oturum: sahipsiz kopya silindi: {g['yol']} ({mb} MB)")

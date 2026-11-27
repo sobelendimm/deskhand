@@ -332,6 +332,17 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
         eklendi, ek_alanlar = _oturum_cerezleri_ekle(rec, kopya_cookies, politika, gorev_siteleri, gorev, bilinen)
         bilgi["oturum_cerez_eklendi"] = eklendi
         izinli_alanlar |= ek_alanlar
+    # 5-k) persistent background sessions ([oturum] kalici, docs/SESSIONS.md §3.8): never in task mode; the strict
+    # policy (`orijinal`, without the panel's account-session permission) filters bank/payment/identity hosts
+    if not gorev and os.path.isfile(kopya_cookies):
+        from pathlib import Path
+
+        from . import kalici
+        try:
+            bilgi["kalici_uygulandi"] = kalici.uygula(Path(hedef), kalici.ayar_siteleri(), politika=orijinal,
+                                                      gorev_siteleri=gorev_siteleri, bilinen_konaklar=bilinen)
+        except Exception:  # noqa: BLE001 - the store must not stop the browser from opening
+            bilgi["kalici_uygulandi"] = 0
     # 5a) the copy keeps only the allowed rows: rebuilt so that no removed value survives in the file bytes
     if os.path.isfile(kopya_cookies) and not _cookies_yeniden_kur(kopya_cookies):
         bilgi["cerez_sayisi"] = 0

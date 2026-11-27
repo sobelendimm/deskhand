@@ -174,6 +174,19 @@ def cerez_uyarisi(yol: str) -> None:
         pass
 
 
+def kalici_kaydet(yol: str) -> None:
+    """Before deleting: save the sessions of the sites listed in `[oturum] kalici` (oturum/kalici.py). The package is
+    imported only here (this script stays standard-library at import time); any failure is ignored."""
+    try:
+        kok = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if kok not in sys.path:
+            sys.path.insert(0, kok)
+        from deskhand.oturum import kalici
+        kalici.kapanirken(yol)
+    except Exception:  # noqa: BLE001 - the copy is deleted anyway
+        pass
+
+
 def bekle_ve_sil(kok: str, yol: str, pid: int, bas: str | None, aralik: float = BEKCI_ARALIK,
                  azami: float = BEKCI_AZAMI, son_pay: float = SON_PAY) -> bool:
     """Sahip süreç bitene dek bekle (pidfd; yoksa yoklama), son_pay sn daha bekle (masaüstü kapanırken oturum.kapanis
@@ -206,6 +219,7 @@ def bekle_ve_sil(kok: str, yol: str, pid: int, bas: str | None, aralik: float = 
             if not silinebilir_yol(yol, kok):
                 return False
             cerez_uyarisi(yol)
+            kalici_kaydet(yol)
             return guvenli_sil(yol, kok)
         time.sleep(aralik)
     return False

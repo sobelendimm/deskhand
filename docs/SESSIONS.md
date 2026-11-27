@@ -329,6 +329,18 @@ A copied profile carries the same device identity; the Mozilla community says "t
 
 `firefox --profile COPY --no-remote --new-instance` (verified by experiment to work). Since the Wayland/X11 remote command and the D-Bus name `org.mozilla.firefox.*` are in the private session, the user's Firefox is not affected.
 
+### 3.8 Persistent background session (`[oturum] kalici`)
+
+Problem: every background Firefox is a throw-away copy of the real profile. A site where the user logs in ONLY in the background (a seller panel) lost its session when the copy was deleted; every new copy asked for a login again.
+
+Setting (`ayarlar.toml`): `[oturum] kalici = "shopier.com, example.test"` (comma-separated domain names; a URL is reduced to its host; `*` and a bare public suffix are rejected). Code: `deskhand/oturum/kalici.py`.
+
+- **Save:** right before a copy is deleted (watchdog, sweep, desktop shutdown), the cookies of the listed sites in the copy's `cookies.sqlite` (and in the copy's own `sessionstore-backups/recovery.jsonlz4` when Firefox wrote one) are written to `DATA_DIR/oturum-kalici/<domain>.json` (directory 0700, file 0600, atomic). A site with no live cookie left (logged out) loses its record.
+- **Apply:** when a new Firefox copy is prepared, the record goes into the copy's `cookies.sqlite`. A row with the same key that is still valid and was used LATER (the user logged in again in the real profile) is kept.
+- **Lifetime:** the source cookie's lifetime, at most 1 day from the save (session-only cookie: save + 1 day; the §3.4.1 rule). A record older than one day, or whose cookies have all expired, is not applied and is deleted. Every save refreshes the day.
+- **Never:** bank/payment/government/central identity domains (the §8 reject list, every spelling: case, trailing dot, Unicode/ACE) are neither saved nor applied even when listed (a record written by hand is filtered too; the panel's account-session permission does not open them here); nothing is applied in task mode and a task copy is never saved. Bank/payment sessions are not carried for now; 1.0.0 adds a separate locked store with the user's approval (Faz 4).
+- **Honest limit:** a session that ends on the server side (e.g. a 2-hour sliding seller session) does not come back. `deskhand sessions check <domain>` says so in its "persistent store:" line: when the stored login cookie has expired it reports "login required" (exit 1); with no copy and a valid stored session it exits 0. A server closing the session early cannot be seen from the cookie.
+
 ---
 
 ## 4. Refresh token rotation risk

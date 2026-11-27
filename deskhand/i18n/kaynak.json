@@ -355,7 +355,7 @@
   "web.py:768"
  ],
  "(boş komut)": [
-  "kwin_oturum.py:1145",
+  "kwin_oturum.py:1146",
   "masaustu.py:1315"
  ],
  "(dizi içinde) bekle": [
@@ -915,10 +915,10 @@
   "gui/metinler.py:260"
  ],
  "EIS bölgesi {boyut} ≠ oturum {hedef}": [
-  "kwin_oturum.py:667"
+  "kwin_oturum.py:668"
  ],
  "ESKİ: profilde daha yeni oturum var (tazeleyin: deskhand open firefox)": [
-  "oturum/denetle.py:309"
+  "oturum/denetle.py:338"
  ],
  "EasyOCR/torch yok": [
   "doktor.py:416"
@@ -993,7 +993,7 @@
   "gorev_kipi.py:285"
  ],
  "Firefox profili bulunamadı (profiles.ini)": [
-  "oturum/denetle.py:313",
+  "oturum/denetle.py:342",
   "oturum/firefox.py:264"
  ],
  "Firefox çalışırken açılan erişilebilirliği algılamıyor: Firefox'u kapatıp yeniden başlat": [
@@ -1226,57 +1226,57 @@
   "doktor.py:91"
  ],
  "KWin HOME'u kullanıcının gerçek ev dizini; verilmedi": [
-  "kwin_oturum.py:169"
+  "kwin_oturum.py:170"
  ],
  "KWin ScreenShot2 arayüzü hazır olmadı": [
-  "kwin_oturum.py:647"
+  "kwin_oturum.py:648"
  ],
  "KWin arka plan oturumu kapalı": [
-  "kwin_oturum.py:852"
+  "kwin_oturum.py:853"
  ],
  "KWin arka plan oturumu zorlandı ama kullanılamıyor: {neden}": [
   "masaustu.py:732"
  ],
  "KWin açılmadı: {hata}": [
-  "kwin_oturum.py:1014"
+  "kwin_oturum.py:1015"
  ],
  "KWin betik kilidi {sn} sn içinde alınamadı": [
   "arka_uc/kwin.py:66",
   "arka_uc/kwin.py:80"
  ],
  "KWin donanım hızlandırması yok ({gpu}): yazılım çizimi": [
-  "kwin_oturum.py:672"
+  "kwin_oturum.py:673"
  ],
  "KWin düşük önceliğe alınamadı (iş parçacığı, nice, politika): {kalan}": [
-  "kwin_oturum.py:745"
+  "kwin_oturum.py:746"
  ],
  "KWin hazırlanırken kapandı: {hata}": [
-  "kwin_oturum.py:637",
-  "kwin_oturum.py:694"
+  "kwin_oturum.py:638",
+  "kwin_oturum.py:695"
  ],
  "KWin oturum dizini güvensiz: {dizin}": [
-  "kwin_oturum.py:201"
+  "kwin_oturum.py:202"
  ],
  "KWin oturum dizini yok: {dizin}": [
-  "kwin_oturum.py:198"
+  "kwin_oturum.py:199"
  ],
  "KWin oturum kaydı geçersiz (XWayland ekranı): {x}": [
-  "kwin_oturum.py:209"
+  "kwin_oturum.py:210"
  ],
  "KWin oturum kaydı geçersiz (kafes): {kafes}": [
-  "kwin_oturum.py:219"
+  "kwin_oturum.py:220"
  ],
  "KWin oturum kaydı geçersiz (kimlik): {kimlik}": [
-  "kwin_oturum.py:191"
+  "kwin_oturum.py:192"
  ],
  "KWin oturum kaydında dbus-daemon PID'i yok: girdi yardımcısı başlatılmadı": [
-  "kwin_oturum.py:1269"
+  "kwin_oturum.py:1270"
  ],
  "KWin oturumu açılamadı ({hata}); Xvfb kullanılıyor": [
   "masaustu.py:815"
  ],
  "KWin oturumundan kare alınamadı: {hata}": [
-  "kwin_oturum.py:663"
+  "kwin_oturum.py:664"
  ],
  "KWin pencere listesi alınamadı: {ayrinti}": [
   "arka_uc/kwin.py:253"
@@ -1286,19 +1286,19 @@
   "uygulama.py:886"
  ],
  "KWin süreci doğrulanamadı (pid {pid})": [
-  "kwin_oturum.py:1018"
+  "kwin_oturum.py:1019"
  ],
  "KWin yapılandırma dizini kullanıcının gerçek yapılandırma dizini (~/.config); yazılmadı: {dizin}": [
-  "kwin_oturum.py:166"
+  "kwin_oturum.py:167"
  ],
  "KWin {surum} < 6.8 (EIS/ScreenShot2 yetkisi için 6.8 gerekir)": [
-  "kwin_oturum.py:379"
+  "kwin_oturum.py:380"
  ],
  "KWin çalışma dizini kullanıcının gerçek XDG_RUNTIME_DIR'i; verilmedi": [
-  "kwin_oturum.py:171"
+  "kwin_oturum.py:172"
  ],
  "KWin özel veri yoluna bağlanmadı: {hata}": [
-  "kwin_oturum.py:1016"
+  "kwin_oturum.py:1017"
  ],
  "Kalan": [
   "gui/metinler.py:100"
@@ -1643,7 +1643,7 @@
   "eylem.py:87"
  ],
  "UYARI: ayarlar.toml: {ileti}": [
-  "ayarlar.py:94"
+  "ayarlar.py:103"
  ],
  "UYARI: klavye etkinliği izlenemiyor ({neden}); yalnız fare izleniyor": [
   "insan.py:119"
@@ -1692,16 +1692,16 @@
   "gui/metinler.py:205"
  ],
  "Wayland soket adı kullanıcının gerçek oturumuyla aynı ({ad}); bağlanılmadı": [
-  "kwin_oturum.py:163"
+  "kwin_oturum.py:164"
  ],
  "Wayland soketi kullanıcının gerçek soketi; bağlanılmadı": [
-  "kwin_oturum.py:271"
+  "kwin_oturum.py:272"
  ],
  "Web sayfası ögeleri için: `web {kimlik} '{ad}'`": [
   "erisim.py:1143"
  ],
  "XWayland ekran adı geçersiz ya da kullanıcının gerçek ekranıyla aynı: {ekran}": [
-  "kwin_oturum.py:176"
+  "kwin_oturum.py:177"
  ],
  "Xvfb + openbox (KWin oturumu kullanılamıyor: {neden})": [
   "doktor.py:397"
@@ -1912,7 +1912,7 @@
   "doktor.py:249"
  ],
  "at-spi2-registryd başlamadı: {hata}": [
-  "kwin_oturum.py:1233"
+  "kwin_oturum.py:1234"
  ],
  "aynı eylem {sayi} kez üst üste ekranı DEĞİŞTİRMEDİ: tekrarlama. observe ile ekranı yeniden okuyup başka bir yol dene (başka öğe/koordinat, başka tuş, önce odağı ya da bir açılır pencereyi kontrol et).": [
   "mcp_sunucu.py:1045"
@@ -1937,7 +1937,7 @@
   "doktor.py:255"
  ],
  "açık oturum kopyaları sınırı aşıyor ({sayi} kopya, {mb} MB; sınır {azami_sayi} kopya / {azami_mb} MB): kullanılmayan arka plan tarayıcılarını kapatın": [
-  "oturum/kopya.py:357"
+  "oturum/kopya.py:359"
  ],
  "açıklama: {aciklama}": [
   "oturum/cli.py:127"
@@ -1947,6 +1947,9 @@
  ],
  "açıldı ({sn} sn)": [
   "uygulama.py:869"
+ ],
+ "banka/ödeme/devlet/kimlik alanı: kalıcı depoya alınmaz": [
+  "oturum/denetle.py:363"
  ],
  "basılı tutuldu ({dugme}, {sn} sn): pencere ({x},{y}) = ekran ({ex},{ey})": [
   "eylem.py:257"
@@ -1987,7 +1990,7 @@
   "masaustu.py:1343"
  ],
  "başlatılamadı: {komut} bulunamadı": [
-  "kwin_oturum.py:1145",
+  "kwin_oturum.py:1146",
   "masaustu.py:1315"
  ],
  "başlatıldı: {ad}": [
@@ -2049,7 +2052,7 @@
   "uygulama.py:574"
  ],
  "bellek kafesi KAPALI (DESKHAND_SANAL_BELLEK=0)": [
-  "kwin_oturum.py:950",
+  "kwin_oturum.py:951",
   "masaustu.py:1019"
  ],
  "bellek kafesi yok: öncelik bekçisi çalışmıyor (ad tabanlı sistem kuralları önceliği yükseltebilir)": [
@@ -2099,10 +2102,10 @@
   "masaustu.py:1393"
  ],
  "bilinmeyen ayar yok sayıldı: {ayar}": [
-  "ayarlar.py:157"
+  "ayarlar.py:178"
  ],
  "bilinmeyen ayar: {ayar}": [
-  "ayarlar.py:112"
+  "ayarlar.py:121"
  ],
  "bilinmeyen değiştirici tuş: {tus} (ctrl, shift, alt, meta)": [
   "eylem.py:198"
@@ -2174,7 +2177,7 @@
   "eylem.py:1239"
  ],
  "boş X ekran numarası bulunamadı": [
-  "kwin_oturum.py:589",
+  "kwin_oturum.py:590",
   "masaustu.py:246"
  ],
  "boş adres": [
@@ -2274,7 +2277,7 @@
   "guvenlik.py:784"
  ],
  "dbus-daemon bellek kafesinde değil: {cgroup}": [
-  "kwin_oturum.py:961"
+  "kwin_oturum.py:962"
  ],
  "dd of=/dev/…: aygıtın üzerine yazar": [
   "guvenlik.py:948"
@@ -2308,16 +2311,16 @@
   "doktor.py:233"
  ],
  "deskhand-eis yok (make -C deskhand/yardimci deskhand-eis)": [
-  "kwin_oturum.py:1259"
+  "kwin_oturum.py:1260"
  ],
  "deskhand-eis yok (make -C deskhand/yardimci deskhand-eis; libei + libxkbcommon gerekir)": [
-  "kwin_oturum.py:388"
+  "kwin_oturum.py:389"
  ],
  "deskhand-etkinlik yok: insan önceliği yalnız fareye bakar": [
   "doktor.py:228"
  ],
  "deskhand-goruntu yok (make -C deskhand/yardimci deskhand-goruntu)": [
-  "kwin_oturum.py:390"
+  "kwin_oturum.py:391"
  ],
  "deskhand-goruntu yok: ekran görüntüsü yavaş yedek yolla alınır; KWin arka planı kullanılamaz, Xvfb kullanılacak": [
   "doktor.py:230"
@@ -2479,7 +2482,7 @@
   "arka_uc/kde.py:194"
  ],
  "ekran boyutu × ölçek çok büyük: {boyut} × {olcek}": [
-  "kwin_oturum.py:883"
+  "kwin_oturum.py:884"
  ],
  "ekran görüntüsü": [
   "arka_uc/kde_goruntu.py:90",
@@ -2498,15 +2501,15 @@
  ],
  "ekran görüntüsü yardımcısı başarısız (kod {kod}): {ayrinti}": [
   "arka_uc/kde_goruntu.py:97",
-  "kwin_oturum.py:1175"
+  "kwin_oturum.py:1176"
  ],
  "ekran görüntüsü yardımcısı yok (make -C deskhand/yardimci deskhand-goruntu)": [
   "arka_uc/kde_goruntu.py:84",
-  "kwin_oturum.py:1168"
+  "kwin_oturum.py:1169"
  ],
  "ekran görüntüsü yardımcısı çalışmadı: {hata}": [
   "arka_uc/kde_goruntu.py:94",
-  "kwin_oturum.py:1173"
+  "kwin_oturum.py:1174"
  ],
  "ekran görüntüsü yardımcısının çıktısı anlaşılamadı": [
   "arka_uc/kde_goruntu.py:54",
@@ -2552,7 +2555,7 @@
   "masaustu.py:796"
  ],
  "erişilebilir render aygıtı yok (/dev/dri/renderD*)": [
-  "kwin_oturum.py:386"
+  "kwin_oturum.py:387"
  ],
  "erişilebilirlik adresi oturumun at-spi dizini dışında ya da geçersiz: {adres}; bağlanılmadı": [
   "arka_ortak.py:294"
@@ -2761,7 +2764,7 @@
   "uygulama.py:346"
  ],
  "geçersiz Wayland soket adı: {ad}": [
-  "kwin_oturum.py:161"
+  "kwin_oturum.py:162"
  ],
  "geçersiz alan adı: {alan}": [
   "oturum/cli.py:138"
@@ -2773,7 +2776,7 @@
   "mcp_sunucu.py:2698"
  ],
  "geçersiz ekran boyutu: {boyut}": [
-  "kwin_oturum.py:880"
+  "kwin_oturum.py:881"
  ],
  "geçersiz girdi satırı": [
   "girdi_merkezi.py:480"
@@ -2794,13 +2797,13 @@
   "arka_uc/sanal.py:115"
  ],
  "geçersiz ölçek: {deger} (1 ya da 2)": [
-  "kwin_oturum.py:836"
+  "kwin_oturum.py:837"
  ],
  "geçici alan dolu ({yol}): durum dosyası yazılamadı. Ayrıntı ve temizlik: deskhand doctor": [
   "hata.py:118"
  ],
  "geçici alan dolu ({yol}: {bos} MB boş): oturum kopyası açılmadı; ayrıntı: deskhand doctor": [
-  "oturum/kopya.py:383"
+  "oturum/kopya.py:385"
  ],
  "geçici dizinden program çalıştırma": [
   "guvenlik.py:772"
@@ -2876,14 +2879,14 @@
   "uygulama.py:532"
  ],
  "girdi satırında satır sonu olamaz": [
-  "kwin_oturum.py:1306"
+  "kwin_oturum.py:1307"
  ],
  "girdi yardımcısı hazır olmadı: {yanit}": [
-  "kwin_oturum.py:1283"
+  "kwin_oturum.py:1284"
  ],
  "girdi yardımcısı kapandı (çıkış {kod})": [
-  "kwin_oturum.py:1298",
-  "kwin_oturum.py:1311"
+  "kwin_oturum.py:1299",
+  "kwin_oturum.py:1312"
  ],
  "girdi yardımcısı koptu ({hata}); basılı düğmeler bırakıldı: {liste}": [
   "arka_uc/kwin.py:487"
@@ -2892,16 +2895,19 @@
   "arka_uc/kwin.py:718"
  ],
  "girdi yardımcısı {sn} sn içinde yanıt vermedi": [
-  "kwin_oturum.py:1292"
+  "kwin_oturum.py:1293"
  ],
  "girdi yardımcısı: {neden}": [
-  "kwin_oturum.py:1244"
+  "kwin_oturum.py:1245"
  ],
  "girdi: {yol}": [
   "uygulama.py:573"
  ],
  "giriş çerezinin adı (fnmatch; tekrarlanabilir). Yoksa ad deseniyle tahmin edilir": [
   "oturum/cli.py:81"
+ ],
+ "giriş çerezlerinin süresi geçmiş (giriş gerekir)": [
+  "oturum/denetle.py:361"
  ],
  "git -c ile kabuk komutu çalıştıran ayar (takma ad / komut kancası)": [
   "guvenlik.py:788"
@@ -2963,6 +2969,9 @@
  ],
  "görev kipinde Flatpak tarayıcı açılmaz (tarayıcı ilkesi bağlanamaz)": [
   "gorev_kipi.py:283"
+ ],
+ "görev kipinde kullanılmaz": [
+  "oturum/denetle.py:364"
  ],
  "görev kipinde yalnız http(s) adresi açılabilir": [
   "gorev_kipi.py:290"
@@ -3055,7 +3064,7 @@
   "mcp_sunucu.py:1568"
  ],
  "güncel, oturum var": [
-  "oturum/denetle.py:309"
+  "oturum/denetle.py:338"
  ],
  "günlüğe metni yazma": [
   "cli.py:486",
@@ -3180,7 +3189,10 @@
   "guvenlik.py:744"
  ],
  "kalıcı": [
-  "oturum/denetle.py:317"
+  "oturum/denetle.py:346"
+ ],
+ "kalıcı depo: {durum}": [
+  "oturum/denetle.py:368"
  ],
  "kalıcı klavye eşlemesi yapılamadı: {hata}": [
   "masaustu.py:1055"
@@ -3202,7 +3214,7 @@
   "doktor.py:256"
  ],
  "kapanmayan süreçler: {surecler}": [
-  "kwin_oturum.py:1076"
+  "kwin_oturum.py:1077"
  ],
  "kapanmayan süreçler: {surecler}; boş ses çıkışı bu yüzden KALDIRILMADI": [
   "masaustu.py:1247"
@@ -3232,7 +3244,7 @@
   "api.py:320"
  ],
  "kare boyutu {boyut} ≠ oturum {hedef} (ölçek {olcek})": [
-  "kwin_oturum.py:657"
+  "kwin_oturum.py:658"
  ],
  "kart bilgisi alanı, {n} karakter": [
   "guvenlik.py:2066"
@@ -3264,6 +3276,9 @@
  "kayıt alınamadı (parec çıkış kodu {kod})": [
   "dinleme.py:187"
  ],
+ "kayıt yok (giriş gerekir)": [
+  "oturum/denetle.py:362"
+ ],
  "kayıtlı simgeye tıkla": [
   "cli.py:207"
  ],
@@ -3286,7 +3301,7 @@
   "guvenlik.py:778"
  ],
  "kimlik oturumları: {ozet}": [
-  "oturum/firefox.py:491"
+  "oturum/firefox.py:502"
  ],
  "kimlikle verilen girdi komutunda otomatik tam başlık kilidini kapat": [
   "cli.py:406"
@@ -3335,25 +3350,25 @@
   "mcp_sunucu.py:853"
  ],
  "kopya: {durum}": [
-  "oturum/denetle.py:328"
+  "oturum/denetle.py:357"
  ],
  "kopya: {durum} ({ad}, {zaman})": [
-  "oturum/denetle.py:325"
+  "oturum/denetle.py:354"
  ],
  "kopya: {yol}": [
   "oturum/cli.py:129"
  ],
  "kopyada YOK": [
-  "oturum/denetle.py:320"
+  "oturum/denetle.py:349"
  ],
  "kopyada aynı": [
-  "oturum/denetle.py:319"
+  "oturum/denetle.py:348"
  ],
  "kopyada farklı değer": [
-  "oturum/denetle.py:319"
+  "oturum/denetle.py:348"
  ],
  "kopyadaki ESKİ": [
-  "oturum/denetle.py:319"
+  "oturum/denetle.py:348"
  ],
  "kscreen-doctor çalışmadı: {hata}": [
   "arka_uc/kwin.py:133"
@@ -3506,7 +3521,7 @@
   "gui/metinler.py:228"
  ],
  "kwin_wayland yok": [
-  "kwin_oturum.py:377"
+  "kwin_oturum.py:378"
  ],
  "küçültme": [
   "arka_uc/__init__.py:148",
@@ -3637,7 +3652,7 @@
   "dosya_sec.py:105"
  ],
  "okunamadı ({hata}); varsayılanlar kullanılıyor": [
-  "ayarlar.py:105"
+  "ayarlar.py:114"
  ],
  "onay ({karar}): {eylem}": [
   "gui/metinler.py:75"
@@ -3732,28 +3747,31 @@
   "mcp_sunucu.py:2373"
  ],
  "oturum soketi kullanıcının gerçek soketinin sert bağı: {yol}; bağlanılmadı": [
-  "kwin_oturum.py:247"
+  "kwin_oturum.py:248"
  ],
  "oturum soketinin karşı tarafı bu oturumun {ad} süreci değil ({karsi}); bağlanılmadı": [
-  "kwin_oturum.py:251"
+  "kwin_oturum.py:252"
  ],
  "oturum var": [
-  "oturum/denetle.py:306"
+  "oturum/denetle.py:335"
+ ],
+ "oturum var ({sayi} giriş çerezi)": [
+  "oturum/denetle.py:360"
  ],
  "oturum veri yolu açılamadı": [
   "mesgul.py:480"
  ],
  "oturum yok (süresi geçmiş ya da eksik)": [
-  "oturum/denetle.py:310"
+  "oturum/denetle.py:339"
  ],
  "oturum çerezi yok (giriş gerekir)": [
-  "oturum/denetle.py:307"
+  "oturum/denetle.py:336"
  ],
  "oturum çerezleri politika dışı (ret listesi / görev izni): kopyaya taşınmaz": [
-  "oturum/denetle.py:308"
+  "oturum/denetle.py:337"
  ],
  "oturum çerezlerinin süresi geçmiş (giriş gerekir)": [
-  "oturum/denetle.py:306"
+  "oturum/denetle.py:335"
  ],
  "oturum çıkışı bulunamadı (kscreen-doctor): {hata}": [
   "arka_uc/kwin.py:140"
@@ -4008,7 +4026,7 @@
   "ses.py:561"
  ],
  "profil: {durum}": [
-  "oturum/denetle.py:315"
+  "oturum/denetle.py:344"
  ],
  "program bulunamadı: {p}": [
   "uygulama.py:382"
@@ -4267,7 +4285,7 @@
   "oturum/cli.py:78"
  ],
  "site: {alan}": [
-  "oturum/denetle.py:314"
+  "oturum/denetle.py:343"
  ],
  "siz durdurdunuz": [
   "gui/metinler.py:24"
@@ -4282,11 +4300,11 @@
   "akis.py:164"
  ],
  "sonuç: oturum VAR": [
-  "oturum/denetle.py:329"
+  "oturum/denetle.py:369"
  ],
  "sonuç: oturum YOK": [
-  "oturum/denetle.py:313",
-  "oturum/denetle.py:329"
+  "oturum/denetle.py:342",
+  "oturum/denetle.py:369"
  ],
  "submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)": [
   "mcp_sunucu.py:2056"
@@ -4295,7 +4313,7 @@
   "guvenlik.py:816"
  ],
  "systemd-run yok: bellek kafesi kurulamaz (bilerek kapatmak için DESKHAND_SANAL_BELLEK=0)": [
-  "kwin_oturum.py:887",
+  "kwin_oturum.py:888",
   "masaustu.py:975"
  ],
  "süre 0-30 sn olmalı": [
@@ -4308,10 +4326,10 @@
   "mcp_sunucu.py:1580"
  ],
  "süresi {sure} önce geçti": [
-  "oturum/denetle.py:300"
+  "oturum/denetle.py:329"
  ],
  "süresiz (tarayıcı oturumu)": [
-  "oturum/denetle.py:317"
+  "oturum/denetle.py:346"
  ],
  "süreç bellek kafesine alınamadı ({kafes}): {hata}": [
   "arka_ortak.py:1169"
@@ -4375,7 +4393,7 @@
   "eylem.py:1235"
  ],
  "taşınmaz (politika)": [
-  "oturum/denetle.py:321"
+  "oturum/denetle.py:350"
  ],
  "tekrarlanan grupta çakışan seçenekler (ör. (a|ab)+): geri izleme ile kilitlenebilir": [
   "desen.py:109"
@@ -4435,7 +4453,7 @@
   "oturum/cli.py:76"
  ],
  "tümleşik GPU ({dugum}) ile açılamadı ({hata}); varsayılan GPU kullanılıyor": [
-  "kwin_oturum.py:869"
+  "kwin_oturum.py:870"
  ],
  "tümleşik {dugum}": [
   "doktor.py:400"
@@ -4584,7 +4602,7 @@
  "yanıt yok": [
   "arka_ortak.py:1231",
   "arka_uc/sanal.py:787",
-  "kwin_oturum.py:1283",
+  "kwin_oturum.py:1284",
   "masaustu.py:1124"
  ],
  "yardımcı süreç kapandı": [
@@ -4666,7 +4684,7 @@
   "oturum/cli.py:96"
  ],
  "yok (sonraki `deskhand open firefox` profildeki oturumu alır)": [
-  "oturum/denetle.py:311"
+  "oturum/denetle.py:340"
  ],
  "yok — çerezsiz": [
   "gui/metinler.py:306"
@@ -4700,7 +4718,7 @@
   "guvenlik.py:840"
  ],
  "{ad} aktarıldı ({cerez} çerez, {giris} kayıtlı giriş)": [
-  "oturum/firefox.py:486"
+  "oturum/firefox.py:497"
  ],
  "{ad} arka planda çalıştırılmaz (ikinci örnek asıl veriyi/oturumu bozar).": [
   "oturum/__init__.py:42"
@@ -4715,10 +4733,10 @@
   "oturum/__init__.py:149"
  ],
  "{ad} süzüldü (görev kipinde aktarılmaz)": [
-  "oturum/firefox.py:484"
+  "oturum/firefox.py:495"
  ],
  "{ad} süzüldü ({cerez} çerez; izin kapalı: panel → Ayarlar → Hesap oturumları)": [
-  "oturum/firefox.py:489"
+  "oturum/firefox.py:500"
  ],
  "{ad} · {g}×{y}": [
   "gui/metinler.py:219"
@@ -4759,36 +4777,36 @@
   "arka_uc/kwin.py:566"
  ],
  "{arac} yok (ya da güvenli dizinde değil: /usr/bin, /bin)": [
-  "kwin_oturum.py:384"
+  "kwin_oturum.py:385"
  ],
  "{arac} {sn} sn içinde bitmedi": [
   "arka_uc/kde.py:739",
   "arka_uc/kwin.py:578"
  ],
  "{ayar} metin olmalı": [
-  "ayarlar.py:132"
+  "ayarlar.py:141"
  ],
  "{ayar} sayı olmalı": [
-  "ayarlar.py:122",
-  "ayarlar.py:126"
+  "ayarlar.py:131",
+  "ayarlar.py:135"
  ],
  "{ayar} true/false olmalı": [
-  "ayarlar.py:118"
+  "ayarlar.py:127"
  ],
  "{ayar} {alt}..{ust} arasında olmalı": [
-  "ayarlar.py:129"
+  "ayarlar.py:138"
  ],
  "{ayar} şunlardan biri olmalı: {secenekler}": [
-  "ayarlar.py:144"
+  "ayarlar.py:155"
  ],
  "{ayar} şunların virgülle ayrılmış alt kümesi olmalı: {secenekler}": [
-  "ayarlar.py:139"
+  "ayarlar.py:150"
  ],
  "{ayrinti}; tikla --foto eşler": [
   "gorsel.py:293"
  ],
  "{dk} dk": [
-  "oturum/denetle.py:299"
+  "oturum/denetle.py:328"
  ],
  "{dosya} panel dışında silindi ya da değiştirildi; panelin kaydı korundu ve dosya geri yazıldı (değişiklikleri Ayarlar'dan yapın).": [
   "liste_koruma.py:237"
@@ -4809,10 +4827,10 @@
   "eylem.py:1142"
  ],
  "{g} gün {s} sa": [
-  "oturum/denetle.py:298"
+  "oturum/denetle.py:327"
  ],
  "{hata}; varsayılan ({deger}) kullanılıyor": [
-  "ayarlar.py:162"
+  "ayarlar.py:183"
  ],
  "{hesap} görünmez masaüstündeki tarayıcıda oturum açık kullanılabilecek.\n\nArka plandaki tarayıcı bu hesabın e-postalarına ve dosyalarına erişebilir; güvenilmeyen bir sayfa ajanı kandırabilir. Yalnız gerektiğinde açın, işiniz bitince kapatın.\n\nAçılsın mı?": [
   "gui/metinler.py:191"
@@ -4932,7 +4950,7 @@
   "oturum/cli.py:146"
  ],
  "{sayi} süreç SIGKILL ile kapatıldı": [
-  "kwin_oturum.py:1073",
+  "kwin_oturum.py:1074",
   "masaustu.py:1244"
  ],
  "{site}: geçersiz alan adı": [
@@ -4958,13 +4976,13 @@
   "api.py:665"
  ],
  "{sure} kaldı": [
-  "oturum/denetle.py:300"
+  "oturum/denetle.py:329"
  ],
  "{sure} önce": [
   "gui/metinler.py:323"
  ],
  "{s} sa {dk} dk": [
-  "oturum/denetle.py:299"
+  "oturum/denetle.py:328"
  ],
  "{s} sa {d} dk": [
   "gui/metinler.py:322"
@@ -5081,7 +5099,7 @@
   "arka_ortak.py:357"
  ],
  "çalışma dizini yolu çok uzun (soket yolu 108 bayt sınırı): {dizin}": [
-  "kwin_oturum.py:902"
+  "kwin_oturum.py:903"
  ],
  "çalışmıyor: hassas eylem onayı ve DUR/Devral düğmeleri yok": [
   "doktor.py:120"
@@ -5181,7 +5199,7 @@
   "gorsel.py:289"
  ],
  "ölçek {olcek} uygulanamadı: {hata}": [
-  "kwin_oturum.py:706"
+  "kwin_oturum.py:707"
  ],
  "ölçek {olcek} yalnız KWin türünde (Xvfb'de çıkış ölçeği yok): {neden}": [
   "masaustu.py:804"
@@ -5205,7 +5223,7 @@
   "masaustu.py:1077"
  ],
  "özel D-Bus (dbus-daemon) açılmadı: {hata}": [
-  "kwin_oturum.py:957"
+  "kwin_oturum.py:958"
  ],
  "özel boş çıkış ({sink}) görünmedi": [
   "ses.py:563"
@@ -5239,13 +5257,13 @@
   "ses.py:566"
  ],
  "özel veri yolu adresi beklenenden farklı: {adres}": [
-  "kwin_oturum.py:936"
+  "kwin_oturum.py:937"
  ],
  "özel veri yolu adresi kullanıcının gerçek oturum adresiyle aynı ({adres}); bağlanılmadı": [
-  "kwin_oturum.py:158"
+  "kwin_oturum.py:159"
  ],
  "özel veri yolu adresi unix:path= biçiminde olmalı: {adres}": [
-  "kwin_oturum.py:153"
+  "kwin_oturum.py:154"
  ],
  "özel veri yolu kancası {kanca} başarısız: {hata}": [
   "masaustu.py:957",
@@ -5255,7 +5273,7 @@
   "masaustu.py:479"
  ],
  "özel veri yolu süreci bu oturumun yapılandırmasıyla çalışmıyor; bağlanılmadı": [
-  "kwin_oturum.py:254"
+  "kwin_oturum.py:255"
  ],
  "İNSAN ÖNCELİĞİ: kullanıcı fareyi YA DA klavyeyi kullanıyorsa (Wayland boşta bildirimi, yetkisiz) girdi\ngönderilmez: 1,5 sn sessizlik beklenir (en çok 8 sn), olmazsa 12. Basılı tutarken insan girdisi → hemen bırakır.": [
   "cli.py:45"

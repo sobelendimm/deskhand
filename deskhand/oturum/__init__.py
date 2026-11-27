@@ -288,5 +288,7 @@ def _kapanis_ic() -> list[str]:
                 uyarilar.append(_("oturum: {ad} kopyasında kimlik oturumu çerezleri yenilendi ({siteler}); asıl profil "
                                   "değiştirilmedi, ama sağlayıcı eski oturumu kapattıysa asıl tarayıcıda yeniden giriş "
                                   "gerekebilir").format(ad=ad, siteler=", ".join(kimlik[:10])))
+        from . import kalici
+        kalici.kapanirken(yol)  # persistent sessions ([oturum] kalici) before the copy goes
         temizle(yol)
     return uyarilar
