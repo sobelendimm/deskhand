@@ -2158,15 +2158,57 @@ def _kaynak_coz(metin):
     return kaynaklar or {DUR_CLI: ""}
 
 
+_DUR_OKU_SINIR = 64 * 1024
+
+
 def _dur_oku(yol=None):
+    """DUR file → {source: line}; {} = no file. A file that exists but cannot be read (I/O error, not a regular file:
+    FIFO, directory, symlink, socket) → {"bilinmiyor": ""}. Never blocks: O_NONBLOCK, the type is checked before
+    reading, at most 64 KiB (review INC6 D4: a FIFO froze the panel's DUR button)."""
+    import stat
     yol = yol or dur_dosyasi()
     try:
-        with open(yol, errors="replace") as f:
-            return _kaynak_coz(f.read())
+        fd = os.open(yol, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC)
     except FileNotFoundError:
         return {}
     except OSError:
         return {_DUR_BILINMIYOR: ""} if os.path.lexists(yol) else {}
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return {_DUR_BILINMIYOR: ""}
+        parcalar, kalan = [], _DUR_OKU_SINIR
+        while kalan > 0:
+            p = os.read(fd, kalan)
+            if not p:
+                break
+            parcalar.append(p)
+            kalan -= len(p)
+        return _kaynak_coz(b"".join(parcalar).decode("utf-8", "replace"))
+    except OSError:
+        return {_DUR_BILINMIYOR: ""}
+    finally:
+        os.close(fd)
+
+
+def _duzenli_dosya(yol):
+    import stat
+    try:
+        return stat.S_ISREG(os.lstat(yol).st_mode)
+    except OSError:
+        return False
+
+
+def _dur_oku_yazici(yol=None):
+    """_dur_oku for a writer (review INC6 D2): a read error is retried once. Still unreadable: a REGULAR file → None
+    (DUR is on; its sources are unknown and must not be replaced by a placeholder); not a regular file (FIFO,
+    symlink, socket) → {} (nothing readable to keep: it is replaced by a regular file)."""
+    yol = yol or dur_dosyasi()
+    k = _dur_oku(yol)
+    if _DUR_BILINMIYOR in k:
+        k = _dur_oku(yol)
+    if _DUR_BILINMIYOR not in k:
+        return k
+    return None if _duzenli_dosya(yol) else {}
 
 
 class _DurKilidi:
@@ -2229,7 +2271,9 @@ def _dur_yaz(kaynaklar, birlestir):
         except FileExistsError:
             pass
         if birlestir:
-            simdi = _dur_oku()
+            simdi = _dur_oku_yazici()
+            if simdi is None:  # a regular DUR file that cannot be read: DUR is on, its sources are kept as they are
+                return
             if any(k not in kaynaklar for k in simdi):
                 os.remove(gecici)
                 gecici = _gecici_yaz(dizin, metin({**simdi, **kaynaklar}))
@@ -2250,8 +2294,10 @@ def dur_ac(kaynak=DUR_CLI):
     ezmez ya da silmez. Atomik: okuyan hiçbir an yarım/boş dosya görmez."""
     kaynak = str(kaynak).split()[0] if str(kaynak).split() else DUR_CLI
     with _DurKilidi():
-        mevcut = _dur_oku()
-        if kaynak not in mevcut:
+        mevcut = _dur_oku_yazici()
+        # None: the file exists but cannot be read now: DUR is already on and its unknown sources are NOT overwritten
+        # with a placeholder (review INC6 D2); the panel puts its own source back once the file can be read (_dur_koru)
+        if mevcut is not None and kaynak not in mevcut:
             _dur_yaz({**mevcut, kaynak: _icerik(kaynak)}, birlestir=True)
     return dur_dosyasi()
 
@@ -2305,7 +2351,9 @@ def dur_kapat(kaynak=DUR_CLI):
                 return True
             except FileNotFoundError:
                 return False
-        mevcut = _dur_oku()
+        mevcut = _dur_oku_yazici()
+        if mevcut is None:  # unreadable: nothing is removed, DUR stays on
+            mevcut = {_DUR_BILINMIYOR: ""}
         vardi = kaynak in mevcut
         kalan = {k: v for k, v in mevcut.items() if k != kaynak}
         if kalan:
@@ -2318,9 +2366,17 @@ def dur_kapat(kaynak=DUR_CLI):
             except FileNotFoundError:
                 return False
             try:
-                kalan = {k: v for k, v in _dur_oku(tasinan).items() if k != kaynak}
-                if kalan:  # a source added between the read and the move (a writer outside the lock): put back
-                    _dur_yaz(kalan, birlestir=True)
+                tasinan_k = _dur_oku(tasinan)
+                if _DUR_BILINMIYOR in tasinan_k:  # cannot check what was moved: put it back as it is (DUR stays on)
+                    kalan = {_DUR_BILINMIYOR: ""}
+                    try:
+                        os.link(tasinan, yol)
+                    except FileExistsError:
+                        pass  # a new DUR file appeared meanwhile: DUR is on
+                else:
+                    kalan = {k: v for k, v in tasinan_k.items() if k != kaynak}
+                    if kalan:  # a source added between the read and the move (a writer outside the lock): put back
+                        _dur_yaz(kalan, birlestir=True)
             finally:
                 try:
                     os.remove(tasinan)
@@ -2329,6 +2385,9 @@ def dur_kapat(kaynak=DUR_CLI):
     if kalan and kaynak == DUR_CLI:
         if set(kalan) == {DUR_KAPALI_BASARISIZ}:
             raise Dur(KULLANICI_DUR, _("DUR'u panel koydu (imzalı kayıt okunamıyor); yalnız kullanıcı Deskhand "
+                                       "panelinden kaldırabilir"))
+        if set(kalan) == {_DUR_BILINMIYOR}:
+            raise Dur(KULLANICI_DUR, _("DUR dosyası okunamıyor (kaynağı bilinmiyor); yalnız kullanıcı Deskhand "
                                        "panelinden kaldırabilir"))
         raise Dur(KULLANICI_DUR, _("DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir"))
     return vardi

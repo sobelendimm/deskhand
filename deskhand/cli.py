@@ -321,8 +321,26 @@ def k_durum(a):
         surum=__version__, arka_uc=hedef_ad(), hedef=os.environ.get("DESKHAND_HEDEF", "on"), dur=dur))
 
 
+def _yalitik_mi() -> bool:
+    return bool(sys.flags.isolated)
+
+
+def panel_argv_yalitik(arg: list[str]) -> list[str]:
+    """The panel's own command line: `python3 -I <src>/bin/deskhand panel …`. -I: no user site-packages, no PYTHON*
+    variables, no script/current directory on sys.path, so a shadow package (e.g. a `secretstorage` that raises
+    ImportError to make the Secret Service look absent) cannot be loaded (review INC6 Not-A, ANA R9)."""
+    kok = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return [sys.executable, "-I", os.path.join(kok, "bin", "deskhand"), "panel", *arg]
+
+
 def k_panel(a):
-    """İzleme paneli + tepsi (PyQt6). --tepsi: yalnız tepsiyle başla."""
+    """İzleme paneli + tepsi (PyQt6). --tepsi: yalnız tepsiyle başla. The panel always runs in an isolated interpreter
+    (panel_argv_yalitik): started otherwise, it re-executes itself once with -I."""
+    argv = panel_argv_yalitik(list(a.arg))
+    if not _yalitik_mi() and sys.executable and os.path.isfile(argv[2]):
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(sys.executable, argv)
     from .gui.__main__ import main as panel_main
     raise SystemExit(panel_main(a.arg))
 

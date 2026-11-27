@@ -166,6 +166,7 @@ def _kasa_nesnesi():
             """ONE Secret Service item: the mark key, a counter per setting and the panel's last approved value."""
             ETIKET = "Deskhand panel settings"
             OZNITELIK = {"application": "deskhand", "purpose": "panel-isaret"}
+            _baglanti = None  # the reused D-Bus connection of servis_yok_kesin
 
             def _bul(self, koleksiyon):
                 for oge in koleksiyon.search_items(self.OZNITELIK):
@@ -197,16 +198,20 @@ def _kasa_nesnesi():
                     import secretstorage
                 except ImportError:
                     return True
+                if self._baglanti is None:  # ONE session-bus connection for every poll (review INC6 D5)
+                    try:
+                        self._baglanti = secretstorage.dbus_init()
+                    except Exception:  # noqa: BLE001 - no session bus: unknown, not absent
+                        return False
                 try:
-                    baglanti = secretstorage.dbus_init()
-                except Exception:  # noqa: BLE001 - no session bus: unknown, not absent
+                    return not secretstorage.check_service_availability(self._baglanti)
+                except Exception:  # noqa: BLE001 - unknown; a broken connection is opened again next time
+                    b, self._baglanti = self._baglanti, None
+                    try:
+                        b.close()
+                    except Exception:  # noqa: BLE001
+                        pass
                     return False
-                try:
-                    return not secretstorage.check_service_availability(baglanti)
-                except Exception:  # noqa: BLE001 - unknown
-                    return False
-                finally:
-                    baglanti.close()
 
             def yaz(self, veri: bytes) -> None:
                 if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali":
@@ -247,11 +252,12 @@ def _durum_coz(ham) -> dict | None:
         sayac = {t: int(v) for t, v in d.get("sayac", {}).items() if t in TUM and int(v) >= 0}
         son = {t: v for t, v in d.get("son", {}).items() if t in TUM and (v is None or isinstance(v, str))}
         dur = d.get("dur")
+        eski = dur is None  # no / null field: an item of an older version (review INC6 D1)
         if not isinstance(dur, bool):
             dur = None  # missing / wrong field: the user's DUR is unknown → closed-fail (review INC5 N1)
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return None
-    return {"anahtar": k, "sayac": sayac, "son": son, "dur": dur} if len(k) == 32 else None
+    return {"anahtar": k, "sayac": sayac, "son": son, "dur": dur, "dur_eski": eski} if len(k) == 32 else None
 
 
 def _neden(e: Exception) -> str:
@@ -388,17 +394,35 @@ def panel_dur_kayitli() -> bool:
     return bool(d is not None and d.get("dur") is True)
 
 
-def panel_dur_durumu() -> bool | None:
-    """The user's DUR as the panel's signed state records it: True / False, or None when it cannot be read (locked
-    wallet, unreadable / corrupt item, item without a DUR field: the caller fails closed; review INC4 B4, INC5 N1).
-    The key ring answering "no item", or no Secret Service at all (absent, not locked: review INC5 Y10), is False:
-    a first start. An item deleted while the wallet is open is outside the threat model (a process that can edit the
-    user's wallet)."""
+DUR_NEDEN_OKUNAMADI = "okunamadi"            # locked wallet, unreadable / corrupt item, D-Bus error
+DUR_NEDEN_ESKI = "eski"                      # an item of an older version: no DUR field (review INC6 D1)
+DUR_NEDEN_SERVIS_YOK = "servis-yok"          # no Secret Service, and the panel has run here before (a mark)
+DUR_NEDEN_SERVIS_YOK_ILK = "servis-yok-ilk"  # no Secret Service and no mark: the panel asks once (default No)
+
+
+def panel_dur_ayrinti() -> tuple[bool | None, str | None]:
+    """(the user's DUR as the panel's signed state records it, why it is unknown). (True/False, None): read. (None,
+    reason): the caller fails closed (review INC4 B4, INC5 N1). The key ring answering "no item" is (False, None): a
+    first start (an item deleted while the wallet is open is outside the threat model: a process that can edit the
+    user's wallet). No Secret Service at all is NEVER a silent first start (review INC6 Not-A, ANA R9): with a panel
+    mark (isaret_gecmisi) it is closed-fail, always; without one the panel asks once (DUR_NEDEN_SERVIS_YOK_ILK).
+    A service that cannot be reached never lifts a closed-fail DUR: only a signed record read with dur=False does."""
     d = _durum(False)
     if d is not None:
         dur = d.get("dur")
-        return dur if isinstance(dur, bool) else None
-    return False if (_DURUM_YOK_KESIN or _SERVIS_YOK_KESIN) else None
+        if isinstance(dur, bool):
+            return dur, None
+        return None, DUR_NEDEN_ESKI if d.get("dur_eski") else DUR_NEDEN_OKUNAMADI
+    if _SERVIS_YOK_KESIN:
+        return None, DUR_NEDEN_SERVIS_YOK if isaret_gecmisi() else DUR_NEDEN_SERVIS_YOK_ILK
+    if _DURUM_YOK_KESIN:
+        return False, None
+    return None, DUR_NEDEN_OKUNAMADI
+
+
+def panel_dur_durumu() -> bool | None:
+    """The user's DUR as the panel's signed state records it: True / False, or None (closed-fail; panel_dur_ayrinti)."""
+    return panel_dur_ayrinti()[0]
 
 
 def isaret_dogrula(tur: str) -> tuple[str, str | None]:
@@ -493,7 +517,8 @@ def _dosyadaki(tur: str) -> str | None:
 # What the user approves is the list of ENTRIES the application applies, taken with the application's own parser
 # (guvenlik._kullanici_yasaklari / seviye_kurallari: str.splitlines, strip, '#' comments), never the raw text:
 #  - every entry on its own numbered line; blank and comment lines are folded into one marked line (they apply nothing);
-#  - every character that is not printable ASCII or a Turkish letter (çğıİöşüÇĞÖŞÜ) → visible \u{XXXX} AND a ⚠ note
+#  - every character that is not printable ASCII, a Turkish letter (çğıİöşüÇĞÖŞÜ), an NFKC-stable Latin letter of
+#    U+00C0–U+017F except ĸ (é ß ł …) or U+2014 EM DASH (review INC6 O1) → visible \u{XXXX} AND a ⚠ note
 #    on an unnumbered line below it: control / bidi / zero-width / combining marks, look-alike letters (Cyrillic е),
 #    and look-alikes that are not letters (Roman numerals Ⅹ Ⅽ, mathematical digits 𝟐, U+2800, U+3002, fullwidth
 #    forms; review INC5 Y7/Y8); a run of spaces → \u{0020}×N; a very long entry is marked the same way (a content
@@ -509,6 +534,18 @@ GOSTERIM_UST_SINIR = 2000  # entries per question; above it the Yes is disabled 
 GOSTERIM_SATIR_SINIR = 3 * GOSTERIM_UST_SINIR  # shown lines per question (entries + folded runs + ⚠ notes)
 UZUN_GIRIS = 160
 _GUVENLI_HARF = frozenset("çğıİöşüÇĞÖŞÜ")  # shown as they are: legitimate Turkish text is not marked
+
+
+def _isaretsiz_kume() -> frozenset[str]:
+    """Characters shown as they are, without a ⚠ (review INC6 O1): Turkish letters, the letters of U+00C0–U+017F
+    (Latin-1 Supplement + Latin Extended-A) whose NFKC form is themselves (é ß Å ł …; not × ÷ Ĳ ĳ Ŀ ŀ ŉ ſ, and not
+    ĸ U+0138), and U+2014 EM DASH (the KDE / Firefox window title separator). Printable ASCII is checked apart."""
+    k = {chr(o) for o in range(0xC0, 0x180)
+         if unicodedata.category(chr(o)).startswith("L") and unicodedata.normalize("NFKC", chr(o)) == chr(o)}
+    return frozenset((k - {"\u0138"}) | _GUVENLI_HARF | {"\u2014"})
+
+
+_ISARETSIZ = _isaretsiz_kume()
 _ISARET = {"+": "+", "-": "−", "~": "~", " ": " "}
 SORU_DEGISIKLIK = N_("Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı. Bu değişiklik "
                      "uygulansın mı? Siz yapmadıysanız Hayır deyin.")
@@ -528,9 +565,9 @@ ETIKET_SINIR = N_("Liste çok uzun (üst sınır {sinir} giriş, {satir} satır)
 
 
 def _kacis(metin: str) -> tuple[str, list[str]]:
-    """→ (visible text, notes): every character that is neither printable ASCII nor a Turkish letter as \\u{XXXX},
-    each named in a note (review INC5 Y7/Y8: no look-alike or invisible character is shown raw or unmarked); runs of
-    spaces counted."""
+    """→ (visible text, notes): every character that is neither printable ASCII nor in _ISARETSIZ (Turkish letters,
+    NFKC-stable Latin letters of U+00C0–U+017F, U+2014; review INC6 O1) as \\u{XXXX}, each named in a note (review
+    INC5 Y7/Y8: no look-alike or invisible character is shown raw or unmarked); runs of spaces counted."""
     cikti: list[str] = []
     notlar: list[str] = []
     i = 0
@@ -544,7 +581,7 @@ def _kacis(metin: str) -> tuple[str, list[str]]:
             i = j
             continue
         o = ord(ch)
-        if 0x20 < o < 0x7F or ch in _GUVENLI_HARF:
+        if 0x20 < o < 0x7F or ch in _ISARETSIZ:
             cikti.append(ch)
         else:
             cikti.append(f"\\u{{{o:04X}}}")

@@ -10,9 +10,9 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication
 
-from .. import guvenlik, onay, yollar
+from .. import guvenlik, hata, onay, yollar
 from ..gunluk import gunluk
-from ..i18n import _
+from ..i18n import N_, _
 from . import ayar as A
 from . import metinler as T
 from .durum import Durum
@@ -258,16 +258,19 @@ class Panel(QObject):
         cli DUR placed before the restart does not suppress it: review INC5 P1) until the wallet can be read; then only
         that source is removed when the signed value is off (a source someone else set stays: review INC5 O4/O5).
         A closed-fail source left by an earlier panel is this panel's own (the label, not the pid, is the owner).
-        No Secret Service at all (not locked: absent) → a first start, no closed-fail (review INC5 Y10)."""
+        No Secret Service at all (review INC6 Not-A, ANA R9): never a silent first start. The panel has run here before
+        (a mark) → closed-fail like a locked wallet. No mark → closed-fail first, then ONE question "run unsigned?"
+        (default No = the DUR stays; unattended mode: not asked). Only the user's Yes, the user's Devam or a signed
+        record read with dur=False lifts it; a service that cannot be reached never does."""
+        from .. import liste_koruma
         self._dur_imzasiz = None
         self._dur_kasa_bekliyor = False
         self._dur_kasa_zaman = time.monotonic()
-        kayit = None
+        kayit, neden = None, liste_koruma.DUR_NEDEN_OKUNAMADI
         try:
-            from .. import liste_koruma
-            kayit = liste_koruma.panel_dur_durumu()
+            kayit, neden = liste_koruma.panel_dur_ayrinti()
         except Exception:  # noqa: BLE001 - wallet unusable: closed-fail below
-            kayit = None
+            kayit, neden = None, liste_koruma.DUR_NEDEN_OKUNAMADI
         kaynaklar = guvenlik.dur_kaynaklari()
         dosyada = guvenlik.DUR_KULLANICI in kaynaklar
         if kayit is None:
@@ -276,8 +279,17 @@ class Panel(QObject):
             self._dur_kullanici = dosyada
             if dosyada:
                 self._dur_imzasiz = True  # sign the user's DUR once the wallet can be written
-            self._liste_uyari(_("Cüzdan okunamıyor; kullanıcının DUR kaydı doğrulanamadı. Güvenli tarafta DUR açık; "
-                                "cüzdan okununca panel imzalı kaydı uygular (kapalıysa DUR kalkar)."))
+            self._liste_uyari(_dur_neden_metni(neden))
+            if neden == liste_koruma.DUR_NEDEN_SERVIS_YOK_ILK and not hata.gozetimsiz():
+                evet = False
+                try:
+                    evet = bool(self._anahtarliksiz_sor())
+                except Exception:  # noqa: BLE001 - no dialog: the default answer No
+                    evet = False
+                if evet:
+                    self._dur_kasa_bekliyor = False
+                    guvenlik.dur_kapat(guvenlik.DUR_KAPALI_BASARISIZ)  # ONLY the panel's own source
+                    self._liste_uyari(_("İmzasız çalışma kabul edildi (anahtarlık yok); panelin koyduğu DUR kaldırıldı."))
             return
         self._dur_kullanici = dosyada or bool(kayit)
         if self._dur_kullanici:
@@ -285,6 +297,17 @@ class Panel(QObject):
             self._dur_koru()
         if guvenlik.DUR_KAPALI_BASARISIZ in kaynaklar:  # an earlier panel's closed-fail: the signed value decides
             guvenlik.dur_kapat(guvenlik.DUR_KAPALI_BASARISIZ)
+
+    def _anahtarliksiz_sor(self) -> bool:
+        """No Secret Service and no panel mark (review INC6 Not-A, ANA R9): ask ONCE whether the panel may run
+        unsigned. Default answer and Esc: No (the closed-fail DUR stays). The Yes cannot be signed (no wallet)."""
+        dlg = anahtarliksiz_diyalogu()
+        if hasattr(self, "pencere"):
+            dlg.setWindowIcon(self.pencere.windowIcon())
+        from PyQt6.QtWidgets import QMessageBox
+        evet = dlg.exec() == QMessageBox.StandardButton.Yes
+        gunluk(f"anahtarlık yok, imzasız çalışma onayı: {'evet' if evet else 'hayır'}")
+        return evet
 
     def _dur_kasa_denetle(self):
         """Poll: a closed-fail DUR waits for the wallet; an unsigned DUR decision is signed once it can be written."""
@@ -327,6 +350,8 @@ class Panel(QObject):
         panel's own (B4)."""
         self._dur_kasa_denetle()
         kaynaklar = guvenlik.dur_kaynaklari()
+        if guvenlik._DUR_BILINMIYOR in kaynaklar and guvenlik._duzenli_dosya(hata.dur_dosyasi()):
+            return  # a regular DUR file that cannot be read now: DUR is on; checked again on the next poll (INC6 D2)
         if not getattr(self, "_dur_kullanici", False) and guvenlik.DUR_KULLANICI in kaynaklar:
             self._dur_kaydet(True)
             kaynaklar = guvenlik.dur_kaynaklari()
@@ -618,6 +643,40 @@ class Panel(QObject):
         self._diyaloglari_kapat()
         self.pencere.kapaninca_gizle = False
         self.app.quit()
+
+
+ANAHTARLIKSIZ_SORU = N_("Anahtarlık (Secret Service) bulunamadı; korumalar imzasız çalışacak: kullanıcının DUR kaydı "
+                        "ve ayar onayları cüzdanda saklanamaz, panel kapatılınca doğrulanamaz. Kabul ediyor musunuz? "
+                        "Hayır derseniz DUR açık kalır; Devam ile yalnız siz kaldırırsınız. Bunu siz başlatmadıysanız "
+                        "Hayır deyin.")
+
+
+def anahtarliksiz_diyalogu():
+    """The keyring-less question (ANA R9): plain text, Yes / No, the default and the Esc answer are No."""
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QMessageBox
+    dlg = QMessageBox(QMessageBox.Icon.Warning, "Deskhand", _(ANAHTARLIKSIZ_SORU),
+                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+    dlg.setTextFormat(Qt.TextFormat.PlainText)
+    dlg.setDefaultButton(QMessageBox.StandardButton.No)
+    dlg.setEscapeButton(QMessageBox.StandardButton.No)
+    return dlg
+
+
+def _dur_neden_metni(neden: str | None) -> str:
+    """The visible reason of the panel's closed-fail DUR (review INC6 D1, Not-A)."""
+    from .. import liste_koruma as lk
+    if neden == lk.DUR_NEDEN_ESKI:
+        return _("Cüzdandaki panel kaydında DUR alanı yok (eski sürüm kaydı; bir kez Devam'a basın). Güvenli tarafta "
+                 "DUR açık; anahtar ve onaylar korunur.")
+    if neden == lk.DUR_NEDEN_SERVIS_YOK:
+        return _("Anahtarlık (Secret Service) bulunamadı; panel burada daha önce çalıştığı için kullanıcının DUR kaydı "
+                 "doğrulanamıyor. Güvenli tarafta DUR açık; yalnız siz Devam ile kaldırabilirsiniz.")
+    if neden == lk.DUR_NEDEN_SERVIS_YOK_ILK:
+        return _("Anahtarlık (Secret Service) bulunamadı; güvenli tarafta DUR açık. İmzasız çalışma sorulacak "
+                 "(gözetimsiz kipte sorulmaz).")
+    return _("Cüzdan okunamıyor; kullanıcının DUR kaydı doğrulanamadı. Güvenli tarafta DUR açık; cüzdan okununca panel "
+             "imzalı kaydı uygular (kapalıysa DUR kalkar).")
 
 
 def degisiklik_diyalogu(g):

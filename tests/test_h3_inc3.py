@@ -336,6 +336,9 @@ class SahtePanel:
     def _liste_uyari(self, m):
         self.uyarilar.append(m)
 
+    def _anahtarliksiz_sor(self):
+        return False  # the keyring-less question (R9): the default answer No
+
 
 lk._anahtar_unut()
 p = SahtePanel()
@@ -883,7 +886,9 @@ for ad_, bozuk in (("bozuk", b"{not json"),
     kontrol(f"INC5 N1: {ad_} kayıt yalnız kullanıcı eylemiyle (Devam) yeniden yazılır",
             KASA.veri != bozuk and lk.panel_dur_durumu() is False)
 
-# Y10: no Secret Service at all (absent, not locked) → a first start, no closed-fail DUR
+# Y10 → R9 (rapor-H3-inceleme-6.md Not-A, ANA R9 kararı 1): "no Secret Service at all" is NEVER a silent first start.
+# A panel mark (isaret_gecmisi) exists → closed-fail DUR, always; no mark → the panel asks once (default No = DUR);
+# unattended → DUR. The closed-fail DUR is never lifted because the service cannot be reached.
 
 
 class YokKasa(Kasa):
@@ -898,17 +903,303 @@ class YokKasa(Kasa):
         return self.yok
 
 
-for yok in (True, False):
-    lk.isaret_anahtarlik_ayarla(YokKasa(yok))
+class SoranPanel(SahtePanel):
+    """SahtePanel whose keyring-less question answers `cevap` (None = the dialog is closed: the default No)."""
+
+    def __init__(self, cevap=None):
+        super().__init__()
+        self.cevap, self.soruldu = cevap, 0
+
+    def _anahtarliksiz_sor(self):
+        self.soruldu += 1
+        return bool(self.cevap)
+
+
+def isaretleri_sakla():
+    s = {}
+    for t_ in lk.TUM:
+        y_ = lk.isaret_yolu(t_)
+        if os.path.lexists(y_):
+            s[y_] = y_ + ".r9-sakla"
+            os.rename(y_, s[y_])
+    return s
+
+
+def isaretleri_geri(s):
+    for y_, g_ in s.items():
+        os.replace(g_, y_)
+
+
+def isaret_koy():
+    y_ = lk.isaret_yolu("yasak")
+    if os.path.lexists(y_):
+        return None
+    os.makedirs(os.path.dirname(y_), exist_ok=True)
+    with open(y_, "w") as f_:
+        f_.write("{}")
+    return y_
+
+
+R9_ESKI_GOZ = os.environ.pop("DESKHAND_GOZETIMSIZ", None)
+lk.isaret_anahtarlik_ayarla(YokKasa(True))
+koyulan = isaret_koy()
+dur_sifirla()
+p13 = SoranPanel(cevap=True)
+Panel._dur_baslat(p13)
+kontrol("R9 (1): işaret var + Secret Service yok → kapalı-başarısız DUR, soru yok",
+        guvenlik.dur_kaynaklari() == {KB} and lk.panel_dur_durumu() is None and p13.soruldu == 0 and
+        p13._dur_kasa_bekliyor, f"{guvenlik.dur_kaynaklari()} {lk.panel_dur_durumu()} soru={p13.soruldu}")
+for _n in range(3):
+    lk._anahtar_unut()
+    Panel._dur_koru(p13)  # the poll: the service is still absent
+kontrol("R9 (1): servis erişilemez kaldıkça yoklama kapalı-başarısız DUR'u kaldırmaz",
+        guvenlik.dur_kaynaklari() == {KB} and p13._dur_kasa_bekliyor, str(guvenlik.dur_kaynaklari()))
+dur_sifirla()
+Panel._dur_kaydet(p13, False)
+if koyulan:
+    os.remove(koyulan)
+saklanan = isaretleri_sakla()
+try:
+    for cevap_, ad_ in ((None, "varsayılan (kapatıldı)"), (False, "Hayır")):
+        lk._anahtar_unut()
+        dur_sifirla()
+        p14 = SoranPanel(cevap=cevap_)
+        Panel._dur_baslat(p14)
+        kontrol(f"R9 (1): işaret yok + servis yok → bir kez sorulur; {ad_} → DUR (kapalı-başarısız)",
+                p14.soruldu == 1 and guvenlik.dur_kaynaklari() == {KB} and p14._dur_kasa_bekliyor,
+                f"soru={p14.soruldu} {guvenlik.dur_kaynaklari()}")
+        lk._anahtar_unut()
+        Panel._dur_koru(p14)
+        kontrol(f"R9 (1): {ad_} sonrası yoklama ne yeniden sorar ne DUR'u kaldırır",
+                p14.soruldu == 1 and guvenlik.dur_kaynaklari() == {KB}, f"soru={p14.soruldu}")
+        dur_sifirla()
+        Panel._dur_kaydet(p14, False)
+    lk._anahtar_unut()
+    p15 = SoranPanel(cevap=True)
+    Panel._dur_baslat(p15)
+    kontrol("R9 (1): işaret yok + servis yok + Evet → imzasız çalışma kabul, DUR yok",
+            p15.soruldu == 1 and not guvenlik.dur_acik() and not p15._dur_kasa_bekliyor,
+            f"soru={p15.soruldu} {guvenlik.dur_kaynaklari()}")
+    os.environ["DESKHAND_GOZETIMSIZ"] = "1"
+    try:
+        lk._anahtar_unut()
+        p16 = SoranPanel(cevap=True)
+        Panel._dur_baslat(p16)
+    finally:
+        os.environ.pop("DESKHAND_GOZETIMSIZ", None)
+    kontrol("R9 (1): gözetimsiz kipte soru açılmaz, DUR",
+            p16.soruldu == 0 and guvenlik.dur_kaynaklari() == {KB}, f"soru={p16.soruldu} {guvenlik.dur_kaynaklari()}")
     dur_sifirla()
-    p13 = SahtePanel()
-    Panel._dur_baslat(p13)
-    kontrol(f"INC5 Y10: Secret Service {'kesin yok → DUR açılmaz' if yok else 'belirsiz/kilitli → kapalı-başarısız DUR'}",
-            guvenlik.dur_acik() is (not yok) and lk.panel_dur_durumu() is (False if yok else None))
-    dur_sifirla()
+    Panel._dur_kaydet(p16, False)
+finally:
+    isaretleri_geri(saklanan)
+lk.isaret_anahtarlik_ayarla(YokKasa(False))
+dur_sifirla()
+p17 = SahtePanel()
+Panel._dur_baslat(p17)
+kontrol("INC5 Y10: Secret Service belirsiz/kilitli → kapalı-başarısız DUR",
+        guvenlik.dur_kaynaklari() == {KB} and lk.panel_dur_durumu() is None)
+dur_sifirla()
+Panel._dur_kaydet(p17, False)
+if R9_ESKI_GOZ is not None:
+    os.environ["DESKHAND_GOZETIMSIZ"] = R9_ESKI_GOZ
 lk.isaret_anahtarlik_ayarla(KASA)
 KASA.veri, KASA.kilitli = None, False
 lk._anahtar_unut()
+
+# R9 (1): the keyring-less question of the real panel: plain text, default No
+SORU_DLG = ("import os, sys; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path.insert(0, sys.argv[1])\n"
+            "from PyQt6.QtCore import Qt\n"
+            "from PyQt6.QtWidgets import QApplication, QMessageBox\n"
+            "app = QApplication([])\n"
+            "from deskhand.gui.panel import anahtarliksiz_diyalogu\n"
+            "d = anahtarliksiz_diyalogu()\n"
+            "print('VARSAYILAN', d.defaultButton() is d.button(QMessageBox.StandardButton.No),\n"
+            "      d.escapeButton() is d.button(QMessageBox.StandardButton.No),\n"
+            "      d.textFormat() == Qt.TextFormat.PlainText, 'imzasız' in d.text())\n")
+r = subprocess.run([sys.executable, "-c", SORU_DLG, _yalitim.KOK], capture_output=True, text=True, timeout=60)
+kontrol("R9 (1): anahtarlıksız soru düz metin, varsayılan ve Esc = Hayır",
+        "VARSAYILAN True True True True" in r.stdout, (r.stdout + r.stderr)[-500:])
+
+# R9 (1): a shadow `secretstorage` in the user's site-packages cannot make the service look absent: the panel is
+# re-executed with `python3 -I` (no user site-packages, no PYTHON* variables)
+import tempfile  # noqa: E402
+
+from deskhand import cli  # noqa: E402
+
+golge = tempfile.mkdtemp(prefix="r9-golge-")
+golge_site = os.path.join(golge, "lib", f"python{sys.version_info[0]}.{sys.version_info[1]}", "site-packages",
+                          "secretstorage")
+os.makedirs(golge_site)
+with open(os.path.join(golge_site, "__init__.py"), "w") as f_:
+    f_.write("raise ImportError('golge')\n")
+PROBE = ("import sys\ntry:\n    import secretstorage\n    print('SS', 'gercek', secretstorage.__file__)\n"
+         "except ImportError as e:\n    print('SS', e)\n")
+golge_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": os.environ.get("HOME", golge),
+             "PYTHONUSERBASE": golge, "DBUS_SESSION_BUS_ADDRESS": "unix:path=/nonexistent-r9"}
+r_ac = subprocess.run([sys.executable, "-c", PROBE], capture_output=True, text=True, timeout=30, env=golge_env)
+argv_ = cli.panel_argv_yalitik(["--tepsi"])
+r_yal = subprocess.run([argv_[0], argv_[1], "-c", PROBE], capture_output=True, text=True, timeout=30, env=golge_env)
+kontrol("R9 (1): gölge secretstorage yalıtımsız yorumlayıcıda etkili (sınamanın kendisi doğru)",
+        "SS golge" in r_ac.stdout, r_ac.stdout + r_ac.stderr)
+kontrol("R9 (1): panel argv'si -I ile bin/deskhand panel",
+        argv_[1] == "-I" and argv_[2] == os.path.join(_yalitim.KOK, "bin", "deskhand") and
+        argv_[3:] == ["panel", "--tepsi"], str(argv_))
+kontrol("R9 (1): gölge secretstorage panel yorumlayıcısında etkisiz",
+        "SS golge" not in r_yal.stdout and "SS" in r_yal.stdout, r_yal.stdout + r_yal.stderr)
+cagrilan = []
+
+
+class _Exec(Exception):
+    pass
+
+
+def sahte_execv(yol_, argv__):
+    cagrilan.append((yol_, list(argv__)))
+    raise _Exec()
+
+
+import deskhand.gui.__main__ as gui_main  # noqa: E402
+
+eski_execv, eski_yal, eski_main = cli.os.execv, cli._yalitik_mi, gui_main.main
+cli.os.execv, cli._yalitik_mi, gui_main.main = sahte_execv, (lambda: False), (lambda argv=None: 0)
+try:
+    try:
+        cli.k_panel(type("A", (), {"arg": ["--tepsi"]})())
+    except (_Exec, SystemExit):
+        pass
+finally:
+    cli.os.execv, cli._yalitik_mi, gui_main.main = eski_execv, eski_yal, eski_main
+kontrol("R9 (1): `deskhand panel` yalıtımsız yorumlayıcıda kendini -I ile yeniden başlatır",
+        cagrilan and cagrilan[0][1] == cli.panel_argv_yalitik(["--tepsi"]), str(cagrilan))
+
+# R9 O1: legitimate Latin text is not marked; look-alikes stay marked
+for desen, isaretli_ in (("Café", 0), ("Société Générale", 0), ("Straße", 0), ("Firefox — Banka", 0),
+                         ("Ünlü İş", 0), ("\u0440\u0430\u0443\u0440\u0430l", 1), ("KeePass\u2169", 1),
+                         ("\u017fecure", 1), ("\u01c3Online", 1), ("\u0138", 1), ("\u0132", 1), ("2\u00d73", 1),
+                         ("«x»", 1)):
+    g = lk.gosterim("soru", [("yasak", desen + "\n", None, None)])
+    kontrol(f"R9 O1: {desen!a} → isaretli={isaretli_}", g.bolumler[0].isaretli == isaretli_,
+            str(icerik_satirlari(g)))
+g = lk.gosterim("soru", [("yasak", "Café — Straße\n", None, None)])
+kontrol("R9 O1: işaretsiz harfler olduğu gibi görünür", any("Café — Straße" in s for s in icerik_satirlari(g)),
+        str(icerik_satirlari(g)))
+
+# R9 D1: an item written by an older version (no `dur` field) → the warning says so and what to do
+KASA.veri = json.dumps({"surum": 1, "anahtar": "ab" * 32, "sayac": {}, "son": {}}).encode()
+lk._anahtar_unut()
+dur_sifirla()
+p18 = SahtePanel()
+Panel._dur_baslat(p18)
+kontrol("R9 D1: eski sürüm kaydı → DUR + 'eski sürüm kaydı; bir kez Devam'a basın'",
+        guvenlik.dur_kaynaklari() == {KB} and any("eski sürüm kaydı; bir kez Devam'a basın" in u for u in p18.uyarilar),
+        str(p18.uyarilar))
+dur_sifirla()
+Panel._dur_kaydet(p18, False)
+KASA.veri = None
+lk._anahtar_unut()
+
+# R9 D2: a transient read error never turns into a permanent "bilinmiyor" source, the user's source is not lost
+dur_sifirla()
+guvenlik.dur_ac("kullanici")
+DUR_YOLU = dur_dosyasi()
+hata_say = {"n": 1}
+gercek_open, gercek_os_open = open, guvenlik.os.open
+
+
+def bozuk_open(yol_, *a, **k):
+    if os.fspath(yol_) == DUR_YOLU and hata_say["n"] > 0:
+        hata_say["n"] -= 1
+        raise OSError(5, "EIO (geçici)")
+    return gercek_open(yol_, *a, **k)
+
+
+def bozuk_os_open(yol_, *a, **k):
+    if os.fspath(yol_) == DUR_YOLU and hata_say["n"] > 0:
+        hata_say["n"] -= 1
+        raise OSError(5, "EIO (geçici)")
+    return gercek_os_open(yol_, *a, **k)
+
+
+guvenlik.open, guvenlik.os.open = bozuk_open, bozuk_os_open
+try:
+    guvenlik.dur_ac("cli")
+finally:
+    del guvenlik.open
+    guvenlik.os.open = gercek_os_open
+kontrol("R9 D2: geçici okuma hatasında 'bilinmiyor' kalıcı kaynak olmaz, kullanıcının kaynağı kalır",
+        "bilinmiyor" not in guvenlik.dur_kaynaklari() and "kullanici" in guvenlik.dur_kaynaklari(),
+        str(guvenlik.dur_kaynaklari()))
+dur_sifirla()
+
+# R9 D4: a DUR "file" that is a FIFO does not freeze the caller (the GUI thread); DUR stays on
+import threading  # noqa: E402
+
+dur_sifirla()
+os.mkfifo(DUR_YOLU)
+bitti_ = threading.Event()
+th = threading.Thread(target=lambda: (guvenlik.dur_ac("kullanici"), guvenlik.dur_kaynaklari(), bitti_.set()),
+                      daemon=True)
+th.start()
+donmadi = bitti_.wait(3)
+if not donmadi:  # unblock the reader
+    try:
+        os.close(os.open(DUR_YOLU, os.O_WRONLY | os.O_NONBLOCK))
+    except OSError:
+        pass
+    th.join(3)
+kontrol("R9 D4: DUR dosyası FIFO → dur_ac takılmaz, DUR açık kalır", donmadi and guvenlik.dur_acik())
+try:
+    os.remove(DUR_YOLU)
+except OSError:
+    pass
+dur_sifirla()
+
+# R9 D5: the wallet poll reuses one D-Bus connection
+import types  # noqa: E402
+
+baglantilar = []
+
+
+class _SahteBaglanti:
+    def close(self):
+        baglantilar.append("kapandi")
+
+
+sahte_ss = types.ModuleType("secretstorage")
+sahte_ss.dbus_init = lambda: (baglantilar.append("acildi"), _SahteBaglanti())[1]
+sahte_ss.check_service_availability = lambda b: True
+eski_ss, eski_anh = sys.modules.get("secretstorage"), os.environ.pop("DESKHAND_ANAHTARLIK", None)
+sys.modules["secretstorage"] = sahte_ss
+lk._KASA = None
+try:
+    kasa_ = lk._kasa_nesnesi()
+    sonuclar_ = [kasa_.servis_yok_kesin() for _n in range(5)]
+finally:
+    if eski_ss is None:
+        sys.modules.pop("secretstorage", None)
+    else:
+        sys.modules["secretstorage"] = eski_ss
+    if eski_anh is not None:
+        os.environ["DESKHAND_ANAHTARLIK"] = eski_anh
+    lk.isaret_anahtarlik_ayarla(KASA)
+kontrol("R9 D5: 5 yoklama tek D-Bus bağlantısı açar",
+        baglantilar.count("acildi") == 1 and sonuclar_ == [False] * 5, f"{baglantilar} {sonuclar_}")
+
+# R9 D3: an unknown DUR label is drawn as plain text (never HTML)
+D3_DLG = ("import os, sys; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path.insert(0, sys.argv[1])\n"
+          "from PyQt6.QtCore import Qt\n"
+          "from PyQt6.QtWidgets import QApplication\n"
+          "app = QApplication([])\n"
+          "from deskhand.gui.durum import Durum\n"
+          "from deskhand.gui.pencere import DurumSeridi\n"
+          "s = DurumSeridi()\n"
+          "s.guncelle(Durum(ad='dur', dur_kaynak='<b>Devam_edildi</b>\\u0430'))\n"
+          "print('DUZ', s.l_durum.textFormat() == Qt.TextFormat.PlainText, '<b>Devam_edildi</b>' in s.l_durum.text(),\n"
+          "      '\\u0430' not in s.l_durum.text())\n")
+r = subprocess.run([sys.executable, "-c", D3_DLG, _yalitim.KOK], capture_output=True, text=True, timeout=60)
+kontrol("R9 D3: bilinmeyen DUR etiketi düz metin (HTML yorumlanmaz), ASCII dışı kaçışlı",
+        "DUZ True True True" in r.stdout, (r.stdout + r.stderr)[-500:])
 
 # Y7 / Y8 / Y9: the display
 for desen, ad_ in (("KeePass\u2169\u216d", "Roma rakamı Ⅹ Ⅽ"), ("Online Banking \U0001d7d0", "matematik rakamı 𝟐"),
