@@ -10,6 +10,7 @@ denetimlerin imleç altı hariç HEPSİ burada AÇIKÇA uygulanır (DUR 13, yasa
 düğme/ödeme sayfası 10 ya da panelden onay, kde'de oyun/film koruması 15, günlük kaydı)."""
 from __future__ import annotations
 
+import collections
 import difflib
 import json
 import os
@@ -264,14 +265,112 @@ def _exe(pid):
         return None
 
 
-TORUN_BENZERLIK = 0.9  # tam PID eşleşmesi yokken torun süreçteki çerçevenin başlığa en düşük benzerliği
+KARDES_VERILMEDI = object()  # cerceve_karari: kardeş listesi hiç verilmedi (doğrudan çağrı; üretim yolları HEP verir)
+SAYFA_BELIRSIZ = "sayfa_belirsiz"  # Dur.tur: çerçeve ↔ pencere eşlemesi kanıtlanamadı (kısa yeniden deneme güvenli)
+BELIRSIZ_SURE, BELIRSIZ_ARA = 1.0, 0.15  # sn: sayfa belirsizken yeniden deneme üst sınırı ve aralığı (SOAK-FIX-R1)
+
+# Tarayıcı marka sonekleri (katla sonrası) ve genel başlıklar: bunlar pencereyi diğerlerinden AYIRMAZ (SOAK-FIX-R1)
+_MARKA_SONEK = ("mozilla firefox private browsing", "mozilla firefox ozel gezinti", "mozilla firefox", "firefox",
+                "google chrome", "chromium", "chrome", "microsoft edge", "brave", "vivaldi", "librewolf")
+_GENEL_BASLIK = frozenset({"", "yeni sekme", "new tab", "about blank", "about newtab", "private browsing",
+                           "ozel gezinti", "new incognito tab", "yeni gizli sekme", "untitled", "adsiz"})
 
 
-def _cerceve_bul(Atspi, pid, baslik):
-    """Pencere → AT-SPI çerçevesi: YALNIZ hedef pencerenin PID'inden seçilir; aynı süreçte birden çok çerçeve varsa
-    başlık benzerliğiyle. Tam PID eşleşmesi yoksa yalnız pencere sürecinin TORUNLARINDAN, AYNI çalıştırılabilir dosyaya
-    sahip ve başlığı ≥ TORUN_BENZERLIK benzeyen çerçeve. Atalar ve başka uygulamalar asla (denetimler X/KWin penceresinde
-    yapılır, eylem BAŞKA uygulamada olurdu): PID bilinmiyor ya da eşleşme yoksa Dur 6. → (çerçeve, uygulama pid, ad)."""
+def zayif_baslik(baslik) -> bool:
+    """Başlık kimlik kanıtı olamayacak kadar zayıf mı: boş, yalnız noktalama/simge, marka ("Mozilla Firefox"),
+    genel ("Yeni Sekme") ya da marka soneki atıldıktan sonra 3 harften kısa."""
+    k = katla(baslik or "")
+    for m in _MARKA_SONEK:
+        if k == m or k.endswith(" " + m):
+            k = k[:len(k) - len(m)].strip()
+            break
+    return k in _GENEL_BASLIK or len(k.replace(" ", "")) < 3
+
+
+def kardes_basliklari(au, k, pid):
+    """Hedef pencereyle AYNI süreçteki ÖBÜR pencerelerin başlıkları (pencere yöneticisinden: KWin/X — sayfanın
+    yönetemediği bağımsız kanal: hangi pencerelerin var olduğu ve sahip süreçleri). → [başlık] | None (bilinmiyor)."""
+    try:
+        pid = int(pid or 0)
+    except (TypeError, ValueError):
+        return None
+    if not pid:
+        return None
+    try:
+        liste = getattr(au, "_liste", None)
+        if getattr(au, "tur", "") == "kwin" and callable(liste):  # KWin: tek betik çağrısında pid dahil (ucuz)
+            from .arka_uc.kwin import kimlik_yap
+            return [w.get("t") or "" for w in liste() if kimlik_yap(w["i"]) != k and str(w.get("p")) == str(pid)]
+        # kimlik listesi ucuz, pid önbellekli (kde); başlık yalnız aynı süreçteki pencereler için sorulur
+        kimlikler = au.kimlikler() if hasattr(au, "kimlikler") else [k_ for k_, _b, _g in au.pencereler()]
+        return [au.baslik(k_) or "" for k_ in kimlikler if k_ != k and str(au.pid(k_) or "") == str(pid)]
+    except Exception:  # noqa: BLE001  (listelenemedi: bilinmiyor → güvenli yön)
+        return None
+
+
+def cerceve_karari(adlar, baslik, kardes, tam_pid=None) -> int:
+    """Pencere → çerçeve kararı (web ve erisim ORTAK; SOAK-FIX-R1). adlar: pencerenin süreç ağacındaki TÜM aday
+    çerçevelerin adları (benzerlik süzgecinden ÖNCE); kardes: kardes_basliklari (None = bilinmiyor → çok çerçevede Dur;
+    KARDES_VERILMEDI = doğrudan çağrı, yalnız birebir-tekil kuralı). AT-SPI çerçevesinde
+    pencere kimliği yok ve çerçeve adı SAYFANIN denetlediği veridir; tek başına kanıt sayılmaz. Bağımsız kanal pencere
+    yöneticisinin pencere listesidir: başlık aynı süreçteki pencereler arasında TEKİL olmalı (saldırgan sayfa başka
+    pencerenin başlığını kopyalarsa iki pencere aynı başlıkta → belirsiz), birebir eşleşen TEK çerçeve olmalı ve öbür
+    her çerçevenin (genel adlılar hariç) adı güncel bir kardeş pencerenin başlığı olmalı (bayat ad = geçiş sürüyor).
+    Tek pencereli uygulamada (kardeş YOK, biliniyor) tek çerçeve karışamaz: ad gecikse de seçilir. tam_pid[i]: çerçeve
+    pencerenin KENDİ sürecinden (aynı adlı torun çerçevesinden önce gelir). → seçilen indeks;
+    kanıt yoksa Dur 6 (tur SAYFA_BELIRSIZ). İletide yalnız hedef pencerenin kendi başlığı (baslik_goster)."""
+    from .guvenlik import baslik_goster
+    n = len(adlar)
+
+    def belirsiz():
+        return Dur(6, _("sayfa belirsiz: bu pencerenin süreç ağacında {n} erişilebilirlik çerçevesi var ve "
+                        "pencere başlığıyla ({baslik}) birebir eşleşen tek çerçeve yok (sayfa geçişi ya da aynı "
+                        "başlıklı pencereler); başka pencerenin sayfası okunmasın diye durduruldu, kısa süre "
+                        "sonra yeniden dene").format(n=n, baslik=baslik_goster(baslik)), tur=SAYFA_BELIRSIZ)
+    if n == 1 and kardes == []:
+        return 0
+    tam = [i for i, a in enumerate(adlar) if a == baslik]
+    if tam_pid and any(tam_pid[i] for i in tam):  # aynı ad: pencerenin KENDİ sürecindeki çerçeve torundan önce
+        tam = [i for i in tam if tam_pid[i]]
+    if len(tam) != 1:
+        raise belirsiz()
+    if kardes is KARDES_VERILMEDI:  # doğrudan çağrı (pencere listesi verilmedi): yalnız birebir-tekil kuralı
+        return tam[0]
+    zayif = zayif_baslik(baslik)
+    if (kardes is not None and baslik in kardes) or (zayif and (not baslik.strip() or kardes is None)):
+        raise Dur(6, _("sayfa belirsiz: pencere başlığı ({baslik}) bu uygulamanın öbür pencerelerinden güvenle ayırt "
+                       "edilemiyor (boş/genel başlık ya da aynı başlıklı başka pencere); başka pencerenin sayfası "
+                       "okunmasın diye durduruldu, kısa süre sonra yeniden dene").format(baslik=baslik_goster(baslik)),
+                  tur=SAYFA_BELIRSIZ)
+    if kardes is None and n > 1:  # çok çerçeve + pencere listesi alınamadı: bağımsız teyit yok
+        raise belirsiz()
+    kalan = collections.Counter(kardes or ())
+    aciklanmayan = []
+    for a in adlar:
+        if a == baslik:
+            continue
+        if kalan[a] > 0:
+            kalan[a] -= 1
+        else:
+            aciklanmayan.append(a)
+    if zayif:
+        # genel başlık ("Mozilla Firefox", "Yeni Sekme") kendi başına kanıt değil: her kardeş pencere AYRI bir çerçeveye
+        # denk gelmeli ve kalan adlı çerçeve olmamalı (eleme ile kanıt). Adsız çerçeve hoş görülür: ölçüldü, Chromium
+        # Ctrl+L sonrası öneri listesini adsız üst düzey çerçeve olarak yayınlar; kardeşlerin hepsi kendi çerçevesiyle
+        # açıklandığından birebir eşleşen çerçeve hiçbir kardeşin olamaz.
+        if +kalan or any(a.strip() for a in aciklanmayan):
+            raise belirsiz()
+    elif any(not zayif_baslik(a) for a in aciklanmayan):
+        raise belirsiz()  # kardeş çerçevenin adı hiçbir güncel pencere başlığı değil (bayat): geçiş sürüyor
+    return tam[0]
+
+
+def _cerceve_bul(Atspi, pid, baslik, kardes=KARDES_VERILMEDI):
+    """Pencere → AT-SPI çerçevesi: YALNIZ hedef pencerenin süreç ağacından (pencerenin süreci ya da AYNI
+    çalıştırılabilir dosyaya sahip torunları). Atalar ve başka uygulamalar asla (denetimler X/KWin penceresinde yapılır,
+    eylem BAŞKA uygulamada olurdu): PID bilinmiyor ya da çerçeve yoksa Dur 6. Ağaçtaki TÜM çerçeveler (benzerlik
+    süzgeci YOK: süzgeç hedefin bayat adlı çerçevesini eleyip öbür pencereyi tek aday bırakıyordu, SOAK-FIX-R1 P4b)
+    cerceve_karari'na gider; kardes: kardes_basliklari (None = bilinmiyor). → (çerçeve, uygulama pid, ad)."""
     from .guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
     if not pid:
         raise Dur(6, _("pencerenin süreç kimliği (PID) bilinmiyor: erişilebilirlik çerçevesi güvenle eşlenemez ({baslik})"
@@ -287,8 +386,7 @@ def _cerceve_bul(Atspi, pid, baslik):
             app_pid = app.get_process_id()
             if not _surec_akrabasi(app_pid, pid):
                 continue
-            tam = str(app_pid) == str(pid)
-            if not tam:
+            if str(app_pid) != str(pid):
                 pencere_exe = pencere_exe or _exe(pid)
                 if pencere_exe is None or _exe(app_pid) != pencere_exe:
                     continue  # torun ama başka program (ör. pencerenin başlattığı ayrı bir uygulama)
@@ -303,30 +401,12 @@ def _cerceve_bul(Atspi, pid, baslik):
                 ad = f.get_name() or ""
             except Exception:
                 continue
-            oran = difflib.SequenceMatcher(None, katla(ad), katla(baslik)).ratio()
-            if not tam and oran < TORUN_BENZERLIK and ad != baslik:
-                continue
-            # tam başlık eşleşmesi içermeden ÖNCE: GTK diyaloğunun başlığı ("File Upload - <sayfa> — Mozilla Firefox")
-            # ana pencerenin adını İÇERİR; eşitlikte ana çerçeve seçilip diyalog yerine onun ağacı okunuyordu
-            benz = 2.0 if ad and ad == baslik else 1.0 if ad and (ad in baslik or baslik in ad) else oran
-            adaylar.append((tam, benz, f, app_pid, app_ad))
+            adaylar.append((ad, f, app_pid, app_ad, str(app_pid) == str(pid)))
     if not adaylar:
         raise Dur(6, _("pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): {ipucu}").format(
             baslik=baslik_goster(baslik), pid=pid, ipucu=_girmeyen_ipucu(pid)), tur="agacta_yok")
-    secim = sorted(adaylar, key=lambda x: (not x[0], -x[1]))[0]
-    esit = sum(1 for a in adaylar if a[:2] == secim[:2])
-    if esit > 1:  # ABM-F3-R2: aynı süreçte aynı başlık: AT-SPI'de pencere kimliği yok, sıra öbür pencereyi seçebilir
-        raise Dur(6, _("aynı süreçte bu başlığı taşıyan {n} erişilebilirlik çerçevesi var (pid {pid}): hangisinin bu "
-                       "pencere olduğu belirlenemiyor; okuma/eylem başka pencereye gitmesin diye durduruldu").format(
-            n=esit, pid=pid))
-    if len(adaylar) > 1 and secim[1] < 2.0:
-        # SOAK-FIX: birden çok çerçevede birebir başlık eşleşmesi yoksa tahmin yok: içerme ("Mozilla Firefox" ⊂
-        # "Sayfa — Mozilla Firefox") ya da benzerlik, sayfa geçişindeki ÖBÜR pencerenin çerçevesini seçebiliyordu
-        raise Dur(6, _("sayfa belirsiz: bu pencerenin süreç ağacında {n} erişilebilirlik çerçevesi var ve "
-                       "pencere başlığıyla ({baslik}) birebir eşleşen tek çerçeve yok (sayfa geçişi ya da aynı "
-                       "başlıklı pencereler); başka pencerenin sayfası okunmasın diye durduruldu, kısa süre "
-                       "sonra yeniden dene").format(n=len(adaylar), baslik=baslik_goster(baslik)))
-    return secim[2], secim[3], secim[4]
+    secim = adaylar[cerceve_karari([a[0] for a in adaylar], baslik, kardes, [a[4] for a in adaylar])]
+    return secim[1], secim[2], secim[3]
 
 
 def _cerceve_denetle(app_pid, app_ad, cerceve_ad, islem):
@@ -655,7 +735,7 @@ def _atspi_is(istek):
     if istek["islem"] in ("eylem", "yaz") and not istek["a11y"]:  # kullanıcının uygulamasında eylem/değer yazma
         gercek_ekran_denetle(_("erişilebilirlik eylemi"))
     Atspi = _atspi(istek["a11y"])
-    cerceve, app_pid, app_ad = _cerceve_bul(Atspi, istek["pid"], istek["baslik"])
+    cerceve, app_pid, app_ad = _cerceve_bul(Atspi, istek["pid"], istek["baslik"], istek.get("kardes", KARDES_VERILMEDI))
     islem = istek["islem"]
     try:
         cerceve_ad = cerceve.get_name() or ""
@@ -953,11 +1033,23 @@ def _yardimci_calistir(istek):
 
 
 def _atspi_calistir(istek):
-    """İşi bu süreçte yürüt; libatspi başka veri yoluna bağlıysa (MCP: iki masaüstü) yardımcı süreçte."""
-    try:
-        return _atspi_is(istek)
-    except _BaskaVeriYolu:
-        return _yardimci_calistir(istek)
+    """İşi bu süreçte yürüt; libatspi başka veri yoluna bağlıysa (MCP: iki masaüstü) yardımcı süreçte. Sayfa belirsizse
+    (çerçeve ↔ pencere kanıtlanamadı: geçiş) güncel başlık + kardeşlerle kısa yeniden deneme, kesin üst sınır
+    BELIRSIZ_SURE (çerçeve seçimi girdi göndermeden ÖNCE: eylem/yaz için de güvenli)."""
+    bitis = time.monotonic() + BELIRSIZ_SURE
+    while True:
+        try:
+            try:
+                return _atspi_is(istek)
+            except _BaskaVeriYolu:
+                return _yardimci_calistir(istek)
+        except Dur as e:
+            if (e.tur != SAYFA_BELIRSIZ or not istek.get("_pencere")
+                    or time.monotonic() + BELIRSIZ_ARA >= bitis):
+                raise
+            time.sleep(BELIRSIZ_ARA)
+            yeni = _pencere_istegi(istek["_pencere"], istek["islem"])
+            istek = {**istek, **{a: yeni[a] for a in ("pid", "baslik", "kardes")}}
 
 
 def _pencere_istegi(k, islem, **ek):
@@ -970,7 +1062,9 @@ def _pencere_istegi(k, islem, **ek):
         pid = int(pid) if pid not in (None, "") else ""
     except (TypeError, ValueError):
         pid = ""
+    # kardes: aynı süreçteki öbür pencerelerin başlıkları (pencere yöneticisinden; çerçeve kararının bağımsız kanalı)
     return {"a11y": _a11y_adresi(), "pid": str(pid or ""), "baslik": au.baslik(k), "islem": islem, **ek,
+            "kardes": kardes_basliklari(au, k, pid), "_pencere": k,
             "baslik_gizli": getattr(guvenlik._BASLIK_GIZLI, "acik", False)}  # yardımcı süreç: gizli yazı bayrağı
 
 
