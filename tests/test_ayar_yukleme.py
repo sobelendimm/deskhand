@@ -82,6 +82,7 @@ YAZ = ORTAK + textwrap.dedent('''
     w.c_onay.activated.emit(i)
     for s in ("microsoft", "google", "edevlet"):
         w.k_hesap[s].setChecked(True)
+    w.uygula()  # tek kaydetme modeli (UX-A): alanlar yalnız işaretler, Uygula yazar
     print("SONUC " + json.dumps(gorunen()), flush=True)
     liste_koruma.panel_durdur()
     os._exit(0)

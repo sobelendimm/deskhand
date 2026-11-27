@@ -680,6 +680,7 @@ try:
             y.c_onay.itemText(1) == "Yalnız kartla ödeme" and y.c_onay.currentData() == "hepsi")
     y.c_onay.setCurrentIndex(1)
     y.c_onay.activated.emit(1)
+    y.uygula()  # tek kaydetme modeli (UX-A): seçim Uygula ile yazılır
     kontrol("panel: seçim ayarlara yazıldı + kip hemen geçerli", ayarlar.al("guvenlik", "onaylar") == "kart" and
             guvenlik.onay_kapsami() == "kart")
     kapsam("hepsi")

@@ -632,11 +632,13 @@ c = y.cakisma_goster()
 kontrol("kısayol çakışması gösterilir", c and "Çakışma" in y.l_kisayol.text(), y.l_kisayol.text())
 y.k_tus.setKeySequence(QKeySequence("Meta+Alt+Esc"))
 y.k_acik.setChecked(True)
+y.uygula()  # tek kaydetme modeli (UX-A)
 from deskhand.gui import ayar as A  # noqa: E402
 
 kontrol("kısayol aç → panel.json (geçici) + kayıt çağrısı (sahte)", A.panel_oku()["kisayol_acik"] and
         kis.cagri and kis.cagri[-1][0] == "ac" and "Meta+Alt+Esc" in kis.cagri[-1][1], str(kis.cagri))
 y.k_acik.setChecked(False)
+y.uygula()
 kontrol("kısayol kapat → kayıt silme çağrısı", kis.cagri[-1] == ("kapat", True) and not A.panel_oku()["kisayol_acik"])
 kontrol("panel.json geçici dizinde", A.panel_yolu().startswith(_yalitim.GECICI))
 if y.karar.var:
@@ -740,6 +742,7 @@ def dil_etkinlestir(kod):
     i = y.c_dil.findData(kod)
     y.c_dil.setCurrentIndex(i)
     y.c_dil.activated.emit(i)  # kullanıcının seçimi (activated) ile aynı yol
+    y.uygula()  # tek kaydetme modeli (UX-A): dil Uygula ile değişir
 
 
 kontrol("dil seçici: Otomatik / Türkçe / English", [y.c_dil.itemData(i) for i in range(y.c_dil.count())] ==
