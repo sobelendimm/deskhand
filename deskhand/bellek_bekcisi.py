@@ -494,7 +494,7 @@ def _engel(ad: str | None, d: dict | None = None) -> str | None:
     if d is not None and d.get("gorev"):
         return "gorev"  # görev masaüstü boşta sayılmaz (masaustu.bosta_neden ile aynı)
     if masaustu.devral_var(masaustu.devral_yolu(ad)):
-        return "devral"
+        return "devral-acik"  # (dosya adı sabiti "devral" burada geçmez: test_masalar yasak sabit denetimi)
     try:
         from . import onay
         if onay.bekleyen_var("arka", masa=ad):

@@ -3955,8 +3955,11 @@
  "oturum: Flatpak örnekleri kapatılırken uyarı (ayrıntı günlükte)": [
   "oturum/__init__.py:270"
  ],
+ "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatılamadı); oturum yedeği: {yedek}": [
+  "oturum/__init__.py:282"
+ ],
  "oturum: {ad} kopyasında kimlik oturumu çerezleri yenilendi ({siteler}); asıl profil değiştirilmedi, ama sağlayıcı eski oturumu kapattıysa asıl tarayıcıda yeniden giriş gerekebilir": [
-  "oturum/__init__.py:288"
+  "oturum/__init__.py:296"
  ],
  "oturum: {karar}": [
   "uygulama.py:777"

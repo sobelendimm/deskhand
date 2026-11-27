@@ -20,7 +20,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from ..i18n import N_, _
-from . import chromium, cozum, firefox, flatpak_ornek, kopya, politika, tespit
+from . import chromium, cozum, firefox, flatpak_ornek, kopya, kopya_bekcisi, politika, tespit
 
 
 @dataclass
@@ -273,6 +273,14 @@ def _kapanis_ic() -> list[str]:
     for ad in sorted(os.listdir(kok)):
         yol = os.path.join(kok, ad)
         if not os.path.isdir(yol) or os.path.islink(yol) or os.path.realpath(yol) in korunan:
+            continue
+        if kopya_bekcisi.korunuyor(yol):  # bellek bekçisi: bekleyen/başarısız Firefox yeniden başlatmasının oturum yedeği
+            yedek = os.path.join(yol, "sessionstore-backups", "deskhand-yedek.jsonlz4")
+            yedek = yedek if os.path.isfile(yedek) else yol
+            gunluk(f"oturum: {ad} kopyası korunuyor (Firefox yeniden başlatılamadı); silinmedi, oturum yedeği: {yedek} "
+                   f"({int(kopya_bekcisi.KORU_AZAMI // 3600)} sa sonra süpürülür)")
+            uyarilar.append(_("oturum: {ad} kopyası silinmedi (Firefox yeniden başlatılamadı); oturum yedeği: {yedek}")
+                            .format(ad=ad, yedek=yedek))
             continue
         try:
             with open(os.path.join(yol, PARMAK_DOSYA)) as f:

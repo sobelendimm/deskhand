@@ -883,7 +883,32 @@ def test_cli():
     kontrol("cli sil 0", cli.main(["sil"]) == 0)
 
 
+def test_kapanis_korumali_kopya():
+    """ABM-F1-R2 EK-1: bellek bekçisinin bekleyen/başarısız Firefox yeniden başlatmasının kopyası (koruma işareti)
+    masaüstü kapanışında KORU_AZAMI dolmadan silinmez; günlük + uyarı yedek yolunu söyler. İşaretsiz kopya silinir."""
+    from deskhand import yollar
+    from deskhand.oturum import kopya_bekcisi
+    korunan = kopya.yeni_kopya_dizini("firefox")
+    yedek = os.path.join(korunan, "sessionstore-backups", "deskhand-yedek.jsonlz4")
+    os.makedirs(os.path.dirname(yedek))
+    open(yedek, "wb").close()
+    kopya_bekcisi.koru_isaretle(korunan, "bellek-yeniden")
+    isaretsiz = kopya.yeni_kopya_dizini("firefox")
+    uyarilar = oturum.kapanis()
+    kontrol("EK-1 kapanış: korumalı kopya kalır", os.path.isdir(korunan) and os.path.isfile(yedek), str(uyarilar))
+    kontrol("EK-1 kapanış: işaretsiz kopya eskisi gibi silinir", not os.path.exists(isaretsiz))
+    gunluk_yol = os.path.join(yollar.gunluk_dizin(), time.strftime("gunluk-%Y%m%d.log"))
+    gun = open(gunluk_yol, encoding="utf-8").read() if os.path.isfile(gunluk_yol) else ""
+    kontrol("EK-1 kapanış: uyarı ve günlük yedek yolunu söyler",
+            any(yedek in u for u in uyarilar) and yedek in gun, f"{uyarilar} | {gun[-300:]}")
+    with open(os.path.join(korunan, kopya_bekcisi.KORU_DOSYA), "w") as f:
+        json.dump({"neden": "x", "zaman": time.time() - kopya_bekcisi.KORU_AZAMI - 10}, f)
+    oturum.kapanis()
+    kontrol("EK-1 kapanış: süresi dolmuş işaretli kopya silinir", not os.path.exists(korunan))
+
+
 def main():
+
     test_politika()
     test_politika_esleme()
     test_politika_birlestir()
@@ -902,6 +927,7 @@ def main():
     test_sqlite_kaynak_yazilmaz()
     test_flatpak_ornek()
     test_degisim()
+    test_kapanis_korumali_kopya()
     test_profil_grubu_yalitimi()
     test_cli()
     print(f"\n{gecen}/{toplam} geçti")
