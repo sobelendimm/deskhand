@@ -110,7 +110,14 @@ for ad in ("CONFIG", "STATE", "CACHE", "DATA", "RUNTIME"):
 os.makedirs(yollar.runtime_dir(), mode=0o700, exist_ok=True)
 os.chmod(yollar.runtime_dir(), 0o700)
 t0 = time.monotonic()
-d = masaustu.masaustu_baslat()
+try:
+    d = masaustu.masaustu_baslat()
+except Exception as _e:  # ürün kafes kuralı CI'da (yoklama geçse de) durdurduysa: aynı gerekçeyle atla
+    if not _yalitim.kafes_durdu_mu(_e):
+        raise
+    _yalitim.atla("gerçek panel AT-SPI denetimi (görünmez masaüstü)", f"kullanıcı bellek kafesi yok: {_e}")
+    print(f"\n{gecen}/{toplam} AT-SPI kural testi geçti")
+    sys.exit(0 if gecen == toplam else 1)
 ihlal_say = collections.Counter()
 ornek = {}
 okunan = []
