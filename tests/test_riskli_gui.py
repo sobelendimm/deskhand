@@ -15,12 +15,36 @@ os.environ.setdefault("DESKHAND_DIL", "tr")
 
 from PyQt6.QtWidgets import QApplication, QPlainTextEdit  # noqa: E402
 
-from deskhand import guvenlik, yollar  # noqa: E402
+from deskhand import guvenlik, liste_koruma, yollar  # noqa: E402
 from deskhand.gui import ayar as A  # noqa: E402
 from deskhand.gui import metinler as T  # noqa: E402
 from deskhand.gui.pencere import AyarlarSekmesi  # noqa: E402
+from deskhand.hata import Dur  # noqa: E402
 from deskhand.i18n import _  # noqa: E402
+from deskhand.oturum.kalici import AnahtarYok  # noqa: E402
 
+
+class SahteKasa:
+    """Açık cüzdan yerine bellekteki panel kaydı (Secret Service sahtesi; gerçek cüzdana dokunulmaz). Panel kaydı
+    imzalar → otomasyon dosyayı panelin onaylı değeriyle doğrular (H3: imzasız işaretli dosyada kapalı-başarısız)."""
+    veri = None
+
+    def oku(self):
+        return self.veri
+
+    def yaz(self, v):
+        self.veri = bytes(v)
+
+
+class KilitliKasa:
+    def oku(self):
+        raise AnahtarYok("cüzdan kilitli")
+
+    def yaz(self, v):
+        raise AnahtarYok("cüzdan kilitli")
+
+
+liste_koruma.isaret_anahtarlik_ayarla(SahteKasa())
 app = QApplication([])
 gecen = toplam = 0
 
@@ -85,6 +109,15 @@ y.seviye.setPlainText("# yalnız yorum\n")
 kontrol("tüm kuralları silip kaydetmek kısıtı kaldırır", y.seviye_kaydet() and guvenlik.seviye_kurallari() == [])
 y.tazele()
 kontrol("dil/tazele: durum etiketi temizlenir", y.l_seviye.text() == "")
+# bilinçli güvenlik davranışı (H3): panelin imzalı kaydı okunamıyorsa (kilitli/yok cüzdan) işaretli dosya kullanılmaz
+liste_koruma.isaret_anahtarlik_ayarla(KilitliKasa())
+try:
+    guvenlik.seviye_kurallari()
+    kod = None
+except Dur as e:
+    kod = e.kod
+kontrol("cüzdan kilitliyken kayıtlı seviye dosyası doğrulanamaz → Dur 10 (kapalı-başarısız)", kod == 10, str(kod))
+liste_koruma.isaret_anahtarlik_ayarla(SahteKasa())
 os.remove(yollar.seviye_dosya())
 kontrol("gerçek ~/.config/deskhand DEĞİŞMEDİ (sha1)", ozet("~/.config/deskhand") == gercek0)
 print(f"\n{gecen}/{toplam} panel seviye testi geçti")

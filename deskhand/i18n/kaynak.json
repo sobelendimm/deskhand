@@ -210,7 +210,7 @@
   "erisim.py:1077"
  ],
  "# '{metin}' için {sayi} eşleşme:": [
-  "eylem.py:1458"
+  "eylem.py:1463"
  ],
  "# '{renk}': {sayi} alan (en az {en_az} piksel)": [
   "gorsel.py:325"
@@ -237,7 +237,7 @@
   "gorsel.py:312"
  ],
  "# {adim} kez kaydırıldı ({sn} sn)": [
-  "eylem.py:1453"
+  "eylem.py:1458"
  ],
  "# {baslik} | {adres} | {sayi} öge gösterildi / {toplam} toplam{sayfa}, {sn} sn": [
   "web.py:800"
@@ -325,13 +325,13 @@
   "web.py:773"
  ],
  "'{metin}' artık ({x},{y}) noktasında değil (ekran değişti); tıklanmadı": [
-  "eylem.py:1478"
+  "eylem.py:1483"
  ],
  "'{metin}' artık yok": [
   "akis.py:199"
  ],
  "'{metin}' bulunamadı ({sn} sn). İpucu: `deskhand read {kimlik}` ile satırlara bak": [
-  "eylem.py:1455"
+  "eylem.py:1460"
  ],
  "'{metin}' {sure} sn içinde görünmedi": [
   "ocr.py:613"
@@ -343,7 +343,7 @@
   "api.py:196"
  ],
  "'{renk}' renkli alan yok (en az {en_az} piksel)": [
-  "eylem.py:1424"
+  "eylem.py:1429"
  ],
  "(--arka) oturum kopyasına bu sitenin yerel deposunu da al; tekrarlanabilir": [
   "cli.py:555"
@@ -412,7 +412,7 @@
   "web.py:666"
  ],
  ", benzerlik {benzerlik}": [
-  "eylem.py:1480"
+  "eylem.py:1485"
  ],
  ", doğrulandı": [
   "erisim.py:1589"
@@ -457,12 +457,12 @@
   "cli.py:553"
  ],
  "--sira 1..{en_cok}": [
-  "eylem.py:1427"
+  "eylem.py:1432"
  ],
  "--sira 1..{en_cok} olmalı": [
   "erisim.py:1175",
-  "eylem.py:1402",
-  "eylem.py:1463"
+  "eylem.py:1407",
+  "eylem.py:1468"
  ],
  "./install.sh derler (make -C deskhand/yardimci; kitaplıklar kurulunca yeniden çalıştır)": [
   "doktor.py:285"
@@ -495,7 +495,7 @@
   "uygulama.py:1339"
  ],
  "; en yakın aday benzerliği {benzerlik}": [
-  "eylem.py:1391"
+  "eylem.py:1396"
  ],
  "; geçici alan: {bos} MB boş / {toplam} MB": [
   "doktor.py:429"
@@ -1397,7 +1397,7 @@
   "arka_uc/kwin.py:253"
  ],
  "KWin pencere listesi alınamadı: {hata}": [
-  "api.py:686",
+  "api.py:687",
   "uygulama.py:1341"
  ],
  "KWin süreci doğrulanamadı (pid {pid})": [
@@ -1825,7 +1825,7 @@
  ],
  "UYARI: {uyari}": [
   "eylem.py:419",
-  "eylem.py:1379",
+  "eylem.py:1384",
   "masaustu.py:1414",
   "masaustu.py:1470",
   "masaustu.py:1477"
@@ -2015,7 +2015,7 @@
   "mcp_sunucu.py:2489"
  ],
  "akış adı yalnız harf/rakam/._- içermeli: {ad} (list ile adlara bak)": [
-  "api.py:715"
+  "api.py:716"
  ],
  "akış dosyası okunamadı: {hata}": [
   "akis.py:43"
@@ -2036,7 +2036,7 @@
   "akis.py:167"
  ],
  "akış yok: {ad} ({dizin})": [
-  "api.py:718"
+  "api.py:719"
  ],
  "akış {ad}: {pencere}": [
   "mcp_sunucu.py:2477"
@@ -2108,7 +2108,7 @@
   "mcp_sunucu.py:1046"
  ],
  "aynı süreçte açılan pencere: {pencere}": [
-  "api.py:658",
+  "api.py:659",
   "uygulama.py:1304"
  ],
  "aynı süreçte bu başlığı taşıyan {n} erişilebilirlik çerçevesi var (pid {pid}): hangisinin bu pencere olduğu belirlenemiyor; okuma/eylem başka pencereye gitmesin diye durduruldu": [
@@ -2226,10 +2226,10 @@
   "guvenlik.py:1387"
  ],
  "başlık uymadı: {baslik} (beklenen /{desen}/); kapatılmadı": [
-  "eylem.py:1262"
+  "eylem.py:1264"
  ],
  "başlık uymadı: {baslik} (beklenen /{desen}/); pencere işlemi yapılmadı": [
-  "eylem.py:1311"
+  "eylem.py:1316"
  ],
  "başlık/sınıf kilidi uymadı (pencere değişti)": [
   "mcp_sunucu.py:140"
@@ -2346,7 +2346,7 @@
   "mcp_sunucu.py:2406"
  ],
  "bilinmeyen pencere işlemi: {islem}": [
-  "eylem.py:1301"
+  "eylem.py:1306"
  ],
  "bilinmeyen seviye {sev}; goruntule, tikla ya da tam olmalı": [
   "gui/ayar.py:121"
@@ -2363,13 +2363,13 @@
   "uygulama.py:1112"
  ],
  "birden çok (ya da eşiğe yakın) eşleşme; --sira N ile seç ya da --bolge ile daralt": [
-  "eylem.py:1399"
+  "eylem.py:1404"
  ],
  "birden çok eşleşme (nth ile seç)": [
   "mcp_sunucu.py:140"
  ],
  "birden çok eşleşme; --sira N ile seç": [
-  "eylem.py:1460"
+  "eylem.py:1465"
  ],
  "birden çok öge; --sira N ile seç": [
   "erisim.py:1172"
@@ -2392,10 +2392,10 @@
  ],
  "boyutlandırma": [
   "arka_uc/__init__.py:144",
-  "eylem.py:1280"
+  "eylem.py:1285"
  ],
  "boyutlandırma için genişlik ve yükseklik gerekli": [
-  "eylem.py:1322"
+  "eylem.py:1327"
  ],
  "boş X ekran numarası bulunamadı": [
   "kwin_oturum.py:590",
@@ -2465,10 +2465,10 @@
   "cli.py:528"
  ],
  "bulundu: '{metin}' ({x},{y}) güven {guven}{benzerlik}, {sn} sn": [
-  "eylem.py:1481"
+  "eylem.py:1486"
  ],
  "bulundu: simge '{ad}' ({x},{y}) benzerlik {benzerlik}": [
-  "eylem.py:1406"
+  "eylem.py:1411"
  ],
  "bulundu: web {rol} '{ad}' ({x},{y}) {konum}, {sn} sn": [
   "erisim.py:1447"
@@ -2489,7 +2489,7 @@
   "arka_uc/__init__.py:152",
   "arka_uc/kwin.py:416",
   "arka_uc/sanal.py:670",
-  "eylem.py:1281"
+  "eylem.py:1286"
  ],
  "cetvel payı sol {sol}, üst {ust}": [
   "gorsel.py:293"
@@ -2980,7 +2980,7 @@
   "mcp_sunucu.py:2287"
  ],
  "genişlik ve yükseklik en az 1 olmalı": [
-  "eylem.py:1324"
+  "eylem.py:1329"
  ],
  "gereksiz sekme ve pencereleri kapatın": [
   "bellek_bekcisi.py:173"
@@ -2989,7 +2989,7 @@
   "arka_uc/__init__.py:156",
   "arka_uc/kwin.py:420",
   "arka_uc/sanal.py:674",
-  "eylem.py:1281"
+  "eylem.py:1286"
  ],
  "gerçek ekran bu süreçte kapalı (DESKHAND_GERCEK_EKRAN): desktop=background kullan": [
   "mcp_sunucu.py:147"
@@ -3351,7 +3351,7 @@
   "arka_uc/sanal.py:621"
  ],
  "hedef pencere ekran alanının dışına taşıyor: konum {x},{y} boyut {g}x{h}; ekran alanı {x0},{y0}..{x1},{y1}": [
-  "eylem.py:1330"
+  "eylem.py:1335"
  ],
  "hedef pencere etkin değil (başka pencere öne geçti)": [
   "mcp_sunucu.py:139"
@@ -3509,10 +3509,10 @@
   "masaustu.py:1259"
  ],
  "kapat için -b <başlık deseni> zorunlu (yanlış pencere kapanmasın)": [
-  "eylem.py:1255"
+  "eylem.py:1257"
  ],
  "kapatıldı: {baslik}": [
-  "eylem.py:1273"
+  "eylem.py:1278"
  ],
  "karar alınamadı ({hata}); görünmez masaüstü seçildi": [
   "mcp_sunucu.py:469"
@@ -3822,7 +3822,7 @@
   "arka_uc/__init__.py:148",
   "arka_uc/kwin.py:412",
   "arka_uc/sanal.py:667",
-  "eylem.py:1280"
+  "eylem.py:1285"
  ],
  "man -P: sayfalayıcı yerine komut çalıştırır": [
   "guvenlik.py:839"
@@ -3840,7 +3840,7 @@
   "guvenlik.py:814"
  ],
  "masaüstü kapatılamaz; pencere kimliği/adı ver": [
-  "eylem.py:1253"
+  "eylem.py:1255"
  ],
  "masaüstü kipi kapatılamaz": [
   "arka_uc/kwin.py:367",
@@ -3851,7 +3851,7 @@
   "arka_uc/kwin.py:380",
   "arka_uc/kwin.py:395",
   "arka_uc/sanal.py:648",
-  "eylem.py:1303"
+  "eylem.py:1308"
  ],
  "masaüstü soketi kullanıcının gerçek soketinin sert bağı: {yol}": [
   "masaustu.py:485"
@@ -3938,7 +3938,7 @@
  ],
  "noktadaki yazı: {yazi}": [
   "eylem.py:820",
-  "eylem.py:1432"
+  "eylem.py:1437"
  ],
  "not: Firefox ve Chromium/Electron çalışırken ağaca girmez; yeniden başlat": [
   "erisim.py:1070"
@@ -4219,18 +4219,18 @@
   "arka_uc/kde.py:942"
  ],
  "pencere işlemi": [
-  "eylem.py:1333"
+  "eylem.py:1338"
  ],
  "pencere kapandı ya da taşındı": [
   "onay_hedef.py:78"
  ],
  "pencere kapanmadı (kaydedilmemiş iş sorusu açık olabilir): {baslik}": [
-  "eylem.py:1276"
+  "eylem.py:1281"
  ],
  "pencere kapatma": [
   "arka_uc/kde.py:918",
-  "eylem.py:1258",
-  "eylem.py:1264"
+  "eylem.py:1260",
+  "eylem.py:1266"
  ],
  "pencere kapatma isteğini desteklemiyor (WM_DELETE_WINDOW yok): {kimlik}": [
   "arka_uc/sanal.py:640"
@@ -4269,20 +4269,20 @@
   "masaustu.py:1440"
  ],
  "pencere yöneticisi istenenden farklı bir geometri verdi: istenen {istenen}, olan {olan}": [
-  "eylem.py:1352"
+  "eylem.py:1357"
  ],
  "pencere yöneticisi isteği yerine getirmedi: {ne}": [
   "arka_uc/kwin.py:390",
   "arka_uc/sanal.py:658"
  ],
  "pencere yönetimi": [
-  "eylem.py:1306"
+  "eylem.py:1311"
  ],
  "pencere {islem}: değerler tam sayı (piksel) olmalı: {deger}": [
-  "eylem.py:1370"
+  "eylem.py:1375"
  ],
  "pencere {islem}: {gerekli} sayı gerekli (verilen {verilen})": [
-  "eylem.py:1365"
+  "eylem.py:1370"
  ],
  "pencere {islem}: {pencere}": [
   "mcp_sunucu.py:2432"
@@ -4417,7 +4417,7 @@
   "erisim.py:1135"
  ],
  "renk alanı: {renk} ({x},{y}) {alan} piksel": [
-  "eylem.py:1434"
+  "eylem.py:1439"
  ],
  "renkli alanları bul": [
   "cli.py:203"
@@ -4569,7 +4569,7 @@
   "guvenlik.py:791"
  ],
  "simge '{ad}' bulunamadı (eşik {esik}{ipucu})": [
-  "eylem.py:1392"
+  "eylem.py:1397"
  ],
  "simge adı yalnız harf/rakam/._- içermeli: {ad}": [
   "gorsel.py:170"
@@ -4717,10 +4717,10 @@
  ],
  "taşıma": [
   "arka_uc/__init__.py:140",
-  "eylem.py:1280"
+  "eylem.py:1285"
  ],
  "taşıma için x ve y gerekli": [
-  "eylem.py:1318"
+  "eylem.py:1323"
  ],
  "taşınmaz (politika)": [
   "oturum/denetle.py:364"
@@ -4797,9 +4797,9 @@
   "eylem.py:235",
   "eylem.py:707",
   "eylem.py:821",
-  "eylem.py:1405",
-  "eylem.py:1433",
-  "eylem.py:1471"
+  "eylem.py:1410",
+  "eylem.py:1438",
+  "eylem.py:1476"
  ],
  "tıklama (erişilebilirlik eylemi)": [
   "erisim.py:1464",
@@ -5184,7 +5184,7 @@
   "gui/metinler.py:190"
  ],
  "{islem} tamam: {baslik} | konum {x},{y} boyut {g}x{h}": [
-  "eylem.py:1376"
+  "eylem.py:1381"
  ],
  "{kimlik} (Flatpak) görünmez masaüstünde açılmaz: kök neden, ad alanındaki boş ev dizininde ~/.var/app/{kimlik} yok ve Flatpak başlatıcısının X yetkisi yok; başlatıcı iç içe bwrap'ten önce çıkıyor (ölçüldü). Öneri: yerli chromium kullanın (open chromium; boş profil, kayıtlı girişler yok) ya da Ekranımda yap.": [
   "oturum/chromium.py:131"
@@ -5352,10 +5352,10 @@
   "mesgul.py:505"
  ],
  "{sn} sn içinde yeni pencere görünmedi": [
-  "api.py:657"
+  "api.py:658"
  ],
  "{sn} sn içinde yeni pencere görünmedi (çıktı: {log})": [
-  "api.py:684"
+  "api.py:685"
  ],
  "{sure} kaldı": [
   "oturum/denetle.py:343"

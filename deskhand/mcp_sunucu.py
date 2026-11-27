@@ -2439,7 +2439,7 @@ def manage_window(
         if action == "close":
             with kilitli(girdi=True), guvenlik.sinif_kilidi(k):  # kimlik kilidi: sınıf da (onayla_ve_yap ile aynı)
                 gonderim.artir()  # kapatma isteği gönderilmek üzere
-                mesaj = api.pencere_kapat(k, desen)
+                mesaj = api.pencere_kapat(k, desen, kimlik_kilidi=True)  # kimlik kesin hedef (B2); desen varsa o da
             return {**bilgi, "status": "closed", "message": mesaj, "window_closed": True, "effect": "confirmed"}
         islem = {"move": "tasi", "resize": "boyut", "minimize": "kucult", "maximize": "buyut",
                  "restore": "geri"}[action]

@@ -378,6 +378,22 @@ async def mcp_testleri():
         kontrol("MCP: DUR açıkken [13] (taşıma ve close)", r.is_error and "[13]" in metin(r) and r2.is_error and
                 "[13]" in metin(r2) and W1 in sahte.pen, metin(r) + metin(r2))
         # oyun/film koruması: sahte arka ucun kendisi 15 vermez; gerçek kde sınıfının koruması A) bölümünde sınandı
+        # CLI/çekirdek başlıkla kapatma yolu: -b (başlık deseni) zorunluluğu sürer (kimlik kilidi yalnız MCP'nin)
+        sahte.kayit.clear()
+        kontrol("CLI kapat -b'siz → Dur 1, kapatılmadı", dur_kodu(eylem.k_kapat, argparse.Namespace(kimlik=W1, baslik=None)) == 1 and
+                dur_kodu(api.pencere_kapat, W1, None) == 1 and W1 in sahte.pen and sahte.kayit == [], str(sahte.kayit))
+        # kimlikle kapatma: kimlik/sınıf doğrulaması sürer — bekleme sırasında aynı kimlik başka uygulamaya geçerse 4
+        asil_oncelik, sinif0 = guvenlik.insan_onceligi, sahte.pen[W1][1]
+
+        def sinif_degisir(*_a, **_k):
+            sahte.pen[W1][1] = "baska-uygulama"
+        guvenlik.insan_onceligi = sinif_degisir
+        try:
+            r = await c.call_tool("manage_window", {"window": W1, "action": "close", "desktop": "foreground"})
+        finally:
+            guvenlik.insan_onceligi, sahte.pen[W1][1] = asil_oncelik, sinif0
+        kontrol("MCP: close (kimlikle) sırasında pencere sınıfı değişti → [4], kapatılmadı", r.is_error and
+                "[4]" in metin(r) and W1 in sahte.pen and sahte.kayit == [], metin(r))
         sahte.kayit.clear()
         r = await c.call_tool("manage_window", {"window": W1, "action": "close", "desktop": "foreground"})
         kontrol("MCP: close (kimlikle) mevcut kapatma yolunu çağırır → kapandı", not r.is_error and

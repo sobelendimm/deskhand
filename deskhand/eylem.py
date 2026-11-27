@@ -1247,23 +1247,28 @@ def hedef_pencere_denetle_onayli(k, onayli, ne):
 
 
 def k_kapat(a):
-    """Pencereyi kapatır (pencere yöneticisi ile, alt+F4 gibi). Başlık kilidi ZORUNLU; yasak pencere kapanmaz.
-    Neden: bazı tarayıcılarda son sekme ctrl+w ile kapanınca pencere başlangıç sayfası olarak açık kalıyor."""
+    """Pencereyi kapatır (pencere yöneticisi ile, alt+F4 gibi). Başlık kilidi ZORUNLU (CLI); yasak pencere kapanmaz.
+    a.kimlik_kilidi=True (yalnız MCP manage_window, guvenlik.sinif_kilidi içinde): kimlik kesin hedeftir, başlık deseni
+    istenmez (ABM-PEN B2: kimlikli eylem başlığa değil kimliğe + sınıfa kilitlenir); kimlik/sınıf/yasak denetimi kapatmadan
+    hemen önce yinelenir. Neden: bazı tarayıcılarda son sekme ctrl+w ile kapanınca pencere başlangıç sayfası olarak açık kalıyor."""
     if a.kimlik == EKRAN:
         raise Dur(1, _("masaüstü kapatılamaz; pencere kimliği/adı ver"))
-    if not a.baslik:
+    if not a.baslik and not getattr(a, "kimlik_kilidi", False):
         raise Dur(1, _("kapat için -b <başlık deseni> zorunlu (yanlış pencere kapanmasın)"))
     dur_denetle()
     guvenlik.eylem_basladi()
     hedef_pencere_denetle_onayli(a.kimlik, getattr(a, "onayli", False), _("pencere kapatma"))
     guvenlik.seviye_denetle(a.kimlik, "klavye")  # pencereyi kapatmak fare/klavye ötesi bir eylem: 'tam' ister
     b = _au().baslik(a.kimlik)
-    if not re.search(a.baslik, b, re.I):
+    if a.baslik and not re.search(a.baslik, b, re.I):
         raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); kapatılmadı").format(baslik=guvenlik.baslik_goster(b),
                                                                                        desen=a.baslik))
     guvenlik.insan_onceligi(_("pencere kapatma"))  # kullanıcı klavye/fare kullanıyorsa bekle, sonra 12
     dur_denetle()
-    hedef_pencere_denetle(a.kimlik)
+    if getattr(a, "kimlik_kilidi", False):  # bekleme sonrası: aynı pencere mi (sınıf kilidi), başlık (varsa), yasak
+        guvenlik.pencere_denetle(a.kimlik, a.baslik)
+    else:
+        hedef_pencere_denetle(a.kimlik)
     _au().kapat(a.kimlik)
     gunluk(f"kapat | [{b}] | windowclose")
     for _i in range(30):

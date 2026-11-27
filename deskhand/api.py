@@ -590,10 +590,11 @@ def pencere_yonet(k, islem, x=None, y=None, g=None, h=None, baslik=None) -> dict
     return f(k, islem, x, y, g, h, baslik)
 
 
-def pencere_kapat(k, baslik) -> str:
-    """Pencereyi kapat (CLI `kapat` ile aynı komut: başlık kilidi zorunlu, kibar kapatma, doğrulama)."""
+def pencere_kapat(k, baslik, kimlik_kilidi=False) -> str:
+    """Pencereyi kapat (CLI `kapat` ile aynı komut: kibar kapatma, doğrulama). Başlık kilidi zorunlu; kimlik_kilidi=True
+    (MCP, sinif_kilidi içinde): kimlikle kapatma, başlık deseni isteğe bağlı, kimlik+sınıf denetimi kapatmadan önce."""
     from .eylem import k_kapat
-    return calistir(k_kapat, ns(kimlik=k, baslik=baslik))
+    return calistir(k_kapat, ns(kimlik=k, baslik=baslik, kimlik_kilidi=kimlik_kilidi))
 
 
 def surukle(k, x1, y1, x2, y2, dugme="left", sure=0.4, baslik=None, onayli=False) -> str:
