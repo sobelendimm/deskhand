@@ -593,7 +593,7 @@
   "gui/metinler.py:21"
  ],
  "Ayar dosyası yazılamadı ({hata}); panelin değeri ({ayar}) bellekte geçerli, aynı değişiklik bu oturumda yeniden sorulmaz.": [
-  "liste_koruma.py:893"
+  "liste_koruma.py:944"
  ],
  "Ayarlar": [
   "gui/metinler.py:54"
@@ -655,7 +655,7 @@
   "gui/metinler.py:124"
  ],
  "Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin.": [
-  "guvenlik.py:2185",
+  "guvenlik.py:2272",
   "onay.py:952"
  ],
  "Bir masaüstü seçin: önizleme onu gösterir (yalnız izleme).": [
@@ -739,19 +739,22 @@
   "guvenlik.py:208"
  ],
  "Cüzdan okunabildi; {ayar} panelin imzalı kaydıyla doğrulandı.": [
-  "liste_koruma.py:850"
+  "liste_koruma.py:901"
  ],
  "Cüzdan okunamıyor; kullanıcının DUR kaydı doğrulanamadı. Güvenli tarafta DUR açık; cüzdan okununca panel imzalı kaydı uygular (kapalıysa DUR kalkar).": [
-  "gui/panel.py:267"
+  "gui/panel.py:279"
  ],
  "Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Cüzdan okunamadığı için açılan DUR kaldırıldı.": [
-  "gui/panel.py:296"
+  "gui/panel.py:313"
+ ],
+ "Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Panelin koyduğu DUR kaynağı kaldırıldı; başka bir kaynağın DUR'u sürüyor.": [
+  "gui/panel.py:310"
  ],
  "Cüzdan okundu; panelin imzalı kaydında kullanıcının DUR'u açık, DUR sürüyor.": [
-  "gui/panel.py:292"
+  "gui/panel.py:305"
  ],
  "Cüzdandaki imzalı kayıtla listeler doğrulanamadı ({ayarlar}; {neden}). Deskhand durdu (Dur 10). Cüzdan okununca panel imzalı kaydı geri yükler; imzalı kayıt yoksa dosya değişince ya da panel yeniden başlayınca yeniden sorulur.": [
-  "liste_koruma.py:802"
+  "liste_koruma.py:853"
  ],
  "D-Bus (python-jeepney)": [
   "gui/saglik.py:24"
@@ -775,7 +778,7 @@
   "arka_ortak.py:118"
  ],
  "DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı geri yükler (imzalı kayıt yoksa girişleri yeniden sorar); o zamana kadar Deskhand durdu (Dur 10).": [
-  "gui/pencere.py:849"
+  "gui/pencere.py:852"
  ],
  "DUR": [
   "gui/dil.py:78",
@@ -800,7 +803,7 @@
   "gui/metinler.py:73"
  ],
  "DUR anahtarı panel dışında kaldırıldı; geri konuldu (yalnız kullanıcı kaldırır).": [
-  "gui/panel.py:314"
+  "gui/panel.py:343"
  ],
  "DUR anahtarını aç (hiçbir girdi gönderilmez)": [
   "cli.py:214"
@@ -815,7 +818,7 @@
   "cli.py:215"
  ],
  "DUR kaldırılsın mı?": [
-  "guvenlik.py:2184",
+  "guvenlik.py:2271",
   "onay.py:951"
  ],
  "DUR kaldırılsın mı? Ajan yeniden girdi gönderebilir.": [
@@ -825,7 +828,7 @@
   "gui/metinler.py:105"
  ],
  "DUR yalnız kullanıcı tarafından kaldırılır: Deskhand panelinden ya da DUR kısayoluyla.": [
-  "guvenlik.py:2174"
+  "guvenlik.py:2261"
  ],
  "DUR — tüm girdileri durdur": [
   "gui/metinler.py:31"
@@ -837,8 +840,10 @@
   "gui/metinler.py:43"
  ],
  "DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir": [
-  "guvenlik.py:2208",
-  "guvenlik.py:2228"
+  "guvenlik.py:2321"
+ ],
+ "DUR'u panel koydu (imzalı kayıt okunamıyor); yalnız kullanıcı Deskhand panelinden kaldırabilir": [
+  "guvenlik.py:2319"
  ],
  "DUR: açık ({yol}); hiçbir girdi gönderilmez. {kaldirma}": [
   "cli.py:306"
@@ -867,7 +872,7 @@
   "liste_koruma.py:85"
  ],
  "Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı. Bu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin.": [
-  "liste_koruma.py:469"
+  "liste_koruma.py:513"
  ],
  "Deskhand bir iş yapmak istiyor": [
   "mesgul.py:49"
@@ -925,8 +930,8 @@
  "Devraldınız: önizlemeye tıklayın, yazın. Bitince Bırak.": [
   "gui/metinler.py:90"
  ],
- "Dikkat: {n} girişte görünmez, Latin dışı ya da çok uzun içerik var (⚠ satırları).": [
-  "liste_koruma.py:481"
+ "Dikkat: {n} girişte görünmez, ASCII dışı ya da çok uzun içerik var (⚠ satırları).": [
+  "liste_koruma.py:525"
  ],
  "Dil": [
   "gui/metinler.py:195"
@@ -1084,9 +1089,6 @@
   "doktor.py:260",
   "doktor.py:261"
  ],
- "Giriş sayısı üst sınırı ({sinir}) aşıldı; bu soruya Evet verilemez.": [
-  "liste_koruma.py:482"
- ],
  "Giriş yaptığım hesaplar görünmez masaüstünde de açık olsun (banka ve ödeme siteleri hariç)": [
   "gui/metinler.py:171"
  ],
@@ -1187,7 +1189,7 @@
   "gui/metinler.py:280"
  ],
  "Görünmez masaüstündeki tarayıcının şu sitelerdeki oturumu kalıcı saklansın mı (şifreli, KDE Cüzdanı anahtarıyla; banka/ödeme siteleri hiçbir zaman)? Bu isteği siz yapmadıysanız Hayır deyin.": [
-  "liste_koruma.py:473"
+  "liste_koruma.py:517"
  ],
  "Görünmez masaüstünü siz kullanın (Arka plan ekranı sekmesi): giriş, CAPTCHA, doğrulama kodu…": [
   "gui/metinler.py:243"
@@ -1266,16 +1268,16 @@
   "gui/metinler.py:194"
  ],
  "Hesap oturumu izni ({saglayici}) panel dışında açılmış; geçerli sayılmadı, kimlik çerezleri süzülmeye devam ediyor. Açmak için panelde Ayarlar → Hesap oturumları.": [
-  "liste_koruma.py:967"
+  "liste_koruma.py:1018"
  ],
  "Hesap oturumu izni ayar dosyasında panel dışında açılmaya çalışıldı; geçerli sayılmadı, panelin değeri korundu ve dosya geri yazıldı (açmak için panelde Ayarlar → Hesap oturumları).": [
-  "liste_koruma.py:1090"
+  "liste_koruma.py:1141"
  ],
  "Hesap oturumu izni ayar dosyasında panel dışında kapatıldı ya da silindi; kimlik çerezleri yeniden süzülüyor.": [
-  "liste_koruma.py:1086"
+  "liste_koruma.py:1137"
  ],
  "Hesap oturumu izni açık: {saglayici}. Görünmez masaüstündeki tarayıcı bu hesaplara girişli açılır. Kapatmak için panelde Ayarlar → Hesap oturumları.": [
-  "liste_koruma.py:954"
+  "liste_koruma.py:1005"
  ],
  "KDE Cüzdanı'nı açın (kilidi açık olmalı)": [
   "doktor.py:248"
@@ -1372,19 +1374,19 @@
   "gui/metinler.py:122"
  ],
  "Kalıcı oturum listesinden ayar dosyasında site çıkarıldı; kabul edildi.": [
-  "liste_koruma.py:1019"
+  "liste_koruma.py:1070"
  ],
  "Kalıcı oturum listesine panel dışında site eklenmek istendi ({siteler}); onaylanmadı, panelin listesi korundu ve dosya geri yazıldı.": [
-  "liste_koruma.py:1032"
+  "liste_koruma.py:1083"
  ],
  "Kalıcı oturum sitesi ({siteler}) panel dışında eklenmiş ve onaylanmadı; kullanılmıyor.": [
-  "liste_koruma.py:971"
+  "liste_koruma.py:1022"
  ],
  "Kalıcı oturum süresi ({yeni} gün) panel dışında yazılmış ve onaylanmadı; {eski} gün kullanılıyor.": [
-  "liste_koruma.py:973"
+  "liste_koruma.py:1024"
  ],
  "Kalıcı oturum süresi ayar dosyasında kısaltıldı; kabul edildi.": [
-  "liste_koruma.py:1020"
+  "liste_koruma.py:1071"
  ],
  "Kalıcı oturumlar": [
   "doktor.py:213"
@@ -1440,8 +1442,8 @@
  "Kısayol kaydedilemedi: {hata}": [
   "gui/metinler.py:210"
  ],
- "Latin dışı / benzer görünen harf: {harfler}": [
-  "liste_koruma.py:511"
+ "Liste çok uzun (üst sınır {sinir} giriş, {satir} satır); bu soruya Evet verilemez. Listeyi Ayarlar'dan inceleyin.": [
+  "liste_koruma.py:526"
  ],
  "MCP sunucuları": [
   "doktor.py:131",
@@ -1540,16 +1542,16 @@
   "doktor.py:161"
  ],
  "Onay kapsamı 'kart' (Yalnız kartla ödeme) panel dışında yazılmış; geçerli sayılmadı, tüm onaylar açık kaldı ('hepsi'). Değiştirmek için panelde Ayarlar → Onay soruları.": [
-  "liste_koruma.py:964"
+  "liste_koruma.py:1015"
  ],
  "Onay kapsamı ayar dosyasında panel dışında 'hepsi' yapıldı ya da silindi; tüm onaylar yeniden açık.": [
-  "liste_koruma.py:1073"
+  "liste_koruma.py:1124"
  ],
  "Onay kapsamı ayar dosyasında panel dışında değiştirildi; panelin değeri ('{deger}') korundu ve dosya geri yazıldı (değişiklikleri Ayarlar'dan yapın).": [
-  "liste_koruma.py:1077"
+  "liste_koruma.py:1128"
  ],
  "Onay penceresinde gösterilen girişler uygulanacak değerle aynı değil; Evet uygulanmadı.": [
-  "liste_koruma.py:732"
+  "liste_koruma.py:783"
  ],
  "Onay soruları": [
   "gui/metinler.py:162",
@@ -1563,13 +1565,13 @@
   "gui/metinler.py:53"
  ],
  "Onaylı kayda göre: {k} kaldırılan, {e} eklenen, {d} değişen giriş; {s} giriş aynı. Kaldırılanlar önce listelenir.": [
-  "liste_koruma.py:477"
+  "liste_koruma.py:521"
  ],
  "Onaylı kayıt okunamadı — karşılaştırma yapılamıyor; aşağıdaki liste dosyadaki girişlerin TAMAMIDIR ({n} giriş); eksik kural görüyorsanız Hayır deyin.": [
-  "liste_koruma.py:475"
+  "liste_koruma.py:519"
  ],
  "Onaylı kayıt yok; varsayılan değere göre: {k} kaldırılan, {e} eklenen, {d} değişen giriş; {s} giriş aynı.": [
-  "liste_koruma.py:479"
+  "liste_koruma.py:523"
  ],
  "Opus (güçlü, yavaş)": [
   "gui/metinler.py:245"
@@ -1608,10 +1610,10 @@
   "gui/metinler.py:34"
  ],
  "Panelin imzalı kaydı kullanılamıyor ({neden}); yalnız varsayılanlar ve daraltmalar uygulanıyor, gevşetmeler panelde sorulur.": [
-  "liste_koruma.py:705"
+  "liste_koruma.py:756"
  ],
  "Panelin imzalı kaydı okunamıyor ({neden}); şu listeler doğrulanamadı. Dosyadaki girişler uygulansın mı? Siz yazmadıysanız Hayır deyin.": [
-  "liste_koruma.py:471"
+  "liste_koruma.py:515"
  ],
  "Pano kullanılıyor": [
   "gui/metinler.py:283"
@@ -1674,7 +1676,7 @@
   "gui/metinler.py:56"
  ],
  "Secret Service hatası": [
-  "liste_koruma.py:233"
+  "liste_koruma.py:258"
  ],
  "Secret Service yok ya da varsayılan cüzdan yok (KDE Cüzdanı)": [
   "oturum/kalici.py:133"
@@ -1996,7 +1998,7 @@
   "oturum/kalici.py:1102"
  ],
  "anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)": [
-  "liste_koruma.py:190",
+  "liste_koruma.py:213",
   "oturum/kalici.py:119"
  ],
  "arayüz (python-pyqt6)": [
@@ -2412,8 +2414,8 @@
   "guvenlik.py:785"
  ],
  "cüzdan kilitli": [
-  "liste_koruma.py:172",
-  "liste_koruma.py:196",
+  "liste_koruma.py:173",
+  "liste_koruma.py:219",
   "oturum/kalici.py:135",
   "oturum/kalici.py:152"
  ],
@@ -3163,6 +3165,9 @@
  ],
  "görünmez masaüstünde erişilebilirlik hazırlanamadı (at-spi2-core kurulu mu?)": [
   "erisim.py:140"
+ ],
+ "görünmez ya da ASCII dışı karakter: {harfler}": [
+  "liste_koruma.py:558"
  ],
  "görüntü": [
   "gorev.py:260",
@@ -3987,6 +3992,9 @@
  "paketi kur: {paket}": [
   "doktor.py:61"
  ],
+ "panel durdurdu: cüzdandaki DUR kaydı okunamıyor": [
+  "gui/pencere.py:33"
+ ],
  "panel kanalı doğrulanamadı": [
   "mcp_sunucu.py:2846"
  ],
@@ -4015,10 +4023,10 @@
   "doktor.py:112"
  ],
  "panelin imzalı kaydı okunamadı (bozuk)": [
-  "liste_koruma.py:252"
+  "liste_koruma.py:284"
  ],
  "panelin imzalı kaydında bu listelerin onaylı değeri yok": [
-  "liste_koruma.py:779"
+  "liste_koruma.py:830"
  ],
  "pano": [
   "cli.py:293"
@@ -4987,7 +4995,7 @@
   "arka_uc/kwin.py:578"
  ],
  "{ayar} doğrulanmadı (Dur 10); cüzdan okununca panel imzalı kaydı geri yükler ya da dosyadaki girişleri yeniden sorar.": [
-  "liste_koruma.py:1050"
+  "liste_koruma.py:1101"
  ],
  "{ayar} metin olmalı": [
   "ayarlar.py:142"
@@ -5015,10 +5023,10 @@
   "oturum/denetle.py:342"
  ],
  "{dosya} panel dışında silindi ya da değiştirildi; panelin kaydı korundu ve dosya geri yazıldı (değişiklikleri Ayarlar'dan yapın).": [
-  "liste_koruma.py:1066"
+  "liste_koruma.py:1117"
  ],
  "{dosya} panel kapalıyken silinmiş ya da değiştirilmiş; panelin son kaydı geri yüklendi (değişiklikleri Ayarlar'dan yapın).": [
-  "liste_koruma.py:961"
+  "liste_koruma.py:1012"
  ],
  "{durum}: kullanıcı bölünmedi, sorulmadı (tam_ekranda_sor=false)": [
   "mesgul.py:568"
@@ -5135,7 +5143,7 @@
   "gui/metinler.py:157"
  ],
  "{n} boş satır ({aralik}) katlandı": [
-  "liste_koruma.py:599"
+  "liste_koruma.py:647"
  ],
  "{n} dk": [
   "gui/metinler.py:321"
@@ -5153,7 +5161,7 @@
   "doktor.py:140"
  ],
  "{n} yorum satırı ({aralik}) uygulanmaz": [
-  "liste_koruma.py:600"
+  "liste_koruma.py:649"
  ],
  "{ok}/{n} bileşen hazır": [
   "gui/metinler.py:226"
@@ -5362,7 +5370,7 @@
   "desen.py:124"
  ],
  "çok uzun giriş: {n} karakter": [
-  "liste_koruma.py:573"
+  "liste_koruma.py:620"
  ],
  "çok uzun ya da boşluk/denetim karakteri içeriyor": [
   "uygulama.py:333"
@@ -5521,7 +5529,7 @@
   "web.py:669"
  ],
  "İstek onaylanmadı ({neden}).": [
-  "guvenlik.py:2190"
+  "guvenlik.py:2277"
  ],
  "İsteyen süreç": [
   "gui/metinler.py:121"
@@ -5537,5 +5545,8 @@
  ],
  "‘{hedef}’ tıklanıyor": [
   "gui/metinler.py:265"
+ ],
+ "⟨boş/yorum ×{n}⟩ ({aralik}) uygulanmaz": [
+  "liste_koruma.py:650"
  ]
 }

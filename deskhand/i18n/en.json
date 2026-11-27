@@ -1736,10 +1736,7 @@
  "DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı geri yükler (imzalı kayıt yoksa girişleri yeniden sorar); o zamana kadar Deskhand durdu (Dur 10).": "NOT VERIFIED — unapproved entries from the file (read-only). Once the wallet can be read the panel restores its signed record (with no signed record it asks about the entries again); until then Deskhand is stopped (Dur 10).",
  "Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı. Bu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin.": "A Deskhand setting changed while the panel was closed, or the panel's signature could not be verified. Apply this change? If you did not make it, answer No.",
  "Deskhand paneli {tur} listesini doğrulayamadı (cüzdan okunamıyor; listeler doğrulanamadı); güvenli tarafta hiçbir girdi gönderilmez. Cüzdan okununca panel imzalı kaydı geri yükler; imzalı kayıt yoksa listeyi panelde yeniden sorar.": "The Deskhand panel could not verify the {tur} list (wallet cannot be read; lists not verified); on the safe side no input is sent. Once the wallet can be read the panel restores its signed record; with no signed record it asks about the list again in the panel.",
- "Dikkat: {n} girişte görünmez, Latin dışı ya da çok uzun içerik var (⚠ satırları).": "Caution: {n} entries contain invisible, non-Latin or very long content (⚠ lines).",
- "Giriş sayısı üst sınırı ({sinir}) aşıldı; bu soruya Evet verilemez.": "The entry limit ({sinir}) is exceeded; Yes cannot be given to this question.",
  "Görünmez masaüstündeki tarayıcının şu sitelerdeki oturumu kalıcı saklansın mı (şifreli, KDE Cüzdanı anahtarıyla; banka/ödeme siteleri hiçbir zaman)? Bu isteği siz yapmadıysanız Hayır deyin.": "Keep the invisible desktop browser's session on these sites persistently (encrypted with the KDE Wallet key; never banking/payment sites)? If you did not make this request, answer No.",
- "Latin dışı / benzer görünen harf: {harfler}": "Non-Latin / look-alike letter: {harfler}",
  "Onay penceresinde gösterilen girişler uygulanacak değerle aynı değil; Evet uygulanmadı.": "The entries shown in the approval dialog are not the value that would be applied; the Yes was not applied.",
  "Onaylı kayda göre: {k} kaldırılan, {e} eklenen, {d} değişen giriş; {s} giriş aynı. Kaldırılanlar önce listelenir.": "Compared with the approved record: {k} removed, {e} added, {d} changed entries; {s} entries unchanged. Removed entries are listed first.",
  "Onaylı kayıt okunamadı — karşılaştırma yapılamıyor; aşağıdaki liste dosyadaki girişlerin TAMAMIDIR ({n} giriş); eksik kural görüyorsanız Hayır deyin.": "The approved record could not be read — no comparison is possible; the list below is ALL the entries in the file ({n} entries); if you see a rule missing, answer No.",
@@ -1750,5 +1747,12 @@
  "{ayar} doğrulanmadı (Dur 10); cüzdan okununca panel imzalı kaydı geri yükler ya da dosyadaki girişleri yeniden sorar.": "{ayar} not verified (Dur 10); once the wallet can be read the panel restores its signed record or asks about the file's entries again.",
  "{n} boş satır ({aralik}) katlandı": "{n} blank lines ({aralik}) folded",
  "{n} yorum satırı ({aralik}) uygulanmaz": "{n} comment lines ({aralik}) not applied",
- "çok uzun giriş: {n} karakter": "very long entry: {n} characters"
+ "çok uzun giriş: {n} karakter": "very long entry: {n} characters",
+ "Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Panelin koyduğu DUR kaynağı kaldırıldı; başka bir kaynağın DUR'u sürüyor.": "Wallet read; the panel's signed record says STOP is off. The STOP source the panel set was removed; a STOP from another source is still on.",
+ "DUR'u panel koydu (imzalı kayıt okunamıyor); yalnız kullanıcı Deskhand panelinden kaldırabilir": "STOP was set by the panel (the signed record cannot be read); only the user can remove it from the Deskhand panel",
+ "Dikkat: {n} girişte görünmez, ASCII dışı ya da çok uzun içerik var (⚠ satırları).": "Caution: {n} entries contain invisible, non-ASCII or very long content (⚠ lines).",
+ "Liste çok uzun (üst sınır {sinir} giriş, {satir} satır); bu soruya Evet verilemez. Listeyi Ayarlar'dan inceleyin.": "The list is too long (limit {sinir} entries, {satir} lines); this question cannot be answered Yes. Review the list in Settings.",
+ "görünmez ya da ASCII dışı karakter: {harfler}": "invisible or non-ASCII character: {harfler}",
+ "panel durdurdu: cüzdandaki DUR kaydı okunamıyor": "stopped by the panel: the STOP record in the wallet cannot be read",
+ "⟨boş/yorum ×{n}⟩ ({aralik}) uygulanmaz": "⟨blank/comment ×{n}⟩ ({aralik}) not applied"
 }

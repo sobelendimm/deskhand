@@ -29,6 +29,9 @@ from .kisayol import VARSAYILAN_TUS, cakismalar
 from .onizleme import MaskeHatasi, Onizleme, maskeli_goruntu, pil_qimage
 from .tepsi import durum_pixmap
 
+# the panel's own closed-fail DUR source (guvenlik.DUR_KAPALI_BASARISIZ; review INC5 O4/O5)
+_DUR_KAYNAK_PANEL = {"panel-kapali-basarisiz": N_("panel durdurdu: cüzdandaki DUR kaydı okunamıyor")}
+
 ONIZLEME_MS = 500  # ~2 fps (Devral açıkken: girdi geri bildirimi)
 IZLEME_MS = 1000  # yalnız izlerken 1 fps (her karede yasak pencere denetimi: pencere listesi okunur)
 MASA_LISTE_MS = 2000  # masaüstü listesi yenileme (yalnız sekme görünürken)
@@ -1521,7 +1524,8 @@ class DurumSeridi(QFrame):
         metin = d.metin
         if d.ad == "dur" and d.dur_kaynak:
             k = d.dur_kaynak
-            metin += f" — {_(T.DUR_KAYNAK[k]) if k in T.DUR_KAYNAK else k}"
+            ad = T.DUR_KAYNAK.get(k) or _DUR_KAYNAK_PANEL.get(k)
+            metin += f" — {_(ad) if ad else k}"
         self.l_durum.setText(metin)
         alt = [_(T.SANAL_ACIK).format(ekran=d.sanal_ekran) if d.sanal_acik else _(T.SANAL_KAPALI)]
         if d.devral:

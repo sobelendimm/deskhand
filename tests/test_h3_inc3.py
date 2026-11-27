@@ -549,7 +549,8 @@ bos = "KeePassXC\n" + "\n" * 300 + "panelin kaydı «KeePassXC», dosyada «KeeP
 g = lk.gosterim("soru", [("yasak", bos, None, None)])
 st = icerik_satirlari(g)
 kontrol("INC4 O3: boş satırla kaydırma → boş satırlar tek işaretli satıra katlanır, girişler numaralı",
-        len(st) == 3 and "300 boş satır (2–301) katlandı" in st[1] and SATIR_RE.match(st[2]) and "  302 │ " in st[2],
+        len(st) == 4 and "300 boş satır (2–301) katlandı" in st[1] and SATIR_RE.match(st[2]) and "  302 │ " in st[2]
+        and st[3].lstrip().startswith("⚠") and "U+00AB" in st[3],
         str(st))
 kontrol("INC4 O3: içerikteki sahte 'panelin kaydı … dosyada' etiketi yalnız numaralı bir içerik satırı; sabit etiket "
         "içeriği taşımaz", yapisi_dogru(g) and "KeePassXC" not in g.bolumler[0].etiket and
@@ -568,7 +569,7 @@ kiril = "KeePassXC\nKe\u0435PassXC\n"
 g = lk.gosterim("soru", [("yasak", kiril, "KeePassXC\n", "onayli")])
 st = icerik_satirlari(g)
 kontrol("INC4 O3: Kiril е işaretlenir (satırın altında ⚠ U+0435), fark +1 / −0",
-        any("U+0435 CYRILLIC SMALL LETTER IE" in s for s in st) and SATIR_RE.match(st[0]) and "Ke\u0435PassXC" in st[0]
+        any("U+0435 CYRILLIC SMALL LETTER IE" in s for s in st) and SATIR_RE.match(st[0]) and "Ke\\u{0435}PassXC" in st[0]
         and "0 kaldırılan, 1 eklenen" in g.bolumler[0].etiket and "Dikkat: 1 girişte" in g.bolumler[0].etiket, str(st))
 g = lk.gosterim("soru", [("yasak", "Yeni\n", ONAYLI, "onayli")])
 st = icerik_satirlari(g)
@@ -682,8 +683,9 @@ for kayitli in (False, True):
     lk._anahtar_unut()
     p5 = SahtePanel()
     Panel._dur_baslat(p5)
-    kontrol(f"INC4 B4: kilitli cüzdanda açılış → DUR açık (kapalı-başarısız; imzalı={kayitli})",
-            guvenlik.dur_acik() and guvenlik.dur_kaynagi() == "kullanici" and p5._dur_kullanici,
+    kontrol(f"INC4 B4: kilitli cüzdanda açılış → DUR açık (kapalı-başarısız, panelin kendi kaynağı; imzalı={kayitli})",
+            guvenlik.dur_acik() and guvenlik.dur_kaynaklari() == {guvenlik.DUR_KAPALI_BASARISIZ} and
+            p5._dur_kasa_bekliyor and not p5._dur_kullanici,
             f"{guvenlik.dur_kaynagi()} {p5.uyarilar}")
     KASA.kilitli = False
     lk._anahtar_unut()
@@ -706,6 +708,238 @@ kontrol("INC4 B4: bekleme sırasında kullanıcının bastığı DUR cüzdan oku
         guvenlik.dur_acik() and lk.panel_dur_durumu() is True, f"{guvenlik.dur_kaynagi()} {lk.panel_dur_durumu()}")
 guvenlik.dur_kapat("kullanici")
 Panel._dur_kaydet(p6, False)
+
+# ================================================================ INC5 (rapor-H3-inceleme-5.md; ANA R8 kararları)
+KB = guvenlik.DUR_KAPALI_BASARISIZ
+
+
+def dur_sifirla():
+    guvenlik.dur_kapat("kullanici")
+
+
+def kod_al(f, *a):
+    try:
+        f(*a)
+        return 0
+    except Dur as e:
+        return e.kod
+
+
+def kilitli_acilis(onceden=()):
+    """A panel start with a locked wallet; `onceden`: DUR sources already on (set by someone else)."""
+    dur_sifirla()
+    for k_ in onceden:
+        guvenlik.dur_ac(k_)
+    KASA.kilitli = True
+    lk._anahtar_unut()
+    p_ = SahtePanel()
+    Panel._dur_baslat(p_)
+    return p_
+
+
+def kasa_acilir(p_):
+    KASA.kilitli = False
+    lk._anahtar_unut()
+    Panel._dur_koru(p_)
+
+
+# DUR source set (guvenlik): parsing + ownership
+kontrol("INC5 P1: _kaynak_coz panelin kapalı-başarısız etiketini 'cli' ya da 'kullanici' saymaz",
+        set(guvenlik._kaynak_coz(f"{KB} 123\n")) == {KB} and set(guvenlik._kaynak_coz("")) == {"cli"} and
+        set(guvenlik._kaynak_coz("kullanici 1\ncli 2\n")) == {"kullanici", "cli"})
+dur_sifirla()
+guvenlik.dur_ac(KB)
+kod = kod_al(guvenlik.dur_kapat, "cli")
+kontrol("INC5 P1 (D3): ajanın dur_kapat('cli')'si panelin kapalı-başarısız DUR'unu kaldıramaz (13, DUR açık)",
+        kod == 13 and guvenlik.dur_kaynaklari() == {KB}, f"{kod} {guvenlik.dur_kaynaklari()}")
+guvenlik.dur_ac("cli")
+kod = kod_al(guvenlik.dur_kapat, "cli")
+kontrol("INC5 P1: ajan yalnız kendi kaynağını kaldırır; başka kaynak sürerken 13",
+        kod == 13 and guvenlik.dur_kaynaklari() == {KB}, f"{kod} {guvenlik.dur_kaynaklari()}")
+guvenlik.dur_ac("kullanici")
+kontrol("INC5: kaynaklar birbirini ezmez (kullanıcı + panel aynı anda)",
+        guvenlik.dur_kaynaklari() == {KB, "kullanici"} and guvenlik.dur_kaynagi() == "kullanici")
+guvenlik.dur_kapat(KB)
+kontrol("INC5: panel yalnız kendi kaynağını kaldırır; kullanıcının DUR'u kalır",
+        guvenlik.dur_kaynaklari() == {"kullanici"})
+dur_sifirla()
+kontrol("INC5: kullanıcının Devam'ı bütün kaynakları kaldırır", not guvenlik.dur_acik())
+
+# P1(3): the last source is MOVED away, then checked: a source written meanwhile (outside the lock) is put back
+guvenlik.dur_ac(KB)
+gercek_rename = guvenlik.os.rename
+tetik = {"n": 0}
+
+
+def araya_giren_rename(kaynak, hedef):
+    if tetik["n"] == 0:
+        tetik["n"] = 1
+        with open(kaynak, "a") as f_:  # a writer that does not take the lock (e.g. an older process)
+            f_.write("cli 99999\n")
+    return gercek_rename(kaynak, hedef)
+
+
+guvenlik.os.rename = araya_giren_rename
+try:
+    sonuc_ = guvenlik.dur_kapat(KB)
+finally:
+    guvenlik.os.rename = gercek_rename
+kontrol("INC5 P1 (3): kaldırma taşı → doğrula → geri koy; araya giren kaynak kaybolmaz",
+        sonuc_ is True and guvenlik.dur_kaynaklari() == {"cli"}, f"{sonuc_} {guvenlik.dur_kaynaklari()}")
+kontrol("INC5 P1 (3): geride geçici dosya kalmadı",
+        not [f_ for f_ in os.listdir(os.path.dirname(dur_dosyasi())) if f_.startswith(("dur.", ".dur-"))],
+        str(os.listdir(os.path.dirname(dur_dosyasi()))))
+dur_sifirla()
+
+# a same-uid process holding the DUR lock cannot block the user's DUR button
+import fcntl  # noqa: E402
+
+kfd = os.open(os.path.join(os.path.dirname(dur_dosyasi()), "dur-kilit"), os.O_RDWR | os.O_CREAT, 0o600)
+fcntl.flock(kfd, fcntl.LOCK_EX)
+try:
+    t0 = time.monotonic()
+    guvenlik.dur_ac("kullanici")
+    sure_ = time.monotonic() - t0
+finally:
+    os.close(kfd)
+kontrol("INC5: DUR kilidini tutan süreç kullanıcının DUR'unu engelleyemez (sınırlı bekleme)",
+        guvenlik.dur_kaynaklari() == {"kullanici"} and sure_ < 3, f"{sure_:.2f} sn {guvenlik.dur_kaynaklari()}")
+dur_sifirla()
+
+# O5: locked wallet at start, a DUR someone else set is on → the panel ADDS its own source, never overwrites
+for onceden in (("cli",), ("kullanici",)):
+    p7 = kilitli_acilis(onceden)
+    kontrol(f"INC5 O5: kilitli açılışta panel kendi kaynağını ekler, {onceden[0]} DUR'unu ezmez",
+            guvenlik.dur_kaynaklari() == {KB, onceden[0]} and p7._dur_kasa_bekliyor,
+            str(guvenlik.dur_kaynaklari()))
+    KASA.kilitli = False
+    lk._anahtar_unut()
+    lk.panel_dur_sakla(False)  # the signed record: DUR off
+    Panel._dur_koru(p7)
+    kontrol(f"INC5 O4: cüzdan okununca imzalı 'DUR yok' yalnız panelin kaynağını kaldırır ({onceden[0]} kalır)",
+            guvenlik.dur_kaynaklari() == {onceden[0]} and not p7._dur_kasa_bekliyor,
+            f"{guvenlik.dur_kaynaklari()} {p7.uyarilar[-1:]}")
+    dur_sifirla()
+    Panel._dur_kaydet(p7, False)
+
+# P1(2)/D4: the agent sets its own DUR before the restart, then lifts it → the closed-fail DUR is still on
+p8 = kilitli_acilis(("cli",))
+kod = kod_al(guvenlik.dur_kapat, "cli")
+kontrol("INC5 P1 (2)/D4: ajanın önceden koyduğu cli DUR'u kapalı-başarısız kuralını atlatamaz",
+        kod == 13 and guvenlik.dur_kaynaklari() == {KB}, f"{kod} {guvenlik.dur_kaynaklari()}")
+
+# P1(4): a deleted DUR is put back with its OWN label; P1(5): a new panel takes over the earlier panel's label
+os.remove(dur_dosyasi())
+Panel._dur_koru(p8)
+kontrol("INC5 P1 (4): silinen kapalı-başarısız DUR kendi etiketiyle geri konur ('kullanici' değil)",
+        guvenlik.dur_kaynaklari() == {KB} and any("geri konuldu" in u for u in p8.uyarilar),
+        str(guvenlik.dur_kaynaklari()))
+lk._anahtar_unut()
+p9 = SahtePanel()
+Panel._dur_baslat(p9)  # wallet still locked: the label stays, this panel waits for it
+kontrol("INC5 P1 (5): yeni panel önceki panelin kapalı-başarısız kaynağını devralır (kilitli → sürer)",
+        guvenlik.dur_kaynaklari() == {KB} and p9._dur_kasa_bekliyor)
+KASA.kilitli = False
+lk._anahtar_unut()
+lk.panel_dur_sakla(False)
+p10 = SahtePanel()
+Panel._dur_baslat(p10)
+kontrol("INC5 P1 (5): cüzdan okunurken açılan panel imzalı 'kapalı' kayda göre önceki kapalı-başarısız kaynağı kaldırır",
+        not guvenlik.dur_acik() and not p10._dur_kasa_bekliyor, str(guvenlik.dur_kaynaklari()))
+lk.panel_dur_sakla(True)
+p11 = kilitli_acilis()
+kasa_acilir(p11)
+kontrol("INC5: imzalı kayıt 'açık' → kapalı-başarısız kaynak kullanıcınınkiyle değişir, DUR hiç kalkmaz",
+        guvenlik.dur_kaynaklari() == {"kullanici"} and p11._dur_kullanici, str(guvenlik.dur_kaynaklari()))
+os.remove(dur_dosyasi())
+Panel._dur_koru(p11)
+kontrol("INC5 P1 (4): silinen kullanıcı DUR'u 'kullanici' etiketiyle geri konur",
+        guvenlik.dur_kaynaklari() == {"kullanici"})
+dur_sifirla()
+Panel._dur_kaydet(p11, False)
+
+# N1: a corrupt / incomplete signed item is closed-fail and is NOT re-made by an automatic path
+lk.panel_dur_sakla(False)
+for ad_, bozuk in (("bozuk", b"{not json"),
+                   ("dur alanı eksik", json.dumps({"surum": 1, "anahtar": "ab" * 32, "sayac": {}, "son": {}}).encode())):
+    KASA.veri = bozuk
+    KASA.kilitli = False
+    lk._anahtar_unut()
+    p12 = SahtePanel()
+    dur_sifirla()
+    Panel._dur_baslat(p12)
+    lk._anahtar_unut()
+    kontrol(f"INC5 N1: {ad_} kayıt → panel_dur_durumu None, DUR açık (kapalı-başarısız)",
+            lk.panel_dur_durumu() is None and guvenlik.dur_kaynaklari() == {KB})
+    lk._anahtar_unut()
+    kontrol(f"INC5 N1: {ad_} kayıt otomatik yolda (_durum(True)) yeniden yaratılmaz",
+            (lk._durum(True) is None) is (ad_ == "bozuk") and KASA.veri == bozuk and lk.panel_dur_durumu() is None)
+    lk._anahtar_unut()
+    Panel._dur_koru(p12)
+    kontrol(f"INC5 N1: {ad_} kayıtta panel yoklaması DUR'u kaldırmaz", guvenlik.dur_kaynaklari() == {KB})
+    dur_sifirla()  # the user's Devam
+    Panel._dur_kaydet(p12, False)
+    lk._anahtar_unut()
+    kontrol(f"INC5 N1: {ad_} kayıt yalnız kullanıcı eylemiyle (Devam) yeniden yazılır",
+            KASA.veri != bozuk and lk.panel_dur_durumu() is False)
+
+# Y10: no Secret Service at all (absent, not locked) → a first start, no closed-fail DUR
+
+
+class YokKasa(Kasa):
+    def __init__(self, yok):
+        super().__init__()
+        self.yok = yok
+
+    def oku(self):
+        raise kalici.AnahtarYok("Secret Service yok")
+
+    def servis_yok_kesin(self):
+        return self.yok
+
+
+for yok in (True, False):
+    lk.isaret_anahtarlik_ayarla(YokKasa(yok))
+    dur_sifirla()
+    p13 = SahtePanel()
+    Panel._dur_baslat(p13)
+    kontrol(f"INC5 Y10: Secret Service {'kesin yok → DUR açılmaz' if yok else 'belirsiz/kilitli → kapalı-başarısız DUR'}",
+            guvenlik.dur_acik() is (not yok) and lk.panel_dur_durumu() is (False if yok else None))
+    dur_sifirla()
+lk.isaret_anahtarlik_ayarla(KASA)
+KASA.veri, KASA.kilitli = None, False
+lk._anahtar_unut()
+
+# Y7 / Y8 / Y9: the display
+for desen, ad_ in (("KeePass\u2169\u216d", "Roma rakamı Ⅹ Ⅽ"), ("Online Banking \U0001d7d0", "matematik rakamı 𝟐"),
+                   ("Banka\u2800", "U+2800"), ("example\u3002com", "U+3002"), ("Banking \uff12", "tam genişlik ２"),
+                   ("\u200bKeePassXC", "sıfır genişlik (Y8)"), ("A\x00B", "NUL (Y8)")):
+    g = lk.gosterim("soru", [("yasak", desen + "\n", None, None)])
+    st = icerik_satirlari(g)
+    ham_ = "".join(st)
+    kontrol(f"INC5 Y7/Y8: {ad_} → kaçışlı, ⚠ ve sayaçta",
+            not any(ord(c) > 0x7e and c not in "│−⚠×çğıİöşüÇĞÖŞÜ" or ord(c) < 0x20 for c in st[0]) and
+            g.bolumler[0].isaretli == 1 and "Dikkat: 1 girişte" in g.bolumler[0].etiket and
+            any(s.lstrip().startswith("⚠") for s in st) and "\\u{" in ham_, str(st))
+g = lk.gosterim("soru", [("yasak", "KeePass\u2169\u216d\n", None, None)])
+kontrol("INC5 Y7: 'KeePassⅩⅭ' → KeePass\\u{2169}\\u{216D}", "KeePass\\u{2169}\\u{216D}" in icerik_satirlari(g)[0])
+g = lk.gosterim("soru", [("yasak", "İstanbul ığdır\nŞÜÖÇĞ şüöçğ\n", None, None)])
+kontrol("INC5 Y7 (negatif): meşru Türkçe kural ⚠ almaz, olduğu gibi görünür",
+        g.bolumler[0].isaretli == 0 and "Dikkat" not in g.bolumler[0].etiket and
+        any("İstanbul ığdır" in s for s in icerik_satirlari(g)), str(icerik_satirlari(g)))
+metin_ = "".join("\n# c\n" for _ in range(5000)) + "KeePassXC\n"
+g = lk.gosterim("soru", [("yasak", metin_, None, None)])
+st = icerik_satirlari(g)
+kontrol("INC5 Y9: art arda boş/yorum satırları tek '⟨boş/yorum ×K⟩' satırına katlanır",
+        len(st) == 2 and "⟨boş/yorum ×10000⟩" in st[0] and "KeePassXC" in st[1] and not g.evet_kapali, str(st[:3]))
+eski_sinir = lk.GOSTERIM_SATIR_SINIR
+lk.GOSTERIM_SATIR_SINIR = 10
+try:
+    g = lk.gosterim("soru", [("yasak", "".join(f"x\u0430{n}\n" for n in range(6)), None, None)])
+finally:
+    lk.GOSTERIM_SATIR_SINIR = eski_sinir
+kontrol("INC5 Y9: gösterilen satır üst sınırı aşılınca Evet kapalı, 'Ayarlar'dan inceleyin'",
+        g.evet_kapali and "Ayarlar'dan inceleyin" in g.bolumler[0].etiket, g.bolumler[0].etiket)
 
 print(f"\n{gecen}/{toplam} H3-INC3 testi geçti")
 sys.exit(0 if gecen == toplam else 1)

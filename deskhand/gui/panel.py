@@ -232,8 +232,13 @@ class Panel(QObject):
     def _dur_kaydet(self, acik: bool):
         """The user's DUR on/off as the panel knows it: in memory AND in the panel's signed state (Secret Service), so
         a panel restart does not lose it (review INC3 B4). Wallet unusable → memory + the DUR file now, the signed
-        state as soon as the wallet can be written (_dur_koru). The user's own decision ends a closed-fail wait."""
+        state as soon as the wallet can be written (_dur_koru). The user's own decision ends a closed-fail wait: on →
+        the user's source replaces the panel's closed-fail one (added first: DUR never off in between); off → the
+        caller already lifted every source (guvenlik.dur_kapat("kullanici"))."""
         self._dur_kullanici = bool(acik)
+        if getattr(self, "_dur_kasa_bekliyor", False) and acik:
+            guvenlik.dur_ac(guvenlik.DUR_KULLANICI)
+            guvenlik.dur_kapat(guvenlik.DUR_KAPALI_BASARISIZ)
         self._dur_kasa_bekliyor = False
         kaydedildi = False
         try:
@@ -246,10 +251,14 @@ class Panel(QObject):
     DUR_KASA_YENIDEN_SN = 5.0
 
     def _dur_baslat(self):
-        """Panel start (B4): the user's DUR is the panel's own when the DUR file says "kullanici" OR the panel's
-        signed state says it was on (the agent may have killed the panel and deleted the file): put back.
-        The signed state cannot be read (locked wallet, no Secret Service; review INC4 B4/E4): closed-fail, the DUR is
-        ON until the wallet can be read; then the signed value applies (off → the DUR put here is lifted)."""
+        """Panel start (B4): the user's DUR is the panel's own when the DUR file holds the "kullanici" source OR the
+        panel's signed state says it was on (the agent may have killed the panel and deleted the file): put back.
+        The signed state cannot be read (locked wallet, unreadable / incomplete item; review INC4 B4/E4, INC5 N1):
+        closed-fail, the panel's OWN source "panel-kapali-basarisiz" is added whatever other source is on (an agent's
+        cli DUR placed before the restart does not suppress it: review INC5 P1) until the wallet can be read; then only
+        that source is removed when the signed value is off (a source someone else set stays: review INC5 O4/O5).
+        A closed-fail source left by an earlier panel is this panel's own (the label, not the pid, is the owner).
+        No Secret Service at all (not locked: absent) → a first start, no closed-fail (review INC5 Y10)."""
         self._dur_imzasiz = None
         self._dur_kasa_bekliyor = False
         self._dur_kasa_zaman = time.monotonic()
@@ -259,11 +268,14 @@ class Panel(QObject):
             kayit = liste_koruma.panel_dur_durumu()
         except Exception:  # noqa: BLE001 - wallet unusable: closed-fail below
             kayit = None
-        dosyada = guvenlik.dur_kaynagi() == "kullanici"
-        if kayit is None and not dosyada:
-            self._dur_kullanici = True
-            guvenlik.dur_ac("kullanici")
+        kaynaklar = guvenlik.dur_kaynaklari()
+        dosyada = guvenlik.DUR_KULLANICI in kaynaklar
+        if kayit is None:
+            guvenlik.dur_ac(guvenlik.DUR_KAPALI_BASARISIZ)
             self._dur_kasa_bekliyor = True
+            self._dur_kullanici = dosyada
+            if dosyada:
+                self._dur_imzasiz = True  # sign the user's DUR once the wallet can be written
             self._liste_uyari(_("Cüzdan okunamıyor; kullanıcının DUR kaydı doğrulanamadı. Güvenli tarafta DUR açık; "
                                 "cüzdan okununca panel imzalı kaydı uygular (kapalıysa DUR kalkar)."))
             return
@@ -271,6 +283,8 @@ class Panel(QObject):
         if self._dur_kullanici:
             self._dur_kaydet(True)
             self._dur_koru()
+        if guvenlik.DUR_KAPALI_BASARISIZ in kaynaklar:  # an earlier panel's closed-fail: the signed value decides
+            guvenlik.dur_kapat(guvenlik.DUR_KAPALI_BASARISIZ)
 
     def _dur_kasa_denetle(self):
         """Poll: a closed-fail DUR waits for the wallet; an unsigned DUR decision is signed once it can be written."""
@@ -286,15 +300,18 @@ class Panel(QObject):
                 kayit = liste_koruma.panel_dur_durumu()
                 if kayit is None:
                     return
-                self._dur_kasa_bekliyor = False
                 if kayit:
-                    self._dur_kullanici = True
+                    self._dur_kaydet(True)  # the signed record IS the user's earlier DUR: its source replaces ours
                     self._liste_uyari(_("Cüzdan okundu; panelin imzalı kaydında kullanıcının DUR'u açık, DUR sürüyor."))
                 else:
-                    self._dur_kullanici = False
-                    guvenlik.dur_kapat("kullanici")
-                    self._liste_uyari(_("Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Cüzdan okunamadığı için "
-                                        "açılan DUR kaldırıldı."))
+                    self._dur_kasa_bekliyor = False
+                    guvenlik.dur_kapat(guvenlik.DUR_KAPALI_BASARISIZ)  # ONLY the panel's own source
+                    if guvenlik.dur_acik():
+                        self._liste_uyari(_("Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Panelin koyduğu DUR "
+                                            "kaynağı kaldırıldı; başka bir kaynağın DUR'u sürüyor."))
+                    else:
+                        self._liste_uyari(_("Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Cüzdan okunamadığı "
+                                            "için açılan DUR kaldırıldı."))
                     if hasattr(self, "izleyici"):
                         self.izleyici.yenile()
             elif liste_koruma.panel_dur_sakla(bool(self._dur_imzasiz)):
@@ -303,14 +320,26 @@ class Panel(QObject):
             pass
 
     def _dur_koru(self):
-        """The user's DUR (set in this panel) vanished without the panel's Devam (a process deleted the file): put it
-        back and warn. Removing DUR is the user's decision only (CLI resume asks the panel: guvenlik.dur_kaldir_iste).
-        A user DUR set outside this panel (the file says "kullanici") becomes the panel's own (B4)."""
+        """The panel's DUR sources vanished without the panel's Devam (a process deleted or rewrote the file): put
+        each back with its OWN label (the user's → "kullanici", the closed-fail → "panel-kapali-basarisiz"; review
+        INC5 P1) and warn; the user's DUR is signed again. Removing DUR is the user's decision only (CLI resume asks
+        the panel: guvenlik.dur_kaldir_iste). A user DUR set outside this panel (source "kullanici") becomes the
+        panel's own (B4)."""
         self._dur_kasa_denetle()
-        if not getattr(self, "_dur_kullanici", False) and guvenlik.dur_kaynagi() == "kullanici":
+        kaynaklar = guvenlik.dur_kaynaklari()
+        if not getattr(self, "_dur_kullanici", False) and guvenlik.DUR_KULLANICI in kaynaklar:
             self._dur_kaydet(True)
-        if getattr(self, "_dur_kullanici", False) and not guvenlik.dur_acik():
-            guvenlik.dur_ac("kullanici")
+            kaynaklar = guvenlik.dur_kaynaklari()
+        eksik = []
+        if getattr(self, "_dur_kullanici", False) and guvenlik.DUR_KULLANICI not in kaynaklar:
+            eksik.append(guvenlik.DUR_KULLANICI)
+        if getattr(self, "_dur_kasa_bekliyor", False) and guvenlik.DUR_KAPALI_BASARISIZ not in kaynaklar:
+            eksik.append(guvenlik.DUR_KAPALI_BASARISIZ)
+        for k in eksik:
+            guvenlik.dur_ac(k)
+        if guvenlik.DUR_KULLANICI in eksik and getattr(self, "_dur_imzasiz", None) is None:
+            self._dur_imzasiz = True  # sign it again (the record may have been touched as well)
+        if eksik:
             self._liste_uyari(_("DUR anahtarı panel dışında kaldırıldı; geri konuldu (yalnız kullanıcı kaldırır)."))
 
     def _liste_degisti(self, *_a):

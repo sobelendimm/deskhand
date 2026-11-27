@@ -142,6 +142,7 @@ _DURUM: dict | None = None       # cached {"anahtar": bytes, "sayac": {tur: int}
 _DURUM_ZAMAN = 0.0
 _DURUM_NEDEN: str | None = None  # why there is no signed state (None = it worked, or no item was ever written)
 _DURUM_YOK_KESIN = False         # the key ring answered "no item" (only then can it be a first start)
+_SERVIS_YOK_KESIN = False        # there is no Secret Service at all (not locked: absent; review INC5 Y10)
 _DURUM_KILIT = threading.RLock()
 _DURUM_ONBELLEK_SN = 1.0
 
@@ -185,6 +186,28 @@ def _kasa_nesnesi():
                         return None
                     raise
 
+            def servis_yok_kesin(self) -> bool:
+                """True ONLY when there is definitely no Secret Service: python-secretstorage is not installed, or
+                the session bus answers that org.freedesktop.secrets is neither running nor activatable. A locked
+                wallet, no session bus, D-Bus errors and DESKHAND_ANAHTARLIK=kapali outside the test sandbox are
+                NOT "absent" (closed-fail)."""
+                if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali":
+                    return False
+                try:
+                    import secretstorage
+                except ImportError:
+                    return True
+                try:
+                    baglanti = secretstorage.dbus_init()
+                except Exception:  # noqa: BLE001 - no session bus: unknown, not absent
+                    return False
+                try:
+                    return not secretstorage.check_service_availability(baglanti)
+                except Exception:  # noqa: BLE001 - unknown
+                    return False
+                finally:
+                    baglanti.close()
+
             def yaz(self, veri: bytes) -> None:
                 if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali":
                     raise AnahtarYok(_("anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)"))
@@ -213,8 +236,8 @@ def _anahtar_unut() -> None:
     global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
     with _DURUM_KILIT:
         _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN = None, 0.0, None
-        global _DURUM_YOK_KESIN
-        _DURUM_YOK_KESIN = False
+        global _DURUM_YOK_KESIN, _SERVIS_YOK_KESIN
+        _DURUM_YOK_KESIN = _SERVIS_YOK_KESIN = False
 
 
 def _durum_coz(ham) -> dict | None:
@@ -223,7 +246,9 @@ def _durum_coz(ham) -> dict | None:
         k = bytes.fromhex(d["anahtar"])
         sayac = {t: int(v) for t, v in d.get("sayac", {}).items() if t in TUM and int(v) >= 0}
         son = {t: v for t, v in d.get("son", {}).items() if t in TUM and (v is None or isinstance(v, str))}
-        dur = d.get("dur") is True
+        dur = d.get("dur")
+        if not isinstance(dur, bool):
+            dur = None  # missing / wrong field: the user's DUR is unknown → closed-fail (review INC5 N1)
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return None
     return {"anahtar": k, "sayac": sayac, "son": son, "dur": dur} if len(k) == 32 else None
@@ -233,30 +258,39 @@ def _neden(e: Exception) -> str:
     return getattr(e, "neden", None) or _("Secret Service hatası")
 
 
-def _durum(olustur: bool = False) -> dict | None:
+def _durum(olustur: bool = False, bozugu_yenile: bool = False) -> dict | None:
     """The panel's signed state, or None: no item yet (first start), locked wallet, no Secret Service, any error.
-    olustur=True (panel only): a missing (or unreadable-content) item is created with a fresh key."""
+    olustur=True (panel only): a MISSING item is created with a fresh key. An item that exists but cannot be read
+    (corrupt content) is re-created ONLY with bozugu_yenile=True: the user's own DUR action (panel_dur_sakla). Any
+    automatic path leaves it as it is, so the user's DUR stays closed-fail ON (review INC5 N1)."""
     global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
     with _DURUM_KILIT:
         if _DURUM is not None and time.monotonic() - _DURUM_ZAMAN < _DURUM_ONBELLEK_SN:
             return _DURUM
-        global _DURUM_YOK_KESIN
+        global _DURUM_YOK_KESIN, _SERVIS_YOK_KESIN
         try:
             ham = _kasa_nesnesi().oku()
         except Exception as e:  # noqa: BLE001 - locked / no service / error / DESKHAND_ANAHTARLIK=kapali: no signed
             _DURUM, _DURUM_NEDEN, _DURUM_YOK_KESIN = None, _neden(e), False  # state, NEVER a first start
+            try:
+                _SERVIS_YOK_KESIN = bool(getattr(_kasa_nesnesi(), "servis_yok_kesin", lambda: False)())
+            except Exception:  # noqa: BLE001 - unknown: closed-fail
+                _SERVIS_YOK_KESIN = False
             return None
+        _SERVIS_YOK_KESIN = False
         _DURUM_YOK_KESIN = not ham  # the key ring answered: there is no item at all
         d = _durum_coz(ham) if ham else None
         if d is None and ham:
             _DURUM_NEDEN = _("panelin imzalı kaydı okunamadı (bozuk)")
         if d is None:
-            if not olustur:
+            if not olustur or (ham and not bozugu_yenile):
                 _DURUM = None
                 if not ham:
                     _DURUM_NEDEN = None
                 return None
-            d = {"anahtar": os.urandom(32), "sayac": {}, "son": {}}
+            # a missing item: a first start (no DUR record = off); a corrupt one re-made by the user's DUR action
+            # (panel_dur_sakla writes the user's value right after)
+            d = {"anahtar": os.urandom(32), "sayac": {}, "son": {}, "dur": False if not ham else None}
             if not _durum_kaydet(d):
                 return None
         _DURUM, _DURUM_ZAMAN = d, time.monotonic()
@@ -267,8 +301,9 @@ def _durum(olustur: bool = False) -> dict | None:
 
 def _durum_kaydet(d: dict) -> bool:
     global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
+    dur = d.get("dur")
     veri = json.dumps({"surum": 1, "anahtar": d["anahtar"].hex(), "sayac": d["sayac"], "son": d["son"],
-                       "dur": bool(d.get("dur"))}, ensure_ascii=False).encode("utf-8", "surrogateescape")
+                       "dur": dur if isinstance(dur, bool) else None}, ensure_ascii=False).encode("utf-8", "surrogateescape")
     with _DURUM_KILIT:
         try:
             _kasa_nesnesi().yaz(veri)
@@ -337,11 +372,12 @@ def _isaret_yaz(tur: str, metin: str | None) -> bool:
 
 def panel_dur_sakla(acik: bool) -> bool:
     """Panel only (review INC3 B4): keep "the user's DUR is on" in the panel's signed state, so that killing the panel,
-    deleting the DUR file and starting a new panel does not lift it. → stored (False: the wallet cannot be used)."""
-    d = _durum(True)
+    deleting the DUR file and starting a new panel does not lift it. → stored (False: the wallet cannot be used).
+    The user's DUR action is the only one that re-makes a corrupt item (review INC5 N1)."""
+    d = _durum(True, bozugu_yenile=True)
     if d is None:
         return False
-    if bool(d.get("dur")) == bool(acik):
+    if d.get("dur") is bool(acik):
         return True
     return _durum_kaydet({**d, "dur": bool(acik)})
 
@@ -349,17 +385,20 @@ def panel_dur_sakla(acik: bool) -> bool:
 def panel_dur_kayitli() -> bool:
     """The panel's signed state says the user's DUR is on (False: no / cannot be read)."""
     d = _durum(False)
-    return bool(d is not None and d.get("dur"))
+    return bool(d is not None and d.get("dur") is True)
 
 
 def panel_dur_durumu() -> bool | None:
     """The user's DUR as the panel's signed state records it: True / False, or None when it cannot be read (locked
-    wallet, no Secret Service, unreadable item: the caller fails closed; review INC4 B4). The key ring answering "no
-    item" is False (a first start; an item deleted while the wallet is open is outside the threat model)."""
+    wallet, unreadable / corrupt item, item without a DUR field: the caller fails closed; review INC4 B4, INC5 N1).
+    The key ring answering "no item", or no Secret Service at all (absent, not locked: review INC5 Y10), is False:
+    a first start. An item deleted while the wallet is open is outside the threat model (a process that can edit the
+    user's wallet)."""
     d = _durum(False)
     if d is not None:
-        return bool(d.get("dur"))
-    return False if _DURUM_YOK_KESIN else None
+        dur = d.get("dur")
+        return dur if isinstance(dur, bool) else None
+    return False if (_DURUM_YOK_KESIN or _SERVIS_YOK_KESIN) else None
 
 
 def isaret_dogrula(tur: str) -> tuple[str, str | None]:
@@ -454,17 +493,22 @@ def _dosyadaki(tur: str) -> str | None:
 # What the user approves is the list of ENTRIES the application applies, taken with the application's own parser
 # (guvenlik._kullanici_yasaklari / seviye_kurallari: str.splitlines, strip, '#' comments), never the raw text:
 #  - every entry on its own numbered line; blank and comment lines are folded into one marked line (they apply nothing);
-#  - control / bidi / zero-width / non-space separators / combining marks / lone surrogates → visible \u{XXXX}; a run of
-#    spaces → \u{0020}×N; a letter that is neither ASCII nor Latin-1/Latin Extended-A (Cyrillic е, Greek ο, fullwidth)
-#    and a very long entry are marked on an unnumbered line below it (a content line always carries its number);
+#  - every character that is not printable ASCII or a Turkish letter (çğıİöşüÇĞÖŞÜ) → visible \u{XXXX} AND a ⚠ note
+#    on an unnumbered line below it: control / bidi / zero-width / combining marks, look-alike letters (Cyrillic е),
+#    and look-alikes that are not letters (Roman numerals Ⅹ Ⅽ, mathematical digits 𝟐, U+2800, U+3002, fullwidth
+#    forms; review INC5 Y7/Y8); a run of spaces → \u{0020}×N; a very long entry is marked the same way (a content
+#    line always carries its number);
+#  - a run of blank and/or comment lines folds into ONE marked line (review INC5 Y9); a question longer than
+#    GOSTERIM_UST_SINIR entries or GOSTERIM_SATIR_SINIR shown lines cannot be answered Yes (read it in Settings);
 #  - with an approved value: per-entry difference (removed first); counts in a FIXED label outside the content;
 #  - without one: a fixed label says the comparison is impossible and that the list is ALL the entries (N);
 #  - the Yes is bound to the hash of the canonical entry lists (`Gosterim.iz`), handed to the dialog as a token and
 #    never read back from a widget (Qt normalises CR / NBSP / U+2029: review INC4 Y5).
 GOSTERIM_SURUM = 1
 GOSTERIM_UST_SINIR = 2000  # entries per question; above it the Yes is disabled (padding: unreadable question)
+GOSTERIM_SATIR_SINIR = 3 * GOSTERIM_UST_SINIR  # shown lines per question (entries + folded runs + ⚠ notes)
 UZUN_GIRIS = 160
-_KACIS_KAT = frozenset(("Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp", "Zs", "Mn", "Mc", "Me"))
+_GUVENLI_HARF = frozenset("çğıİöşüÇĞÖŞÜ")  # shown as they are: legitimate Turkish text is not marked
 _ISARET = {"+": "+", "-": "−", "~": "~", " ": " "}
 SORU_DEGISIKLIK = N_("Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı. Bu değişiklik "
                      "uygulansın mı? Siz yapmadıysanız Hayır deyin.")
@@ -478,13 +522,15 @@ ETIKET_FARK = N_("Onaylı kayda göre: {k} kaldırılan, {e} eklenen, {d} deği�
                  "önce listelenir.")
 ETIKET_FARK_VARSAYILAN = N_("Onaylı kayıt yok; varsayılan değere göre: {k} kaldırılan, {e} eklenen, {d} değişen "
                             "giriş; {s} giriş aynı.")
-ETIKET_ISARETLI = N_("Dikkat: {n} girişte görünmez, Latin dışı ya da çok uzun içerik var (⚠ satırları).")
-ETIKET_SINIR = N_("Giriş sayısı üst sınırı ({sinir}) aşıldı; bu soruya Evet verilemez.")
+ETIKET_ISARETLI = N_("Dikkat: {n} girişte görünmez, ASCII dışı ya da çok uzun içerik var (⚠ satırları).")
+ETIKET_SINIR = N_("Liste çok uzun (üst sınır {sinir} giriş, {satir} satır); bu soruya Evet verilemez. Listeyi "
+                  "Ayarlar'dan inceleyin.")
 
 
 def _kacis(metin: str) -> tuple[str, list[str]]:
-    """→ (visible text, notes): invisible / direction / combining characters as \\u{XXXX}, space runs counted,
-    look-alike letters noted."""
+    """→ (visible text, notes): every character that is neither printable ASCII nor a Turkish letter as \\u{XXXX},
+    each named in a note (review INC5 Y7/Y8: no look-alike or invisible character is shown raw or unmarked); runs of
+    spaces counted."""
     cikti: list[str] = []
     notlar: list[str] = []
     i = 0
@@ -498,18 +544,19 @@ def _kacis(metin: str) -> tuple[str, list[str]]:
             i = j
             continue
         o = ord(ch)
-        kat = unicodedata.category(ch)
-        if kat in _KACIS_KAT:
-            cikti.append(f"\\u{{{o:04X}}}")
-        else:
+        if 0x20 < o < 0x7F or ch in _GUVENLI_HARF:
             cikti.append(ch)
-            if o > 0x7F and kat.startswith("L") and not (0xC0 <= o <= 0x17F):
-                n = f"U+{o:04X} {unicodedata.name(ch, '?')}"
-                if n not in notlar:
-                    notlar.append(n)
+        else:
+            cikti.append(f"\\u{{{o:04X}}}")
+            n = f"U+{o:04X} {unicodedata.name(ch, '?')}"
+            if n not in notlar:
+                notlar.append(n)
         i += 1
-    return "".join(cikti), [_("Latin dışı / benzer görünen harf: {harfler}").format(harfler=", ".join(notlar[:6]))] \
-        if notlar else []
+    if not notlar:
+        return "".join(cikti), []
+    ek = "" if len(notlar) <= 6 else f" (+{len(notlar) - 6})"
+    return "".join(cikti), [_("görünmez ya da ASCII dışı karakter: {harfler}").format(
+        harfler=", ".join(notlar[:6]) + ek)]
 
 
 def _yasak_girisleri(metin: str | None) -> list[tuple[int, str | None]]:
@@ -586,8 +633,8 @@ def _katla(tur: str, metin: str | None) -> list[tuple[int, int, str]]:
         if g is not None:
             continue
         tur_ = "bos" if not satirlar[no - 1].strip() else "yorum"
-        if sonuc and sonuc[-1][1] == no - 1 and sonuc[-1][2] == tur_:
-            sonuc[-1] = (sonuc[-1][0], no, tur_)
+        if sonuc and sonuc[-1][1] == no - 1:  # blank and comment lines mixed: still ONE line (review INC5 Y9)
+            sonuc[-1] = (sonuc[-1][0], no, tur_ if sonuc[-1][2] == tur_ else "karisik")
         else:
             sonuc.append((no, no, tur_))
     return sonuc
@@ -596,8 +643,11 @@ def _katla(tur: str, metin: str | None) -> list[tuple[int, int, str]]:
 def _katlanan_satir(ilk: int, son: int, tur_: str) -> str:
     n = son - ilk + 1
     aralik = str(ilk) if n == 1 else f"{ilk}–{son}"
-    return f"{'':>9}⋯ " + (_("{n} boş satır ({aralik}) katlandı").format(n=n, aralik=aralik) if tur_ == "bos" else
-                           _("{n} yorum satırı ({aralik}) uygulanmaz").format(n=n, aralik=aralik))
+    if tur_ == "bos":
+        return f"{'':>9}⋯ " + _("{n} boş satır ({aralik}) katlandı").format(n=n, aralik=aralik)
+    if tur_ == "yorum":
+        return f"{'':>9}⋯ " + _("{n} yorum satırı ({aralik}) uygulanmaz").format(n=n, aralik=aralik)
+    return f"{'':>9}⋯ " + _("⟨boş/yorum ×{n}⟩ ({aralik}) uygulanmaz").format(n=n, aralik=aralik)
 
 
 def _deger_eki(tur: str, deger) -> str:
@@ -660,10 +710,11 @@ def gosterim(soru: str, parcalar: list[tuple[str, str | None, str | None, str | 
     kanon = [[t, rt, kanonik(t, y), None if rt is None else kanonik(t, r)] for t, y, r, rt in parcalar]
     iz = hashlib.sha256(json.dumps(["deskhand-onay-gosterim", GOSTERIM_SURUM, kanon], ensure_ascii=False)
                         .encode("utf-8", "surrogateescape")).hexdigest()
-    kapali = sum(b.giris for b in bolumler) > GOSTERIM_UST_SINIR
+    kapali = (sum(b.giris for b in bolumler) > GOSTERIM_UST_SINIR or
+              sum(len(b.satirlar) for b in bolumler) > GOSTERIM_SATIR_SINIR)
     if kapali:
         for b in bolumler:
-            b.etiket += " " + _(ETIKET_SINIR).format(sinir=GOSTERIM_UST_SINIR)
+            b.etiket += " " + _(ETIKET_SINIR).format(sinir=GOSTERIM_UST_SINIR, satir=GOSTERIM_SATIR_SINIR)
     duz = soru + "".join(f"\n\n[{b.ayar}]\n{b.etiket}\n" + "\n".join(b.satirlar) for b in bolumler)
     g = Gosterim(duz)
     g.soru, g.bolumler, g.iz, g.evet_kapali = soru, bolumler, iz, kapali
