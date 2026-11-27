@@ -518,7 +518,7 @@ app.processEvents()
 QTest.mouseClick(on, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(480, 270))
 kontrol("Devral kapalıyken girdi gönderilmez", arka.girdiler == [])
 a.b_devral.setChecked(True)
-kontrol("Devral → devral dosyası", os.path.exists(D.devral_yolu()) and a.b_devral.text() == "Bırak")
+kontrol("Devral → devral dosyası", os.path.exists(D.devral_yolu()) and a.b_devral.text() == "Geri ver")
 kontrol("Devral dosyası sahibi bu panel (pid + başlangıç) → devral_var", D.devral_var() and
         open(D.devral_yolu()).read().split()[:2] == ["panel", str(os.getpid())])
 r = on.hedef_rect()
@@ -526,7 +526,8 @@ QTest.mouseClick(on, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
                  QPoint(int(r.x() + r.width() * 0.25), int(r.y() + r.height() * 0.5)))
 g = arka.girdiler[0] if arka.girdiler else SahteGirdi()
 kontrol("tıklama → mouseto (ölçekli) + buttondown/up left",
-        len(g.satirlar) >= 3 and g.satirlar[0].startswith("mouseto 0.25") and " 0.5" in g.satirlar[0] and
+        len(g.satirlar) >= 3 and abs(float(g.satirlar[0].split()[1]) - 0.25) < 0.003 and
+        abs(float(g.satirlar[0].split()[2]) - 0.5) < 0.003 and
         "buttondown left" in g.satirlar and g.satirlar[-1] == "buttonup left", str(g.satirlar))
 kontrol("Devral girdisi denetle=None (insan)", g.denetle is None)
 g.satirlar.clear()

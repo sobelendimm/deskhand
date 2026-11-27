@@ -638,6 +638,9 @@
  "Arka plan masaüstü türü": [
   "doktor.py:441"
  ],
+ "Arka plan masaüstü — büyük görünüm": [
+  "gui/sekmeler/arka_plan.py:37"
+ ],
  "Arka plan masaüstünü siz kullanıyorsunuz (Devral)": [
   "gui/metinler.py:28"
  ],
@@ -663,6 +666,7 @@
  "Ayrıntı": [
   "gui/gorev.py:38",
   "gui/metinler.py:120",
+  "gui/sekmeler/arka_plan.py:45",
   "gui/sekmeler/etkinlik.py:20",
   "guvenlik.py:1620"
  ],
@@ -797,6 +801,9 @@
  ],
  "Bu, bir ajanın kendi masaüstü: burada yalnız izlersiniz. Devral varsayılan masaüstünde ya da bir onay devrinde açılır.": [
   "gui/metinler.py:359"
+ ],
+ "Büyüt": [
+  "gui/sekmeler/arka_plan.py:35"
  ],
  "Bırak": [
   "gui/metinler.py:87",
@@ -1144,6 +1151,9 @@
  "Doğrulanmamış uygulama girdisi ({neden})": [
   "uygulama.py:575"
  ],
+ "Duraklat / Salt okunur": [
+  "gui/sekmeler/arka_plan.py:40"
+ ],
  "Durdur": [
   "gui/metinler.py:83",
   "gui/metinler.py:270"
@@ -1251,6 +1261,9 @@
   "gui/metinler.py:117",
   "guvenlik.py:1616"
  ],
+ "Fare ve klavyeniz önizleme üzerinden arka plan masaüstüne gider; bu sırada Claude bekler. DUR açıkken hiçbir girdi gönderilmez.": [
+  "gui/sekmeler/arka_plan.py:29"
+ ],
  "Fare ve klavyeniz önizleme üzerinden arka plan masaüstüne gider; bu sırada ajan bekler. DUR açıkken girdi gönderilmez.": [
   "gui/metinler.py:88"
  ],
@@ -1299,6 +1312,9 @@
  ],
  "Geri al": [
   "gui/metinler.py:188"
+ ],
+ "Geri ver": [
+  "gui/sekmeler/arka_plan.py:28"
  ],
  "Gerçek ekran": [
   "doktor.py:100",
@@ -1384,7 +1400,8 @@
   "gui/metinler.py:333"
  ],
  "Görevi durdur": [
-  "gui/gorev.py:29"
+  "gui/gorev.py:29",
+  "gui/sekmeler/arka_plan.py:38"
  ],
  "Görevi hemen durdurur. Görünmez masaüstü açık kalır.": [
   "gui/metinler.py:271"
@@ -1687,6 +1704,18 @@
  ],
  "Komutlar (koordinatlar pencereye göre, piksel; <kimlik> yerine tek pencereye uyan ad da verilebilir;\n<kimlik> = \"ekran\" (masaüstü kipi): tüm ekran — panel, masaüstü, menüler, başlatıcı; okuma odağı çalmaz,\nklavye o an etkin pencereye gider ve ona kilitlenir, fare imlecin altındaki pencereyi denetler).\nParantezdeki Türkçe komut adları ve Türkçe seçenekler (--baslik, --bolge, --sure …) de çalışır:": [
   "cli.py:55"
+ ],
+ "Kontrol alınamadı: geçici dosya yazılamadı (disk dolu olabilir). Biraz sonra yeniden deneyin.": [
+  "gui/sekmeler/arka_plan.py:32"
+ ],
+ "Kontrol sizde — Claude bekliyor": [
+  "gui/sekmeler/arka_plan.py:33"
+ ],
+ "Kontrol sizde — DUR açık: girdileriniz gönderilmiyor": [
+  "gui/sekmeler/arka_plan.py:34"
+ ],
+ "Kontrolü al": [
+  "gui/sekmeler/arka_plan.py:27"
  ],
  "Kısayol etkin: {tus}": [
   "gui/metinler.py:242"
@@ -2040,6 +2069,9 @@
  "Tarayıcıyı kapatıp Deskhand ile yeniden aç (open_app / ac: Firefox GNOME_ACCESSIBILITY=1, Chromium --force-renderer-accessibility ile başlatılır). Ön planda tarayıcı zaten açıksa yeni açılış çalışan sürece katılır: önce onu kapat. Kalıcı çözüm: deskhand doctor": [
   "mcp_sunucu.py:1212"
  ],
+ "Teknik ayrıntı (destek için): {tur}": [
+  "gui/sekmeler/arka_plan.py:46"
+ ],
  "Temel": [
   "gui/metinler.py:164"
  ],
@@ -2186,6 +2218,12 @@
  ],
  "YOK": [
   "masaustu.py:1396"
+ ],
+ "Yakında: Claude'u duraklatır ya da masaüstünü yalnız izlenir yapar.": [
+  "gui/sekmeler/arka_plan.py:41"
+ ],
+ "Yakında: Claude'un bu masaüstündeki işini durdurur.": [
+  "gui/sekmeler/arka_plan.py:39"
  ],
  "Yalnız DUR": [
   "gui/metinler.py:62"
@@ -2676,6 +2714,9 @@
  ],
  "bir pencere kapatıldı": [
   "gui/insan_metni.py:55"
+ ],
+ "bir sonraki karede yeniden denenir": [
+  "gui/sekmeler/arka_plan.py:44"
  ],
  "bir uygulama açıldı": [
   "gui/insan_metni.py:53"
@@ -5949,6 +5990,9 @@
  "Önce görevi yazın: kutuya ne yapılmasını istediğinizi yazıp yeniden Başlat'a basın.": [
   "gui/gorev.py:28"
  ],
+ "Önizleme alınamadı: arka plan masaüstüne ulaşılamıyor. Masaüstü kapanmış olabilir; Durdur'a, sonra Başlat'a basın.": [
+  "gui/sekmeler/arka_plan.py:42"
+ ],
  "Önizleme gizlendi: yasak pencereler denetlenemedi ({hata})": [
   "gui/metinler.py:361"
  ],
@@ -5957,6 +6001,12 @@
  ],
  "Önizleme yok: {hata}": [
   "gui/metinler.py:93"
+ ],
+ "Önizlemeye tıklayıp yazabilirsiniz. Bitince Geri ver'e basın.": [
+  "gui/sekmeler/arka_plan.py:31"
+ ],
+ "Önizlemeyi ayrı, büyük bir pencerede açar. Gizli tutulan pencereler orada da karartılır.": [
+  "gui/sekmeler/arka_plan.py:36"
  ],
  "Özet: {tamam} tamam, {uyari} uyarı, {eksik} eksik zorunlu bağımlılık": [
   "doktor.py:521"

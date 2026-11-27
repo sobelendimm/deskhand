@@ -132,7 +132,7 @@ kontrol("tepsi uyarısı: tek bildirim (seyreltildi), metin hata özetini içeri
         "BILDIRIM 1" in c and "OSError" in c, c)
 kontrol("istisna stderr'e iz olarak yazıldı", "No space left on device" in r.stderr and "Traceback" in r.stderr)
 kontrol("istisnadan sonra DUR düğmesi çalışıyor", "DUR True" in c, c)
-kontrol("Devral dosyası yazılamadı → Devral kapalı kaldı + not gösterildi", "DEVRAL False Devral açılamadı" in c, c)
+kontrol("Devral dosyası yazılamadı → Devral kapalı kaldı + not gösterildi", "DEVRAL False Kontrol alınamadı" in c, c)
 sat = next((s for s in c.splitlines() if s.startswith("GUNLUK")), "")
 kontrol("günlük: iki slot hatası + iş parçacığı hatası + Devral hatası", sat == "GUNLUK 2 1 True", sat)
 
