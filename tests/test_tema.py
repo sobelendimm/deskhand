@@ -1,11 +1,13 @@
 """Tasarım token'ları → Qt teması köprüsü (deskhand/gui/tema): tokens.json → QPalette + QSS.
 
-Denetlenen: şema (bilinen anahtarlar, geçerli renk, geçerli QPalette rolü), açık kip bugünkü Fusion paletini birebir
-üretir, koyu kip koyu, sistem kipi paleti değiştirmez, eksik/bozuk anahtar → varsayılan, metin/arka plan kontrastı
-≥ 4,5:1 (WCAG AA), panel tema_uygula'yı çağırır. Ekransız (offscreen), gerçek ~/.config yazılmaz.
+Denetlenen: şema (bilinen anahtarlar, geçerli renk, geçerli QPalette rolü), açık/koyu kip onaylı tasarım A + Renk 1
+değerlerini üretir (tokens.json = kod varsayılanı), sistem kipi sistem paleti koyuysa koyu, açıksa açık token'ları
+seçer, eksik/bozuk anahtar → varsayılan, metin/arka plan + soluk + devre dışı etiket kontrastı ≥ kontrast_min
+(WCAG AA), QSS renkleri token'dan, panel tema_uygula'yı çağırır. Ekransız (offscreen), gerçek ~/.config yazılmaz.
 Çalıştır: python3 tests/test_tema.py"""
 import json
 import os
+import re
 import sys
 
 os.environ["QT_QPA_PLATFORM"] = "offscreen"
@@ -66,26 +68,38 @@ kontrol("şema denetimi bozuk rengi yakalar", uret.sema_denetle({"durum": {"dur"
 
 T = uret.yukle()
 
-# ---------------------------------------------------------------- açık = bugünkü Fusion paleti (birebir)
+# ---------------------------------------------------------------- açık = onaylı Renk 1 açık
+kontrol("tokens.json = kod varsayılanı (dosya silinse de aynı görünüm)",
+        {k: v for k, v in ham.items() if k != "$aciklama"} == uret.VARSAYILAN)
+kontrol("eşikler token'da: min_tiklama_hedefi_px 24, kontrast_min 4,5",
+        ham.get("min_tiklama_hedefi_px") == 24 and ham.get("kontrast_min") == 4.5)
 p = uret.palet_uret(T, "acik")
-farklar = [(g.name, r.name) for g in (G.Active, G.Inactive, G.Disabled) for r in ROLLER
-           if p.color(g, r).rgba() != STD.color(g, r).rgba()]
-kontrol("açık palet = bugünkü Fusion paleti (tüm grup × rol)", not farklar, str(farklar[:6]))
+farklar = [r for r, v in T["renk"]["acik"]["palet"].items() if p.color(G.Active, R[r]).name() != v.lower()]
+kontrol("açık palet: her rol token'dan (Active)", not farklar, str(farklar))
+kontrol("açık: pencere arka planı açık", p.color(R.Window).lightness() > 200, p.color(R.Window).name())
+kontrol("açık: devre dışı metin token'dan", p.color(G.Disabled, R.WindowText).name()
+        == T["renk"]["acik"]["devre_disi"]["WindowText"].lower())
 
 # ---------------------------------------------------------------- koyu
 pk = uret.palet_uret(T, "koyu")
 kontrol("koyu: pencere arka planı koyu", pk.color(R.Window).lightness() < 100, pk.color(R.Window).name())
 kontrol("koyu: metin açık", pk.color(R.WindowText).lightness() > 180, pk.color(R.WindowText).name())
 kontrol("koyu: palet token'dan gelir", pk.color(R.Window).name() == T["renk"]["koyu"]["palet"]["Window"].lower())
-kontrol("sistem: palet üretilmez", uret.palet_uret(T, "sistem") is None)
+kontrol("sistem_kipi: koyu palet → koyu", uret.sistem_kipi(pk) == "koyu")
+kontrol("sistem_kipi: açık palet → acik", uret.sistem_kipi(p) == "acik")
+kontrol("sistem_kipi: Fusion standart (bugünkü ekransız) → acik", uret.sistem_kipi(STD) == "acik")
 
 # ---------------------------------------------------------------- kontrast (WCAG AA, metin/arka plan)
 CIFTLER = [("WindowText", "Window"), ("Text", "Base"), ("ButtonText", "Button"), ("ToolTipText", "ToolTipBase"),
-           ("Text", "AlternateBase")]
+           ("Text", "AlternateBase"), ("PlaceholderText", "Window"), ("PlaceholderText", "Base"),
+           ("HighlightedText", "Highlight"), ("Link", "Base")]
+KMIN = T["kontrast_min"]
 for kip, pal in (("acik", p), ("koyu", pk)):
     for on, arka in CIFTLER:
         o = uret.kontrast(pal.color(G.Active, R[on]), pal.color(G.Active, R[arka]))
-        kontrol(f"{kip}: {on}/{arka} kontrastı ≥ 4,5", o >= 4.5, f"{o:.2f}")
+        kontrol(f"{kip}: {on}/{arka} kontrastı ≥ {KMIN}", o >= KMIN, f"{o:.2f}")
+    o = uret.kontrast(pal.color(G.Disabled, R.WindowText), pal.color(G.Active, R.Window))
+    kontrol(f"{kip}: devre dışı etiket (soluk not) / Window ≥ {KMIN}", o >= KMIN, f"{o:.2f}")
 d = T["durum"]
 o = uret.kontrast(QColor(d["dur_metin"]), QColor(d["dur"]))
 kontrol("DUR düğmesi metin/arka plan kontrastı ölçülür (bilgi)", o > 1, f"{o:.2f}")
@@ -110,6 +124,10 @@ kontrol("tokens.json yoksa varsayılan", uret.yukle(eksik_yol) == uret.VARSAYILA
 q = uret.qss_uret(T, "acik")
 kontrol("QSS: DUR düğmesi rengi token'dan", T["durum"]["dur"].lower() in q.lower(), q[:200])
 kontrol("QSS: köşe token'dan", f"border-radius: {T['kose']['dugme']}px" in q)
+qss_renk = {c.lower() for c in re.findall(r"#[0-9a-fA-F]{3,8}\b", q)}
+token_renk = {v.lower() for v in T["durum"].values()}
+kontrol("QSS: bütün renkler token'dan (QSS_RENK)", qss_renk <= token_renk, str(qss_renk - token_renk))
+kontrol("QSS: DUR üzerinde rengi token'dan", T["durum"]["dur_uzerinde"].lower() in q.lower())
 kontrol("QSS: açık ve koyu aynı yapıda üretilir", uret.qss_uret(T, "koyu").count("{") == q.count("{"))
 try:
     uret.qss_uret(T, "mor")
@@ -118,13 +136,17 @@ except ValueError:
     kontrol("bilinmeyen kip reddedilir", True)
 
 # ---------------------------------------------------------------- tema_uygula
-tema.tema_uygula(app, "sistem")
-kontrol("tema_uygula(sistem) paleti değiştirmez", app.palette() == STD)
+tema.tema_uygula(app, "sistem")  # ekransız Fusion = açık sistem
+kontrol("tema_uygula(sistem) açık sistemde açık token'lar",
+        app.palette().color(R.Window).name() == T["renk"]["acik"]["palet"]["Window"].lower())
 tema.tema_uygula(app, "koyu")
 kontrol("tema_uygula(koyu) koyu palet", app.palette().color(R.Window).lightness() < 100)
+tema.tema_uygula(app, "sistem")  # uygulama paleti koyu (KDE BreezeDark karşılığı) → koyu token'lar
+kontrol("tema_uygula(sistem) koyu sistemde koyu token'lar",
+        app.palette().color(R.Window).name() == T["renk"]["koyu"]["palet"]["Window"].lower())
 tema.tema_uygula(app, "acik")
-kontrol("tema_uygula(acik) bugünkü palet", all(app.palette().color(g, r).rgba() == STD.color(g, r).rgba()
-                                              for g in (G.Active, G.Inactive, G.Disabled) for r in ROLLER))
+kontrol("tema_uygula(acik) açık palet",
+        app.palette().color(R.Window).name() == T["renk"]["acik"]["palet"]["Window"].lower())
 kontrol("tema_uygula QSS'i uygular", app.styleSheet() == uret.qss_uret(T, "acik"))
 
 # ---------------------------------------------------------------- panel bağlantısı

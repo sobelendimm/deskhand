@@ -39,9 +39,6 @@ deskhand/gozlem.py:B905
 deskhand/gui/ayar.py:B009
 deskhand/gui/ayar.py:B009
 deskhand/gui/durum.py:F401
-deskhand/gui/pencere.py:B008
-deskhand/gui/pencere.py:B008
-deskhand/gui/pencere.py:SIM102
 deskhand/gui/saglik.py:B905
 deskhand/gui/saglik.py:SIM905
 deskhand/guvenlik.py:E741

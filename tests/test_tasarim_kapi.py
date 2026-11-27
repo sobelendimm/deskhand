@@ -82,7 +82,13 @@ kontrol("eşik: aralık birimi = aralık değerlerinin EBOB'u",
 kontrol("eşik: yazı ölçeği temel × yazi.*_olcek",
         any(abs(p - TEMEL * HAM["yazi"]["baslik_olcek"]) < 1e-6 for p in E["yazi_pt"]), str(E["yazi_pt"]))
 kontrol("eşik: palet token renklerini içerir", HAM["durum"]["dur"].lower() in E["palet"])
-kontrol("eşik: kontrast alt sınırı 4,5", E["kontrast_min"] == 4.5)
+kontrol("eşik: kontrast alt sınırı tokens'tan (4,5)", E["kontrast_min"] == HAM["kontrast_min"] == 4.5)
+kontrol("eşik: tokens'ta eşik yoksa token şeması varsayılanı",
+        (K.esikler({}, TEMEL)["hedef_min"], K.esikler({}, TEMEL)["kontrast_min"])
+        == (uret.VARSAYILAN["min_tiklama_hedefi_px"], uret.VARSAYILAN["kontrast_min"]))
+kontrol("eşik: kontrast_min değişince eşik değişir", K.esikler({**HAM, "kontrast_min": 7}, TEMEL)["kontrast_min"] == 7)
+kontrol("diyalog örnek istekleri tek kaynak (_gorsel.diyalog_istekleri)",
+        not hasattr(K, "_diyalog_istekleri") and list(G.diyalog_istekleri()) == list(G.DIYALOGLAR))
 
 # ---------------------------------------------------------------- temiz ağaç
 temiz = kap(QLabel("Merhaba"), temiz_dugme())

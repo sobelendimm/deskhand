@@ -5,6 +5,7 @@ Kütüphane (testler içe aktarır; Qt/deskhand İÇE AKTARMAZ):
   cek(cikti, varyant)          bir varyantın ekranlarını AYRI süreçte (sabit ortam, offscreen, Fusion) PNG'ye çeker
   kiyasla(a, b, fark_yol)      birebir piksel kıyası (eşik 0) → fark piksel sayısı (-1: boyut farklı); fark varsa
                                fark_yol'a kırmızı işaretli fark PNG'si yazar
+  diyalog_istekleri(s)         onay diyaloğu örnek istekleri (görsel taban + tasarım kapısı ortak)
   ihlaller(ogeler)             AT-SPI öğe listesinden kural ihlalleri (adsız düğme/giriş, boş ad, hedef < 24×24,
                                odak alamayan etkileşimli öge)
   anahtar(ihlal)               ihlalin koordinatsız kimliği (bilinen listesi için)
@@ -33,7 +34,20 @@ VARYANTLAR = [
     ("tr-acik-1.0-dur", "tr", "acik", "1.0", "dur", True),
 ]
 DIYALOGLAR = ("odeme", "tus", "devir")
-HEDEF_MIN = 24  # tıklama hedefi alt sınırı (px; WCAG 2.5.8)
+TOKENS = os.path.join(KOK, "deskhand", "gui", "tema", "tokens.json")
+
+
+def _token_hedef_min() -> int:
+    """Tıklama hedefi alt sınırı tokens.json'dan (min_tiklama_hedefi_px; yoksa WCAG 2.5.8 = 24 px)."""
+    try:
+        with open(TOKENS, encoding="utf-8") as f:
+            v = json.load(f).get("min_tiklama_hedefi_px", 24)
+    except (OSError, ValueError):
+        v = 24
+    return int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else 24
+
+
+HEDEF_MIN = _token_hedef_min()
 DUGME = ("push button", "button", "toggle button", "check box", "radio button", "menu item", "page tab")
 GIRIS = ("text", "entry", "password text", "spin button", "combo box", "editbar")
 
@@ -108,6 +122,21 @@ def ihlaller(ogeler: list[dict]) -> list[dict]:
     return out
 
 
+def diyalog_istekleri(s: float = SABIT_SAAT) -> dict:
+    """Onay diyaloğu örnek istekleri (DIYALOGLAR sırasıyla; görsel taban + tasarım kapısı ortak). deskhand.onay
+    işlev içinde içe aktarılır (modül Qt/deskhand içe aktarmaz)."""
+    from deskhand import onay
+    return {
+        "odeme": {"id": "a1", "eylem": "Düğmeye tıkla: “Öde”", "hedef": "Trendyol — Sepetim — Firefox",
+                  "masaustu": "arka", "masa": "", "ayrinti": "HASSAS düğme ('öde' ← ['Öde', 'Siparişi tamamla'])",
+                  "zaman": s, "son_zaman": s + 118, "pid": 4242},
+        "tus": {"id": "a2", "eylem": "Riskli tuş: ctrl+w", "hedef": "Belge — KWrite", "masaustu": "ekran",
+                "ayrinti": "pencere kapatma kısayolu\ntuş: ctrl+w", "zaman": s, "son_zaman": s + 100},
+        "devir": {"id": "a3", "tur": onay.TUR_DEVIR, "eylem": "CAPTCHA", "hedef": "Giriş — Firefox",
+                  "masaustu": "arka", "zaman": s, "son_zaman": s + 300},
+    }
+
+
 def anahtar(i: dict) -> str:
     """Koordinatsız, sekmeden bağımsız kimlik: kural | rol | ad | ata zinciri (rol:ad; sekme sayfası zincirde)."""
     return f"{i['kural']}|{i['rol']}|{i['ad']}|{i['yol']}"
@@ -115,19 +144,14 @@ def anahtar(i: dict) -> str:
 
 # =========================================================================== alt süreç kipleri
 def _app(tema: str):
-    from PyQt6.QtGui import QColor, QPalette
+    """Fusion + panel teması (tokens.json; gui.tema.tema_uygula) — panelin kendi tema_uygula("sistem") çağrısı bu
+    paletin koyu/açık oluşuna göre aynı kipi seçer."""
     from PyQt6.QtWidgets import QApplication
+
+    from deskhand.gui.tema import tema_uygula
     app = QApplication([])
     app.setStyle("Fusion")
-    if tema == "koyu":
-        p = QPalette()
-        R = QPalette.ColorRole
-        for r, c in ((R.Window, "#31363b"), (R.WindowText, "#eff0f1"), (R.Base, "#232629"),
-                     (R.AlternateBase, "#31363b"), (R.Text, "#eff0f1"), (R.Button, "#31363b"),
-                     (R.ButtonText, "#eff0f1"), (R.Highlight, "#3daee9"), (R.HighlightedText, "#ffffff"),
-                     (R.ToolTipBase, "#31363b"), (R.ToolTipText, "#eff0f1"), (R.PlaceholderText, "#7f8c8d")):
-            p.setColor(r, QColor(c))
-        app.setPalette(p)
+    tema_uygula(app, tema)
     return app
 
 
@@ -213,18 +237,8 @@ def _kip_diyalog(cikti, dil):
     os.environ["DESKHAND_DIL"] = dil
     os.makedirs(cikti, exist_ok=True)
     app = _app("acik")
-    from deskhand import onay
     from deskhand.gui.onay_diyalog import OnayDiyalog
-    s = SABIT_SAAT
-    istekler = {
-        "odeme": {"id": "a1", "eylem": "Düğmeye tıkla: “Öde”", "hedef": "Trendyol — Sepetim — Firefox",
-                  "masaustu": "arka", "masa": "", "ayrinti": "HASSAS düğme ('öde' ← ['Öde', 'Siparişi tamamla'])",
-                  "zaman": s, "son_zaman": s + 118, "pid": 4242},
-        "tus": {"id": "a2", "eylem": "Riskli tuş: ctrl+w", "hedef": "Belge — KWrite", "masaustu": "ekran",
-                "ayrinti": "pencere kapatma kısayolu\ntuş: ctrl+w", "zaman": s, "son_zaman": s + 100},
-        "devir": {"id": "a3", "tur": onay.TUR_DEVIR, "eylem": "CAPTCHA", "hedef": "Giriş — Firefox",
-                  "masaustu": "arka", "zaman": s, "son_zaman": s + 300},
-    }
+    istekler = diyalog_istekleri()
     for ad in DIYALOGLAR:
         d = OnayDiyalog(istekler[ad], yanitla=lambda k, v: True, istek_var=lambda: True, kurma_ms=0,
                         saat=lambda: SABIT_SAAT)

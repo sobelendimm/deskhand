@@ -1,7 +1,8 @@
 """Tasarım token'ları (tokens.json) → QPalette + QSS.
 
 tokens.json tek kaynaktır; burada yalnız güvenlik ağı olarak VARSAYILAN durur (dosya yok/bozuk ya da anahtar eksikse
-bugünkü görünüm). Kip: "acik" | "koyu" | "sistem" (sistem = platform paleti; yalnız QSS uygulanır).
+onaylı görünüm). Kip: "acik" | "koyu" | "sistem" (sistem = uygulamanın o anki paleti koyuysa "koyu", açıksa "acik"
+token değerleri; KDE'de BreezeDark → koyu).
 """
 from __future__ import annotations
 
@@ -20,22 +21,35 @@ _ROLLER = {r.name: r for r in QPalette.ColorRole if r != QPalette.ColorRole.NCol
 _PALET_BOLUMLERI = ("palet", "devre_disi")
 _log = logging.getLogger(__name__)
 
-# Bugünkü görünüm (27 Kas). "acik" paleti boş = stilin standart paleti (Fusion, bugün panelin offscreen/temasız
-# görünümü); "koyu" = Breeze koyu (UX denetimi koyu çekimleri).
+# Onaylı tasarım A + Renk 1 (UX-D0, 27 Kas; tokens.json sürüm 2 ile aynı). Güvenlik ağı: dosya yok/bozuksa da bu görünüm.
+_ACIK = {"zemin": "#eff0f1", "yuzey": "#fcfcfc", "yuzey2": "#e3e5e7", "cizgi": "#d0d3d6", "kenar": "#7d858c",
+         "metin": "#232629", "soluk": "#566069", "vurgu": "#1b6ea8", "vurgu_metin": "#ffffff"}
+_KOYU = {"zemin": "#31363b", "yuzey": "#232629", "yuzey2": "#3b4045", "cizgi": "#4d5359", "kenar": "#8f979e",
+         "metin": "#eff0f1", "soluk": "#adb4ba", "vurgu": "#3daee9", "vurgu_metin": "#0b1823"}
+
+
+def _renk_kipi(r: dict) -> dict:
+    """Tasarım rengi (renk1) → QPalette rolleri (eşleme tokens.json $aciklama'da)."""
+    return {"palet": {
+        "Window": r["zemin"], "WindowText": r["metin"], "Base": r["yuzey"], "AlternateBase": r["zemin"],
+        "Text": r["metin"], "PlaceholderText": r["soluk"], "Button": r["yuzey2"], "ButtonText": r["metin"],
+        "Light": r["yuzey"] if r is _ACIK else r["yuzey2"], "Midlight": r["cizgi"], "Mid": r["cizgi"],
+        "Dark": r["kenar"], "Shadow": r["kenar"], "Highlight": r["vurgu"], "HighlightedText": r["vurgu_metin"],
+        "Accent": r["vurgu"], "Link": r["vurgu"], "LinkVisited": r["vurgu"], "ToolTipBase": r["yuzey"],
+        "ToolTipText": r["metin"],
+    }, "devre_disi": {"WindowText": r["soluk"], "Text": r["soluk"], "ButtonText": r["soluk"],
+                      "Highlight": r["cizgi"], "Accent": r["cizgi"]}}
+
+
 VARSAYILAN: dict = {
-    "surum": 1,
-    "renk": {
-        "acik": {"palet": {}, "devre_disi": {}},
-        "koyu": {"palet": {
-            "Window": "#31363b", "WindowText": "#eff0f1", "Base": "#232629", "AlternateBase": "#31363b",
-            "Text": "#eff0f1", "PlaceholderText": "#7f8c8d", "Button": "#31363b", "ButtonText": "#eff0f1",
-            "Highlight": "#3daee9", "HighlightedText": "#ffffff", "ToolTipBase": "#31363b", "ToolTipText": "#eff0f1",
-        }, "devre_disi": {}},
-    },
+    "surum": 2,
+    "min_tiklama_hedefi_px": 24,  # WCAG 2.5.8
+    "kontrast_min": 4.5,          # WCAG 1.4.3
+    "renk": {"acik": _renk_kipi(_ACIK), "koyu": _renk_kipi(_KOYU)},
     "durum": {
         "bos": "#8a8f98", "ekran": "#e8590c", "arka": "#1c7ed6", "dur": "#e03131", "dur_metin": "#ffffff",
-        "rozet": "#fab005", "basari": "#2f9e44", "hata": "#e03131", "uyari": "#e8a317", "soluk": "#8a8f98",
-        "tepsi_on": "#ffffff", "tepsi_cizgi": "#2b2b2b",
+        "dur_uzerinde": "#fb3737", "rozet": "#fab005", "basari": "#2f9e44", "hata": "#e03131", "uyari": "#e8a317",
+        "soluk": "#8a8f98", "tepsi_on": "#ffffff", "tepsi_cizgi": "#2b2b2b",
     },
     "yazi": {"aile": None, "baslik_olcek": 1.08, "durum_olcek": 1.2, "diyalog_soru_olcek": 1.25,
              "kalin_agirlik": 700},
@@ -129,12 +143,21 @@ def _kip_denetle(kip: str) -> None:
         raise ValueError(f"bilinmeyen tema kipi: {kip!r} (beklenen: {', '.join(KIPLER)})")
 
 
-def palet_uret(tokens: dict, kip: str, temel: QPalette | None = None) -> QPalette | None:
-    """kip için QPalette; "sistem" → None (platform paleti korunur). Verilmeyen roller temel paletten (varsayılan:
+def sistem_kipi(palet: QPalette | None = None) -> str:
+    """Sistem paleti (verilmezse uygulamanın paleti) koyu mu? → "koyu" | "acik". Ölçüt: Window açıklığı < 128
+    (renk düzeni ipucu yerine palet: KDE renk düzeni palete yansır, ekransız ortamda ipucu "bilinmiyor"dur)."""
+    if palet is None:
+        from PyQt6.QtGui import QGuiApplication
+        palet = QGuiApplication.palette()
+    return "koyu" if palet.color(QPalette.ColorGroup.Active, QPalette.ColorRole.Window).lightness() < 128 else "acik"
+
+
+def palet_uret(tokens: dict, kip: str, temel: QPalette | None = None) -> QPalette:
+    """kip için QPalette ("sistem" → sistem_kipi() ile acik/koyu). Verilmeyen roller temel paletten (varsayılan:
     Fusion standart paleti) gelir."""
     _kip_denetle(kip)
     if kip == "sistem":
-        return None
+        kip = sistem_kipi()
     t = birlestir(tokens)["renk"][kip]
     if temel is None:
         from PyQt6.QtWidgets import QStyleFactory
@@ -149,12 +172,12 @@ def palet_uret(tokens: dict, kip: str, temel: QPalette | None = None) -> QPalett
 
 
 def qss_uret(tokens: dict, kip: str) -> str:
-    """Uygulama düzeyi QSS. Sürüm 1 yalnız bugün elle yazılmış kuralları üretir (DUR düğmesi, girintili alt
-    anahtar); genel widget kuralı yok (Fusion çizimi değişmesin)."""
+    """Uygulama düzeyi QSS: yalnız elle yazılmış kurallar (DUR düğmesi, girintili alt anahtar); genel widget
+    kuralı yok (renkler QPalette'ten; QSS stil çizimini bozmasın). Bütün renkler token'dan (QSS_RENK kuralı)."""
     _kip_denetle(kip)
     t = birlestir(tokens)
     d, a, k, y = t["durum"], t["aralik"], t["kose"], t["yazi"]
-    uzerinde = QColor(d["dur"]).lighter(112).name()
+    uzerinde = d["dur_uzerinde"]
     return (
         f"QPushButton#dur {{ background: {d['dur']}; color: {d['dur_metin']}; font-weight: {y['kalin_agirlik']};"
         f" border: none; border-radius: {k['dugme']}px; padding: {a['dugme_dikey']}px {a['dugme_yatay']}px; }}\n"

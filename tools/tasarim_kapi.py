@@ -9,9 +9,8 @@ tasarım kurallarını denetler:
   QSS_RENK     QSS rengi token paleti dışında
   KONTRAST     metin/zemin kontrastı < kontrast_min (WCAG 2)
   ARALIK       düzen kenar/boşluk değeri aralık biriminin katı değil
-Eşikler token dosyasından okunur (esikler()); token dosyasında karşılığı olmayan iki eşik WCAG değerine düşer
-(hedef 24 px — WCAG 2.5.8, kontrast 4,5:1 — WCAG 1.4.3); token dosyası `min_tiklama_hedefi_px` / `kontrast_min`
-verirse onlar kullanılır.
+Eşikler token dosyasından okunur (esikler(): `min_tiklama_hedefi_px`, `kontrast_min`, aralık, yazı, palet); dosyada
+eşik yoksa token şemasının varsayılanı (gui/tema/uret.VARSAYILAN: 24 px — WCAG 2.5.8, 4,5:1 — WCAG 1.4.3).
 
 Kullanım:
   python3 tools/tasarim_kapi.py [--json] [--pano OUT.png] [--tokens PATH] [--kip acik|koyu]
@@ -39,8 +38,6 @@ KOK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTLER = os.path.join(KOK, "tests")
 TOKENS = os.path.join(KOK, "deskhand", "gui", "tema", "tokens.json")
 BILINEN = os.path.join(TESTLER, "tasarim_bilinen.json")
-WCAG_HEDEF = 24      # WCAG 2.5.8 (token dosyasında min_tiklama_hedefi_px yoksa)
-WCAG_KONTRAST = 4.5  # WCAG 1.4.3 (token dosyasında kontrast_min yoksa)
 PANO_KENAR = 1600
 KURALLAR = ("KESIK", "HEDEF_KUCUK", "YAZI_BOYUTU", "QSS_RENK", "KONTRAST", "ARALIK")
 _HEX = re.compile(r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b")
@@ -92,8 +89,10 @@ def esikler(ham: dict, temel_pt: float) -> dict:
                                     if k.endswith("_olcek") and _sayi(v)})
     palet: set = set()
     _renkleri_topla(ham, palet)
-    return {"hedef_min": int(ham.get("min_tiklama_hedefi_px", WCAG_HEDEF)),
-            "kontrast_min": float(ham.get("kontrast_min", WCAG_KONTRAST)),
+    from deskhand.gui.tema.uret import VARSAYILAN  # eksik eşik → token şemasının varsayılanı (WCAG 24 px / 4,5)
+    hedef, kontrast = ham.get("min_tiklama_hedefi_px"), ham.get("kontrast_min")
+    return {"hedef_min": int(hedef if _sayi(hedef) and hedef > 0 else VARSAYILAN["min_tiklama_hedefi_px"]),
+            "kontrast_min": float(kontrast if _sayi(kontrast) and kontrast > 0 else VARSAYILAN["kontrast_min"]),
             "aralik_birim": max(1, birim), "yazi_pt": yazi, "palet": palet}
 
 
@@ -331,20 +330,6 @@ def _ortam_yalit() -> str:
     return ev
 
 
-def _diyalog_istekleri() -> dict:
-    from deskhand import onay
-    s = time.time()
-    return {
-        "odeme": {"id": "a1", "eylem": "Düğmeye tıkla: “Öde”", "hedef": "Trendyol — Sepetim — Firefox",
-                  "masaustu": "arka", "masa": "", "ayrinti": "HASSAS düğme ('öde' ← ['Öde', 'Siparişi tamamla'])",
-                  "zaman": s, "son_zaman": s + 118, "pid": 4242},
-        "tus": {"id": "a2", "eylem": "Riskli tuş: ctrl+w", "hedef": "Belge — KWrite", "masaustu": "ekran",
-                "ayrinti": "pencere kapatma kısayolu\ntuş: ctrl+w", "zaman": s, "son_zaman": s + 100},
-        "devir": {"id": "a3", "tur": onay.TUR_DEVIR, "eylem": "CAPTCHA", "hedef": "Giriş — Firefox",
-                  "masaustu": "arka", "zaman": s, "son_zaman": s + 300},
-    }
-
-
 def _bekle(app, sn: float) -> None:
     son = time.monotonic() + sn
     while time.monotonic() < son:
@@ -362,11 +347,12 @@ def calistir(ham: dict, kip: str, pano_dizin: str | None) -> tuple[list[dict], l
     from deskhand.gui.tema import uret
     app = QApplication.instance() or QApplication([])
     app.setStyle("Fusion")
-    panel = G._panel_kur(app)
     birlesik = uret.birlestir(ham)
-    pal = uret.palet_uret(birlesik, kip)
-    if pal is not None:
-        app.setPalette(pal)
+    # palet panel kurulmadan ÖNCE: soluk etiketler rengini kurulumda paletten alır; panelin tema_uygula("sistem")
+    # çağrısı bu paletin koyu/açık oluşuna göre aynı kipi seçer, ardından denetlenen token'lar yeniden uygulanır
+    app.setPalette(uret.palet_uret(birlesik, kip, app.style().standardPalette()))
+    panel = G._panel_kur(app)
+    app.setPalette(uret.palet_uret(birlesik, kip, app.style().standardPalette()))
     app.setStyleSheet(uret.qss_uret(birlesik, kip))
     esik = esikler(ham, app.font().pointSizeF())
     w = panel.pencere
@@ -386,7 +372,8 @@ def calistir(ham: dict, kip: str, pano_dizin: str | None) -> tuple[list[dict], l
             cekim.append((yol, ad))
     w.hide()
     from deskhand.gui.onay_diyalog import OnayDiyalog
-    for j, (ad, istek) in enumerate(_diyalog_istekleri().items()):
+    istekler = G.diyalog_istekleri()
+    for j, (ad, istek) in enumerate(istekler.items()):
         d = OnayDiyalog(istek, yanitla=lambda k, v: True, istek_var=lambda: True, kurma_ms=0,
                         saat=lambda z=istek["zaman"]: z)
         d.show()
@@ -398,7 +385,7 @@ def calistir(ham: dict, kip: str, pano_dizin: str | None) -> tuple[list[dict], l
             cekim.append((yol, f"diyalog-{ad}"))
         d.hide()
         d.deleteLater()
-    return ihlal, cekim, n + len(_diyalog_istekleri())
+    return ihlal, cekim, n + len(istekler)
 
 
 def pano_yap(cekim: list[tuple[str, str]], cikti: str) -> dict:
