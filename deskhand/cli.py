@@ -366,6 +366,40 @@ def sir_degeri(ad: str) -> str:
         raise Dur(1, _("gizli bilgi metin değil: {ad}").format(ad=ad)) from None
 
 
+def _pencere_bilgisi(k) -> tuple[str, str]:
+    """(title, window class) of the target window ('' when unknown). The class comes from the window manager, not from
+    the page."""
+    try:
+        au = sec()
+        return str(au.baslik(k) or ""), str(au.sinif(k) or "").lower()
+    except Exception:  # noqa: BLE001 - unknown
+        return "", ""
+
+
+def _sir_hedef_denetle(ad: str, k, sinif: str) -> None:
+    """The secret's binding (anahtar_deposu.sir_hedefi_oku): window class must be equal; site: the page address last
+    read from the window's accessibility tree (dogrulama_sinamasi.son_adres) must be the site or a subdomain of it.
+    Unknown → refused (closed-fail)."""
+    from .anahtar_deposu import DepoHatasi, sir_hedefi_oku
+    try:
+        h = sir_hedefi_oku(ad)
+    except DepoHatasi as e:
+        raise Dur(10, _("gizli bilgi hedefi okunamadı ({ad}): {neden}").format(ad=ad, neden=e.neden)) from None
+    if h.get("uygulama") and h["uygulama"] != sinif:
+        raise Dur(10, _("kayıtlı parola ({ad}) yalnız {uygulama} penceresine yazılır (hedef: {sinif})").format(
+            ad=ad, uygulama=h["uygulama"], sinif=sinif or "?"))
+    if h.get("site"):
+        from urllib.parse import urlsplit
+        from . import dogrulama_sinamasi
+        try:
+            konak = (urlsplit(dogrulama_sinamasi.son_adres(k) or "").hostname or "").lower().rstrip(".")
+        except ValueError:
+            konak = ""
+        if not konak or not (konak == h["site"] or konak.endswith("." + h["site"])):
+            raise Dur(10, _("kayıtlı parola ({ad}) yalnız {site} sitesine yazılır; sayfa adresi {konak} (önce sayfayı "
+                            "gözlemleyin)").format(ad=ad, site=h["site"], konak=konak or "?"))
+
+
 def k_yaz_sir(a):
     """`type`: with --secret-ref AD the value comes from the key store (never argv, never the log, never the result) and
     goes ONLY into a field the accessibility tree reports as a password field (so a stored password cannot be typed
@@ -382,7 +416,19 @@ def k_yaz_sir(a):
     if eylem._parola_alani_mi(a.kimlik) is not True:
         raise Dur(10, _("--secret-ref yalnız parola alanına yazılır: odaklı alan parola alanı değil ya da alan türü "
                         "belirlenemedi (erişilebilirlik: deskhand a11y on)"))
-    a.metin, a.gizli = sir_degeri(ad) + (getattr(a, "sir_ek", "") or ""), True
+    deger = sir_degeri(ad)  # exists + readable before anything is asked
+    baslik, sinif = _pencere_bilgisi(a.kimlik)
+    _sir_hedef_denetle(ad, a.kimlik, sinif)
+    # ALWAYS the user's approval in the panel, whatever the approval scope and --onayli say (a stored password may
+    # leave the machine only with the user's Yes; the dialog names the secret and the target, never the value)
+    izin, neden = guvenlik._panelden_onay(
+        _("Kayıtlı parolayı yaz"), baslik,
+        _("Ajan kayıtlı \"{ad}\" parolasını bu pencerenin parola alanına yazmak istiyor: {baslik} ({sinif}).").format(
+            ad=ad, baslik=baslik or "?", sinif=sinif or "?"), konu="parola")
+    if not izin:
+        raise Dur(10, _("HASSAS: kayıtlı parola ({ad}) yalnız kullanıcının panel onayıyla yazılır ({neden})").format(
+            ad=ad, neden=neden), tur="hassas")
+    a.metin, a.gizli = deger + (getattr(a, "sir_ek", "") or ""), True
     try:
         return k_yaz(a)
     finally:
@@ -399,6 +445,8 @@ def k_sir(argv: list[str]) -> int:
                                 description=_("Anahtar deposundaki adlandırılmış gizli bilgiler (değer yalnız stdin'den)."))
     alt = p.add_subparsers(dest="islem", required=True)
     s = alt.add_parser("set", help=_("değeri stdin'den (uçbirimde gizli giriş) kaydet")); s.add_argument("ad")
+    s.add_argument("--app", dest="uygulama", default=None, help=_("yalnız bu pencere sınıfına yazılsın"))
+    s.add_argument("--site", default=None, help=_("yalnız bu siteye (alt alan adları dahil) yazılsın"))
     alt.add_parser("list", help=_("kayıtlı adlar (değer gösterilmez)"))
     s = alt.add_parser("rm", help=_("sil")); s.add_argument("ad")
     s = alt.add_parser("status", help=_("seçili depo ve durumu")); s.add_argument("--json", action="store_true")
@@ -418,6 +466,7 @@ def k_sir(argv: list[str]) -> int:
             print(_("geçersiz ya da ayrılmış ad: {ad}").format(ad=a.ad), file=sys.stderr)
             return 1
         if a.islem == "rm":
+            ad_.sir_hedefi_yaz(a.ad)  # the binding goes with the secret
             if depo.sil(a.ad):
                 print(_("silindi: {ad}").format(ad=a.ad))
                 return 0
@@ -437,6 +486,11 @@ def k_sir(argv: list[str]) -> int:
                 veri = veri[:-1]
         if not veri:
             print(_("boş değer kaydedilmez"), file=sys.stderr)
+            return 1
+        try:
+            ad_.sir_hedefi_yaz(a.ad, a.uygulama, a.site)  # validates before the value is stored
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
             return 1
         depo.yaz(a.ad, veri)
         print(_("kaydedildi: {ad} ({depo})").format(ad=a.ad, depo=_(ad_.TUR_ADLARI.get(depo.tur, depo.tur))))

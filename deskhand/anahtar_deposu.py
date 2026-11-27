@@ -17,9 +17,9 @@ Errors: `DepoHatasi(neden)` = the store cannot answer (locked wallet, no systemd
 NEVER "no item": `oku` answers None only when the store definitely has no such item. Callers fail closed on DepoHatasi
 (liste_koruma: no signed state, not a first start; kalici: nothing saved or applied).
 
-Selection: `secili_tur()` reads `[anahtar] depo`; with no value: a store that already has kasa items → kasa; earlier
-panel marks or persistent-session records (an install that used the wallet) → cuzdan (nothing changes until the user
-switches in Settings); otherwise (a new install) → kasa. `depo_degistir(yeni)` (panel only, after the user's Yes) copies
+Selection: `secili_tur()`: the selection sealed in the kasa by depo_degistir wins (a disagreeing `[anahtar] depo` is
+closed-fail); else `[anahtar] depo`; else a store that already has kasa items → kasa; earlier panel marks (an install
+that used the wallet) → cuzdan (nothing changes until the user switches in Settings); otherwise (a new install) → kasa. `depo_degistir(yeni)` (panel only, after the user's Yes) copies
 every item from the old store to the new one FIRST and only then writes the setting, so the signed panel state stays
 valid. A changed setting with no copy (a hand edit) finds no signed state while marks exist: closed-fail, never a first
 start (liste_koruma.ilk_kurulum).
@@ -29,6 +29,15 @@ valid seal by copying files. Code running as the same user that DELIBERATELY run
 can read and forge kasa items, exactly like same-user code that talks to an unlocked wallet: out of scope (it needs the
 agent shell isolated from the user's credentials). Deleting the kasa items AND every panel mark AND both list files makes
 the next panel start a first start (the default lists); removing only some of them is closed-fail.
+ROLLBACK (security review 27 Kas, finding 2): a file-writing process can copy a sealed item and put the OLDER copy back
+later (with the wallet this needed D-Bus). The panel's state carries a generation (liste_koruma `nesil`, +1 per write);
+a process that has seen a newer generation treats an older one as rolled back (closed-fail: the user's DUR stays on,
+no approved value). This covers every rollback while the panel / MCP process runs; a rollback done while NO Deskhand
+process runs (kill the panel, put back the old item AND the old marks, start again) is NOT detected: user space has no
+anchor a same-user process cannot rewind (TPM NV counters need the tss group + tpm2-tools; this user has neither).
+Who needs that guarantee keeps the KDE Wallet store. Selection (finding 3): the selection is sealed in the kasa
+(`depo-secimi`); `[anahtar] depo` that disagrees → closed-fail (SecimsizDepo); depo_degistir removes the panel state
+from the old store, so switching the setting back by hand finds nothing to replay.
 
 DESKHAND_ANAHTARLIK=kapali (tests/_yalitim.py): `secili_depo()` is a store that refuses everything (never the real
 wallet, never the real TPM); tests build KasaDepo with a fake systemd-creds on PATH.
@@ -56,7 +65,11 @@ IC_ADLAR = {
     "panel-isaret": ("Deskhand panel settings", "application/json"),
     "kalici-oturum": ("Deskhand session store", "application/octet-stream"),
     "kde-cuzdan": ("Deskhand KDE Wallet unlock", "application/octet-stream"),
+    "depo-secimi": ("Deskhand key store selection", "text/plain"),
+    "sir-hedefleri": ("Deskhand secret targets", "application/json"),
 }
+KASA_SABIT = ("kde-cuzdan", "depo-secimi")  # always in the kasa, never moved by depo_degistir
+SECIM_AD = "depo-secimi"
 _AD = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 _UZANTI = ".cred"
 _AZAMI = 64 * 1024          # a sealed item larger than this is not read; a value larger than this is not written
@@ -495,8 +508,9 @@ def _ayardaki_tur() -> str | None:
 
 
 def _varsayilan_tur() -> str:
-    """No `[anahtar] depo`: kasa items → kasa; panel marks or persistent-session records (the wallet was in use) →
-    cuzdan; a new install → kasa. Reads files only (no D-Bus)."""
+    """No selection at all: kasa items → kasa; panel marks (the wallet was in use before this release) → cuzdan; a new
+    install → kasa. Reads files only (no D-Bus). Persistent-session records do NOT select a store (review: a file a
+    process can create must not choose the store)."""
     try:
         if KasaDepo().tum_adlar():
             return "kasa"
@@ -505,24 +519,84 @@ def _varsayilan_tur() -> str:
     from . import liste_koruma
     if liste_koruma.isaret_gecmisi():
         return "cuzdan"
-    try:
-        kayit = os.listdir(os.path.join(yollar.data_dir(), "oturum-kalici"))
-    except OSError:
-        kayit = []
-    if any(a.endswith(".kayit") for a in kayit):
-        return "cuzdan"
     return VARSAYILAN_TUR
 
 
+class SecimHatasi(DepoHatasi):
+    """The sealed selection and `[anahtar] depo` disagree, or the sealed selection cannot be read: closed-fail."""
+
+
+def _muhurlu_secim() -> str | None:
+    """The selection sealed in the kasa by depo_degistir (None: never sealed). A seal that does not open → SecimHatasi.
+    A process that only writes files cannot make one; it can delete it (then the setting decides and a store without
+    the panel's item is closed-fail while marks exist) or put an older one back (then it disagrees with the setting
+    written at the same time, or names a store whose panel item depo_degistir removed: closed-fail)."""
+    k = ornek("kasa")
+    try:
+        if SECIM_AD not in k.tum_adlar():
+            return None
+        v = k.oku(SECIM_AD)
+    except DepoHatasi as e:
+        raise SecimHatasi(_("anahtar deposu seçimi doğrulanamadı: {neden}").format(neden=e.neden)) from None
+    t = (v or b"").decode("ascii", "replace")
+    if t not in TURLER:
+        raise SecimHatasi(_("anahtar deposu seçimi bozuk"))
+    return t
+
+
 def secili_tur() -> str:
-    return _ayardaki_tur() or _varsayilan_tur()
+    """The selected store. The kasa-sealed selection wins; `[anahtar] depo` that disagrees with it → SecimHatasi
+    (closed-fail: a hand edit of ayarlar.toml cannot switch the store). No sealed selection: the setting, else the
+    default (_varsayilan_tur)."""
+    muhurlu = _muhurlu_secim()
+    ayar = _ayardaki_tur()
+    if muhurlu is not None:
+        if ayar is not None and ayar != muhurlu:
+            raise SecimHatasi(_("anahtar deposu ayarı ({ayar}) mühürlü seçimle ({secim}) uyuşmuyor; ayar dosyası "
+                                "panel dışında değişmiş. Ayarlar'dan depoyu yeniden seçin").format(ayar=ayar,
+                                                                                                  secim=muhurlu))
+        return muhurlu
+    return ayar or _varsayilan_tur()
+
+
+class SecimsizDepo(Depo):
+    """The selection is not verified (SecimHatasi): every call refuses with that reason (closed-fail)."""
+
+    tur = "dogrulanamadi"
+
+    def __init__(self, neden: str):
+        self.neden = neden
+
+    def _ret(self):
+        raise DepoHatasi(self.neden)
+
+    def oku(self, ad: str) -> bytes | None:
+        self._ret()
+
+    def yaz(self, ad: str, veri: bytes) -> None:
+        self._ret()
+
+    def sil(self, ad: str) -> bool:
+        self._ret()
+        return False
+
+    def listele(self) -> list[str]:
+        self._ret()
+        return []
+
+    def durum(self) -> dict:
+        return {"tur": self.tur, "hazir": False, "neden": self.neden, "tpm": tpm_var()}
 
 
 def secili_depo() -> Depo:
-    """The store the user selected (`[anahtar] depo`). Under DESKHAND_ANAHTARLIK=kapali: a store that refuses."""
+    """The store the user selected. Under DESKHAND_ANAHTARLIK=kapali: a store that refuses. A selection that is not
+    verified (SecimHatasi): a store that refuses with the reason."""
     if _kapali():
         return KapaliDepo()
-    return ornek(secili_tur())
+    try:
+        return ornek(secili_tur())
+    except SecimHatasi as e:
+        return SecimsizDepo(e.neden)
 
 
 def _ayar_yaz(tur: str) -> None:
@@ -534,23 +608,32 @@ def _ayar_yaz(tur: str) -> None:
 
 
 def depo_degistir(yeni_tur: str, tasima: bool = True) -> dict:
-    """Panel only, after the user's Yes: switch the store. Every item of the old store (internal + the user's) is copied
-    to the new one FIRST (so the panel's signed state and its marks stay valid), then `[anahtar] depo` is written.
-    The old items are left where they are (the user may remove them; a switch back finds them).
+    """Panel only, after the user's Yes: switch the store. Every item of the old store (internal + the user's; not the
+    kasa-only ones, KASA_SABIT) is copied to the new one FIRST and read back (so the panel's signed state and its marks
+    stay valid); then the selection is SEALED in the kasa (`depo-secimi`) and `[anahtar] depo` is written; then the
+    panel's signed state and the session key are deleted from the OLD store (a later hand switch back finds no stale
+    state to replay: closed-fail). The user's named secrets stay in the old store as well.
     → {"tur": yeni_tur, "tasinan": [names], "atlanan": [names]}.
     The old store cannot be read (locked wallet, broken seal) → DepoHatasi and NOTHING changes; tasima=False switches
-    without copying (the panel then has no signed state: closed-fail, the user approves the lists again)."""
+    without copying (the panel then has no signed state: closed-fail, the user approves the lists again). A selection
+    that is not verified (SecimHatasi) is replaced by the user's choice here (the user's Yes in the panel)."""
     if yeni_tur not in TURLER:
         raise ValueError(_("bilinmeyen depo: {tur}").format(tur=yeni_tur))
     if _kapali():
         raise DepoHatasi(_(KapaliDepo.NEDEN))
     with _SECIM_KILIT:
-        eski_tur = secili_tur()
+        try:
+            eski_tur = secili_tur()
+        except SecimHatasi:
+            eski_tur, tasima = None, False  # nothing verified to copy from
         tasinan, atlanan = [], []
-        if yeni_tur != eski_tur and tasima:
-            eski, yeni = ornek(eski_tur), ornek(yeni_tur)
+        eski = ornek(eski_tur) if eski_tur else None
+        if eski is not None and yeni_tur != eski_tur and tasima:
+            yeni = ornek(yeni_tur)
             degerler = {}
             for ad in eski.tum_adlar():
+                if ad in KASA_SABIT:
+                    continue
                 v = eski.oku(ad)
                 if v is None:
                     atlanan.append(ad)
@@ -561,7 +644,22 @@ def depo_degistir(yeni_tur: str, tasima: bool = True) -> dict:
                 if yeni.oku(ad) != v:
                     raise DepoHatasi(_("taşınan öğe geri okunamadı ({ad}); depo değiştirilmedi").format(ad=ad))
                 tasinan.append(ad)
+        try:
+            ornek("kasa").yaz(SECIM_AD, yeni_tur.encode("ascii"))
+        except DepoHatasi:
+            if yeni_tur == "kasa":
+                raise
+            try:  # no usable kasa (no systemd-creds): the setting alone selects the wallet; remove a stale seal
+                ornek("kasa").sil(SECIM_AD)
+            except DepoHatasi:
+                pass
         _ayar_yaz(yeni_tur)
+        if eski is not None and yeni_tur != eski_tur and tasima:
+            for ad in ("panel-isaret", "kalici-oturum"):
+                try:
+                    eski.sil(ad)
+                except DepoHatasi:
+                    pass
     from .gunluk import gunluk
     gunluk(f"anahtar deposu: {eski_tur} → {yeni_tur} ({len(tasinan)} öğe taşındı)")
     try:
@@ -570,3 +668,49 @@ def depo_degistir(yeni_tur: str, tasima: bool = True) -> dict:
     except Exception:  # noqa: BLE001
         pass
     return {"tur": yeni_tur, "tasinan": tasinan, "atlanan": atlanan}
+
+
+# ---------------------------------------------------------------- where a named secret may be typed
+
+HEDEF_AD = "sir-hedefleri"
+_SITE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+")
+
+
+def _hedefler(depo: Depo) -> dict:
+    import json
+    ham = depo.oku(HEDEF_AD)
+    if not ham:
+        return {}
+    try:
+        d = json.loads(ham.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        raise DepoHatasi(_("gizli bilgi hedefleri okunamadı (bozuk)")) from None
+    return d if isinstance(d, dict) else {}
+
+
+def sir_hedefi_oku(ad: str) -> dict:
+    """{"uygulama": window class | None, "site": domain | None} the user bound the secret `ad` to ({}: no binding).
+    Kept sealed in the selected store (item "sir-hedefleri"): a file-writing process cannot change it."""
+    h = _hedefler(secili_depo()).get(_ad_denetle(ad))
+    if not isinstance(h, dict):
+        return {}
+    return {k: v for k, v in h.items() if k in ("uygulama", "site") and isinstance(v, str) and v}
+
+
+def sir_hedefi_yaz(ad: str, uygulama: str | None = None, site: str | None = None) -> None:
+    """Bind the secret `ad` to a window class and/or a site (domain; subdomains included). Both None: no binding."""
+    import json
+    _ad_denetle(ad)
+    uygulama = (uygulama or "").strip().lower() or None
+    site = (site or "").strip().lower().rstrip(".") or None
+    if uygulama is not None and not re.fullmatch(r"[a-z0-9._-]{1,128}", uygulama):
+        raise ValueError(_("geçersiz uygulama sınıfı: {deger}").format(deger=uygulama))
+    if site is not None and not _SITE.fullmatch(site):
+        raise ValueError(_("geçersiz site: {deger}").format(deger=site))
+    depo = secili_depo()
+    d = _hedefler(depo)
+    if uygulama or site:
+        d[ad] = {k: v for k, v in (("uygulama", uygulama), ("site", site)) if v}
+    else:
+        d.pop(ad, None)
+    depo.yaz(HEDEF_AD, json.dumps(d, ensure_ascii=False, sort_keys=True).encode("utf-8"))

@@ -316,6 +316,93 @@ finally:
     AD.ornek_ayarla("kasa", None)
     liste_koruma.isaret_anahtarlik_ayarla(None)
 
+# ---------------------------------------------------------------- 5b. güvenlik bulguları 2 (geri alma) ve 3 (seçim)
+import shutil  # noqa: E402
+
+cuzdan = SahteCuzdan()
+AD.ornek_ayarla("cuzdan", cuzdan)
+AD.ornek_ayarla("kasa", None)
+liste_koruma.isaret_anahtarlik_ayarla(None)
+os.environ.pop("DESKHAND_ANAHTARLIK")
+for t in liste_koruma.TUM:
+    if os.path.lexists(liste_koruma.isaret_yolu(t)):
+        os.unlink(liste_koruma.isaret_yolu(t))
+for ad_ in list(AD.ornek("kasa").tum_adlar()):
+    AD.ornek("kasa").sil(ad_)
+try:
+    # bulgu 3a: oturum-kalici .kayit dosyası depo seçmez
+    kd = os.path.join(yollar.data_dir(), "oturum-kalici")
+    os.makedirs(kd, exist_ok=True)
+    with open(os.path.join(kd, "ornek.com.kayit"), "wb") as f:
+        f.write(b"x")
+    from deskhand import ayarlar as _ay  # noqa: E402
+    ham_ = _ay.ham_oku()
+    ham_.pop("anahtar", None)
+    _ay.yaz(ham_)
+    kontrol("bulgu 3: .kayit dosyası depo seçimini cüzdana çevirmez", AD.secili_tur() == "kasa")
+    os.unlink(os.path.join(kd, "ornek.com.kayit"))
+    # bulgu 3b: depo_degistir seçimi mühürler; ayar dosyası elle değişirse kapalı-başarısız
+    liste_koruma._anahtar_unut()
+    liste_koruma._isaret_yaz(liste_koruma.KAPSAM, "hepsi")
+    AD.depo_degistir("kasa")
+    kontrol("bulgu 3: seçim kasada mühürlü", AD.ornek("kasa").oku(AD.SECIM_AD) == b"kasa")
+    AD._ayar_yaz("cuzdan")  # ajan ayar dosyasını değiştirdi
+    liste_koruma._anahtar_unut()
+    kontrol("bulgu 3: ayar ≠ mühürlü seçim → depo reddeder (SecimsizDepo)",
+            isinstance(AD.secili_depo(), AD.SecimsizDepo))
+    kontrol("bulgu 3: uyuşmazlıkta ilk kurulum DEĞİL, DUR kapalı-başarısız, onaylı değer yok",
+            not liste_koruma.ilk_kurulum() and
+            liste_koruma.panel_dur_ayrinti() == (None, liste_koruma.DUR_NEDEN_OKUNAMADI) and
+            liste_koruma.onayli_deger(liste_koruma.KAPSAM) == (False, None))
+    kontrol("bulgu 3: uyuşmazlık nedeni görünür", "uyuşmuyor" in (liste_koruma.kasa_nedeni() or ""))
+    # kullanıcının panel seçimi (depo_degistir) uyuşmazlığı giderir
+    AD._ayar_yaz("kasa")
+    AD.depo_degistir("cuzdan")
+    kontrol("bulgu 3: geçişte eski depodaki imzalı durum silinir (geri dönüşte eski durum yok)",
+            "panel-isaret" not in AD.ornek("kasa").tum_adlar() and "panel-isaret" in cuzdan.d)
+    # mühürlü seçimi silip ayarı kasaya çevirmek: kasada imzalı durum yok + işaret var → kapalı-başarısız
+    AD.ornek("kasa").sil(AD.SECIM_AD)
+    AD._ayar_yaz("kasa")
+    liste_koruma._anahtar_unut()
+    kontrol("bulgu 3: mühür silinip ayar çevrilince ilk kurulum DEĞİL, DUR kapalı-başarısız",
+            not liste_koruma.ilk_kurulum() and
+            liste_koruma.panel_dur_ayrinti() == (None, liste_koruma.DUR_NEDEN_OKUNAMADI))
+    # işaretler de silinip ayar cüzdana çevrilirse (cüzdanda öğe yok): dosyalar varsayılan değilse ilk kurulum değil
+    cuzdan.d.pop("panel-isaret", None)
+    AD._ayar_yaz("cuzdan")
+    for t in liste_koruma.TUM:
+        if os.path.lexists(liste_koruma.isaret_yolu(t)):
+            os.unlink(liste_koruma.isaret_yolu(t))
+    with open(liste_koruma.dosya("seviye"), "w") as f:
+        f.write("firefox = izle\n")
+    liste_koruma._anahtar_unut()
+    kontrol("bulgu 3: cüzdan kipinde de öğe+işaret yok + dolu liste dosyası → ilk kurulum DEĞİL",
+            not liste_koruma.ilk_kurulum())
+    os.unlink(liste_koruma.dosya("seviye"))
+    # bulgu 2: eski mühürlü kopyanın geri konması (bu süreç yaşarken) kapalı-başarısız
+    AD.depo_degistir("kasa")
+    liste_koruma._anahtar_unut()
+    liste_koruma._isaret_yaz(liste_koruma.KAPSAM, "hepsi")
+    cred = os.path.join(AD.KasaDepo().dizin, "panel-isaret.cred")
+    eski_kopya = cred + ".eski-kopya"
+    shutil.copy2(cred, eski_kopya)
+    liste_koruma.panel_dur_sakla(True)  # kullanıcı DUR'u açtı (yeni nesil)
+    liste_koruma._anahtar_unut()
+    kontrol("bulgu 2: DUR açık kaydı okunur", liste_koruma.panel_dur_ayrinti() == (True, None))
+    os.replace(eski_kopya, cred)  # ajan eski (DUR kapalı) kopyayı geri koydu
+    liste_koruma._anahtar_unut()
+    kontrol("bulgu 2: geri konan eski kopya → DUR kalkmaz (kapalı-başarısız) + neden",
+            liste_koruma.panel_dur_ayrinti() == (None, liste_koruma.DUR_NEDEN_OKUNAMADI) and
+            "geri alınmış" in (liste_koruma.kasa_nedeni() or ""), liste_koruma.kasa_nedeni())
+    kontrol("bulgu 2: geri konan kopya imzalı değer vermez", liste_koruma.onayli_deger(liste_koruma.KAPSAM) == (False, None))
+    kontrol("bulgu 2: kullanıcının DUR eylemi yeni nesille yeniden yazar", liste_koruma.panel_dur_sakla(True) and
+            (liste_koruma._anahtar_unut() or liste_koruma.panel_dur_ayrinti() == (True, None)))
+finally:
+    os.environ["DESKHAND_ANAHTARLIK"] = "kapali"
+    AD.ornek_ayarla("cuzdan", None)
+    AD.ornek_ayarla("kasa", None)
+    liste_koruma.isaret_anahtarlik_ayarla(None)
+
 # ---------------------------------------------------------------- 6. kasa kipinde Secret Service HİÇ çağrılmaz (odak 1)
 ALT = os.path.join(_yalitim.GECICI, "alt")
 alt_ortam = {k: v for k, v in os.environ.items() if k != "DESKHAND_ANAHTARLIK"}
@@ -380,6 +467,7 @@ eski_parola = eylem._parola_alani_mi
 os.environ.pop("DESKHAND_ANAHTARLIK")
 try:
     AD.ornek_ayarla("kasa", None)
+    AD.ornek("kasa").sil(AD.SECIM_AD)
     AD._ayar_yaz("kasa")
     AD.ornek("kasa").yaz("site", b"P@rola!")
     ns = cli.ayristirici().parse_args(["type", "pencere-1", "--secret-ref", "site"])
@@ -397,9 +485,66 @@ try:
     except Dur as e:
         kontrol("type --secret-ref: alan türü bilinmiyorsa reddedilir", e.kod == 10 and not yakalanan)
     eylem._parola_alani_mi = lambda k: True
-    ns.f(ns)
-    kontrol("type --secret-ref: parola alanına depodaki değer gizli yazılır",
-            yakalanan == {"metin": "P@rola!", "gizli": True} and ns.metin is None, yakalanan)
+    # bulgu 1: kayıtlı parola HER kullanımda panel onayı ister (--onayli ve onay kapsamı ne olursa olsun)
+    sorulan = []
+    cevap = {"izin": False}
+    eski_onay, eski_bilgi = cli.guvenlik._panelden_onay, cli._pencere_bilgisi
+    cli.guvenlik._panelden_onay = lambda eylem_, hedef, ayrinti, **kw: (sorulan.append((eylem_, hedef, ayrinti)),
+                                                                        (cevap["izin"], "red"))[1]
+    cli._pencere_bilgisi = lambda k: ("Giriş — Örnek Banka", "firefox")
+    try:
+        nso = cli.ayristirici().parse_args(["type", "pencere-1", "--secret-ref", "site", "--onayli"])
+        try:
+            nso.f(nso)
+            kontrol("bulgu 1: panel reddi → Dur 10 (--onayli olsa da)", False)
+        except Dur as e:
+            kontrol("bulgu 1: panel reddi → Dur 10 (--onayli olsa da), yazı gönderilmez, değer iletide yok",
+                    e.kod == 10 and not yakalanan and "P@rola" not in e.mesaj and len(sorulan) == 1)
+        kontrol("bulgu 1: onay metni parolanın adını ve hedefi taşır, değeri taşımaz",
+                '"site"' in sorulan[0][2] and "firefox" in sorulan[0][2] and "P@rola" not in repr(sorulan))
+        cevap["izin"] = True
+        ns.f(ns)
+        kontrol("type --secret-ref: onaydan sonra parola alanına depodaki değer gizli yazılır",
+                yakalanan == {"metin": "P@rola!", "gizli": True} and ns.metin is None, yakalanan)
+        # bağlama: uygulama sınıfı
+        AD.sir_hedefi_yaz("site", uygulama="chromium")
+        yakalanan.clear(); sorulan.clear()
+        try:
+            ns.f(ns)
+            kontrol("bulgu 1: başka uygulamaya bağlı parola reddedilir", False)
+        except Dur as e:
+            kontrol("bulgu 1: başka uygulamaya bağlı parola reddedilir (onay sorulmadan)",
+                    e.kod == 10 and not yakalanan and not sorulan, e.mesaj)
+        AD.sir_hedefi_yaz("site", uygulama="firefox", site="ornekbanka.com.tr")
+        from deskhand import dogrulama_sinamasi  # noqa: E402
+        eski_adres = dogrulama_sinamasi.son_adres
+        try:
+            dogrulama_sinamasi.son_adres = lambda k: "https://kotu.example/ornekbanka.com.tr"
+            try:
+                ns.f(ns)
+                kontrol("bulgu 1: başka siteye bağlı parola reddedilir", False)
+            except Dur as e:
+                kontrol("bulgu 1: başka siteye bağlı parola reddedilir", e.kod == 10 and not yakalanan)
+            dogrulama_sinamasi.son_adres = lambda k: ""
+            try:
+                ns.f(ns)
+                kontrol("bulgu 1: sayfa adresi bilinmiyorsa reddedilir", False)
+            except Dur as e:
+                kontrol("bulgu 1: sayfa adresi bilinmiyorsa reddedilir", e.kod == 10 and not yakalanan)
+            dogrulama_sinamasi.son_adres = lambda k: "https://giris.ornekbanka.com.tr/login"
+            ns.f(ns)
+            kontrol("bulgu 1: doğru uygulama + site alt alanı → yazılır", yakalanan.get("metin") == "P@rola!")
+        finally:
+            dogrulama_sinamasi.son_adres = eski_adres
+        try:
+            AD.sir_hedefi_yaz("site", site="*.com")
+            kontrol("bulgu 1: geçersiz site bağlaması reddedilir", False)
+        except ValueError:
+            kontrol("bulgu 1: geçersiz site bağlaması reddedilir", True)
+        AD.sir_hedefi_yaz("site")
+        kontrol("bulgu 1: bağlama kaldırılır", AD.sir_hedefi_oku("site") == {})
+    finally:
+        cli.guvenlik._panelden_onay, cli._pencere_bilgisi = eski_onay, eski_bilgi
     ns2 = cli.ayristirici().parse_args(["type", "pencere-1", "metin", "--secret-ref", "site"])
     try:
         ns2.f(ns2)

@@ -2093,5 +2093,20 @@
  "cüzdan kilitli: kayıtlı anahtar açmadı ya da cüzdan bu birimden önce başlatıldı": "wallet locked: the saved key did not open it, or the wallet was started before this unit",
  "ksecretd bulunamadı (KDE Cüzdanı 6 gerekir)": "ksecretd not found (KDE Wallet 6 required)",
  "kullanıcı birimi etkinleştirilemedi ({birim})": "the user unit could not be enabled ({birim})",
- "kullanım: deskhand wallet open|status|remove (kurulum: panel Ayarlar)": "usage: deskhand wallet open|status|remove (setup: panel Settings)"
+ "kullanım: deskhand wallet open|status|remove (kurulum: panel Ayarlar)": "usage: deskhand wallet open|status|remove (setup: panel Settings)",
+ "Ajan kayıtlı \"{ad}\" parolasını bu pencerenin parola alanına yazmak istiyor: {baslik} ({sinif}).": "The agent wants to type the saved password \"{ad}\" into this window's password field: {baslik} ({sinif}).",
+ "HASSAS: kayıtlı parola ({ad}) yalnız kullanıcının panel onayıyla yazılır ({neden})": "SENSITIVE: a saved password ({ad}) is typed only with the user's approval in the panel ({neden})",
+ "Kayıtlı parolayı yaz": "Type saved password",
+ "anahtar deposu ayarı ({ayar}) mühürlü seçimle ({secim}) uyuşmuyor; ayar dosyası panel dışında değişmiş. Ayarlar'dan depoyu yeniden seçin": "the key store setting ({ayar}) does not match the sealed selection ({secim}); the settings file was changed outside the panel. Select the store again in Settings",
+ "anahtar deposu seçimi bozuk": "the key store selection is corrupt",
+ "anahtar deposu seçimi doğrulanamadı: {neden}": "the key store selection could not be verified: {neden}",
+ "geçersiz site: {deger}": "invalid site: {deger}",
+ "geçersiz uygulama sınıfı: {deger}": "invalid application class: {deger}",
+ "gizli bilgi hedefi okunamadı ({ad}): {neden}": "the secret's target could not be read ({ad}): {neden}",
+ "gizli bilgi hedefleri okunamadı (bozuk)": "secret targets could not be read (corrupt)",
+ "kayıtlı parola ({ad}) yalnız {site} sitesine yazılır; sayfa adresi {konak} (önce sayfayı gözlemleyin)": "the saved password ({ad}) is typed only on {site}; the page address is {konak} (observe the page first)",
+ "kayıtlı parola ({ad}) yalnız {uygulama} penceresine yazılır (hedef: {sinif})": "the saved password ({ad}) is typed only into a {uygulama} window (target: {sinif})",
+ "panelin imzalı kaydı geri alınmış (daha eski bir kopya geri konmuş)": "the panel's signed record was rolled back (an older copy was put back)",
+ "yalnız bu pencere sınıfına yazılsın": "type it only into this window class",
+ "yalnız bu siteye (alt alan adları dahil) yazılsın": "type it only on this site (subdomains included)"
 }

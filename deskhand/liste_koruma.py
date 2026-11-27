@@ -145,6 +145,7 @@ _DURUM_YOK_KESIN = False         # the key ring answered "no item" (only then ca
 _SERVIS_YOK_KESIN = False        # there is no Secret Service at all (not locked: absent; review INC5 Y10)
 _DURUM_KILIT = threading.RLock()
 _DURUM_ONBELLEK_SN = 1.0
+_EN_YUKSEK_NESIL = 0             # the newest generation of the signed state this process has seen (rollback check)
 
 
 def _test_kumu() -> bool:
@@ -219,8 +220,9 @@ def _varsayilan_dosyalar() -> bool:
 
 def isaret_anahtarlik_ayarla(nesne) -> None:
     """Replace the panel's Secret Service item (tests: an object with oku() -> bytes | None and yaz(bytes))."""
-    global _KASA
+    global _KASA, _EN_YUKSEK_NESIL
     _KASA = nesne
+    _EN_YUKSEK_NESIL = 0  # another store object: its generations are its own
     _anahtar_unut()
 
 
@@ -242,9 +244,12 @@ def _durum_coz(ham) -> dict | None:
         eski = dur is None  # no / null field: an item of an older version (review INC6 D1)
         if not isinstance(dur, bool):
             dur = None  # missing / wrong field: the user's DUR is unknown → closed-fail (review INC5 N1)
+        nesil = d.get("nesil")
+        nesil = None if nesil is None else max(0, int(nesil))  # None: an item of a release before generations
     except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return None
-    return {"anahtar": k, "sayac": sayac, "son": son, "dur": dur, "dur_eski": eski} if len(k) == 32 else None
+    return {"anahtar": k, "sayac": sayac, "son": son, "dur": dur, "dur_eski": eski,
+            "nesil": nesil} if len(k) == 32 else None
 
 
 def _neden(e: Exception) -> str:
@@ -272,9 +277,16 @@ def _durum(olustur: bool = False, bozugu_yenile: bool = False) -> dict | None:
             return None
         _SERVIS_YOK_KESIN = False
         _DURUM_YOK_KESIN = not ham  # the key ring answered: there is no item at all
+        global _EN_YUKSEK_NESIL
         d = _durum_coz(ham) if ham else None
+        geri = d is not None and d["nesil"] is not None and d["nesil"] < _EN_YUKSEK_NESIL
+        if geri:  # an OLDER sealed copy was put back (rollback; anahtar_deposu threat model): like a corrupt item
+            d = None
+        elif d is not None and d["nesil"] is not None:
+            _EN_YUKSEK_NESIL = d["nesil"]
         if d is None and ham:
-            _DURUM_NEDEN = _("panelin imzalı kaydı okunamadı (bozuk)")
+            _DURUM_NEDEN = (_("panelin imzalı kaydı geri alınmış (daha eski bir kopya geri konmuş)") if geri
+                            else _("panelin imzalı kaydı okunamadı (bozuk)"))
         if d is None:
             if not olustur or (ham and not bozugu_yenile):
                 _DURUM = None
@@ -293,17 +305,20 @@ def _durum(olustur: bool = False, bozugu_yenile: bool = False) -> dict | None:
 
 
 def _durum_kaydet(d: dict) -> bool:
-    global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
+    global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN, _EN_YUKSEK_NESIL
     dur = d.get("dur")
-    veri = json.dumps({"surum": 1, "anahtar": d["anahtar"].hex(), "sayac": d["sayac"], "son": d["son"],
-                       "dur": dur if isinstance(dur, bool) else None}, ensure_ascii=False).encode("utf-8", "surrogateescape")
     with _DURUM_KILIT:
+        d = {**d, "nesil": max(int(d.get("nesil", 0) or 0), _EN_YUKSEK_NESIL) + 1}  # every write: a newer generation
+        veri = json.dumps({"surum": 1, "anahtar": d["anahtar"].hex(), "sayac": d["sayac"], "son": d["son"],
+                           "dur": dur if isinstance(dur, bool) else None, "nesil": d["nesil"]},
+                          ensure_ascii=False).encode("utf-8", "surrogateescape")
         try:
             _kasa_nesnesi().yaz(veri)
         except Exception as e:  # noqa: BLE001 - not written: nothing is signed
             _DURUM, _DURUM_NEDEN = None, _neden(e)
             return False
         _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN = d, time.monotonic(), None
+        _EN_YUKSEK_NESIL = d["nesil"]
         return True
 
 
@@ -313,14 +328,14 @@ def isaret_gecmisi() -> bool:
 
 
 def ilk_kurulum() -> bool:
-    """A first start ONLY when the key ring definitely answered "no item" AND no mark exists. The Deskhand kasa
-    (files a file-writing process can delete, unlike a wallet item) additionally needs both list files to be absent or
-    the defaults: deleting the kasa item and the marks while a list file holds anything else is closed-fail (the panel
-    asks once), never a silent first start (anahtar_deposu: threat model)."""
+    """A first start ONLY when the key ring definitely answered "no item" AND no mark exists AND (real stores) both list
+    files are absent or the defaults: deleting the kasa item (a file) or switching the store setting by hand, together
+    with the marks, while a list file holds anything else is closed-fail (the panel asks once), never a silent first
+    start (anahtar_deposu: threat model)."""
     _durum(False)
     if not (_DURUM_YOK_KESIN and not isaret_gecmisi()):
         return False
-    if getattr(_kasa_nesnesi(), "son_tur", None) == "kasa":
+    if getattr(_kasa_nesnesi(), "son_tur", None) in ("kasa", "cuzdan"):  # a real store (not a test fake)
         return _varsayilan_dosyalar()
     return True
 
