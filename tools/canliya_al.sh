@@ -8,7 +8,6 @@ HEDEF_DAL="${1:?kullanım: canliya_al.sh HEDEF_DAL [--kuru]}"
 KURU=0; [[ "${2:-}" == "--kuru" ]] && KURU=1
 DH="$HOME/.local/bin/deskhand"
 HELPER="$DEPO/deskhand/yardimci"
-STATE="$HOME/.local/state/deskhand"
 PANEL_RE="^/usr/bin/python3 ($HOME/.local/bin|$HOME/.local/src/deskhand/bin)/deskhand panel"
 ESKI_SURUM="?"; ESKI_UC="?"; YEDEK_TAR=""
 
