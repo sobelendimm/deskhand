@@ -871,6 +871,7 @@ uymadı · 5 belirsiz (birden çok eşleşme) · 6 bulunamadı · 7 zaman aşım
 **16 uygulama arka planda açılamaz** (kullanıcının ekranında açık ya da yalnız ön plan) ·
 **17 gerçek ekran bu süreçte kapalı** (`DESKHAND_GERCEK_EKRAN`, bkz. §6) ·
 **18 insan doğrulaması (CAPTCHA) bekliyor: ajan girdisi reddedildi, kullanıcıya devret (`request_human`)** ·
+**19 parola kayıtlı değil** (`--secret-ref` / `secret_ref`): panelden ad ve siteyle "Parola kaydet" istendi (değer yok); sonra yeniden dene ·
 20 / 21 `decide` karar kodları: 0 = kullanıcının ekranı, 20 = arka plan, 21 = sonra.
 
 Çağıran otomasyon 10, 12, 13, 15, 16, 17 ve 18'de durmalı ve kullanıcıya haber vermelidir. MCP yüzeyinde aynı kodlar

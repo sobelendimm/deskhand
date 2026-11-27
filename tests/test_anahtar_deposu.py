@@ -710,9 +710,9 @@ try:
     ns3 = cli.ayristirici().parse_args(["type", "pencere-1", "--secret-ref", "yok-boyle"])
     try:
         ns3.f(ns3)
-        kontrol("type --secret-ref: kayıtsız ad → Dur 1", False)
+        kontrol("type --secret-ref: kayıtsız ad → Dur 19 (SIR_YOK; B1)", False)
     except Dur as e:
-        kontrol("type --secret-ref: kayıtsız ad → Dur 1", e.kod == 1)
+        kontrol("type --secret-ref: kayıtsız ad → Dur 19 (SIR_YOK; B1)", e.kod == 19 and e.tur == "sir_yok")
     ns4 = cli.ayristirici().parse_args(["type", "pencere-1"])
     try:
         ns4.f(ns4)

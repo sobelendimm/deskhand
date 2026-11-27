@@ -872,6 +872,7 @@ suggests doing the work in the background, otherwise in the foreground.
 **16 the application cannot be opened in the background** (open on the user's screen or foreground only) ·
 **17 the real screen is closed in this process** (`DESKHAND_GERCEK_EKRAN`, see §6) ·
 **18 human verification (CAPTCHA) pending: agent input refused, hand over to the user (`request_human`)** ·
+**19 the password is not saved** (`--secret-ref` / `secret_ref`): the panel was asked to show "Save password" with the name and site (no value); retry later ·
 20 / 21 `decide` decision codes: 0 = the user's screen, 20 = background, 21 = later.
 
 Calling automation must stop at 10, 12, 13, 15, 16, 17 and 18 and notify the user. On the MCP surface the same codes appear as an error

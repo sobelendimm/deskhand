@@ -731,26 +731,42 @@ def _hedef_dogrula(uygulama: str | None, site: str | None) -> dict:
     return {k: v for k, v in (("uygulama", uygulama), ("site", site)) if v}
 
 
-def sir_paketle(deger: bytes, uygulama: str | None = None, site: str | None = None) -> bytes:
+def sir_paketle(deger: bytes, uygulama: str | None = None, site: str | None = None, nesil: int = 1) -> bytes:
+    """The envelope: ZARF + JSON header {"hedef", "degisim" (epoch seconds of this value), "nesil" (+1 per value
+    change)} + "\\n" + value. The header never holds the value."""
     import json
+    import time
     hedef = _hedef_dogrula(uygulama, site)
-    return _ZARF + json.dumps({"hedef": hedef}, ensure_ascii=False, sort_keys=True).encode("utf-8") + b"\n" + \
-        bytes(deger)
+    bas = {"hedef": hedef, "degisim": int(time.time()), "nesil": max(1, int(nesil))}
+    return _ZARF + json.dumps(bas, ensure_ascii=False, sort_keys=True).encode("utf-8") + b"\n" + bytes(deger)
+
+
+def _sir_ac(ham: bytes) -> tuple[bytes, dict, dict]:
+    """(value, binding, {"degisim", "nesil"}) of a stored secret. No envelope: (raw, {}, {}). Malformed → DepoHatasi."""
+    import json
+    if not ham.startswith(_ZARF):
+        return ham, {}, {}
+    bas, ayrac, deger = ham[len(_ZARF):].partition(b"\n")
+    try:
+        b = json.loads(bas.decode("utf-8")) if ayrac else None
+        if not isinstance(b, dict):
+            raise ValueError
+        h = b.get("hedef")
+        if not isinstance(h, dict):
+            raise ValueError
+        hedef = _hedef_dogrula(h.get("uygulama"), h.get("site"))
+        degisim, nesil = b.get("degisim"), b.get("nesil")
+        meta = {"degisim": degisim if isinstance(degisim, int) and not isinstance(degisim, bool) and degisim >= 0
+                else None,
+                "nesil": nesil if isinstance(nesil, int) and not isinstance(nesil, bool) and nesil >= 1 else None}
+    except (ValueError, UnicodeDecodeError, AttributeError, TypeError):
+        raise DepoHatasi(_("gizli bilgi kaydı bozuk")) from None
+    return deger, hedef, meta
 
 
 def sir_coz(ham: bytes) -> tuple[bytes, dict]:
     """(value, binding) of a stored secret. No envelope: (raw, {}). A malformed envelope → DepoHatasi."""
-    import json
-    if not ham.startswith(_ZARF):
-        return ham, {}
-    bas, ayrac, deger = ham[len(_ZARF):].partition(b"\n")
-    try:
-        h = json.loads(bas.decode("utf-8")).get("hedef") if ayrac else None
-        if not isinstance(h, dict):
-            raise ValueError
-        hedef = _hedef_dogrula(h.get("uygulama"), h.get("site"))
-    except (ValueError, UnicodeDecodeError, AttributeError):
-        raise DepoHatasi(_("gizli bilgi kaydı bozuk")) from None
+    deger, hedef, _meta = _sir_ac(ham)
     return deger, hedef
 
 
@@ -784,3 +800,138 @@ def sir_hedefi_yaz(ad: str, uygulama: str | None = None, site: str | None = None
     if s is None:
         raise DepoHatasi(_("kayıtlı gizli bilgi yok: {ad}").format(ad=ad))
     secili_depo().yaz(ad, sir_paketle(s[0], uygulama, site))
+
+
+def sir_degistir(ad: str, deger: bytes) -> None:
+    """Settings "Change": a NEW value for the existing secret `ad`; its binding (site / window class) is kept as it is
+    and its generation goes up by one. No such secret → DepoHatasi. The value is never logged or returned."""
+    if not kullanici_adi_mi(ad):
+        raise ValueError(_("geçersiz ya da ayrılmış ad: {ad}").format(ad=ad))
+    if not deger:
+        raise ValueError(_("boş değer kaydedilmez"))
+    depo = secili_depo()
+    ham = depo.oku(ad)
+    if ham is None:
+        raise DepoHatasi(_("kayıtlı gizli bilgi yok: {ad}").format(ad=ad))
+    _eski, hedef, meta = _sir_ac(ham)
+    depo.yaz(ad, sir_paketle(deger, hedef.get("uygulama"), hedef.get("site"), (meta.get("nesil") or 1) + 1))
+
+
+def sir_listesi() -> list[dict]:
+    """Settings "Saved passwords": [{"ad", "site", "uygulama", "degisim" (epoch seconds | None)}] of the user's secrets,
+    sorted by name. NEVER the value. An item that cannot be opened is listed with None fields (DepoHatasi of the
+    store itself is raised: locked wallet, no systemd-creds)."""
+    depo = secili_depo()
+    sonuc = []
+    for ad in sorted(depo.listele()):
+        satir = {"ad": ad, "site": None, "uygulama": None, "degisim": None}
+        try:
+            ham = depo.oku(ad)
+            if ham is not None:
+                _d, hedef, meta = _sir_ac(ham)
+                satir.update(site=hedef.get("site"), uygulama=hedef.get("uygulama"), degisim=meta.get("degisim"))
+        except DepoHatasi:
+            pass
+        sonuc.append(satir)
+    return sonuc
+
+
+# ---------------------------------------------------------------- "please save this password" requests (no value)
+# An agent asked to type a secret the user has not saved (cli.k_yaz_sir → Dur SIR_YOK): a request file for the panel,
+# which shows the "Save password" form with the name and site filled in. The request carries the NAME and the SITE
+# only: there is no value field (the value only ever comes from the panel's password field).
+SIR_ISTEK_TUR = "sir_kaydet"
+_SIR_ISTEK_EN_COK = 20
+_SIR_ISTEK_OMUR = 24 * 3600
+
+
+def sir_istek_dizini() -> str:
+    return os.path.join(yollar.runtime_dir(), "sir-istek")
+
+
+def sir_istegi_yaz(ad: str, site: str | None = None) -> str | None:
+    """Record {"tur": "sir_kaydet", "ad", "site"} for the panel → the request id (an existing request for the same name
+    and site is reused); None when the name is not a user name or too many requests are pending. An invalid site is
+    dropped (the form opens without it)."""
+    import json
+    import time
+    import uuid
+    if not kullanici_adi_mi(ad):
+        return None
+    try:
+        site = _hedef_dogrula(None, site).get("site")
+    except ValueError:
+        site = None
+    bekleyen = sir_istekleri()
+    for b in bekleyen:
+        if b["ad"] == ad and b["site"] == site:
+            return b["id"]
+    if len(bekleyen) >= _SIR_ISTEK_EN_COK:
+        return None
+    d = sir_istek_dizini()
+    os.makedirs(os.path.dirname(d), mode=0o700, exist_ok=True)
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    kimlik = uuid.uuid4().hex
+    fd, gecici = tempfile.mkstemp(dir=d, prefix=".", suffix=".yeni")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"tur": SIR_ISTEK_TUR, "ad": ad, "site": site, "zaman": time.time()}, f, ensure_ascii=False)
+        os.replace(gecici, os.path.join(d, kimlik + ".json"))
+    except BaseException:
+        try:
+            os.unlink(gecici)
+        except OSError:
+            pass
+        raise
+    return kimlik
+
+
+def sir_istekleri() -> list[dict]:
+    """Pending requests, oldest first: [{"id", "tur": "sir_kaydet", "ad", "site", "zaman"}]. Malformed, foreign or
+    expired (24 h) files are skipped (and expired ones removed)."""
+    import json
+    import time
+    d = sir_istek_dizini()
+    try:
+        adlar = os.listdir(d)
+    except OSError:
+        return []
+    simdi = time.time()
+    sonuc = []
+    for a in adlar:
+        kimlik = a[:-5] if a.endswith(".json") else ""
+        if not re.fullmatch(r"[0-9a-f]{32}", kimlik):
+            continue
+        yol = os.path.join(d, a)
+        try:
+            fd = os.open(yol, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            with os.fdopen(fd, encoding="utf-8") as f:
+                if os.fstat(f.fileno()).st_uid != os.getuid():
+                    continue
+                v = json.loads(f.read(4096))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(v, dict) or v.get("tur") != SIR_ISTEK_TUR or not kullanici_adi_mi(v.get("ad")):
+            continue
+        zaman = v.get("zaman") if isinstance(v.get("zaman"), (int, float)) else 0.0
+        if simdi - zaman > _SIR_ISTEK_OMUR:
+            sir_istegi_kapat(kimlik)
+            continue
+        site = v.get("site") if isinstance(v.get("site"), str) else None
+        try:
+            site = _hedef_dogrula(None, site).get("site")
+        except ValueError:
+            site = None
+        sonuc.append({"id": kimlik, "tur": SIR_ISTEK_TUR, "ad": v["ad"], "site": site, "zaman": zaman})
+    return sorted(sonuc, key=lambda x: x["zaman"])
+
+
+def sir_istegi_kapat(istek_id: str) -> bool:
+    """The panel saved the password (or the user dismissed the request): remove it. → removed."""
+    if not isinstance(istek_id, str) or not re.fullmatch(r"[0-9a-f]{32}", istek_id):
+        return False
+    try:
+        os.unlink(os.path.join(sir_istek_dizini(), istek_id + ".json"))
+    except OSError:
+        return False
+    return True

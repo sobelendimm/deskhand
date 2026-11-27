@@ -2071,7 +2071,6 @@
  "kaydedildi: {ad} ({depo})": "saved: {ad} ({depo})",
  "kayıtlı adlar (değer gösterilmez)": "saved names (values are never shown)",
  "kayıtlı değil: {ad}": "not saved: {ad}",
- "kayıtlı gizli bilgi yok: {ad} (deskhand secret set {ad})": "no saved secret: {ad} (deskhand secret set {ad})",
  "makine anahtarı (TPM2 yok)": "host key (no TPM2)",
  "metin ile --secret-ref birlikte verilmez": "text and --secret-ref cannot be given together",
  "metin yerine anahtar deposundaki AD gizli bilgisini yaz (yalnız parola alanına; değer komut satırında ve günlükte görünmez)": "type the secret NAME from the key store instead of text (password fields only; the value never appears on the command line or in the log)",
@@ -2166,5 +2165,7 @@
  "XDG_RUNTIME_DIR yok ya da güvenli değil; cüzdan açılmadı": "XDG_RUNTIME_DIR is missing or not safe; the wallet was not opened",
  "birim dosyasına yazılamayan yol (denetim karakteri)": "a path that cannot be written to the unit file (control character)",
  "güvenli araç bulunamadı: {ad} (yalnız /usr/bin ve /bin, root'a ait)": "no safe helper found: {ad} (only /usr/bin and /bin, owned by root)",
- "panelin imzalı kaydı silinmiş (bu bilgisayarda daha önce yazılmıştı)": "the panel's signed record was deleted (it was written on this computer before)"
+ "panelin imzalı kaydı silinmiş (bu bilgisayarda daha önce yazılmıştı)": "the panel's signed record was deleted (it was written on this computer before)",
+ "Parola kayıtlı değil ({ad}); kullanıcıdan panelde kaydetmesi istendi, sonra yeniden deneyin.": "The password is not saved ({ad}); the user was asked to save it in the panel. Try again later.",
+ "parola kayıtlı değil: kullanıcıdan panelde kaydetmesi istendi": "password not saved: the user was asked to save it in the panel"
 }

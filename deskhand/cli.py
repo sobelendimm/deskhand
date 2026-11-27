@@ -22,7 +22,7 @@ from .gezin import k_git
 from .gorsel import k_foto, k_renk_bul, k_simge_bul, k_simge_kaydet
 from .gunluk import gunluk, temizle
 from .guvenlik import yasak_denetle
-from .hata import SANAL_KAPALI, Dur, dur_denetle, dur_dosyasi
+from .hata import SANAL_KAPALI, SIR_YOK, Dur, dur_denetle, dur_dosyasi
 from .i18n import N_, _, h_
 from .komutlar import DUGME, ERISIM, PENCERE, RENK, SECENEKLER, TR_EN, YON, cevirici, ic_ad, secimler, takma_adlar
 from .mesgul import k_karar, k_mesgul
@@ -364,7 +364,8 @@ def _sir_ve_hedef(ad: str) -> tuple[str, dict]:
     except DepoHatasi as e:
         raise Dur(10, _("gizli bilgi okunamadı ({ad}): {neden}").format(ad=ad, neden=e.neden)) from None
     if s is None:
-        raise Dur(1, _("kayıtlı gizli bilgi yok: {ad} (deskhand secret set {ad})").format(ad=ad))
+        raise Dur(SIR_YOK, _("Parola kayıtlı değil ({ad}); kullanıcıdan panelde kaydetmesi istendi, sonra yeniden "
+                             "deneyin.").format(ad=ad), tur="sir_yok")
     try:
         return s[0].decode("utf-8"), s[1]
     except UnicodeDecodeError:
@@ -429,6 +430,20 @@ def _sir_hedef_denetle(ad: str, h: dict, sinif: str, konak: str) -> None:
             ad=ad, site=h["site"], konak=konak or "?"))
 
 
+def _sir_istegi(k, ad: str) -> None:
+    """Not saved: ask the panel to show "Save password" with the name and (best effort) the site of the focused
+    password field filled in (anahtar_deposu.sir_istegi_yaz). NAME and SITE only: the request has no value field."""
+    from .anahtar_deposu import sir_istegi_yaz
+    try:
+        site = _guncel_konak(k) or None
+    except Exception:  # noqa: BLE001 - unknown site: the form opens without it
+        site = None
+    try:
+        sir_istegi_yaz(ad, site)
+    except OSError:
+        pass
+
+
 def k_yaz_sir(a):
     """`type`: with --secret-ref AD the value comes from the key store (never argv, never the log, never the result) and
     goes ONLY into a field the accessibility tree reports as a password field (so a stored password cannot be typed
@@ -445,7 +460,12 @@ def k_yaz_sir(a):
     if eylem._parola_alani_mi(a.kimlik) is not True:
         raise Dur(10, _("--secret-ref yalnız parola alanına yazılır: odaklı alan parola alanı değil ya da alan türü "
                         "belirlenemedi (erişilebilirlik: deskhand a11y on)"))
-    deger, hedef = _sir_ve_hedef(ad)  # exists + readable before anything is asked
+    try:
+        deger, hedef = _sir_ve_hedef(ad)  # exists + readable before anything is asked
+    except Dur as e:
+        if e.tur == "sir_yok":
+            _sir_istegi(a.kimlik, ad)
+        raise
     _baslik, sinif = _pencere_bilgisi(a.kimlik)
     konak = _guncel_konak(a.kimlik)  # the field's own document, read NOW (R2/R3: no cache, no top-page origin)
     _sir_hedef_denetle(ad, hedef, sinif, konak)

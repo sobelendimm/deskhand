@@ -22,6 +22,7 @@ KULLANICI_MESGUL = 15  # kullanıcı oyunda / film izliyor: ekranına müdahale 
 OTURUM_POLITIKASI = 16  # uygulama arka planda açılamaz (kullanıcının ekranında açık / yalnız ön plan)
 GERCEK_EKRAN_KAPALI = 17  # bu süreçte kullanıcının GERÇEK ekranı kilitli (DESKHAND_GERCEK_EKRAN): görünmez masaüstü kullan
 INSAN_DOGRULAMA = 18  # insan doğrulaması (CAPTCHA) sınaması: ajan girdisi reddedildi, kullanıcıya devret (request_human)
+SIR_YOK = 19  # secret_ref: the user has not saved that password; the panel was asked to show "Save password" (no value)
 
 
 class Dur(Exception):

@@ -146,6 +146,7 @@ KOD_ADI = {  # gösterirken _()
     16: N_("uygulama arka planda açılamaz (kullanıcının ekranında açık ya da yalnız ön plan)"),
     17: N_("gerçek ekran bu süreçte kapalı (DESKHAND_GERCEK_EKRAN): desktop=background kullan"),
     18: N_("insan doğrulaması (CAPTCHA) bekliyor: kullanıcıya devret (request_human)"),
+    19: N_("parola kayıtlı değil: kullanıcıdan panelde kaydetmesi istendi"),
 }
 
 
@@ -196,6 +197,8 @@ IPUCU = {
     17: "the real screen is locked for this process (DESKHAND_GERCEK_EKRAN): use desktop='background'",
     18: "a human-verification challenge (CAPTCHA) is in the way: never click it or try to solve it; call "
         "request_human(reason, window) and continue when it returns status=resolved",
+    19: "the password is not saved: the user was asked to save it in the Deskhand panel; tell the user, then retry "
+        "the same secret_ref later (never ask the user to type the password to you)",
 }
 
 

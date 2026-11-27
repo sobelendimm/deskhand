@@ -364,6 +364,94 @@ def cuzdan_ac() -> int:
     return 1
 
 
+# ---------------------------------------------------------------- Settings buttons (ONLY the panel calls these)
+# The ONLY places in Deskhand that ask KDE to unlock the wallet, change its password or open the user's account
+# settings. Each runs only when the user clicks its button in Settings › Secrets; never from the background, MCP or the
+# CLI (tests/test_cuzdan_yardim.py scans the sources). KDE shows its OWN windows: Deskhand never sees a password.
+
+CUZDAN = "kdewallet"
+_KWALLETD = ("org.kde.kwalletd6", "/modules/kwalletd6", "org.kde.KWallet")
+
+
+def kullanici_kilit_ac(zaman_asimi: float = 120) -> bool:
+    """Settings "Open the wallet" button: Secret Service Unlock of the default collection (secretstorage
+    Collection.unlock): KDE shows its own password window. ONE call, no retry. → True: unlocked now; False: the user
+    cancelled, the call failed or `zaman_asimi` seconds passed (the call keeps waiting in a daemon thread; its answer is
+    then ignored)."""
+    import threading
+    sonuc: dict = {}
+
+    def is_():
+        try:
+            import secretstorage
+            baglanti = secretstorage.dbus_init()
+            try:
+                k = secretstorage.get_default_collection(baglanti)
+                if k.is_locked():
+                    k.unlock()  # the wallet's own prompt; True = dismissed
+                sonuc["acik"] = not k.is_locked()
+            finally:
+                try:
+                    baglanti.close()
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception as e:  # noqa: BLE001 - no Secret Service / D-Bus error / no python-secretstorage: still locked
+            sonuc["hata"] = type(e).__name__
+
+    t = threading.Thread(target=is_, name="deskhand-cuzdan-kilit-ac", daemon=True)
+    t.start()
+    t.join(max(0.0, float(zaman_asimi)))
+    if t.is_alive() or "acik" not in sonuc:
+        _gunluk(f"cüzdan: kullanıcı kilit açma: açılmadı ({sonuc.get('hata') or 'zaman aşımı/iptal'})")
+        return False
+    return bool(sonuc["acik"])
+
+
+def parola_degistir_baslat(wid: int) -> bool:
+    """Settings "Change the wallet password" button: kwalletd6 changePassword("kdewallet", wid, "Deskhand"); KDE asks
+    the old and the new password in its OWN window (parented to `wid` when it is an X11 id; 0 = none). Starts the dialog
+    only: → True when the request was accepted (not whether the password changed)."""
+    arac = _arac("busctl")
+    if not arac:
+        return False
+    try:
+        wid = int(wid)
+    except (TypeError, ValueError):
+        wid = 0
+    try:
+        r = subprocess.run([arac, "--user", "--timeout=10", "call", *_KWALLETD, "changePassword", "sxs", CUZDAN,
+                            str(wid if 0 <= wid < 2 ** 63 else 0), "Deskhand"],
+                           capture_output=True, text=True, timeout=15, stdin=subprocess.DEVNULL, env=_ortam())
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if r.returncode != 0:
+        _gunluk("cüzdan: parola değiştirme penceresi açılamadı")
+    return r.returncode == 0
+
+
+def cuzdan_durumu() -> dict:
+    """{"var": the user has a KDE Wallet (kdewallet.kwl), "kilitli": True/False, None = no Secret Service running /
+    unknown (a property read: never a prompt, never starts a service), "giris_parolasi_olasi": kwallet-pam's salt
+    exists, so the wallet password is most likely the login password}."""
+    dizin = os.path.dirname(tuz_yolu())
+    return {"var": os.path.isfile(os.path.join(dizin, CUZDAN + ".kwl")), "kilitli": kilitli(),
+            "giris_parolasi_olasi": os.path.isfile(tuz_yolu())}
+
+
+def kullanici_ayari_ac() -> bool:
+    """Settings "I don't know my password" › "Open user settings": `kcmshell6 kcm_users` (the login password; the
+    administrator prompt is KDE's). Detached; → True when started."""
+    arac = _arac("kcmshell6")
+    if not arac:
+        return False
+    try:
+        subprocess.Popen([arac, "kcm_users"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True, env=soket_ortami())
+    except OSError:
+        return False
+    return True
+
+
 def main(argv: list[str]) -> int:
     """`deskhand wallet open|status|remove` (setup only from Settings: the password is never an argument)."""
     import json
