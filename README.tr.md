@@ -171,6 +171,10 @@ Ayrıntılar için bkz. [CHANGELOG.tr.md](CHANGELOG.tr.md).
 - **Web ögeleri:** tarayıcı sayfasının düğme/bağlantı/alanları erişilebilirlik ağacından okunur; tarayıcıya uzaktan denetim kapısı açılmaz.
 - **Görünmez masaüstü:** yalıtık, ekran kartı hızlandırmalı KWin oturumu (`bubblewrap` içinde); olmazsa Xvfb yedeği.
 - **Onay kapsamı "Yalnız kartla ödeme":** yalnız panelden (Ayarlar → Onay soruları) açılır; yalnız para düğmeleri ve kart bilgisi yazma onay sorar. Varsayılan "hepsi"dir.
+- **Deskhand kasası ya da KDE Cüzdanı (0.10.0'da yeni):** kayıtlı parolalar ve panelin imzalı ayar kaydı iki depodan birinde durur. *Deskhand kasası* (yeni kurulumda varsayılan) öğeleri `systemd-creds` ile mühürlü dosyalarda tutar (TPM2 varsa ona, yoksa makine anahtarına bağlı) ve hiç D-Bus ya da cüzdan çağrısı yapmaz; girişte cüzdan sorusu çıkmaz. *KDE Cüzdanı* eskiden kullanılan Secret Service yoludur. Değiştirmek sizi sorar ve öğeleri taşır. Cüzdanı zaten kullanan bir kurulum, kasayı siz seçene dek cüzdanda kalır.
+- **Ayarlar → Gelişmiş → Gizli bilgiler (0.10.0'da yeni):** depoyu seçin, durum rozetini görün (TPM ile hazır / makine anahtarıyla hazır / açık / kilitli / kullanılamıyor ve nedeni), adlı kayıtlı parolalar ekleyin ya da silin (değerler asla gösterilmez), **Girişte KDE Cüzdanı'nı aç**'ı açın.
+- **Siteye bağlı, her kullanımda onaylı kayıtlı parolalar (0.10.0'da yeni):** `deskhand secret set AD [--site ALAN] [--app PENCERE_SINIFI]` (değer stdin'den, komut satırından asla), `secret list`, `secret rm`, `secret status`. Ajan bir parolayı `deskhand type <pencere> --secret-ref AD` ya da MCP `type_text`'in `secret_ref` argümanıyla yazar. Değer depodan doğrudan klavye katmanına gider; sonuçta, günlükte ve panel akışında görünmez. Yalnız parola alanına yazılır (erişilebilirlik açık olmalı, `deskhand a11y on`) ve **her kullanım panelde sorulur** (ad, pencere sınıfı, site; değer asla). Bir siteye ya da uygulamaya bağlı parola başka yerde reddedilir.
+- **Girişte KDE Cüzdanı'nı aç (0.10.0'da yeni):** `deskhand wallet open|status|remove`. Deskhand parolanızı değil, cüzdanın türetilmiş anahtarını kasaya mühürleyerek saklar; bir kullanıcı servisi (`deskhand-cuzdan-ac.service`) girişte onu `kwallet-pam`'ın yaptığı gibi `ksecretd`'ye verir. Servis çalışırken cüzdan zaten başlamış ve kilitliyse zorlanmaz: tek satır günlüğe yazar, sonraki girişte yeniden dener, Ayarlar da bunu söyler.
 - **Kalıcı arka plan oturumları, hesap oturumları, çoklu masaüstü, `--scale 2`, dosya yükleme, `doctor`:** yukarıdaki ve aşağıdaki bölümlere bakın.
 
 ### MCP sunucusu (20 araç)
@@ -178,6 +182,7 @@ Ayrıntılar için bkz. [CHANGELOG.tr.md](CHANGELOG.tr.md).
 `deskhand mcp` 20 araçlı bir stdio MCP sunucusudur: `get_status`, `choose_desktop`, `manage_desktop`,
 `observe`, `screenshot`, `read_text`, `listen`, `find`, `click`, `type_text`, `clipboard`, `press_key`,
 `scroll`, `drag`, `open_app`, `manage_window`, `run_flow`, `batch`, `wait_for`, `request_human`.
+`type_text` ayrıca `text` yerine `secret_ref` alır (kayıtlı parolanın adı, yukarıya bakın).
 Ekran görüntüleri uzun kenarı 1280 piksele küçültülür. Koordinatlar bir `shot_id`'ye bağlıdır; bayat
 görüntüye göre tıklama reddedilir. MCP yüzeyinde "onaylandı" bayrağı yoktur: hassas eylemler her zaman
 panelden geçer.
@@ -186,7 +191,7 @@ panelden geçer.
 
 Etkinlik (canlı günlük, süzgeç), arka plan masaüstleri (seçici, canlı izleme, durdurma, devralma), görev
 (panelin kendi ajanına görünmez masaüstünde iş verin), onaylar (bekleyenler + geçmiş), ayarlar (meşgulken
-davranış, yasak pencereler, DUR kısayolu, onay kapsamı, hesap oturumları), kayıtlı simgeler ve tüm
+davranış, yasak pencereler, DUR kısayolu, onay kapsamı, hesap oturumları, gizli bilgiler), kayıtlı simgeler ve tüm
 bağımlılıkların sağlık denetimi. Tepsi simgesi boşta / ekranınızda / arka planda / DUR durumunu gösterir;
 onay bekliyorsa rozet çıkar.
 
@@ -271,8 +276,20 @@ sudo modprobe uinput                                  # /dev/uinput yoksa
 echo uinput | sudo tee /etc/modules-load.d/uinput.conf   # açılışta yüklensin
 ```
 
-> **CachyOS (Arch) + KDE Plasma 6** üzerinde geliştirildi ve denendi. Diğer dağıtımlarda
-> karşılık gelen paketlerle çalışması beklenir ama denenmedi.
+## Desteklenen sistemler
+
+| Durum | Sistem |
+| ----- | ------ |
+| **Denendi** | CachyOS (Arch) + Wayland üzerinde KDE Plasma 6.8. Deskhand'in çalıştırıldığı tek kurulum budur. |
+| **Çalışması beklenir (denenmedi)** | Plasma 6.8 ile Arch Linux, EndeavourOS ve Manjaro (aynı paketler, aynı depolar). |
+| **Henüz yok** | Fedora, openSUSE, Debian ve Ubuntu (KDE sürümleri dahil): çoğunda KWin 6.8'den eski ya da Deskhand'in istediği paketler (`kdotool`, `dotool`, `mcp` 2.3+) eksik; `install.sh` yalnız `pacman` komutu yazdırır. KWin 6.8'den eskiyse görünmez masaüstü Xvfb'ye düşer (yalnız X11 uygulamaları). GNOME ve diğer masaüstleri: yalnız görünmez masaüstü çalışabilir (Xvfb), ön plan KDE ister. Windows, macOS, BSD: desteklenmez (Linux'a özgü parçalar: `uinput`, D-Bus, `bubblewrap`, `systemd`). |
+
+Yardımcılar (`kdotool`, `dotool`, `bwrap`) yalnız `/usr/bin` ve `/bin` içinde aranır; Python modülü `mcp` 2.3 ya da
+daha yeni olmalı ve sistem `python3`'ü tarafından içe aktarılabilmeli.
+
+Dağıtımınızın desteklenmesini ister misiniz? `deskhand doctor` çıktısıyla [bir issue açın](https://github.com/sobelendimm/deskhand/issues)
+ya da [çalışmaya destek olun](https://github.com/sponsors/sobelendimm): başka sistemlerde denemek gerçekten zaman alıyor,
+başka kurulumlardan gelen raporlar kapsamı genişletmenin en hızlı yolu.
 
 ## Kurulum
 
@@ -515,6 +532,13 @@ aracı veya komutu yoktur. Onay diyaloğu, DUR, yasak pencere listesi ve meşgul
   doğrulanmamış listeyi salt okunur gösterir. Bu, cüzdan kaydını bilerek okuyan ya da değiştiren (KDE
   Cüzdan'da uygulama başına erişim denetimi yok) ya da cüzdan açıkken kaydı silen (ilk açılış gibi görünür)
   sizin kullanıcınızla çalışan kodu kapsamaz.
+- **Deskhand kasası, sizin kullanıcınızla çalışan koda karşı kilidi açık bir cüzdandan güçlü değildir.** Kullanıcı
+  hesabınızdaki bir süreç kasa öğesine `systemd-creds --user decrypt` çalıştırabilir; tıpkı kilidi açık bir KDE
+  Cüzdanı'nı `secret-tool` ile okuyabileceği gibi; buna karşı kilitli cüzdan daha güçlü seçimdir. Kasa, panel kaydının
+  geri alınmış bir kopyasını yalnız bir Deskhand süreci daha yeni olanı görmüşse fark eder; hiçbir Deskhand süreci
+  çalışmıyorken eski kopyayı geri koymak fark edilmez (çapa için TPM sayacı yoktu). `secret_ref` ek bir katmandır:
+  her kullanım panelde Evet'inizi ister ve değer yalnız parola alanına gider.
+- **Kullanıcınız olarak rastgele kabuk komutları çalıştırabilen bir ajan** dosyaları düzenleyebilir, paneli
   kapatabilir ya da masaüstünü Deskhand olmadan sürebilir. Kabuk erişimini istemcinizin izin istemlerinin
   arkasında tutun.
 - Arka plan masaüstündeki uygulamalar `bubblewrap` içinde çalışır (salt okunur kök, boş ev dizini, örtülü sır
