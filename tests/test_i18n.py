@@ -83,8 +83,8 @@ kontrol("sifirla() sonrası Türkçe (DESKHAND_DIL=tr)", i18n._("merhaba") == "m
 
 # ---------------------------------------------------------------- 3) sahte İngilizce katalog: Dur mesajı + yardım
 print("3) sahte en kataloğu")
-DUR_TR = "kullanıcı DUR dedi (deskhand devam ile kaldırılır); girdi gönderilmedi"
-DUR_EN = "the user said STOP (lift it with deskhand resume); no input was sent"
+DUR_TR = "kullanıcı DUR dedi (yalnız kullanıcı panelden ya da kısayolla kaldırır); girdi gönderilmedi"
+DUR_EN = "user said STOP (only the user removes it, in the panel or with the shortcut); input not sent"
 os.makedirs(os.path.dirname(hata.dur_dosyasi()), exist_ok=True)
 open(hata.dur_dosyasi(), "w").close()
 try:

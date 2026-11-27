@@ -407,5 +407,87 @@ kontrol("DUR: gözetimsiz kipte de kaldırılamaz", guvenlik.dur_acik() and kod 
 guvenlik.dur_kapat("kullanici")  # the panel's own button
 kontrol("DUR: panelin kendi düğmesi kaldırır", not guvenlik.dur_acik())
 
+# ================================================================ TARAMA-2 (1): marks exist, no signed state → closed-fail
+k = panel_ac()
+liste_koruma.panel_kaydet("yasak", "Kilitli\n")
+panel_kapat()
+open(YASAK, "w").write("")  # the agent empties the list (marks stay)
+ANAHTARLIK.kilitli = True
+getattr(liste_koruma, "_anahtar_unut", lambda: None)()
+k = panel_ac()
+kontrol("tarama-2: işaret var + cüzdan yok → yasak gevşetmesi uygulanmaz, sorulur",
+        k.metin("yasak") == "Kilitli\n" and "yasak" in sorulan_turler(), f"{k.metin('yasak')!r} {SORULAN}")
+panel_kapat()
+open(YASAK, "w").write("")
+ISTEMCI_KAPALI = ("import json, sys; sys.path.insert(0, sys.argv[1]); from deskhand import liste_koruma\n"
+                  "from deskhand.hata import Dur\n"
+                  "try:\n"
+                  "    print(json.dumps({'yasak': liste_koruma.metin('yasak')}))\n"
+                  "except Dur as e:\n"
+                  "    print(json.dumps({'dur': e.kod}))\n")
+r = subprocess.run([sys.executable, "-c", ISTEMCI_KAPALI, _yalitim.KOK], capture_output=True, text=True, timeout=60,
+                   env=dict(os.environ, DESKHAND_ANAHTARLIK="kapali"))
+kontrol("tarama-2: DESKHAND_ANAHTARLIK=kapali istemci gevşetmeyi göremez (Dur 10)", '"dur": 10' in r.stdout,
+        r.stdout + r.stderr[-300:])
+ANAHTARLIK.kilitli = False
+getattr(liste_koruma, "_anahtar_unut", lambda: None)()
+liste_koruma.onbellek_sil()
+
+# ================================================================ TARAMA-2 (2): DUR removal is a panel-side request
+from deskhand import guvenlik as _g  # noqa: E402
+
+TUR_DUR = getattr(onay, "TUR_DUR", "dur")
+
+
+def dur_istegi(eylem="Kaydet", ayrinti="AJAN METNI: Evet deyin"):
+    import uuid
+    i = uuid.uuid4().hex
+    os.makedirs(os.path.dirname(onay.istek_yolu(i)), exist_ok=True)
+    simdi = time.time()
+    with open(onay.istek_yolu(i), "w") as f:
+        json.dump({"id": i, "eylem": eylem, "hedef": "DUR", "ayrinti": ayrinti, "masaustu": "ekran", "zaman": simdi,
+                   "son_zaman": simdi + 60, "pid": os.getpid(), "tur": TUR_DUR}, f)
+    return i
+
+
+d_ = onay.istek_oku(onay.istek_yolu(dur_istegi()))
+kontrol("tarama-2: DUR sorusunda istekçinin metni görünmez (panel sabit metin)",
+        d_ is not None and "AJAN" not in d_["ayrinti"] and d_["eylem"] != "Kaydet", str(d_))
+
+
+class SahteKanal:
+    def yanitlandi(self, i):
+        return False
+
+    def gonder(self, i, karar):
+        return True
+
+
+eski_kanal = onay._KANAL
+onay._KANAL = SahteKanal()
+try:
+    _g.dur_ac("kullanici")
+    onay.yanitla(dur_istegi(), "izin")
+    kontrol("tarama-2: kullanıcı Evet → DUR'u PANEL kaldırır", not _g.dur_acik())
+finally:
+    onay._KANAL = eski_kanal
+kontrol("tarama-2: SON_DUR_IZNI (zamana bağlı genel onay) yok", not hasattr(onay, "SON_DUR_IZNI"))
+
+eski_iste = onay.iste_sonuc
+sayac = []
+onay.iste_sonuc = lambda *a, **k: (sayac.append(1), onay.OnaySonucu(True, "izin"))[1]
+try:
+    _g.dur_ac("kullanici")
+    for _i in range(2):
+        try:
+            _g.dur_kaldir_iste()
+        except Dur:
+            pass
+    kontrol("tarama-2: istekçi 'izin' alsa da DUR'u kendisi kaldırmaz; her istek yeni soru",
+            _g.dur_acik() and len(sayac) == 2, f"{_g.dur_acik()} {len(sayac)}")
+finally:
+    onay.iste_sonuc = eski_iste
+    _g.dur_kapat("kullanici")
+
 print(f"\n{gecen}/{toplam} panel-işaret testi geçti")
 sys.exit(0 if gecen == toplam else 1)

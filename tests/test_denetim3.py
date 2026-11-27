@@ -241,9 +241,10 @@ kontrol("D1: panel yeniden açılınca kapalıyken silinen/değişen dosyalar i�
         len(uyarilar) == 2, str(uyarilar))
 liste_koruma.panel_durdur()
 onay.panel_sil()
-# ilk kurulum: işaret yok, panelin imzalı kaydı yok → bugünkü davranış
-for t in liste_koruma.TURLER:
-    os.remove(liste_koruma.isaret_yolu(t))
+# ilk kurulum: hiç işaret yok, panelin imzalı kaydı yok → bugünkü davranış
+for t in getattr(liste_koruma, "TUM", liste_koruma.TURLER):
+    if os.path.exists(liste_koruma.isaret_yolu(t)):
+        os.remove(liste_koruma.isaret_yolu(t))
 os.remove(SahteKasa.yol)
 liste_koruma._anahtar_unut()
 os.remove(YASAK)

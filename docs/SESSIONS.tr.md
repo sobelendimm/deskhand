@@ -471,7 +471,8 @@ replay sayılır, reddedilir). Kural: diskteki DARALTMA (site/sağlayıcı çık
 düşük seviye) sorusuz kabul; GEVŞETME (ya da yönü belirsiz değişiklik) kullanıcı panelde Evet demeden uygulanmaz
 (varsayılan Hayır); sahte dosya + işaret kaybeder, son onaylı değer ögeden geri gelir. İmzalı kayıt yoksa (ilk açılış,
 cüzdan kilitli, Secret Service yok, her hata): yalnız varsayılanlar ve daraltmalar uygulanır, her gevşetme sorulur;
-imzasız işarete düşüş yok. **Kapsamda:** yalnız dosya yazan süreç (ajanın kabuğu, düzenleyici, istemle yönlendirilmiş
+imzasız işarete düşüş yok; herhangi bir işaret varsa (panel daha önce imzaladı) okunamayan kayıt asla ilk açılış sayılmaz:
+yasak pencereler ve erişim seviyeleri panelde sorulur, panel kapalıyken reddedilir (Dur 10). **Kapsamda:** yalnız dosya yazan süreç (ajanın kabuğu, düzenleyici, istemle yönlendirilmiş
 ajan). **Kapsam dışı:** aynı kullanıcıyla çalışıp Secret Service ögesini BİLEREK okuyan ya da değiştiren kod (KDE
 Cüzdanı'nda uygulama başına erişim denetimi yok; bunun için ajan kabuğunun oturum veri yolundan yalıtılması gerekir);
 cüzdan açıkken ögenin silinmesi ilk açılış gibi görünür.

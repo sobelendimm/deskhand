@@ -2184,10 +2184,12 @@ def dur_kaldir_iste(sure=None):
     s = onay.iste_sonuc(_("DUR kaldırılsın mı?"), "DUR",
                         _("Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin."),
                         **({"sure": sure} if sure else {}), dur_kaldirma=True)
-    if not s.izin:
+    # the PANEL removes DUR on the user's Yes (onay.yanitla, request type "dur"); the requester never does, whatever
+    # answer it got: the switch itself is the proof
+    if dur_acik():
         raise Dur(KULLANICI_DUR, _(DUR_KALDIRMA_MESAJI) + " " + _("İstek onaylanmadı ({neden}).").format(
             neden=s.neden))
-    return dur_kapat("kullanici")
+    return True
 
 
 def dur_kapat(kaynak="cli"):

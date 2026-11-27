@@ -126,6 +126,7 @@ _KASA = None                     # oku() -> bytes | None (None = no item yet), y
 _DURUM: dict | None = None       # cached {"anahtar": bytes, "sayac": {tur: int}, "son": {tur: str | None}}
 _DURUM_ZAMAN = 0.0
 _DURUM_NEDEN: str | None = None  # why there is no signed state (None = it worked, or no item was ever written)
+_DURUM_YOK_KESIN = False         # the key ring answered "no item" (only then can it be a first start)
 _DURUM_KILIT = threading.RLock()
 _DURUM_ONBELLEK_SN = 1.0
 
@@ -185,6 +186,8 @@ def _anahtar_unut() -> None:
     global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
     with _DURUM_KILIT:
         _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN = None, 0.0, None
+        global _DURUM_YOK_KESIN
+        _DURUM_YOK_KESIN = False
 
 
 def _durum_coz(ham) -> dict | None:
@@ -209,11 +212,13 @@ def _durum(olustur: bool = False) -> dict | None:
     with _DURUM_KILIT:
         if _DURUM is not None and time.monotonic() - _DURUM_ZAMAN < _DURUM_ONBELLEK_SN:
             return _DURUM
+        global _DURUM_YOK_KESIN
         try:
             ham = _kasa_nesnesi().oku()
-        except Exception as e:  # noqa: BLE001 - locked / no service / error: no signed state (closed-fail)
-            _DURUM, _DURUM_NEDEN = None, _neden(e)
+        except Exception as e:  # noqa: BLE001 - locked / no service / error / DESKHAND_ANAHTARLIK=kapali: no signed
+            _DURUM, _DURUM_NEDEN, _DURUM_YOK_KESIN = None, _neden(e), False  # state, NEVER a first start
             return None
+        _DURUM_YOK_KESIN = not ham  # the key ring answered: there is no item at all
         d = _durum_coz(ham) if ham else None
         if d is None and ham:
             _DURUM_NEDEN = _("panelin imzalı kaydı okunamadı (bozuk)")
@@ -244,6 +249,17 @@ def _durum_kaydet(d: dict) -> bool:
             return False
         _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN = d, time.monotonic(), None
         return True
+
+
+def isaret_gecmisi() -> bool:
+    """Some panel mark exists: the panel has run (and signed) here before."""
+    return any(os.path.lexists(isaret_yolu(t)) for t in TUM)
+
+
+def ilk_kurulum() -> bool:
+    """A first start ONLY when the key ring definitely answered "no item" AND no mark exists."""
+    _durum(False)
+    return _DURUM_YOK_KESIN and not isaret_gecmisi()
 
 
 def kasa_nedeni() -> str | None:
@@ -401,6 +417,7 @@ class Koruyucu:
         self._yazilamadi: set[tuple[str, str | None]] = set()
         self._kilit = threading.Lock()
         self.bellek: dict[str, str | None] = {}
+        self._gecmis = isaret_gecmisi()  # before this start writes any mark
         for tur in TUM:
             self._acilis(tur)
         if kasa_nedeni():  # once per start, visible: why loosening values are being asked / not applied
@@ -472,17 +489,23 @@ class Koruyucu:
                 self._kabul(tur, d)
                 return
         elif tur in TURLER:
-            # no signed state (first start / locked wallet / no Secret Service): the default is the built-in list
-            # only (yasak) and no rule (seviye); any file is that or stricter. Nothing is restored from a file.
-            if d is None and tur == "yasak":
-                from .guvenlik import VARSAYILAN_YASAK
-                d = _(VARSAYILAN_YASAK)
-                try:
-                    _yaz_atomik(dosya(tur), d)
-                except OSError:
-                    pass
-            self._kabul(tur, d)
-            return
+            if not self._gecmis:
+                # no signed state AND no mark at all (first start, or a wallet that never held the panel's record):
+                # the default is the built-in list only (yasak) and no rule (seviye); any file is that or stricter
+                if d is None and tur == "yasak":
+                    from .guvenlik import VARSAYILAN_YASAK
+                    d = _(VARSAYILAN_YASAK)
+                    try:
+                        _yaz_atomik(dosya(tur), d)
+                    except OSError:
+                        pass
+                self._kabul(tur, d)
+                return
+            # the panel signed before (marks exist) but its record cannot be read (locked wallet, no Secret Service,
+            # DESKHAND_ANAHTARLIK=kapali, deleted item): closed-fail, never a first start. The unverified mark only
+            # makes the value stricter; the file is used only after the user's Yes (security scan 2, finding 1)
+            m = (isaret_oku(tur) or {}).get("icerik")
+            ref = en_siki(tur, d, m if isinstance(m, str) else None)
         else:
             if siki_mi(tur, d, TABAN[tur]):
                 self._kabul(tur, d)
@@ -879,7 +902,9 @@ def _dosyadan(tur: str, olustur: bool = True) -> str | None:
         if not siki_mi(tur, mevcut, ref):
             raise Dur(10, _(MESAJ_KAYIP).format(dosya=yol))
         return mevcut
-    if mevcut is None and tur == "yasak":  # no signed state: the default list
+    if isaret_gecmisi():  # the panel signed before but its record cannot be read: closed-fail (scan 2, finding 1)
+        raise Dur(10, _(MESAJ_KAYIP).format(dosya=yol))
+    if mevcut is None and tur == "yasak":  # no signed state and no mark ever: the default list
         from .guvenlik import VARSAYILAN_YASAK
         mevcut = _(VARSAYILAN_YASAK)
         if olustur:

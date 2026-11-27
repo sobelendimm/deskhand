@@ -203,6 +203,9 @@ class Panel(QObject):
         from .. import liste_koruma
         self.liste_uyarilari: list[str] = []
         self.koruyucu = liste_koruma.panel_baslat(self._liste_uyari, self._kalici_onayla, self._degisiklik_onayla)
+        from .. import onay as _onay
+        # the panel removed DUR itself on the user's Yes to a removal request: it is no longer the panel's own DUR
+        _onay.dur_kaldirildi = lambda: setattr(self, "_dur_kullanici", False)
         self._liste_izci = QFileSystemWatcher(self)
         self._liste_izle()
         self._liste_izci.fileChanged.connect(self._liste_degisti)
@@ -224,12 +227,6 @@ class Panel(QObject):
         """The user's DUR (set in this panel) vanished without the panel's Devam (a process deleted the file): put it
         back and warn. Removing DUR is the user's decision only (CLI resume asks the panel: guvenlik.dur_kaldir_iste)."""
         if getattr(self, "_dur_kullanici", False) and not guvenlik.dur_acik():
-            import time as _t
-
-            from .. import onay
-            if onay.SON_DUR_IZNI and _t.monotonic() - onay.SON_DUR_IZNI < 300:
-                self._dur_kullanici = False  # the user approved the removal in this panel's dialog
-                return
             guvenlik.dur_ac("kullanici")
             self._liste_uyari(_("DUR anahtarı panel dışında kaldırıldı; geri konuldu (yalnız kullanıcı kaldırır)."))
 

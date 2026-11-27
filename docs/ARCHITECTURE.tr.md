@@ -447,7 +447,7 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 - Başlık (`-b`) ve sınıf (`-s`) kilidi her girdiden hemen önce (4).
 - DUR anahtarı: `DESKHAND_RUNTIME_DIR/dur` varsa her girdi çağrısından önce Dur(13); basılı her şey bırakılır.
   DUR AÇMAK serbesttir (`deskhand dur`, arayüz/tepsi/kısayol). Kaldırmak yalnız kullanıcının kararıdır: `deskhand devam`
-  (`guvenlik.dur_kaldir_iste`) panele sorar ("DUR kaldırılsın mı?", varsayılan Hayır); panel kapalı / gözetimsiz kip /
+  (`guvenlik.dur_kaldir_iste`) panele sorar (istek türü `dur`: panel kendi sabit metnini gösterir, "DUR kaldırılsın mı?", varsayılan Hayır; Evet'te DUR'u PANEL kaldırır, istekçi asla); panel kapalı / gözetimsiz kip /
   Hayır → Dur 13; komut satırı `--approved` yanıt sayılmaz. İletiler ajana kaldırma yolunu tarif etmez. Kullanıcının panelde
   koyduğu DUR panelin Devam'ı olmadan kaybolursa (bir süreç dosyayı sildi) görünür uyarıyla geri konur
   (`gui/panel._dur_koru`). Kapsam dışı: panel kapalıyken dosyayı silen süreç.

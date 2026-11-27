@@ -464,7 +464,7 @@ suggests doing the work in the background, otherwise in the foreground.
 - The title (`-b`) and class (`-s`) lock right before every input (4).
 - The DUR (stop) switch: if `DESKHAND_RUNTIME_DIR/dur` exists, Dur(13) before every input call; everything held down is released.
   Turning DUR ON is free (`deskhand dur`, the UI/tray/shortcut). Removing it is the user's decision only: `deskhand devam`
-  (`guvenlik.dur_kaldir_iste`) asks the panel ("Remove STOP?", default No); panel closed / unattended mode / No → Dur 13; a
+  (`guvenlik.dur_kaldir_iste`) asks the panel (request type `dur`: the panel shows its own fixed text "Remove STOP?", default No, and on Yes the PANEL removes DUR; the requester never does); panel closed / unattended mode / No → Dur 13; a
   command-line `--approved` is not an answer. Messages never tell an agent how to remove it. A DUR the user set in the panel
   and that disappears without the panel's Devam (a process deleted the file) is put back with a visible warning
   (`gui/panel._dur_koru`). Out of scope: a process that deletes the file while the panel is closed.

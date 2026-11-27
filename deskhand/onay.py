@@ -69,6 +69,7 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "silindi": N_("onay isteği beklerken silindi → red"),
 }
 TUR_DEVIR = "devir"           # istek türü: insan doğrulaması devri (panelde "Devral / Bitti / Vazgeç"; izin = Bitti)
+TUR_DUR = "dur"               # request type: remove DUR; fixed panel text, on Yes the PANEL removes it (yanitla)
 DEVIR_EN_COK = 3600.0         # insan devri isteğinin en uzun ömrü (request_human timeout_s üst sınırı): bekleme boyunca BAŞKA
                               # süreçlerin girdisi de kapalı kalır (bekleyen_var bu sınıra kadar "sahte" saymaz)
 KONTROL_ARALIK = 3.0          # isteyen `kontrol` işlevini en çok bu sıklıkta çağırır (sn)
@@ -764,6 +765,8 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
                  "masa": masalar.secili() if masaustu == "arka" else ""}
         if tur == TUR_DEVIR:
             istek["tur"] = TUR_DEVIR
+        if dur_kaldirma:
+            istek["tur"] = TUR_DUR
         _yaz_atomik(iy, istek)
         kanal.sendall(f"bekle {istek_id}\n".encode())
     except Exception:  # noqa: BLE001 - görüntü/istek yazılamadı: red (soket açık kalmasın)
@@ -873,10 +876,16 @@ def istek_oku(yol: str) -> dict | None:
     from . import masalar
     m = d.get("masa")
     d["masa"] = m if d["masaustu"] == "arka" and isinstance(m, str) and masalar.AD_DESENI.fullmatch(m) else ""
-    d["tur"] = TUR_DEVIR if d.get("tur") == TUR_DEVIR else ""
+    d["tur"] = d.get("tur") if d.get("tur") in (TUR_DEVIR, TUR_DUR) else ""
     g = d.get("goruntu")
     d["goruntu"] = g if isinstance(g, str) and os.path.isfile(g) else None
+    if d["tur"] == TUR_DUR:  # the panel shows its OWN fixed text: nothing the requester wrote reaches the dialog
+        d.update(eylem=_("DUR kaldırılsın mı?"), hedef="DUR", goruntu=None, masaustu="ekran", masa="",
+                 ayrinti=_("Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin."))
     return d
+
+
+dur_kaldirildi = None  # panel: called after the panel itself removed DUR on the user's Yes (gui/panel: forget own DUR)
 
 
 def _canli(pid: int) -> bool:
@@ -937,9 +946,6 @@ def bekleyenler(simdi: float | None = None) -> list[dict]:
     return sorted(sonuc, key=lambda d: d["zaman"])
 
 
-SON_DUR_IZNI = 0.0  # panel: monotonic time of the user's last Yes to a "remove DUR?" request (gui/panel._dur_koru)
-
-
 def yanitla(istek_id: str, karar: str, simdi: float | None = None) -> bool:
     """Panel: isteği yanıtla (tek kullanımlık). → iletildi mi. İstek yoksa/süresi geçtiyse/zaten yanıtlandıysa False.
     İZİN yalnız bu süreçteki onay kanalından isteyene gider (kanal yoksa False). RED ayrıca yanıt dosyasına yazılır
@@ -954,11 +960,16 @@ def yanitla(istek_id: str, karar: str, simdi: float | None = None) -> bool:
     if (k is not None and k.yanitlandi(istek_id)) or os.path.exists(yanit_yolu(istek_id)):
         return False  # tek kullanımlık: ilk karar kesin
     if karar == "izin":
-        gitti = k is not None and k.gonder(istek_id, "izin")
-        if gitti and d["hedef"] == "DUR":  # the user approved removing DUR (guvenlik.dur_kaldir_iste)
-            global SON_DUR_IZNI
-            SON_DUR_IZNI = time.monotonic()
-        return gitti
+        if d["tur"] == TUR_DUR:
+            # the user's Yes to THIS request: the panel removes DUR itself (the requester never does), once
+            from . import guvenlik
+            guvenlik.dur_kapat("kullanici")
+            if dur_kaldirildi is not None:
+                try:
+                    dur_kaldirildi()
+                except Exception:  # noqa: BLE001 - the panel's own bookkeeping must not block the answer
+                    pass
+        return k is not None and k.gonder(istek_id, "izin")
     try:
         _yaz_atomik(yanit_yolu(istek_id), {"id": istek_id, "karar": "red", "kaynak": "arayuz", "zaman": simdi,
                                            "panel_pid": os.getpid()}, ozel=True)
