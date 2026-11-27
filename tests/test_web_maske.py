@@ -60,7 +60,8 @@ ALANLAR = [  # (ad, değer, açıklama, nitelikler, beklenen)
     ("Kutu", "abc", "", {"text-input-type": "password"}, "***"),
     ("Doğrulama kodu", "55667", "", {}, "***"),
     ("Şehir", "Çınarlı", "", {"id": "sehir"}, "Çınarlı"),
-    ("Not", "a\x1bb\nc", "", {"tag": "input"}, "ab c"),  # gerçek tarayıcı nitelikleri hiç boş değil (ölçüldü)
+    # gerçek tarayıcı nitelikleri hiç boş değil (ölçüldü); id/autocomplete/placeholder/text-input-type'sız alan doğrulanamaz
+    ("Not", "a\x1bb\nc", "", {"tag": "input", "id": "not"}, "ab c"),
     ("Maske", "••••", "", {}, None),
 ]
 
@@ -192,6 +193,102 @@ v7 = {("/t", "GetText"): ("4111 1111 1111 1111",), ("/t", "Description"): (("s",
 o7 = [{"ad": "Sipariş", "rol": "entry"}]
 web._ayrinti_ekle(SahteYol(v7), ":1.5", o7, [{"_yol": "/t", "ad": "Sipariş"}])
 kontrol("maske (sahte): sıradan alanda Luhn'lu kart numarası değeri → ***", o7[0].get("deger") == "***", repr(o7))
+
+
+class PlanYol(SahteYol):
+    """K2 PoC (INCELEME-MASKE P1–P3): GetAttributes içeren her toplu çağrı plandaki kipe göre yanıt verir: "ilkbos" (ilk
+    öge {}, öteki ögeler kısmi), "kismi" (id/autocomplete yok; tag/display kalır), "tam" (plan bitince de tam)."""
+
+    def __init__(self, veri, plan):
+        super().__init__(veri)
+        self.plan = list(plan)
+
+    def toplu(self, mesajlar, sure=10.0, yeniden=True):
+        from jeepney.low_level import HeaderFields
+        r = super().toplu(mesajlar, sure, yeniden)
+        nitelik = [i for i, m in enumerate(mesajlar) if m.header.fields[HeaderFields.member] == "GetAttributes"]
+        if nitelik:
+            kip = self.plan.pop(0) if self.plan else "tam"
+            for k, i in enumerate(nitelik):
+                if kip == "ilkbos" and k == 0:
+                    r[i] = ({},)
+                elif kip in ("ilkbos", "kismi") and r[i]:
+                    r[i] = ({a: d for a, d in r[i][0].items() if a not in ("id", "autocomplete")},)
+        return r
+
+
+def poc_verisi():
+    alanlar = [("Kod", "482913", {"id": "otp-input"}), ("Numara", "4111111111111111", {"id": "cc-number"}),
+               ("Üç hane", "737", {"id": "cvc"}), ("Şehir", "Çınarlı", {"id": "sehir"})]
+    v, og, hm = {}, [], []
+    for i, (ad, deger, nit) in enumerate(alanlar):
+        y = f"/p/{i}"
+        v[(y, "GetText")] = (deger,)
+        v[(y, "Description")] = (("s", ""),)
+        v[(y, "GetAttributes")] = ({**nit, "tag": "input", "display": "inline-block"},)
+        og.append({"ad": ad, "rol": "entry"})
+        hm.append({"_yol": y, "ad": ad})
+    return v, og, hm
+
+
+for poc, plan in (("P1 ilk toplu {}+kısmi, iki tur kısmi", ["ilkbos", "kismi", "kismi", "tam"]),
+                  ("P2 ilk toplu {}+kısmi, üç tur kısmi", ["ilkbos", "kismi", "kismi", "kismi", "tam"]),
+                  ("P3 hiç {} yok, yalnız ilk toplu kısmi", ["kismi", "tam", "tam"])):
+    vp, op, hp = poc_verisi()
+    web._ayrinti_ekle(PlanYol(vp, plan), ":1.5", op, hp)
+    dp = {o["ad"]: o.get("deger") for o in op}
+    kontrol(f"maske (K2 {poc}): Kod/Numara/Üç hane ***, gizli değer çıktıda yok",
+            all(dp[a] == "***" for a in ("Kod", "Numara", "Üç hane"))
+            and not any(g in repr(op) for g in ("482913", "4111111111111111", "737")), repr(dp))
+vp, op, hp = poc_verisi()
+web._ayrinti_ekle(PlanYol(vp, ["kismi", "tam", "tam"]), ":1.5", op, hp)
+kontrol("maske (K2 P3): yeniden sorulup tam gelen sıradan alan korunur (Şehir = Çınarlı)",
+        op[3].get("deger") == "Çınarlı", repr(op[3]))
+
+
+def tek_alanlar(alanlar):
+    """[(ad, değer, nitelikler)] → kararlı (her sorguda aynı) sahte veri, ögeler, ham."""
+    v, og, hm = {}, [], []
+    for i, (ad, deger, nit) in enumerate(alanlar):
+        y = f"/k/{i}"
+        v[(y, "GetText")] = (deger,)
+        v[(y, "Description")] = (("s", ""),)
+        v[(y, "GetAttributes")] = (nit,)
+        og.append({"ad": ad, "rol": "entry"})
+        hm.append({"_yol": y, "ad": ad})
+    return v, og, hm
+
+
+# doğrulanamaz: kararlı ama id/autocomplete/placeholder(-text)/text-input-type yok → ***
+v9, o9, h9 = tek_alanlar([("Şehir", "Çınarlı", {"tag": "input", "display": "inline-block", "explicit-name": "true"}),
+                          ("Köy", "Akçaören", {"tag": "input", "text-input-type": "text"})])
+web._ayrinti_ekle(SahteYol(v9), ":1.5", o9, h9)
+kontrol("maske (sahte): kararlı ama tanıtıcı niteliksiz (yalnız tag/display/explicit-name) → ***; text-input-type'lı korunur",
+        o9[0].get("deger") == "***" and o9[1].get("deger") == "Akçaören", repr(o9))
+
+# ipucusuz (id/placeholder/autocomplete yok) yalnız rakam 3–8 hane → *** (yanlış pozitif kabul: adet alanı)
+v10, o10, h10 = tek_alanlar([("Üç hane", "737", {"tag": "input", "text-input-type": "tel"}),
+                             ("Giriş", "48291300", {"tag": "input", "text-input-type": "text"}),
+                             ("Uzun", "123456789", {"tag": "input", "text-input-type": "text"}),
+                             ("Kısa", "12", {"tag": "input", "text-input-type": "number"}),
+                             ("Adet", "250", {"id": "adet", "tag": "input"}),
+                             ("Yazı", "Çınar 12", {"tag": "input", "text-input-type": "text"})])
+web._ayrinti_ekle(SahteYol(v10), ":1.5", o10, h10)
+d10 = {o["ad"]: o.get("deger") for o in o10}
+kontrol("maske (sahte): ipucusuz 3–8 haneli rakam değeri ***; 9 hane, 2 hane, id'li ve harfli değer korunur",
+        d10 == {"Üç hane": "***", "Giriş": "***", "Uzun": "123456789", "Kısa": "12", "Adet": "250", "Yazı": "Çınar 12"},
+        repr(d10))
+
+# bölünmüş kart numarası (4+4+4+4 ardışık alan, id'li): birleşimi Luhn'lu → hepsi ***; Luhn'suz birleşim korunur
+v11, o11, h11 = tek_alanlar([("Ad", "Ayşe", {"id": "ad"})] +
+                            [(f"Kart {i}", "4111", {"id": f"kart{i}"}) if i == 1 else (f"Kart {i}", "1111", {"id": f"kart{i}"})
+                             for i in range(1, 5)] +
+                            [("Tel 1", "1234", {"id": "t1"}), ("Tel 2", "5678", {"id": "t2"})])
+web._ayrinti_ekle(SahteYol(v11), ":1.5", o11, h11)
+d11 = {o["ad"]: o.get("deger") for o in o11}
+kontrol("maske (sahte): 4+4+4+4 bölünmüş Luhn'lu kart numarası → dört alan ***; komşu sıradan alanlar korunur",
+        all(d11[f"Kart {i}"] == "***" for i in range(1, 5)) and d11["Ad"] == "Ayşe"
+        and d11["Tel 1"] == "1234" and d11["Tel 2"] == "5678", repr(d11))
 
 # ---------------------------------------------------------------- 2) tarayıcı sınıf deseni (tablo)
 class SahteAU:
