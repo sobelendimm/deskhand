@@ -1081,42 +1081,6 @@ def korumali_baslat(d: dict, argv: list[str], env: dict, baglar: list[tuple[str,
     return p
 
 
-def _kafes_agaci(cg: str) -> set[int]:
-    """Kafesin (alt kafesler dahil) bütün süreçleri."""
-    out: set[int] = set()
-    if not cg:
-        return out
-    for kok, _d, _f in os.walk(os.path.join("/sys/fs/cgroup", cg.lstrip("/"))):
-        try:
-            with open(os.path.join(kok, "cgroup.procs")) as f:
-                out.update(int(x) for x in f.read().split())
-        except (OSError, ValueError):
-            pass
-    return out
-
-
-def kumda_baslat(d: dict, hedef_pid: int, argv: list[str], env: dict, **popen) -> subprocess.Popen:
-    """argv'yi ÇALIŞAN bir arka plan uygulamasının (hedef_pid) bwrap ad alanında başlat: kullanıcı + bağ + PID ad
-    alanına girilir (nsenter, kök ve çalışma dizini hedefinki): aynı tmpfs ev, /tmp, bağlar, kopya; yeni ad alanı ve
-    yeni tmpfs ev KURULMAZ. Tarayıcının "yeni pencere" istemcisi için (uygulama.ayni_surecte_ac): Chromium'un tek örnek
-    soketi /tmp'de, ancak aynı ad alanından ulaşılır. Hedef bu masaüstünün kafesinde olmalı ve kendi kullanıcı ad
-    alanında (korumali_argv) koşmalı; değilse Dur(14). Süreç kafese alınır (kafeste_baslat), PATH güvenli."""
-    if hedef_pid not in _kafes_agaci(d.get("cgroup") or ""):
-        raise Dur(14, _("hedef süreç bu masaüstünün kafesinde değil: {pid}").format(pid=hedef_pid))
-    try:
-        ayri = os.readlink(f"/proc/{hedef_pid}/ns/user") != os.readlink("/proc/self/ns/user")
-    except OSError:
-        ayri = False
-    if not ayri:
-        raise Dur(14, _("hedef süreç yalıtılmış ad alanında değil: {pid}").format(pid=hedef_pid))
-    dis = {k: v for k, v in env.items() if k not in SON_KOMUT_ORTAMI}
-    dis["PATH"] = GUVENLI_PATH
-    komut = [arac("nsenter"), f"--target={int(hedef_pid)}", "--user", "--mount", "--pid", "--root", "--wd",
-             "--preserve-credentials", "--", *argv]
-    popen.setdefault("stdin", subprocess.DEVNULL)
-    return kafeste_baslat(d, komut, dis, **popen)
-
-
 def _exec_adayi(argv: list[str], env: dict | None) -> str | None:
     """Başlatılacak komutun çözülmüş çalıştırılabilir yolu: argv[0]; `gio launch X.desktop` ise .desktop'un Exec ilk
     sözcüğü. Çözülemezse None (denetim atlanır; bwrap/uygulama kendi hatasını verir)."""

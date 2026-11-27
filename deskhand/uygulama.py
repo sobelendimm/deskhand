@@ -742,11 +742,12 @@ def tum_pencereler():
 
 # ---------------------------------------------------------------- ABM-F3: aynı süreçte 2. pencere
 
-# Firefox'un ilk açılışında atılan bayraklar: uzaktan komut sunucusu açık kalsın ki aynı profille gelen 2. `open`
-# çalışan sürece "yeni pencere" diye iletilsin. Güvenli: her kopyanın profil yolu ayrı; sunucuya yalnız aynı ad
-# alanından (nsenter, arka_ortak.kumda_baslat) ulaşılır, kullanıcının Firefox'u ayrı veri yolu/ad alanında.
-_UZAK_KAPATAN = ("--no-remote", "-no-remote", "--new-instance", "-new-instance")
-YENI_PENCERE_BEKLE_SN = 10.0  # istemci (2. pencere isteği) bu sürede 0 ile çıkmazsa ayrı süreçle açılır
+# Uzak komut kanalı AÇILMAZ (Firefox --no-remote kalır) ve tarayıcının ad alanına GİRİLMEZ. İkinci pencere Deskhand'in
+# kendi denetimli girdi yoluyla açılır: kayıtlı tarayıcının penceresine Ctrl+N, yeni pencere süreç soyundan beklenir,
+# adres verildiyse yeni pencerenin adres çubuğuna yazılır. Hedef YALNIZ Deskhand'in başlatma kaydından seçilir
+# (Firefox: F1 kaydı tarayicilar.json, çalışma dizininde; Chromium: kopya sahip kaydı), PID başlangıç zamanıyla
+# doğrulanır (pid_dogru). Komut satırına dayalı keşif yok: kafesteki başka bir süreç tarayıcı gibi görünse de seçilmez.
+YENI_PENCERE_BEKLE_SN = 10.0
 
 
 def _tarayici_turu(argv) -> str | None:
@@ -757,24 +758,10 @@ def _tarayici_turu(argv) -> str | None:
     ad = os.path.basename(asil[0]).lower()
     if ad in FIREFOX_IKILILERI and any(a in ("--profile", "-profile") for a in asil):
         return "firefox"
-    if ad in CHROMIUM_IKILILERI and ad not in _ELECTRON_IKILILERI and \
+    if ad in {"chromium", "chromium-browser", "ungoogled-chromium"} and \
             any(str(a).startswith("--user-data-dir=") for a in asil):
         return "chromium"
     return None
-
-
-_ELECTRON_IKILILERI = {"code", "code-oss", "codium", "vscodium", "cursor", "discord", "vesktop", "slack",
-                       "signal-desktop", "obsidian", "spotify", "teams-for-linux", "ferdium", "element-desktop",
-                       "bitwarden", "postman", "insomnia", "typora", "mattermost-desktop", "joplin-desktop",
-                       "figma-linux", "notion-app"}
-
-
-def uzak_acik(argv) -> list:
-    """Firefox komutundan uzaktan komutu kapatan bayrakları at (diğer komutlar aynen)."""
-    argv = list(argv)
-    if _tarayici_turu(argv) != "firefox":
-        return argv
-    return [a for a in argv if a not in _UZAK_KAPATAN]
 
 
 def _belgeler(argv) -> list:
@@ -790,78 +777,94 @@ def _belgeler(argv) -> list:
     return out
 
 
-def yeni_pencere_argv(tur: str, kopya: str, argv) -> list:
-    """Çalışan tarayıcıya (kopya) 'yeni pencere' isteği gönderen istemci komutu; argv'deki belgeler taşınır."""
-    exe = _asil_komut(argv)[0]
-    profil = ["--profile", kopya] if tur == "firefox" else [f"--user-data-dir={kopya}"]
-    return [exe, *profil, "--new-window", *_belgeler(_asil_komut(argv))]
-
-
-def _ana_tarayici(d: dict, tur: str, haric: str | None) -> tuple[int, str] | None:
-    """Bu masaüstünün kafesinde, oturum kopyasıyla çalışan ANA tarayıcı süreci (Firefox: uzaktan komut açık) →
-    (pid, kopya) | None. Kopya yalnız bu masaüstünün kopya kökünün doğrudan alt dizini olabilir."""
-    from . import bellek_bekcisi
+def _kayitli_tarayicilar(d: dict, tur: str, haric: str | None) -> list[tuple[int, str]]:
+    """Deskhand'in KENDİ başlatma kaydındaki, doğrulanmış (pid_dogru: canlı + başlangıç zamanı + kafes) tarayıcılar →
+    [(kayıtlı pid, kopya)]. Firefox: F1 kaydı (çalışma dizini; uygulamalara bağlanmaz). Chromium: kopya kökündeki
+    kopyaların sahip kaydı (kopya.sahip_kaydet; korumali_baslat yazar)."""
+    from .arka_ortak import pid_dogru
     from .oturum import politika
     kok = os.path.realpath(politika.kopya_dizini())
     haric_g = os.path.realpath(haric) if haric else None
-    for pid in bellek_bekcisi._kafes_pidleri(d.get("cgroup") or ""):
-        a = bellek_bekcisi._argv(pid)
-        a = " ".join(a).split() if a and " " in a[0] else a  # Chromium argv'yi tek dizgeye yeniden yazar
-        if not a or _tarayici_turu(a) != tur:
-            continue
-        if tur == "firefox":
-            if "-contentproc" in a or any(x in _UZAK_KAPATAN for x in a):
+    adaylar: list[tuple[int, object, str]] = []
+    if tur == "firefox":
+        from . import bellek_bekcisi
+        for g in bellek_bekcisi._kayitlar(d.get("calisma") or ""):
+            adaylar.append((int(g.get("pid") or 0), g.get("bas"), str(g.get("kopya") or "")))
+    else:
+        from .oturum import kopya_bekcisi
+        try:
+            adlar = sorted(os.listdir(kok))
+        except OSError:
+            adlar = []
+        for ad in adlar:
+            if not ad.startswith(tur + "-"):
                 continue
-            kp = bellek_bekcisi._profil(a)
-        else:
-            if any(x.startswith("--type=") for x in a):
-                continue
-            kp = next((x.split("=", 1)[1] for x in a if x.startswith("--user-data-dir=")), None)
-        if not kp:
+            s = kopya_bekcisi.sahip_oku(os.path.join(kok, ad))
+            adaylar.append((int(s.get("pid") or 0), s.get("bas"), os.path.join(kok, ad)))
+    out = []
+    for pid, bas, kp in adaylar:
+        g = os.path.realpath(kp) if kp else ""
+        if not g or g == haric_g or os.path.dirname(g) != kok or os.path.islink(kp) or not os.path.isdir(g):
             continue
-        g = os.path.realpath(kp)
-        if g != haric_g and os.path.dirname(g) == kok and os.path.isdir(g) and not os.path.islink(kp):
-            return pid, kp
-    return None
+        if pid_dogru(pid, bas, d.get("cgroup") or ""):
+            out.append((pid, kp))
+    return out
 
 
-def ayni_surecte_ac(komut, kopya, env, fp):
-    """Arka planda aynı masaüstünde aynı türden kopyalı tarayıcı çalışıyorsa 2. `open` onun SÜRECİNDE yeni pencere
-    açar (aynı kum havuzu/profil; yeni tmpfs ev yok): istemci çalışan sürecin ad alanında (nsenter) başlar, isteği
-    iletip çıkar. Başarıda politikanın bu açılış için hazırladığı yeni kopya silinir, F1 başlatma kaydı ve kopya
-    sahibi DEĞİŞMEZ (yeni pencere kayıttaki sürecin içindedir; yeniden başlatma oturumla geri getirir).
-    → istemci Popen | None (çalışan yok / istemci başarısız: çağıran ayrı süreçle açar)."""
-    import subprocess
-    from . import arka_ortak, gorev_kipi, masaustu
+def _soyundan_mi(pid: int | None, ata: int) -> bool:
+    """pid, ata sürecin soyundan mı (/proc ppid zinciri; çekirdeğin tuttuğu ilişki, komut satırı değil)."""
+    for _i in range(64):
+        if not pid or pid <= 1:
+            return False
+        if pid == ata:
+            return True
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            return False
+    return False
+
+
+def _tarayici_pencereleri(au, ata: int) -> list[str]:
+    return [w for w, _b, _g in au.pencereler() if _soyundan_mi(au.pid(w), ata)]
+
+
+def ayni_surecte_ac(au, komut, kopya) -> bool:
+    """Arka planda aynı masaüstünde Deskhand'in başlattığı, kayıtlı ve doğrulanmış aynı türden tarayıcı varsa 2. `open`
+    onun SÜRECİNDE yeni pencere açar: penceresine denetimli Ctrl+N (api.tus), yeni pencere (aynı süreç soyu) beklenir,
+    adres verildiyse adres çubuğuna denetimli yazı + Enter. Başarıda politikanın bu açılış için hazırladığı yeni kopya
+    silinir; F1 kaydı ve kopya sahibi DEĞİŞMEZ. → True | False (kayıtlı tarayıcı yok / pencere gelmedi: çağıran
+    yeni örnek başlatır)."""
+    from . import api, masaustu, oturum
     tur = _tarayici_turu(komut)
     if not tur or not kopya:
-        return None
-    d = masaustu.gerekli()
-    hedef = _ana_tarayici(d, tur, kopya)
-    if hedef is None:
-        return None
-    gorev_kipi.masaustu_kapisi(d)  # masaustu.baslat ile aynı kapılar: görev masaüstü, doğrulanmış bağlantı
-    d = masaustu.baglanti_denetle(d)
-    pid, eski = hedef
-    argv = yeni_pencere_argv(tur, eski, komut)
-    if masaustu.tur(d) == "kwin" and d.get("xwayland"):  # istemci çalışan süreçle aynı görüntü yolundan (XWayland)
-        from . import kwin_oturum
-        argv, chromium_env = kwin_oturum.chromium_x11(argv)
-        env = {**kwin_oturum.gecko_ipuclari(argv), **chromium_env, **(env or {})}
-    p = arka_ortak.kumda_baslat(d, pid, argv, masaustu.uygulama_ortami(d, env), stdout=fp, stderr=fp)
-    try:
-        kod = p.wait(YENI_PENCERE_BEKLE_SN)
-    except subprocess.TimeoutExpired:
-        p.kill()
-        p.wait()
-        kod = None
-    if kod != 0:
-        gunluk(f"ac | 2. pencere istemcisi başarısız ({kod}); ayrı süreç açılıyor")
-        return None
-    from . import oturum
-    oturum.temizle(kopya)
-    gunluk(f"ac | 2. pencere aynı süreçte | pid {pid} | {os.path.basename(eski)}")
-    return p
+        return False
+    d = masaustu.durum()
+    if not d:
+        return False
+    for ata, eski in _kayitli_tarayicilar(d, tur, kopya):
+        once = _tarayici_pencereleri(au, ata)
+        if not once:
+            continue
+        api.tus(once[0], "ctrl+n")
+        bitis = time.monotonic() + YENI_PENCERE_BEKLE_SN
+        yeni = []
+        while time.monotonic() < bitis and not yeni:
+            time.sleep(0.25)
+            yeni = [w for w in _tarayici_pencereleri(au, ata) if w not in once]
+        if not yeni:
+            gunluk(f"ac | 2. pencere: Ctrl+N sonrası yeni pencere yok ({tur}); yeni örnek açılıyor")
+            return False
+        for adres in _belgeler(_asil_komut(komut))[:1]:  # tek adres: adres çubuğu (yeni pencerede odakta)
+            time.sleep(0.5)
+            api.tus(yeni[0], "ctrl+l")
+            api.yaz(yeni[0], str(adres))
+            api.tus(yeni[0], "Return")
+        oturum.temizle(kopya)
+        gunluk(f"ac | 2. pencere aynı süreçte (Ctrl+N) | {tur} | {os.path.basename(eski)}")
+        return True
+    return False
 
 
 def flatpak_tarayici_denetle(komut) -> None:
@@ -882,16 +885,13 @@ def _baslat(au, komut, fp, env=None, kopya=None, girdi=None, ev=()):
     politikasının kopyası (yalnız arka plan arka uçları alır; ad alanına yalnız o bağlanır); girdi: onaylı kullanıcı
     girdisinin özel .desktop kopyası (arka planda ad alanına salt okunur bağlanır: RUNTIME_DIR orada boştur); ev:
     politikanın uygulama başına ev dizini beyaz liste girdileri (yalnız arka plan arka uçları alır).
-    Arka planda (ABM-F3): Flatpak tarayıcısı → Dur 16; aynı türden kopyalı tarayıcı çalışıyorsa yeni pencere o
-    süreçte (ayni_surecte_ac); Firefox ilk açılışta uzaktan komut açık başlar (uzak_acik)."""
+    Arka planda (ABM-F3): Flatpak tarayıcısı → Dur 16; Deskhand'in başlattığı aynı türden kayıtlı tarayıcı varsa yeni
+    pencere o süreçte, Ctrl+N ile (ayni_surecte_ac; uzak komut kanalı ve ad alanına giriş YOK)."""
     p = inspect.signature(au.baslat).parameters
     if "kopya" in p:  # arka plan arka uçları (sanal: kwin | xvfb)
         flatpak_tarayici_denetle(komut)
-        if kopya:
-            komut = uzak_acik(komut)
-            yp = ayni_surecte_ac(komut, kopya, env, fp)
-            if yp is not None:
-                return yp
+        if kopya and ayni_surecte_ac(au, komut, kopya):
+            return None
     ek = {"kopya": kopya} if kopya and "kopya" in p else {}
     if girdi and "girdi" in p:
         ek["girdi"] = girdi

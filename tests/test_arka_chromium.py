@@ -162,17 +162,10 @@ if h is not None and h.kopya_yolu:
     kopya.temizle(h.kopya_yolu)
 kontrol("F3 birim: başka 'on' uygulaması (vivaldi, brave, Flatpak olmayan chrome) değişmez",
         chromium.on_karari(_on(["vivaldi"])) is None and chromium.on_karari(_on(["chrome"])) is None)
-kontrol("F3 birim: Firefox ilk açılışta uzaktan komut AÇIK (--no-remote/--new-instance atılır; 2. pencere için)",
-        uygulama.uzak_acik(["firefox", "--profile", "/k", "--no-remote", "--new-instance", "about:blank"]) ==
-        ["firefox", "--profile", "/k", "about:blank"] and
-        uygulama.uzak_acik(["chromium", "--no-remote"]) == ["chromium", "--no-remote"])
-kontrol("F3 birim: 2. pencere istemcisi yalnız belgeleri taşır (profil/bayrak değil)",
-        uygulama.yeni_pencere_argv("firefox", "/k2", ["firefox", "--profile", "/k1", "--no-remote", "https://a.b/",
-                                                     "about:blank"]) ==
-        ["firefox", "--profile", "/k2", "--new-window", "https://a.b/", "about:blank"] and
-        uygulama.yeni_pencere_argv("chromium", "/k2", ["chromium", "--user-data-dir=/k1", "--no-first-run",
-                                                      "--force-renderer-accessibility", "https://a.b/"]) ==
-        ["chromium", "--user-data-dir=/k2", "--new-window", "https://a.b/"])
+kontrol("F3 birim: uzak komut/ad alanı yolu YOK (uzak_acik, kumda_baslat kaldırıldı)",
+        not hasattr(uygulama, "uzak_acik") and not hasattr(arka_ortak, "kumda_baslat"))
+kontrol("F3 birim: 2. pencere adresi yalnız belgelerden (profil/bayrak değil)",
+        uygulama._belgeler(["firefox", "--profile", "/k1", "--no-remote", "https://a.b/"]) == ["https://a.b/"])
 
 # ---------------------------------------------------------------- B) görünmez masaüstünde gerçek Chromium
 if not (shutil.which("chromium") and shutil.which("bwrap")):
@@ -355,11 +348,23 @@ try:
 
     if shutil.which("firefox"):
         time.sleep(2)
+        # SAHTE: kafeste komut satırı Firefox gibi görünen ama Deskhand kaydında olmayan süreç (hedef seçilmemeli)
+        sahte_kp = kopya.yeni_kopya_dizini("firefox")
+        sahte = masaustu.baslat(["/usr/bin/bash", "-c", f'exec -a firefox /usr/bin/python3 -c "import time; '
+                                 f'time.sleep(300)" --profile {sahte_kp}'])
+        time.sleep(1)
         m0 = kafes_mb()
         k1 = kopya.yeni_kopya_dizini("firefox")
         r1 = ac(["firefox", "--profile", k1, "--no-remote", "--new-instance", "about:blank"], "Firefox", k1)
         time.sleep(5)
         m1, ana1 = kafes_mb(), ana_surecler("firefox", k1)
+        kontrol("cmdline'ı tarayıcı gibi görünen sahte süreç hedef seçilmez (1. open yeni Firefox açtı)",
+                ana_surecler("firefox", sahte_kp) and len(ana1) == 1 and r1.get("status") == "opened" and
+                os.path.isdir(k1) and all(os.path.realpath(kp_) != os.path.realpath(sahte_kp) for _p, kp_ in
+                                          uygulama._kayitli_tarayicilar(d, "firefox", None)),
+                f"sahte {ana_surecler('firefox', sahte_kp)} ana {ana1} {r1}")
+        kontrol("Firefox komut satırında --no-remote var (uzak kanal kapalı)",
+                len(ana1) == 1 and "--no-remote" in bellek_bekcisi._argv(ana1[0]), str(ana1 and bellek_bekcisi._argv(ana1[0])))
         kayit1 = bellek_bekcisi._kayitlar(d["calisma"])
         k2 = kopya.yeni_kopya_dizini("firefox")
         t0 = time.monotonic()
@@ -370,7 +375,7 @@ try:
         kayit2 = bellek_bekcisi._kayitlar(d["calisma"])
         print(f"   firefox: kafes {m0:.0f} → 1 pencere {m1:.0f} → 2 pencere {m2:.0f} MB; ana {ana1} → {ana2}; "
               f"2. açılış {sure2:.1f} sn; pencereler {kimlik(r1)} {kimlik(r2)}")
-        kontrol("2. open firefox → yeni pencere, süreç ağacı tek, toplam bellek < 2 örnek",
+        kontrol("2. open firefox → Ctrl+N ile aynı süreçte yeni pencere, süreç ağacı tek, toplam bellek < 2 örnek",
                 r1.get("status") == "opened" and r2.get("status") == "opened" and kimlik(r1) != kimlik(r2) and
                 len(ana1) == 1 and ana2 == ana1 and not ana_surecler("firefox", k2) and
                 (m2 - m0) < 2 * (m1 - m0), f"{r1} {r2} ana {ana1}/{ana2} MB {m0:.0f}/{m1:.0f}/{m2:.0f}")
@@ -378,7 +383,7 @@ try:
                 len(kayit2) == 1 and kayit2 == kayit1 and os.path.realpath(kayit2[0]["kopya"]) == os.path.realpath(k1)
                 and bellek_bekcisi.firefox_ana_pidleri(d["cgroup"], k1) == ana2 and not os.path.exists(k2),
                 f"{kayit1} → {kayit2}; k2 var: {os.path.exists(k2)}")
-        for p_ in ana2:
+        for p_ in ana2 + ana_surecler("firefox", sahte_kp):
             os.kill(p_, 15)
         time.sleep(3)
     else:
@@ -398,6 +403,7 @@ try:
                 out.append(pid)
         return out
 
+    ana0 = chromium_analari()
     h1 = chromium.on_karari(_on(["chromium"]))
     r1 = ac([*h1.argv, "about:blank"], "Chromium", h1.kopya_yolu)
     time.sleep(3)
@@ -407,9 +413,10 @@ try:
     time.sleep(3)
     ana2 = chromium_analari()
     print(f"   chromium: kopyalı ana süreçler {ana1} → {ana2}; pencereler {kimlik(r1)} {kimlik(r2)}")
-    kontrol("2. open chromium → aynı süreçte yeni pencere (kopyalı ana süreç sayısı artmadı, 2. kopya silindi)",
+    kontrol("2. open chromium → Ctrl+N ile aynı süreçte yeni pencere (kopyalı ana süreç sayısı artmadı, 2. kopya silindi)",
             r1.get("status") == "opened" and r2.get("status") == "opened" and kimlik(r1) != kimlik(r2) and
-            len(ana1) == 1 and ana2 == ana1 and not os.path.exists(h2.kopya_yolu), f"{r1} {r2} ana {ana1}/{ana2}")
+            len(ana1) <= len(ana0) + 1 and ana2 == ana1 and not os.path.exists(h2.kopya_yolu),
+            f"{r1} {r2} ana {ana0}/{ana1}/{ana2}")
     agac = {"items": []}
     bitis = time.monotonic() + 20
     while time.monotonic() < bitis and not agac["items"]:
