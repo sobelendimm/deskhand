@@ -1,5 +1,5 @@
 """Girişte KDE Cüzdanı'nı açma (deskhand/cuzdan_ac.py) testleri. Gerçek cüzdan, gerçek ksecretd, gerçek TPM ve gerçek
-systemctl KULLANILMAZ: PATH'in başında sahte systemd-creds / busctl / ksecretd / systemctl; tuz dosyası geçici
+systemctl KULLANILMAZ: anahtar_deposu.SINAMA_ARACLARI ile sahte systemd-creds / busctl / ksecretd / systemctl; tuz dosyası geçici
 XDG_DATA_HOME'da; birim dosyası geçici XDG_CONFIG_HOME'da.
 
 Çalıştır:  python3 tests/test_cuzdan_ac.py"""
@@ -83,7 +83,10 @@ ok = k.hex() == os.environ.get("SAHTE_BEKLENEN", "")
 open(DURUM, "w").write("sahip=1 kilit=" + ("0" if ok else "1"))
 """)
 betik("systemctl", "sys.exit(0)\n")
-os.environ["PATH"] = S + os.pathsep + os.environ.get("PATH", "")
+# K2-1: araçlar PATH ile ARANMAZ; sahteler yalnız süreç içi kancayla
+for _ad in ("systemd-creds", "busctl", "ksecretd", "systemctl"):
+    AD.SINAMA_ARACLARI[_ad] = os.path.join(S, _ad)
+AD.SINAMA_ORTAM_ADLARI = ("SAHTE_BEKLENEN",)
 os.environ["XDG_DATA_HOME"] = os.path.join(S, "data")
 os.environ["XDG_CONFIG_HOME"] = os.path.join(S, "config")
 os.environ["XDG_RUNTIME_DIR"] = os.path.join(S, "run")

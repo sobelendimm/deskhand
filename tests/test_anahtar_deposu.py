@@ -1,7 +1,7 @@
 """Anahtar deposu (deskhand/anahtar_deposu.py) testleri: kasa (systemd-creds), seçim, depo değişimi, kapalı-başarısızlık,
 CLI `secret` ve `type --secret-ref`.
 
-Gerçek TPM ve gerçek KDE Cüzdanı KULLANILMAZ: PATH'in başına konan SAHTE bir systemd-creds (geçici dizinde) mühürler;
+Gerçek TPM ve gerçek KDE Cüzdanı KULLANILMAZ: anahtar_deposu.SINAMA_ARACLARI ile verilen SAHTE systemd-creds mühürler;
 cüzdan yerine sahte bir depo nesnesi verilir (anahtar_deposu.ornek_ayarla). DESKHAND_*_DIR'ler geçici (tests/_yalitim.py).
 
 Çalıştır:  python3 tests/test_anahtar_deposu.py"""
@@ -62,7 +62,11 @@ if "decrypt" in arg:
 sys.exit(3)
 """)
 os.chmod(SAHTE, 0o755)
-os.environ["PATH"] = SAHTE_DIZIN + os.pathsep + os.environ.get("PATH", "")
+# K2-1: araçlar PATH ile ARANMAZ; sahte yalnız süreç içi kancayla verilir (alt süreçlerde KANCA önekiyle)
+AD.SINAMA_ARACLARI["systemd-creds"] = SAHTE
+AD.SINAMA_ORTAM_ADLARI = ("SAHTE_CREDS_KIP",)
+KANCA = (f"from deskhand import anahtar_deposu as _A; _A.SINAMA_ARACLARI[\"systemd-creds\"] = {SAHTE!r}; "
+         "_A.SINAMA_ORTAM_ADLARI = (\"SAHTE_CREDS_KIP\",)\n")
 os.environ["SAHTE_CREDS_KIP"] = "tamam"
 
 
@@ -146,8 +150,7 @@ except AD.DepoHatasi:
     kontrol("sembolik bağ öğe reddedilir", True)
 os.unlink(os.path.join(kasa_dizin, "bag.cred"))
 
-eski_path = os.environ["PATH"]
-os.environ["PATH"] = os.path.join(_yalitim.GECICI, "bos-path")
+AD.SINAMA_ARACLARI["systemd-creds"] = None  # kurulu değil
 try:
     try:
         AD.KasaDepo().oku("hesap1")
@@ -159,7 +162,7 @@ try:
     kontrol("systemd-creds yok → durum hazir=False, neden dolu", d["tur"] == "kasa" and not d["hazir"] and d["neden"])
     kontrol("systemd-creds yok → servis_yok_kesin", AD.KasaDepo().servis_yok_kesin())
 finally:
-    os.environ["PATH"] = eski_path
+    AD.SINAMA_ARACLARI["systemd-creds"] = SAHTE
 
 AD._TPM = None
 os.environ["SAHTE_CREDS_KIP"] = "tpm-yok"
@@ -457,6 +460,51 @@ try:
                 liste_koruma.kasa_nedeni())
     finally:
         kasa_n.nesil_yaz = eski_nyaz
+    # K2-2: "çapa yazıldı" kaydı kasanın DIŞINDA (STATE_DIR); toplu silme ilk kurulum değil
+    liste_koruma._anahtar_unut()
+    kontrol("K2-2: çapa kaydı kasanın dışında yazıldı", liste_koruma.panel_dur_sakla(True) and
+            liste_koruma.capa_kaydi_var() and not liste_koruma.capa_kaydi_yolu().startswith(AD.KasaDepo().dizin))
+    # nesilsiz (eski biçim) durum + çapa SİLİNMİŞ, yeni süreç: kayıt var → geri alma (önceden kabul ediliyordu)
+    AD.ornek("kasa").yaz("panel-isaret", eski_bicim)
+    AD.ornek("kasa").sil("panel-nesil")
+    liste_koruma._EN_YUKSEK_NESIL = 0
+    liste_koruma._anahtar_unut()
+    kontrol("K2-2: çapa yok + nesilsiz durum (kayıt var) → kapalı-başarısız",
+            liste_koruma.panel_dur_ayrinti() == (None, liste_koruma.DUR_NEDEN_OKUNAMADI) and
+            liste_koruma.onayli_deger(liste_koruma.KAPSAM) == (False, None), liste_koruma.panel_dur_ayrinti())
+    # toplu silme: kasadaki BÜTÜN öğeler + bütün işaretler + iki liste dosyası
+    def _toplu_sil():
+        for ad_ in list(AD.ornek("kasa").tum_adlar()):
+            AD.ornek("kasa").sil(ad_)
+        for t in liste_koruma.TUM:
+            if os.path.lexists(liste_koruma.isaret_yolu(t)):
+                os.unlink(liste_koruma.isaret_yolu(t))
+        for t in ("yasak", "seviye"):
+            if os.path.lexists(liste_koruma.dosya(t)):
+                os.unlink(liste_koruma.dosya(t))
+        liste_koruma._EN_YUKSEK_NESIL = 0
+        liste_koruma._anahtar_unut()
+    liste_koruma.panel_dur_sakla(True)
+    _toplu_sil()
+    kontrol("K2-2: kasa + işaretler + listeler silindi, kayıt var → ilk kurulum DEĞİL", not liste_koruma.ilk_kurulum())
+    kontrol("K2-2: toplu silmede DUR kalkmaz + neden \"silinmiş\"",
+            liste_koruma.panel_dur_ayrinti() == (None, liste_koruma.DUR_NEDEN_OKUNAMADI) and
+            "silinmiş" in (liste_koruma.kasa_nedeni() or ""), liste_koruma.kasa_nedeni())
+    try:
+        liste_koruma._dosyadan("yasak", olustur=False)
+        kontrol("K2-2: toplu silmede panel kapalıyken liste → Dur 10", False)
+    except Dur as e:
+        kontrol("K2-2: toplu silmede panel kapalıyken liste → Dur 10", e.kod == 10)
+    # panel kullanıcının yeniden onayını imzalar ama DUR bilinmiyor kalır (kullanıcının Devam/DUR eylemine dek)
+    kontrol("K2-2: yeniden onay imzalanır", liste_koruma._isaret_yaz(liste_koruma.KAPSAM, "hepsi"))
+    liste_koruma._anahtar_unut()
+    kontrol("K2-2: yeniden yaratılan durumda DUR yine kapalı-başarısız", liste_koruma.panel_dur_ayrinti()[0] is None,
+            liste_koruma.panel_dur_ayrinti())
+    # kalan (belgeli): kayıt da silinirse ilk kurulum
+    _toplu_sil()
+    os.unlink(liste_koruma.capa_kaydi_yolu())
+    liste_koruma._anahtar_unut()
+    kontrol("K2-2 kalan (belgeli): kayıt da silinince ilk kurulum", liste_koruma.ilk_kurulum())
 finally:
     os.environ["DESKHAND_ANAHTARLIK"] = "kapali"
     AD.ornek_ayarla("cuzdan", None)
@@ -488,7 +536,7 @@ print("anahtar", len(k or b""))
 doktor.satir_anahtar_deposu(); doktor.satir_kalici_oturum()
 print("moduller", [m for m in sys.modules if m.split(".")[0] in ("secretstorage", "jeepney")])
 """
-r = subprocess.run([sys.executable, "-c", PROBE], capture_output=True, text=True, timeout=60, env=alt_ortam,
+r = subprocess.run([sys.executable, "-c", KANCA + PROBE], capture_output=True, text=True, timeout=60, env=alt_ortam,
                    cwd=_yalitim.KOK)
 kontrol("kasa kipi: panel/kalıcı oturum/doctor açılışı secretstorage/jeepney yüklemez",
         r.returncode == 0 and "tur kasa" in r.stdout and "anahtar 32" in r.stdout and "moduller []" in r.stdout
@@ -501,7 +549,8 @@ for ad_ in ("CONFIG", "STATE", "DATA", "CACHE", "RUNTIME"):
 
 
 def dh(*arg, girdi=None):
-    return subprocess.run([sys.executable, "-m", "deskhand", *arg], input=girdi, capture_output=True, text=True,
+    return subprocess.run([sys.executable, "-c", KANCA + "import runpy, sys; sys.argv = [\"deskhand\", *sys.argv[1:]]; "
+                           "runpy.run_module(\"deskhand\", run_name=\"__main__\")", *arg], input=girdi, capture_output=True, text=True,
                           timeout=60, env=cli_ortam, cwd=_yalitim.KOK)
 
 

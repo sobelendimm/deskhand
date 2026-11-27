@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -93,13 +92,24 @@ def _kasa():
 
 # ---------------------------------------------------------------- D-Bus (busctl, never auto-starting a service)
 
+def _arac(ad: str) -> str | None:
+    """A helper's safe absolute path (anahtar_deposu.yardimci_arac: /usr/bin, /bin, root-owned; NEVER PATH, K2-1)."""
+    from .anahtar_deposu import yardimci_arac
+    return yardimci_arac(ad, zorunlu=False)
+
+
+def _ortam() -> dict[str, str]:
+    from .anahtar_deposu import temiz_ortam
+    return temiz_ortam()
+
+
 def _busctl(*arg: str) -> str | None:
-    arac = shutil.which("busctl")
+    arac = _arac("busctl")
     if not arac:
         return None
     try:
         r = subprocess.run([arac, "--user", "--auto-start=no", *arg], capture_output=True, text=True, timeout=5,
-                           stdin=subprocess.DEVNULL)
+                           stdin=subprocess.DEVNULL, env=_ortam())
     except (OSError, subprocess.SubprocessError):
         return None
     return r.stdout.strip() if r.returncode == 0 else None
@@ -127,9 +137,21 @@ def birim_yolu() -> str:
     return os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "systemd", "user", BIRIM)
 
 
+def _birim_tirnak(s: str) -> str:
+    """One systemd unit-file word, double-quoted: \\ and " escaped, % (specifiers) and $ (variables) doubled. A
+    control character cannot be written safely → CuzdanHatasi."""
+    if any(ord(c) < 32 or ord(c) == 127 for c in s):
+        raise CuzdanHatasi(_("birim dosyasına yazılamayan yol (denetim karakteri)"))
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("$", "$$") + '"'
+
+
 def birim_metni() -> str:
-    deskhand = shutil.which("deskhand")
-    komut = f"{deskhand} wallet open" if deskhand else f"{sys.executable} -m deskhand wallet open"
+    """The login unit. ExecStart is ABSOLUTE and quoted (K2-1/K2-5): the running interpreter + `-m deskhand` with the
+    package's own directory on PYTHONPATH; no PATH lookup of `deskhand` (~/.local/bin is writable by any user process)."""
+    paket_ust = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.isabs(sys.executable or ""):
+        raise CuzdanHatasi(_("Python yorumlayıcısının yolu bilinmiyor"))
+    komut = f"{_birim_tirnak(sys.executable)} -m deskhand wallet open"
     return ("[Unit]\n"
             "Description=Deskhand: open KDE Wallet at login (sealed key, no prompt)\n"
             "PartOf=graphical-session.target\n"
@@ -138,6 +160,7 @@ def birim_metni() -> str:
             "plasma-xdg-desktop-portal-kde.service xdg-desktop-portal.service\n\n"
             "[Service]\n"
             "Type=oneshot\n"
+            f"Environment={_birim_tirnak('PYTHONPATH=' + paket_ust)}\n"
             f"ExecStart={komut}\n"
             "TimeoutStartSec=30\n"
             "KillMode=process\n\n"
@@ -146,12 +169,12 @@ def birim_metni() -> str:
 
 
 def _systemctl(*arg: str) -> bool:
-    arac = shutil.which("systemctl")
+    arac = _arac("systemctl")
     if not arac:
         return False
     try:
         return subprocess.run([arac, "--user", *arg], capture_output=True, timeout=30,
-                              stdin=subprocess.DEVNULL).returncode == 0
+                              stdin=subprocess.DEVNULL, env=_ortam()).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
@@ -219,16 +242,45 @@ def durum() -> dict:
 
 
 def _ksecretd() -> str:
-    for ad in ("ksecretd",):
-        yol = shutil.which(ad) or (f"/usr/bin/{ad}" if os.access(f"/usr/bin/{ad}", os.X_OK) else None)
-        if yol:
-            return yol
+    """ksecretd from /usr/bin or /bin only (root-owned chain): it receives the wallet KEY (K2-1)."""
+    yol = _arac("ksecretd")
+    if yol:
+        return yol
     raise CuzdanHatasi(_("ksecretd bulunamadı (KDE Cüzdanı 6 gerekir)"))
+
+
+# what ksecretd needs from the session (kwallet-pam sends its whole PAM environment; Deskhand only these, K2-4)
+_SOKET_ORTAMI = ("DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY", "HOME", "USER", "LOGNAME",
+                 "LANG", "LANGUAGE")
+
+
+def soket_ortami() -> dict[str, str]:
+    """The session environment ksecretd gets on the socket: XDG_*, LC_*, the names above and PATH=/usr/bin:/bin."""
+    from .arka_ortak import GUVENLI_PATH
+    ortam = {k: v for k, v in os.environ.items()
+             if (k in _SOKET_ORTAMI or k.startswith(("XDG_", "LC_"))) and "\n" not in k + v and "=" not in k}
+    ortam["PATH"] = GUVENLI_PATH
+    return ortam
+
+
+def _calisma_dizini() -> str:
+    """XDG_RUNTIME_DIR: set, absolute, a real directory of this user, 0700. Otherwise REFUSED (K2-3: no /tmp fallback,
+    where the socket name is predictable)."""
+    import stat as _stat
+    d = os.environ.get("XDG_RUNTIME_DIR") or ""
+    try:
+        st = os.lstat(d) if os.path.isabs(d) else None
+    except OSError:
+        st = None
+    if st is None or not _stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or _stat.S_IMODE(st.st_mode) & 0o077:
+        raise CuzdanHatasi(_("XDG_RUNTIME_DIR yok ya da güvenli değil; cüzdan açılmadı"))
+    return d
 
 
 def _baslat(anahtar: bytes) -> None:
     """kwallet-pam's protocol: `ksecretd --pam-login <pipe> <socket>`; key on the pipe, environment on the socket."""
-    calisma = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    calisma = _calisma_dizini()
+    ksecretd = _ksecretd()
     soket_yolu = os.path.join(calisma, f"deskhand-kwallet-{os.getpid()}.socket")
     try:
         os.unlink(soket_yolu)
@@ -243,9 +295,12 @@ def _baslat(anahtar: bytes) -> None:
         finally:
             os.umask(eski)
         dinle.listen(1)
-        subprocess.Popen([_ksecretd(), "--pam-login", str(oku_fd), str(dinle.fileno())],
+        from .anahtar_deposu import SINAMA_ORTAM_ADLARI
+        sok = soket_ortami()
+        surec_ortami = {**sok, **{k: os.environ[k] for k in SINAMA_ORTAM_ADLARI if k in os.environ}}
+        subprocess.Popen([ksecretd, "--pam-login", str(oku_fd), str(dinle.fileno())],
                          pass_fds=(oku_fd, dinle.fileno()), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+                         stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True, env=surec_ortami)
         os.close(oku_fd)
         oku_fd = -1
         yazilan = 0
@@ -253,7 +308,7 @@ def _baslat(anahtar: bytes) -> None:
             yazilan += os.write(yaz_fd, anahtar[yazilan:])
         os.close(yaz_fd)
         yaz_fd = -1
-        ortam = "".join(f"{k}={v}\n" for k, v in os.environ.items() if "\n" not in k + v and "=" not in k)
+        ortam = "".join(f"{k}={v}\n" for k, v in sok.items())
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
             s.settimeout(_BEKLE_SN)
             s.connect(soket_yolu)

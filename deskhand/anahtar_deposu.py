@@ -27,8 +27,9 @@ start (liste_koruma.ilk_kurulum).
 Threat model (honest, docs/ARCHITECTURE.md §4): a process that only writes files cannot read the sealed items or make a
 valid seal by copying files. Code running as the same user that DELIBERATELY runs `systemd-creds --user decrypt|encrypt`
 can read and forge kasa items, exactly like same-user code that talks to an unlocked wallet: out of scope (it needs the
-agent shell isolated from the user's credentials). Deleting the kasa items AND every panel mark AND both list files makes
-the next panel start a first start (the default lists); removing only some of them is closed-fail.
+agent shell isolated from the user's credentials). Deleting the kasa items AND every panel mark AND both list files AND
+the anchor record (STATE_DIR/panel-nesil.kayit, liste_koruma.capa_kaydi_yolu; K2-2) makes the next panel start a first
+start (the default lists, DUR off; Settings says so next to the kasa); removing only some of them is closed-fail.
 ROLLBACK (security review 27 Kas, finding 2): a file-writing process can copy a sealed item and put the OLDER copy back
 later (with the wallet this needed D-Bus). The panel's state carries a generation (liste_koruma `nesil`, +1 per write);
 a process that has seen a newer generation treats an older one (or one without a generation) as rolled back
@@ -42,13 +43,13 @@ Who needs that guarantee keeps the KDE Wallet store. Selection (finding 3): the 
 from the old store, so switching the setting back by hand finds nothing to replay.
 
 DESKHAND_ANAHTARLIK=kapali (tests/_yalitim.py): `secili_depo()` is a store that refuses everything (never the real
-wallet, never the real TPM); tests build KasaDepo with a fake systemd-creds on PATH.
+wallet, never the real TPM); tests build KasaDepo with a fake systemd-creds
+given in SINAMA_ARACLARI (in-process; never PATH).
 """
 from __future__ import annotations
 
 import os
 import re
-import shutil
 import stat
 import subprocess
 import tempfile
@@ -134,6 +135,43 @@ class Depo:
         return False
 
 
+# ---------------------------------------------------------------- helper programs (security review K2-1)
+
+# Every helper this module and cuzdan_ac.py run (systemd-creds, busctl, ksecretd, systemctl, kcmshell6, kwalletmanager)
+# is found ONLY through arka_ortak.arac: /usr/bin or /bin, the file and every parent root-owned and not writable by
+# others. NEVER through PATH: its head is the user's writable ~/.local/bin, where a fake systemd-creds received every
+# password on stdin and a fake ksecretd the wallet key (K2 review, finding 1). The children get a CLEAN environment.
+# Tests only, in-process: name → absolute path of a fake helper (None: "not installed"). Never read from the environment
+# or a file, so nothing outside this process can set it.
+SINAMA_ARACLARI: dict[str, str | None] = {}
+SINAMA_ORTAM_ADLARI: tuple[str, ...] = ()  # tests only, in-process: extra variables the fakes read
+_ORTAM_ADLARI = ("HOME", "USER", "LOGNAME", "LANG", "LANGUAGE", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
+
+
+def yardimci_arac(ad: str, zorunlu: bool = True) -> str | None:
+    """The SAFE absolute path of helper `ad` (arka_ortak.arac: /usr/bin, /bin, root-owned chain). Missing or unsafe:
+    zorunlu → DepoHatasi(yok_kesin=True), else None. Never a PATH lookup."""
+    if ad in SINAMA_ARACLARI:
+        yol = SINAMA_ARACLARI[ad]
+    else:
+        from .arka_ortak import arac
+        yol = arac(ad, zorunlu=False)
+    if yol is None and zorunlu:
+        raise DepoHatasi(_("güvenli araç bulunamadı: {ad} (yalnız /usr/bin ve /bin, root'a ait)").format(ad=ad),
+                         yok_kesin=True)
+    return yol
+
+
+def temiz_ortam(ekler: tuple[str, ...] = ()) -> dict[str, str]:
+    """A clean environment for a helper: PATH=/usr/bin:/bin plus only HOME, USER, LOGNAME, LANG(UAGE), LC_*,
+    XDG_RUNTIME_DIR, DBUS_SESSION_BUS_ADDRESS and the names in `ekler` (no LD_*, PYTHON*, SYSTEMD_*, ... of the caller)."""
+    from .arka_ortak import GUVENLI_PATH
+    adlar = set(_ORTAM_ADLARI) | set(ekler) | set(SINAMA_ORTAM_ADLARI)
+    ortam = {k: v for k, v in os.environ.items() if k in adlar or (k.startswith("LC_") and k.isupper())}
+    ortam["PATH"] = GUVENLI_PATH
+    return ortam
+
+
 # ---------------------------------------------------------------- kasa (systemd-creds)
 
 _TPM: bool | None = None
@@ -143,12 +181,12 @@ def tpm_var() -> bool:
     """`systemd-creds has-tpm2` (cached; no TPM operation)."""
     global _TPM
     if _TPM is None:
-        arac = shutil.which("systemd-creds")
+        arac = yardimci_arac("systemd-creds", zorunlu=False)
         if not arac:
             return False
         try:
             _TPM = subprocess.run([arac, "has-tpm2", "-q"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL, timeout=_SURE).returncode == 0
+                                  stderr=subprocess.DEVNULL, timeout=_SURE, env=temiz_ortam()).returncode == 0
         except (OSError, subprocess.SubprocessError):
             _TPM = False
     return _TPM
@@ -174,7 +212,7 @@ class KasaDepo(Depo):
         return self._dizin or os.path.join(yollar.data_dir(), "kasa")
 
     def _arac(self) -> str:
-        arac = shutil.which("systemd-creds")
+        arac = yardimci_arac("systemd-creds", zorunlu=False)
         if not arac:
             raise DepoHatasi(_("systemd-creds bulunamadı (systemd 256+ gerekir); Ayarlar'dan KDE Cüzdanı seçilebilir"),
                              yok_kesin=True)
@@ -182,7 +220,8 @@ class KasaDepo(Depo):
 
     def _calistir(self, argv: list[str], girdi: bytes) -> bytes:
         try:
-            r = subprocess.run([self._arac(), "--user", *argv], input=girdi, capture_output=True, timeout=_SURE)
+            r = subprocess.run([self._arac(), "--user", *argv], input=girdi, capture_output=True, timeout=_SURE,
+                               env=temiz_ortam())
         except subprocess.TimeoutExpired:
             raise DepoHatasi(_("systemd-creds yanıt vermedi")) from None
         except OSError:
@@ -307,7 +346,7 @@ class KasaDepo(Depo):
         return self._adlar()
 
     def servis_yok_kesin(self) -> bool:
-        return shutil.which("systemd-creds") is None
+        return yardimci_arac("systemd-creds", zorunlu=False) is None
 
     def durum(self) -> dict:
         neden = None

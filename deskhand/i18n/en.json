@@ -2161,5 +2161,10 @@
  "kayıtlı parola yazılmadı: odaklı alan parola alanı değil ya da okunamadı": "the saved password was not typed: the focused field is not a password field or could not be read",
  "kayıtlı parola yazılmadı: parola alanı başka bir sitenin iç çerçevesinde ({alan}; sayfa {ust})": "the saved password was not typed: the password field is in another site's inner frame ({alan}; page {ust})",
  "kayıtlı parola yazılmadı: parola alanının sayfa kökeni belirlenemedi": "the saved password was not typed: the password field's page origin could not be determined",
- "panelin nesil çapası yazılamadı: {neden}": "the panel's generation anchor could not be written: {neden}"
+ "panelin nesil çapası yazılamadı: {neden}": "the panel's generation anchor could not be written: {neden}",
+ "Python yorumlayıcısının yolu bilinmiyor": "the path of the Python interpreter is unknown",
+ "XDG_RUNTIME_DIR yok ya da güvenli değil; cüzdan açılmadı": "XDG_RUNTIME_DIR is missing or not safe; the wallet was not opened",
+ "birim dosyasına yazılamayan yol (denetim karakteri)": "a path that cannot be written to the unit file (control character)",
+ "güvenli araç bulunamadı: {ad} (yalnız /usr/bin ve /bin, root'a ait)": "no safe helper found: {ad} (only /usr/bin and /bin, owned by root)",
+ "panelin imzalı kaydı silinmiş (bu bilgisayarda daha önce yazılmıştı)": "the panel's signed record was deleted (it was written on this computer before)"
 }

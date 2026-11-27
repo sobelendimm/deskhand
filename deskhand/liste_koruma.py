@@ -291,24 +291,30 @@ def _durum(olustur: bool = False, bozugu_yenile: bool = False) -> dict | None:
                 _SERVIS_YOK_KESIN = False
             return None
         _SERVIS_YOK_KESIN = False
-        _DURUM_YOK_KESIN = not ham  # the key ring answered: there is no item at all
+        kasa_ = _kasa_nesnesi()
+        # K2-2: the panel wrote an anchor here once (a record OUTSIDE the store, capa_kaydi_yolu): a missing state item
+        # or anchor is then a deletion, never a first start (deleting every kasa file alone no longer resets DUR)
+        kayit = _gercek_depo(kasa_) and capa_kaydi_var()
+        kayip = not ham and kayit
+        _DURUM_YOK_KESIN = not ham and not kayit  # the key ring answered: there is no item at all, and never was
         global _EN_YUKSEK_NESIL
         d = _durum_coz(ham) if ham else None
         capa_bozuk = False
-        kasa_ = _kasa_nesnesi()
         capa_oku = getattr(kasa_, "nesil_oku", None)
         if d is not None and capa_oku is not None:
             try:
                 capa = capa_oku()
                 if capa is None:
-                    # a generation-carrying state with NO anchor in a real store: the anchor was deleted (review R3)
-                    capa_bozuk = d["nesil"] is not None and getattr(kasa_, "son_tur", None) in ("kasa", "cuzdan")
+                    # NO anchor in a real store while the state carries a generation, or an anchor was written here
+                    # before: the anchor was deleted (review R3, K2-2)
+                    capa_bozuk = (d["nesil"] is not None or kayit) and _gercek_depo(kasa_)
                 else:
                     _EN_YUKSEK_NESIL = max(_EN_YUKSEK_NESIL, _capa_coz(capa, d["anahtar"]))
             except Exception:  # noqa: BLE001 - an anchor that cannot be read or whose HMAC is wrong: closed-fail
                 capa_bozuk = True
-        # older generation, or an item without generations once generations were seen (review R2 finding 3)
-        geri = d is not None and (capa_bozuk or (d["nesil"] is None and _EN_YUKSEK_NESIL > 0) or
+        # older generation, or an item without generations once generations were seen / an anchor was ever written
+        # (review R2 finding 3, K2-2)
+        geri = d is not None and (capa_bozuk or (d["nesil"] is None and (_EN_YUKSEK_NESIL > 0 or kayit)) or
                                   (d["nesil"] is not None and d["nesil"] < _EN_YUKSEK_NESIL))
         if geri:  # an OLDER sealed copy was put back (rollback; anahtar_deposu threat model): like a corrupt item
             d = None
@@ -317,15 +323,19 @@ def _durum(olustur: bool = False, bozugu_yenile: bool = False) -> dict | None:
         if d is None and ham:
             _DURUM_NEDEN = (_("panelin imzalı kaydı geri alınmış (daha eski bir kopya geri konmuş)") if geri
                             else _("panelin imzalı kaydı okunamadı (bozuk)"))
+        elif kayip:
+            _DURUM_NEDEN = _("panelin imzalı kaydı silinmiş (bu bilgisayarda daha önce yazılmıştı)")
         if d is None:
             if not olustur or (ham and not bozugu_yenile):
                 _DURUM = None
-                if not ham:
+                if not ham and not kayip:
                     _DURUM_NEDEN = None
                 return None
             # a missing item: a first start (no DUR record = off); a corrupt one re-made by the user's DUR action
-            # (panel_dur_sakla writes the user's value right after)
-            d = {"anahtar": os.urandom(32), "sayac": {}, "son": {}, "dur": False if not ham else None}
+            # (panel_dur_sakla writes the user's value right after); a DELETED one (kayip) is re-made by the panel
+            # for the values the user approves again, with the user's DUR unknown (closed-fail until the user's
+            # Continue / DUR action)
+            d = {"anahtar": os.urandom(32), "sayac": {}, "son": {}, "dur": False if not (ham or kayip) else None}
             if not _durum_kaydet(d):
                 return None
         _DURUM, _DURUM_ZAMAN = d, time.monotonic()
@@ -356,7 +366,29 @@ def _durum_kaydet(d: dict) -> bool:
             from .gunluk import gunluk
             gunluk(f"liste_koruma: nesil çapası yazılamadı: {_neden(e)}")
             return False
+        if _gercek_depo(_kasa_nesnesi()) and not capa_kaydi_var():
+            try:  # K2-2: "an anchor was written here", outside the store (no secret in it)
+                _yaz_atomik(capa_kaydi_yolu(), "deskhand-panel-nesil 1\n")
+            except OSError as e:
+                from .gunluk import gunluk
+                gunluk(f"liste_koruma: çapa kaydı yazılamadı: {type(e).__name__}")
         return True
+
+
+def capa_kaydi_yolu() -> str:
+    """K2-2: the record "the panel's generation anchor was written here once" (STATE_DIR, outside the kasa). With it,
+    a missing state item or anchor is a deletion (closed-fail), never a first start. Deleting it TOGETHER with every
+    kasa file, every mark and both list files still makes a first start (Settings says so: gui Secrets group)."""
+    return os.path.join(yollar.state_dir(), "panel-nesil.kayit")
+
+
+def capa_kaydi_var() -> bool:
+    return os.path.lexists(capa_kaydi_yolu())
+
+
+def _gercek_depo(kasa_) -> bool:
+    """The panel's own item in a real store (kasa / wallet), not a test fake (isaret_anahtarlik_ayarla)."""
+    return isinstance(kasa_, _PanelKasasi) and getattr(kasa_, "son_tur", None) in ("kasa", "cuzdan")
 
 
 def _capa_degeri(anahtar: bytes, nesil: int) -> bytes:

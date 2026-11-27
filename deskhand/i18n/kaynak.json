@@ -706,7 +706,7 @@
   "gui/metinler.py:21"
  ],
  "Ayar dosyası yazılamadı ({hata}); panelin değeri ({ayar}) bellekte geçerli, aynı değişiklik bu oturumda yeniden sorulmaz.": [
-  "liste_koruma.py:1046"
+  "liste_koruma.py:1078"
  ],
  "Ayar dosyası yazılamıyor. Disk dolu mu? Klasör izinlerini kontrol edin.": [
   "gui/metinler.py:364"
@@ -980,7 +980,7 @@
   "gui/sekmeler/gizli.py:71"
  ],
  "Cüzdan okunabildi; {ayar} panelin imzalı kaydıyla doğrulandı.": [
-  "liste_koruma.py:1003"
+  "liste_koruma.py:1035"
  ],
  "Cüzdan okunamıyor; kullanıcının DUR kaydı doğrulanamadı. Güvenli tarafta DUR açık; cüzdan okununca panel imzalı kaydı uygular (kapalıysa DUR kalkar).": [
   "gui/panel.py:683"
@@ -1001,7 +1001,7 @@
   "gui/sekmeler/gizli.py:48"
  ],
  "Cüzdandaki imzalı kayıtla listeler doğrulanamadı ({ayarlar}; {neden}). Deskhand durdu (Dur 10). Cüzdan okununca panel imzalı kaydı geri yükler; imzalı kayıt yoksa dosya değişince ya da panel yeniden başlayınca yeniden sorulur.": [
-  "liste_koruma.py:955"
+  "liste_koruma.py:987"
  ],
  "Cüzdandaki panel kaydında DUR alanı yok (eski sürüm kaydı; bir kez Devam'a basın). Güvenli tarafta DUR açık; anahtar ve onaylar korunur.": [
   "gui/panel.py:675"
@@ -1140,7 +1140,7 @@
   "liste_koruma.py:85"
  ],
  "Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı. Bu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin.": [
-  "liste_koruma.py:615"
+  "liste_koruma.py:647"
  ],
  "Deskhand bir iş yapmak istiyor": [
   "mesgul.py:49"
@@ -1152,7 +1152,7 @@
   "gui/gorev.py:32"
  ],
  "Deskhand kasası": [
-  "anahtar_deposu.py:63",
+  "anahtar_deposu.py:64",
   "gui/sekmeler/gizli.py:37"
  ],
  "Deskhand onay/panel penceresi /{desen}/": [
@@ -1216,7 +1216,7 @@
   "gui/metinler.py:172"
  ],
  "Dikkat: {n} girişte görünmez, ASCII dışı ya da çok uzun içerik var (⚠ satırları).": [
-  "liste_koruma.py:627"
+  "liste_koruma.py:659"
  ],
  "Dil": [
   "gui/metinler.py:219"
@@ -1560,7 +1560,7 @@
   "gui/metinler.py:304"
  ],
  "Görünmez masaüstündeki tarayıcının şu sitelerdeki oturumu kalıcı saklansın mı (şifreli, KDE Cüzdanı anahtarıyla; banka/ödeme siteleri hiçbir zaman)? Bu isteği siz yapmadıysanız Hayır deyin.": [
-  "liste_koruma.py:619"
+  "liste_koruma.py:651"
  ],
  "Görünmez masaüstünü siz kullanın (Arka plan ekranı sekmesi): giriş, CAPTCHA, doğrulama kodu…": [
   "gui/metinler.py:267"
@@ -1664,16 +1664,16 @@
   "gui/metinler.py:195"
  ],
  "Hesap oturumu izni ({saglayici}) panel dışında açılmış; geçerli sayılmadı, kimlik çerezleri süzülmeye devam ediyor. Açmak için panelde Ayarlar → Hesap oturumları.": [
-  "liste_koruma.py:1120"
+  "liste_koruma.py:1152"
  ],
  "Hesap oturumu izni ayar dosyasında panel dışında açılmaya çalışıldı; geçerli sayılmadı, panelin değeri korundu ve dosya geri yazıldı (açmak için panelde Ayarlar → Hesap oturumları).": [
-  "liste_koruma.py:1243"
+  "liste_koruma.py:1275"
  ],
  "Hesap oturumu izni ayar dosyasında panel dışında kapatıldı ya da silindi; kimlik çerezleri yeniden süzülüyor.": [
-  "liste_koruma.py:1239"
+  "liste_koruma.py:1271"
  ],
  "Hesap oturumu izni açık: {saglayici}. Görünmez masaüstündeki tarayıcı bu hesaplara girişli açılır. Kapatmak için panelde Ayarlar → Hesap oturumları.": [
-  "liste_koruma.py:1107"
+  "liste_koruma.py:1139"
  ],
  "Hızlı (ekran kartlı) arka plan masaüstü": [
   "gui/saglik.py:34"
@@ -1682,17 +1682,17 @@
   "gui/metinler.py:270"
  ],
  "KDE Cüzdanı": [
-  "anahtar_deposu.py:63",
+  "anahtar_deposu.py:64",
   "gui/sekmeler/gizli.py:39"
  ],
  "KDE Cüzdanı kilitli ya da kurulu değil. Cüzdan yöneticisinden cüzdan oluşturup açın.": [
   "gui/sekmeler/gizli.py:49"
  ],
  "KDE Cüzdanı tuz dosyası beklenen boyda değil": [
-  "cuzdan_ac.py:76"
+  "cuzdan_ac.py:75"
  ],
  "KDE Cüzdanı tuz dosyası yok ({yol}); cüzdan bu kullanıcıda oluşturulmamış olabilir": [
-  "cuzdan_ac.py:73"
+  "cuzdan_ac.py:72"
  ],
  "KDE Cüzdanı'nı açın (kilidi açık olmalı)": [
   "doktor.py:248"
@@ -1798,19 +1798,19 @@
   "gui/saglik.py:39"
  ],
  "Kalıcı oturum listesinden ayar dosyasında site çıkarıldı; kabul edildi.": [
-  "liste_koruma.py:1172"
+  "liste_koruma.py:1204"
  ],
  "Kalıcı oturum listesine panel dışında site eklenmek istendi ({siteler}); onaylanmadı, panelin listesi korundu ve dosya geri yazıldı.": [
-  "liste_koruma.py:1185"
+  "liste_koruma.py:1217"
  ],
  "Kalıcı oturum sitesi ({siteler}) panel dışında eklenmiş ve onaylanmadı; kullanılmıyor.": [
-  "liste_koruma.py:1124"
+  "liste_koruma.py:1156"
  ],
  "Kalıcı oturum süresi ({yeni} gün) panel dışında yazılmış ve onaylanmadı; {eski} gün kullanılıyor.": [
-  "liste_koruma.py:1126"
+  "liste_koruma.py:1158"
  ],
  "Kalıcı oturum süresi ayar dosyasında kısaltıldı; kabul edildi.": [
-  "liste_koruma.py:1173"
+  "liste_koruma.py:1205"
  ],
  "Kalıcı oturum şifrelemesi": [
   "gui/saglik.py:39"
@@ -1949,7 +1949,7 @@
   "gui/metinler.py:236"
  ],
  "Liste çok uzun (üst sınır {sinir} giriş, {satir} satır); bu soruya Evet verilemez. Listeyi Ayarlar'dan inceleyin.": [
-  "liste_koruma.py:628"
+  "liste_koruma.py:660"
  ],
  "MCP sunucuları": [
   "doktor.py:131",
@@ -2060,16 +2060,16 @@
   "doktor.py:161"
  ],
  "Onay kapsamı 'kart' (Yalnız kartla ödeme) panel dışında yazılmış; geçerli sayılmadı, tüm onaylar açık kaldı ('hepsi'). Değiştirmek için panelde Ayarlar → Onay soruları.": [
-  "liste_koruma.py:1117"
+  "liste_koruma.py:1149"
  ],
  "Onay kapsamı ayar dosyasında panel dışında 'hepsi' yapıldı ya da silindi; tüm onaylar yeniden açık.": [
-  "liste_koruma.py:1226"
+  "liste_koruma.py:1258"
  ],
  "Onay kapsamı ayar dosyasında panel dışında değiştirildi; panelin değeri ('{deger}') korundu ve dosya geri yazıldı (değişiklikleri Ayarlar'dan yapın).": [
-  "liste_koruma.py:1230"
+  "liste_koruma.py:1262"
  ],
  "Onay penceresinde gösterilen girişler uygulanacak değerle aynı değil; Evet uygulanmadı.": [
-  "liste_koruma.py:885"
+  "liste_koruma.py:917"
  ],
  "Onay soruları": [
   "gui/metinler.py:188",
@@ -2083,13 +2083,13 @@
   "gui/metinler.py:53"
  ],
  "Onaylı kayda göre: {k} kaldırılan, {e} eklenen, {d} değişen giriş; {s} giriş aynı. Kaldırılanlar önce listelenir.": [
-  "liste_koruma.py:623"
+  "liste_koruma.py:655"
  ],
  "Onaylı kayıt okunamadı — karşılaştırma yapılamıyor; aşağıdaki liste dosyadaki girişlerin TAMAMIDIR ({n} giriş); eksik kural görüyorsanız Hayır deyin.": [
-  "liste_koruma.py:621"
+  "liste_koruma.py:653"
  ],
  "Onaylı kayıt yok; varsayılan değere göre: {k} kaldırılan, {e} eklenen, {d} değişen giriş; {s} giriş aynı.": [
-  "liste_koruma.py:625"
+  "liste_koruma.py:657"
  ],
  "Ortak: -b/--title (--baslik) DESEN  başlık bu deseni (regex, büyük/küçük harf duyarsız) içermezse DUR.": [
   "cli.py:140"
@@ -2134,10 +2134,10 @@
   "gui/metinler.py:34"
  ],
  "Panelin imzalı kaydı kullanılamıyor ({neden}); yalnız varsayılanlar ve daraltmalar uygulanıyor, gevşetmeler panelde sorulur.": [
-  "liste_koruma.py:858"
+  "liste_koruma.py:890"
  ],
  "Panelin imzalı kaydı okunamıyor ({neden}); şu listeler doğrulanamadı. Dosyadaki girişler uygulansın mı? Siz yazmadıysanız Hayır deyin.": [
-  "liste_koruma.py:617"
+  "liste_koruma.py:649"
  ],
  "Pano kullanılıyor": [
   "gui/metinler.py:307"
@@ -2208,6 +2208,9 @@
  "Python modülü": [
   "gui/metinler.py:254"
  ],
+ "Python yorumlayıcısının yolu bilinmiyor": [
+  "cuzdan_ac.py:153"
+ ],
  "Rahatsız Etme açık": [
   "mesgul.py:572"
  ],
@@ -2246,10 +2249,10 @@
   "liste_koruma.py:271"
  ],
  "Secret Service yok ya da varsayılan cüzdan yok (KDE Cüzdanı)": [
-  "anahtar_deposu.py:357"
+  "anahtar_deposu.py:396"
  ],
  "Secret Service'e bağlanılamadı (oturum veri yolu yok)": [
-  "anahtar_deposu.py:352"
+  "anahtar_deposu.py:391"
  ],
  "Ses dinleniyor": [
   "gui/metinler.py:308"
@@ -2460,6 +2463,9 @@
  ],
  "Web sayfası ögeleri için: `web {kimlik} '{ad}'`": [
   "erisim.py:1434"
+ ],
+ "XDG_RUNTIME_DIR yok ya da güvenli değil; cüzdan açılmadı": [
+  "cuzdan_ac.py:276"
  ],
  "XWayland ekran adı geçersiz ya da kullanıcının gerçek ekranıyla aynı: {ekran}": [
   "kwin_oturum.py:177"
@@ -2674,19 +2680,19 @@
   "mcp_sunucu.py:2498"
  ],
  "anahtar deposu ayarı ({ayar}) mühürlü seçimle ({secim}) uyuşmuyor; ayar dosyası panel dışında değişmiş. Ayarlar'dan depoyu yeniden seçin": [
-  "anahtar_deposu.py:557"
+  "anahtar_deposu.py:596"
  ],
  "anahtar deposu seçimi bozuk": [
-  "anahtar_deposu.py:545"
+  "anahtar_deposu.py:584"
  ],
  "anahtar deposu seçimi doğrulanamadı: {neden}": [
-  "anahtar_deposu.py:542"
+  "anahtar_deposu.py:581"
  ],
  "anahtar deposu: {neden}": [
   "cli.py:535"
  ],
  "anahtar okunamadı (Secret Service hatası)": [
-  "anahtar_deposu.py:364",
+  "anahtar_deposu.py:403",
   "oturum/kalici.py:187"
  ],
  "anahtar okunamadı (anahtar deposu hatası)": [
@@ -2700,7 +2706,7 @@
   "oturum/kalici.py:1083"
  ],
  "anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)": [
-  "anahtar_deposu.py:453",
+  "anahtar_deposu.py:492",
   "liste_koruma.py:214",
   "oturum/kalici.py:120"
  ],
@@ -2987,7 +2993,7 @@
   "ayarlar.py:123"
  ],
  "bilinmeyen depo: {tur}": [
-  "anahtar_deposu.py:623"
+  "anahtar_deposu.py:662"
  ],
  "bilinmeyen değiştirici tuş: {tus} (ctrl, shift, alt, meta)": [
   "eylem.py:199"
@@ -3054,6 +3060,9 @@
  "birden çok öge; --sira N ile seç": [
   "erisim.py:1448"
  ],
+ "birim dosyasına yazılamayan yol (denetim karakteri)": [
+  "cuzdan_ac.py:144"
+ ],
  "birincil eylem yok (click/press/activate/toggle); ögenin eylemleri: {liste}; --eylem ADI ile seç": [
   "erisim.py:754",
   "erisim.py:1796"
@@ -3088,11 +3097,11 @@
   "uygulama.py:294"
  ],
  "boş değer kaydedilmez": [
-  "anahtar_deposu.py:724",
+  "anahtar_deposu.py:763",
   "cli.py:525"
  ],
  "boş parola kaydedilmez": [
-  "cuzdan_ac.py:179"
+  "cuzdan_ac.py:202"
  ],
  "boş ses çıkışı kurulamadı ({hata}): arka plan sesi kapatıldı": [
   "arka_ortak.py:1281"
@@ -3197,11 +3206,11 @@
   "guvenlik.py:788"
  ],
  "cüzdan kilitli": [
-  "anahtar_deposu.py:359",
-  "anahtar_deposu.py:377"
+  "anahtar_deposu.py:398",
+  "anahtar_deposu.py:416"
  ],
  "cüzdan kilitli: kayıtlı anahtar açmadı ya da cüzdan bu birimden önce başlatıldı": [
-  "cuzdan_ac.py:217"
+  "cuzdan_ac.py:240"
  ],
  "dbus-daemon bellek kafesinde değil: {cgroup}": [
   "kwin_oturum.py:962"
@@ -3315,7 +3324,7 @@
   "erisim.py:787"
  ],
  "değer çok büyük": [
-  "anahtar_deposu.py:260"
+  "anahtar_deposu.py:299"
  ],
  "değeri stdin'den (uçbirimde gizli giriş) kaydet": [
   "cli.py:485"
@@ -3743,7 +3752,7 @@
   "kwin_oturum.py:162"
  ],
  "geçersiz ad: harf, rakam, '.', '_' ya da '-' (en çok 64 karakter)": [
-  "anahtar_deposu.py:98"
+  "anahtar_deposu.py:99"
  ],
  "geçersiz alan adı: {alan}": [
   "oturum/cli.py:149",
@@ -3780,14 +3789,14 @@
   "arka_uc/sanal.py:115"
  ],
  "geçersiz site: {deger}": [
-  "anahtar_deposu.py:691"
+  "anahtar_deposu.py:730"
  ],
  "geçersiz uygulama sınıfı: {deger}": [
-  "anahtar_deposu.py:689"
+  "anahtar_deposu.py:728"
  ],
  "geçersiz ya da ayrılmış ad: {ad}": [
-  "anahtar_deposu.py:722",
-  "anahtar_deposu.py:731",
+  "anahtar_deposu.py:761",
+  "anahtar_deposu.py:770",
   "cli.py:504"
  ],
  "geçersiz ölçek: {deger} (1 ya da 2)": [
@@ -3925,7 +3934,7 @@
   "gui/metinler.py:351"
  ],
  "gizli bilgi kaydı bozuk": [
-  "anahtar_deposu.py:714"
+  "anahtar_deposu.py:753"
  ],
  "gizli bilgi metin değil: {ad}": [
   "cli.py:371"
@@ -4035,7 +4044,7 @@
   "erisim.py:141"
  ],
  "görünmez ya da ASCII dışı karakter: {harfler}": [
-  "liste_koruma.py:660"
+  "liste_koruma.py:692"
  ],
  "görüntü": [
   "gorev.py:272",
@@ -4090,6 +4099,9 @@
  ],
  "gürültü süzgeci kapalı": [
   "cli.py:712"
+ ],
+ "güvenli araç bulunamadı: {ad} (yalnız /usr/bin ve /bin, root'a ait)": [
+  "anahtar_deposu.py:160"
  ],
  "güvenli araç bulunamadı: {ad} (yalnız /usr/bin ve /bin; dosya ve üst dizinleri root'a ait, başkası yazamaz olmalı)": [
   "arka_ortak.py:449"
@@ -4323,26 +4335,26 @@
   "doktor.py:150"
  ],
  "kasa dizini güvenli değil (dizin değil ya da başka kullanıcının)": [
-  "anahtar_deposu.py:210"
+  "anahtar_deposu.py:249"
  ],
  "kasa dizini güvenli değil (izinler düzeltilemedi)": [
-  "anahtar_deposu.py:215"
+  "anahtar_deposu.py:254"
  ],
  "kasa dizini okunamadı": [
-  "anahtar_deposu.py:208",
-  "anahtar_deposu.py:300"
+  "anahtar_deposu.py:247",
+  "anahtar_deposu.py:339"
  ],
  "kasa öğesi açılamadı ({ad}): mühür bozuk ya da başka bir makinede/kullanıcıda oluşturulmuş; Ayarlar'dan parolayı yeniden girin ya da KDE Cüzdanı'nı seçin": [
-  "anahtar_deposu.py:250"
+  "anahtar_deposu.py:289"
  ],
  "kasa öğesi güvenli değil ({ad})": [
-  "anahtar_deposu.py:236"
+  "anahtar_deposu.py:275"
  ],
  "kasa öğesi okunamadı ({ad})": [
-  "anahtar_deposu.py:232"
+  "anahtar_deposu.py:271"
  ],
  "kasa öğesi silinemedi ({ad})": [
-  "anahtar_deposu.py:291"
+  "anahtar_deposu.py:330"
  ],
  "kayboldu: '{metin}' ({sn} sn)": [
   "ocr.py:610"
@@ -4385,7 +4397,7 @@
   "cli.py:510"
  ],
  "kayıtlı gizli bilgi yok: {ad}": [
-  "anahtar_deposu.py:746"
+  "anahtar_deposu.py:785"
  ],
  "kayıtlı gizli bilgi yok: {ad} (deskhand secret set {ad})": [
   "cli.py:367"
@@ -4503,7 +4515,7 @@
   "arka_uc/kwin.py:133"
  ],
  "ksecretd bulunamadı (KDE Cüzdanı 6 gerekir)": [
-  "cuzdan_ac.py:226"
+  "cuzdan_ac.py:249"
  ],
  "kullanıcı Bitti dedi ama sınama işareti hâlâ sayfada: observe ile bak; sayfa ilerlemiyorsa kullanıcıya söyle (aynı sınama için yeniden çağrılmaz)": [
   "mcp_sunucu.py:3079"
@@ -4536,7 +4548,7 @@
   "onay.py:61"
  ],
  "kullanıcı birimi etkinleştirilemedi ({birim})": [
-  "cuzdan_ac.py:168"
+  "cuzdan_ac.py:191"
  ],
  "kullanıcı bu hassas tıklamayı AÇIKÇA onayladı": [
   "cli.py:670",
@@ -4644,7 +4656,7 @@
   "doktor.py:455"
  ],
  "kullanım: deskhand wallet open|status|remove (kurulum: panel Ayarlar)": [
-  "cuzdan_ac.py:324"
+  "cuzdan_ac.py:379"
  ],
  "kurulu": [
   "oturum/cli.py:107"
@@ -5008,16 +5020,19 @@
   "doktor.py:112"
  ],
  "panelin imzalı kaydı geri alınmış (daha eski bir kopya geri konmuş)": [
-  "liste_koruma.py:318"
+  "liste_koruma.py:324"
  ],
  "panelin imzalı kaydı okunamadı (bozuk)": [
-  "liste_koruma.py:319"
+  "liste_koruma.py:325"
+ ],
+ "panelin imzalı kaydı silinmiş (bu bilgisayarda daha önce yazılmıştı)": [
+  "liste_koruma.py:327"
  ],
  "panelin imzalı kaydında bu listelerin onaylı değeri yok": [
-  "liste_koruma.py:932"
+  "liste_koruma.py:964"
  ],
  "panelin nesil çapası yazılamadı: {neden}": [
-  "liste_koruma.py:355"
+  "liste_koruma.py:365"
  ],
  "pano": [
   "cli.py:293"
@@ -5266,7 +5281,7 @@
   "uygulama.py:396"
  ],
  "python-secretstorage kurulu değil": [
-  "anahtar_deposu.py:344"
+  "anahtar_deposu.py:383"
  ],
  "red": [
   "mcp_sunucu.py:826",
@@ -5581,19 +5596,19 @@
   "guvenlik.py:820"
  ],
  "systemd-creds boş çıktı verdi": [
-  "anahtar_deposu.py:265"
+  "anahtar_deposu.py:304"
  ],
  "systemd-creds bulunamadı (systemd 256+ gerekir); Ayarlar'dan KDE Cüzdanı seçilebilir": [
-  "anahtar_deposu.py:179"
+  "anahtar_deposu.py:217"
  ],
  "systemd-creds hatası: {hata}": [
-  "anahtar_deposu.py:191"
+  "anahtar_deposu.py:230"
  ],
  "systemd-creds yanıt vermedi": [
-  "anahtar_deposu.py:187"
+  "anahtar_deposu.py:226"
  ],
  "systemd-creds çalıştırılamadı": [
-  "anahtar_deposu.py:189"
+  "anahtar_deposu.py:228"
  ],
  "systemd-run yok: bellek kafesi kurulamaz (bilerek kapatmak için DESKHAND_SANAL_BELLEK=0)": [
   "kwin_oturum.py:888",
@@ -5682,7 +5697,7 @@
   "eylem.py:1333"
  ],
  "taşınan öğe geri okunamadı ({ad}); depo değiştirilmedi": [
-  "anahtar_deposu.py:647"
+  "anahtar_deposu.py:686"
  ],
  "taşınmaz (politika)": [
   "oturum/denetle.py:364"
@@ -6137,7 +6152,7 @@
   "arka_uc/kwin.py:579"
  ],
  "{ayar} doğrulanmadı (Dur 10); cüzdan okununca panel imzalı kaydı geri yükler ya da dosyadaki girişleri yeniden sorar.": [
-  "liste_koruma.py:1203"
+  "liste_koruma.py:1235"
  ],
  "{ayar} metin olmalı": [
   "ayarlar.py:143"
@@ -6168,10 +6183,10 @@
   "oturum/denetle.py:342"
  ],
  "{dosya} panel dışında silindi ya da değiştirildi; panelin kaydı korundu ve dosya geri yazıldı (değişiklikleri Ayarlar'dan yapın).": [
-  "liste_koruma.py:1219"
+  "liste_koruma.py:1251"
  ],
  "{dosya} panel kapalıyken silinmiş ya da değiştirilmiş; panelin son kaydı geri yüklendi (değişiklikleri Ayarlar'dan yapın).": [
-  "liste_koruma.py:1114"
+  "liste_koruma.py:1146"
  ],
  "{dugme} (fareyi oynatın)": [
   "gui/onay_diyalog.py:48"
@@ -6315,7 +6330,7 @@
   "gui/metinler.py:183"
  ],
  "{n} boş satır ({aralik}) katlandı": [
-  "liste_koruma.py:749"
+  "liste_koruma.py:781"
  ],
  "{n} dk": [
   "gui/metinler.py:345"
@@ -6345,7 +6360,7 @@
   "gui/insan_metni.py:24"
  ],
  "{n} yorum satırı ({aralik}) uygulanmaz": [
-  "liste_koruma.py:751"
+  "liste_koruma.py:783"
  ],
  "{ok}/{n} bileşen hazır": [
   "gui/metinler.py:252"
@@ -6612,7 +6627,7 @@
   "desen.py:124"
  ],
  "çok uzun giriş: {n} karakter": [
-  "liste_koruma.py:722"
+  "liste_koruma.py:754"
  ],
  "çok uzun ya da boşluk/denetim karakteri içeriyor": [
   "uygulama.py:335"
@@ -6827,6 +6842,6 @@
   "gui/metinler.py:168"
  ],
  "⟨boş/yorum ×{n}⟩ ({aralik}) uygulanmaz": [
-  "liste_koruma.py:752"
+  "liste_koruma.py:784"
  ]
 }
