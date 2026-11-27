@@ -82,8 +82,8 @@ ONBELLEK_SN = 0.3  # istemci: panelden alınan listeyi bu kadar süre yeniden so
 MESAJ_DOGRULANAMADI = N_("Deskhand ayar dosyasının ({dosya}) önceki onaylı değeri doğrulanamadı (cüzdan kilitli/yok); "
                          "güvenli tarafta hiçbir girdi gönderilmez; Deskhand paneli açın.")
 MESAJ_PANEL_DOGRULANAMADI = N_("Deskhand paneli {tur} listesini doğrulayamadı (cüzdan okunamıyor; listeler "
-                               "doğrulanamadı); güvenli tarafta hiçbir girdi gönderilmez. Cüzdanı açın ya da listeyi "
-                               "panelin Ayarlar'ından kaydedin.")
+                               "doğrulanamadı); güvenli tarafta hiçbir girdi gönderilmez. Cüzdan açılınca panel imzalı "
+                               "kaydı geri yükler.")
 MESAJ_KAYIP = N_("Deskhand ayar dosyası ({dosya}) kayıp ya da panel dışında değişti; güvenli tarafta hiçbir girdi "
                  "gönderilmez; Deskhand paneli açın (panel kendi kaydını geri yükler).")
 _AYAR_ADI = {"yasak": N_("yasak pencereler"), "seviye": N_("uygulama erişim seviyeleri"), KAPSAM: N_("onay kapsamı"),
@@ -437,11 +437,14 @@ def _dosyadaki(tur: str) -> str | None:
     return str(_sure_dosyadan())
 
 
-def _kisa(metin: str | None) -> str:
+def _tam(metin: str | None) -> str:
+    """The WHOLE value for a question (review EK-2: nothing cut, a loosening cannot hide past a limit). Multi-line
+    values start on their own line."""
     if metin is None:
         return _("(yok)")
-    s = "; ".join(x.strip() for x in metin.splitlines() if x.strip()) or _("(boş)")
-    return s if len(s) <= 200 else s[:200] + "…"
+    if not metin.strip():
+        return _("(boş)")
+    return ("\n" + metin.rstrip("\n") + "\n") if "\n" in metin.rstrip("\n") else metin.rstrip("\n")
 
 
 # ---------------------------------------------------------------- panel tarafı
@@ -485,7 +488,15 @@ class Koruyucu:
             if siteler is not None and self.onayla is not None:
                 return bool(self.onayla(siteler))
             if self.sor is not None:
-                return bool(self.sor(tur, aciklama))
+                cevap = self.sor(tur, aciklama)
+                if isinstance(cevap, tuple):  # the panel dialog: (Yes?, sha256 of the text it SHOWED) (EK-2)
+                    evet, iz = (cevap + (None,))[:2]
+                    if evet and iz != _ozet(aciklama):
+                        self.uyari(_("Onay penceresinde gösterilen metin uygulanacak değerle aynı değil; Evet "
+                                     "uygulanmadı."))
+                        return False
+                    return bool(evet)
+                return bool(cevap)
             return False
         except Exception:  # noqa: BLE001 - the dialog failed: not approved
             return False
@@ -508,7 +519,7 @@ class Koruyucu:
         if tur == KALICI and self.onayla is not None:
             siteler = sorted(kalici_ayristir(yeni) - kalici_ayristir(ref)) or sorted(kalici_ayristir(yeni))
         cevap = self._soru(tur, _("{ayar}: panelin kaydı «{eski}», dosyada «{yeni}»").format(
-            ayar=_(_AYAR_ADI[tur]), eski=_kisa(ref), yeni=_kisa(yeni)), siteler)
+            ayar=_(_AYAR_ADI[tur]), eski=_tam(ref), yeni=_tam(yeni)), siteler)
         if not cevap:
             self._redler.add(anahtar)
         return cevap
@@ -527,7 +538,7 @@ class Koruyucu:
         if not liste:
             return
         neden = kasa_nedeni() or _("panelin imzalı kaydı yok")
-        satirlar = "\n".join(_("{ayar}: dosyada «{yeni}»").format(ayar=_(_AYAR_ADI[t]), yeni=_kisa(d))
+        satirlar = "\n".join(_("{ayar}: dosyada «{yeni}»").format(ayar=_(_AYAR_ADI[t]), yeni=_tam(d))
                              for t, d in liste)
         aciklama = _("Panelin imzalı kaydı okunamıyor ({neden}); şu listeler doğrulanamadı:\n{satirlar}").format(
             neden=neden, satirlar=satirlar)
@@ -546,9 +557,9 @@ class Koruyucu:
             for tur, d in liste:
                 self.bellek[tur] = d  # kept as found (the settings page shows it); NOT served: Dur 10
                 self._dogrulanamayan.add(tur)
-        self.uyari(_("Cüzdan okunamıyor; listeler doğrulanamadı ({ayarlar}). Bu listeler doğrulanana kadar Deskhand "
-                     "girdi göndermez (Dur 10). Cüzdan açılınca panel imzalı kaydı geri yükler; ya da listeleri "
-                     "Ayarlar'dan kaydedin.").format(ayarlar=", ".join(_(_AYAR_ADI[t]) for t, _d in liste)))
+        self.uyari(_("Cüzdan okunamıyor; listeler doğrulanamadı ({ayarlar}). Cüzdan açılınca panel imzalı kaydı geri "
+                     "yükler; o zamana kadar Deskhand durdu (Dur 10).").format(
+                         ayarlar=", ".join(_(_AYAR_ADI[t]) for t, _d in liste)))
 
     def _kasa_yeniden(self) -> list[str]:
         """denetle: the wallet can be read again → sign the values approved meanwhile, restore + re-check the
@@ -581,6 +592,11 @@ class Koruyucu:
             uyarilar.append(_("Cüzdan okunabildi; {ayar} panelin imzalı kaydıyla doğrulandı.").format(
                 ayar=_(_AYAR_ADI[tur])))
         return uyarilar
+
+    def dogrulanmamis(self, tur: str) -> bool:
+        """yasak/seviye is not verified (wallet unreadable, No): Settings shows it read-only (EK-2)."""
+        with self._kilit:
+            return tur in self._dogrulanamayan
 
     def yanit(self, tur: str) -> str | None:
         """The value served on the approval channel (`liste <tur>`): an unverified list is not served (B1)."""
@@ -622,7 +638,6 @@ class Koruyucu:
         except OSError:
             imzali = False
         if onay:
-            self._dogrulanamayan.discard(tur)  # the user's own value: verified by the user
             self._imza_izle(tur, imzali)
         return tamam
 
@@ -765,9 +780,13 @@ class Koruyucu:
             return self.bellek.get(tur)
 
     def kaydet(self, tur: str, metin: str) -> None:
-        """Panelin Kaydet'i: bellek + dosya + işaret (tek yetkili yazar). The user's own value: an unverified list
-        becomes verified (B1), and it is signed now or as soon as the wallet can be written."""
+        """Panelin Kaydet'i: bellek + dosya + işaret (tek yetkili yazar). Signed now or as soon as the wallet can be
+        written. An UNVERIFIED list cannot be saved (review EK-2: the page shows the unapproved file content; saving
+        it would sign the attacker's value): PermissionError until the wallet is read or the full-content Yes."""
         with self._kilit:
+            if tur in self._dogrulanamayan:
+                raise PermissionError(_("{ayar} doğrulanmadı; cüzdan açılınca panel imzalı kaydı geri yükler.").format(
+                    ayar=_(_AYAR_ADI.get(tur, tur))))
             self.bellek[tur] = metin
             self._dosyaya(tur, onay=True)
 
@@ -831,6 +850,11 @@ def panel_durdur() -> None:
     AKTIF = None
     from . import onay
     onay.liste_saglayici = None
+
+
+def dogrulanmamis(tur: str) -> bool:
+    """Panel process: this list is not verified (Settings: read-only, Save disabled; EK-2)."""
+    return AKTIF is not None and AKTIF.dogrulanmamis(tur)
 
 
 def panel_kaydet(tur: str, metin: str) -> None:

@@ -265,6 +265,9 @@ class Panel(QObject):
         if k is None:
             return
         k.denetle()
+        ayarlar_ = getattr(getattr(self, "pencere", None), "ayarlar", None)
+        if ayarlar_ is not None and hasattr(ayarlar_, "liste_durumu_tazele"):
+            ayarlar_.liste_durumu_tazele()  # an unverified list became verified: Settings editable again (EK-2)
         self._liste_izle()  # geri yazılan dosya yeni inode: yeniden izle
 
     def _kalici_onayla(self, siteler: list[str]) -> bool:
@@ -281,19 +284,15 @@ class Panel(QObject):
         gunluk(f"kalıcı oturum sitesi onayı: {'evet' if evet else 'hayır'}: {', '.join(siteler)}")
         return evet
 
-    def _degisiklik_onayla(self, tur: str, aciklama: str) -> bool:
+    def _degisiklik_onayla(self, tur: str, aciklama: str) -> tuple[bool, str]:
         """A panel-authoritative setting changed while the panel was closed (or its mark cannot be verified) in the
-        LOOSENING direction (liste_koruma): it is not used until the user says Yes. Default answer: No."""
-        from PyQt6.QtWidgets import QMessageBox
-        metin = _("Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı:\n\n{aciklama}\n\n"
-                  "Bu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin (panelin son kaydı kullanılır)."
-                  ).format(aciklama=aciklama)
-        cevap = QMessageBox.question(None, "Deskhand — Onay", metin,
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                     QMessageBox.StandardButton.No)
-        evet = cevap == QMessageBox.StandardButton.Yes
+        LOOSENING direction (liste_koruma): it is not used until the user says Yes. Default answer: No.
+        The WHOLE text is shown (scrollable, nothing cut) and the hash of what was shown goes back with the answer:
+        liste_koruma applies the Yes only when it equals the hash of the text built from the value (review EK-2)."""
+        dlg, _alan = degisiklik_diyalogu(aciklama)
+        evet = dlg.exec() == dlg.DialogCode.Accepted
         gunluk(f"panel ayarı değişiklik onayı ({tur}): {'evet' if evet else 'hayır'}")
-        return evet
+        return evet, dlg.gosterilen_iz()
 
     def _liste_uyari(self, metin: str):
         """Ayar dosyası panel dışında değişti/silindi ve geri yüklendi: günlük satırı (panel penceresinde görünür) +
@@ -516,3 +515,35 @@ class Panel(QObject):
         self._diyaloglari_kapat()
         self.pencere.kapaninca_gizle = False
         self.app.quit()
+
+
+def degisiklik_diyalogu(aciklama: str):
+    """The loosening question of liste_koruma (review EK-2): the WHOLE text in a scrollable read-only field (every
+    pattern / level rule visible, nothing cut), Yes / No with No as the default. → (dialog, text field); the dialog's
+    gosterilen_iz() is the sha256 of the text it shows."""
+    import hashlib
+
+    from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPlainTextEdit, QVBoxLayout
+    dlg = QDialog()
+    dlg.setWindowTitle("Deskhand — Onay")
+    dlg.setMinimumSize(560, 420)
+    kok = QVBoxLayout(dlg)
+    soru = QLabel(_("Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı. Değerin tamamı "
+                    "aşağıda. Bu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin."))
+    soru.setWordWrap(True)
+    kok.addWidget(soru)
+    alan = QPlainTextEdit()
+    alan.setReadOnly(True)
+    alan.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+    alan.setPlainText(aciklama)
+    kok.addWidget(alan, 1)
+    dugmeler = QDialogButtonBox(QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No)
+    hayir = dugmeler.button(QDialogButtonBox.StandardButton.No)
+    if hayir is not None:
+        hayir.setDefault(True)
+        hayir.setFocus()
+    dugmeler.accepted.connect(dlg.accept)
+    dugmeler.rejected.connect(dlg.reject)
+    kok.addWidget(dugmeler)
+    dlg.gosterilen_iz = lambda: hashlib.sha256(alan.toPlainText().encode("utf-8", "surrogateescape")).hexdigest()
+    return dlg, alan

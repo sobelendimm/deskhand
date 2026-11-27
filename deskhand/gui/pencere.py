@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFormLayou
                              QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from .. import i18n, onay, yollar
-from ..i18n import _
+from ..i18n import N_, _
 from . import ayar as A
 from . import metinler as T
 from .dil import Metinler, dil_secenekleri, gunluk_eylemi
@@ -846,6 +846,10 @@ class OnaylarSekmesi(QWidget):
 
 # =========================================================================== Ayarlar
 
+Y_DOGRULANMADI = N_("DOĞRULANMADI — dosyadaki onaylanmamış içerik (salt okunur). Cüzdan açılınca panel imzalı kaydı "
+                    "geri yükler; o zamana kadar Deskhand durdu (Dur 10).")
+
+
 class AyarlarSekmesi(QScrollArea):
     kisayol_degisti = pyqtSignal(bool, str)
     dil_degisti = pyqtSignal(str)  # yeni etkin dil kodu (i18n yeniden yüklendikten SONRA)
@@ -854,6 +858,7 @@ class AyarlarSekmesi(QScrollArea):
         super().__init__(parent)
         self.karar = karar if karar is not None else A.KararAyarlari()
         self.cakisma_f = cakisma_f
+        self._liste_kilitli: dict[str, bool] = {}
         self.mt = Metinler()
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -959,6 +964,7 @@ class AyarlarSekmesi(QScrollArea):
         b_kaydet = QPushButton()
         self.mt(b_kaydet.setText, T.Y_KAYDET)
         b_kaydet.clicked.connect(self.yasak_kaydet)
+        self.b_yasak_kaydet = b_kaydet
         sat.addWidget(b_geri)
         sat.addWidget(b_kaydet)
         gl.addLayout(sat)
@@ -986,6 +992,7 @@ class AyarlarSekmesi(QScrollArea):
         b_kaydet = QPushButton()
         self.mt(b_kaydet.setText, T.Y_KAYDET)
         b_kaydet.clicked.connect(self.seviye_kaydet)
+        self.b_seviye_kaydet = b_kaydet
         sat.addWidget(b_geri)
         sat.addWidget(b_kaydet)
         gl.addLayout(sat)
@@ -1190,11 +1197,36 @@ class AyarlarSekmesi(QScrollArea):
         self.l_hesap.setText(_(T.Y_KAYDEDILDI))
         return True
 
+    def _liste_kilidi(self, tur: str) -> bool:
+        """An unverified list (wallet unreadable, the user said No; liste_koruma) is shown READ-ONLY with a label and
+        cannot be saved: saving would sign the unapproved file content (review EK-2). → locked."""
+        from .. import liste_koruma
+        kilitli = liste_koruma.dogrulanmamis(tur)
+        alan, etiket, dugme = ((self.yasak, self.l_yasak, getattr(self, "b_yasak_kaydet", None)) if tur == "yasak" else
+                               (self.seviye, self.l_seviye, getattr(self, "b_seviye_kaydet", None)))
+        alan.setReadOnly(kilitli)
+        if dugme is not None:
+            dugme.setEnabled(not kilitli)
+        if kilitli:
+            etiket.setText(_(Y_DOGRULANMADI))
+        self._liste_kilitli[tur] = kilitli
+        return kilitli
+
+    def liste_durumu_tazele(self):
+        """Panel poll: the lock state of yasak/seviye changed (wallet read → verified): reload the page."""
+        from .. import liste_koruma
+        for tur, yukle in (("yasak", self.yasak_yukle), ("seviye", self.seviye_yukle)):
+            if liste_koruma.dogrulanmamis(tur) != self._liste_kilitli.get(tur, False):
+                yukle()
+
     def yasak_yukle(self):
         self.yasak.setPlainText(A.yasak_metni())
         self.l_yasak.setText("")
+        self._liste_kilidi("yasak")
 
     def yasak_kaydet(self) -> bool:
+        if self._liste_kilidi("yasak"):
+            return False
         metin = self.yasak.toPlainText()
         h = A.yasak_dogrula(metin)
         if h:
@@ -1211,8 +1243,11 @@ class AyarlarSekmesi(QScrollArea):
     def seviye_yukle(self):
         self.seviye.setPlainText(A.seviye_metni())
         self.l_seviye.setText("")
+        self._liste_kilidi("seviye")
 
     def seviye_kaydet(self) -> bool:
+        if self._liste_kilidi("seviye"):
+            return False
         metin = self.seviye.toPlainText()
         h = A.seviye_dogrula(metin)
         if h:

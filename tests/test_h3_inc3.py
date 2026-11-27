@@ -375,5 +375,95 @@ r = subprocess.run([sys.executable, "-c", DIYALOG, _yalitim.KOK], capture_output
 kontrol("B5: reddedilen Evet diyalogda 'red' + neden ile kapanır", "['red']" in r.stdout and "None" not in r.stdout,
         (r.stdout + r.stderr)[-400:])
 
+# ================================================================ EK-2 (1): an unverified list is read-only in Settings
+AYAR = ("import os, sys; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path.insert(0, sys.argv[1])\n"
+        "from PyQt6.QtWidgets import QApplication\n"
+        "app = QApplication([])\n"
+        "from deskhand import liste_koruma as lk, onay\n"
+        "from deskhand.oturum import kalici\n"
+        "class K:\n"
+        "    def oku(self):\n"
+        "        raise kalici.AnahtarYok('cüzdan kilitli')\n"
+        "    def yaz(self, v):\n"
+        "        raise kalici.AnahtarYok('cüzdan kilitli')\n"
+        "lk.isaret_anahtarlik_ayarla(K())\n"
+        "open(lk.isaret_yolu('yasak'), 'w').write('{\"sha256\": \"yok\"}')\n"
+        "open(lk.dosya('yasak'), 'w').write('# emptied by agent\\n')\n"
+        "uyarilar = []\n"
+        "k = lk.panel_baslat(uyarilar.append, None, None)\n"
+        "from deskhand.gui.pencere import AyarlarSekmesi\n"
+        "y = AyarlarSekmesi()\n"
+        "print('RO', y.yasak.isReadOnly(), y.seviye.isReadOnly())\n"
+        "print('BTN', y.b_yasak_kaydet.isEnabled(), y.b_seviye_kaydet.isEnabled())\n"
+        "print('ETIKET', 'DOĞRULANMADI' in y.l_yasak.text())\n"
+        "y.yasak.setPlainText('# still empty\\n')\n"
+        "print('KAYDET', y.yasak_kaydet())\n"
+        "try:\n"
+        "    lk.panel_kaydet('yasak', '# via api\\n')\n"
+        "    print('API kaydetti')\n"
+        "except OSError:\n"
+        "    print('API reddetti')\n"
+        "print('HALA', 'yasak' in k._dogrulanamayan)\n"
+        "print('UYARI', repr(uyarilar))\n")
+os.makedirs(os.path.join(_yalitim.GECICI, "ek2"), exist_ok=True)
+ortam = dict(os.environ)
+for ad in ("DESKHAND_CONFIG_DIR", "DESKHAND_STATE_DIR", "DESKHAND_DATA_DIR", "DESKHAND_CACHE_DIR"):
+    ortam[ad] = os.path.join(_yalitim.GECICI, "ek2", ad.split("_")[1].lower())
+    os.makedirs(ortam[ad], exist_ok=True)
+r = subprocess.run([sys.executable, "-c", AYAR, _yalitim.KOK], capture_output=True, text=True, timeout=60, env=ortam)
+cikti = r.stdout + r.stderr[-600:]
+kontrol("EK-2: doğrulanamayan tür Ayarlar'da salt okunur, kaydet kapalı, DOĞRULANMADI etiketi",
+        "RO True True" in r.stdout and "BTN False False" in r.stdout and "ETIKET True" in r.stdout, cikti)
+kontrol("EK-2: doğrulanamayan tür Ayarlar'dan ve API'den kaydedilemez (imzalanmaz)",
+        "KAYDET False" in r.stdout and "API reddetti" in r.stdout and "HALA True" in r.stdout, cikti)
+kontrol("EK-2: uyarı metni kaydet önermiyor", "UYARI" in r.stdout and "kaydedin" not in r.stdout.split("UYARI", 1)[1]
+        and "Dur 10" in r.stdout.split("UYARI", 1)[1], cikti)
+
+# ================================================================ EK-2 (2): the full content is shown; shown == applied
+KASA.kilitli = True
+uzun = "".join(f"^Pencere-{n:03d}$\n" for n in range(120))  # far longer than the old 200-char cut
+open(YASAK, "w").write(uzun)
+for y in glob.glob(os.path.join(os.path.dirname(lk.isaret_yolu("yasak")), "liste-*.isaret")):
+    os.remove(y)
+GOSTERILEN = []
+
+
+def sor_iz(dogru):
+    def f(tur, aciklama):
+        GOSTERILEN.append(aciklama)
+        iz = hashlib.sha256(aciklama.encode("utf-8", "surrogateescape")).hexdigest()
+        return (True, iz if dogru else "0" * 64)
+    return f
+
+
+lk._anahtar_unut()
+onay.panel_kaydet()
+k = lk.panel_baslat(UYARILAR.append, onayla, sor_iz(False))
+kontrol("EK-2: uzun liste diyalog metninde eksiksiz (kırpma yok)",
+        GOSTERILEN and all(f"^Pencere-{n:03d}$" in GOSTERILEN[-1] for n in range(120)) and "…" not in GOSTERILEN[-1],
+        GOSTERILEN[-1][-200:] if GOSTERILEN else "soru yok")
+kontrol("EK-2: gösterilen ≠ uygulanacak (karma tutmuyor) → Evet uygulanmaz (Dur 10)", istemci_yasak() == "Dur 10",
+        repr(istemci_yasak())[:80])
+panel_kapat()
+lk._anahtar_unut()
+onay.panel_kaydet()
+k = lk.panel_baslat(UYARILAR.append, onayla, sor_iz(True))
+kontrol("EK-2: gösterilen = uygulanacak → Evet uygulanır", istemci_yasak() == uzun, repr(istemci_yasak())[:80])
+panel_kapat()
+KASA.kilitli = False
+
+# the panel's own dialog shows the whole text in a scrollable read-only area and reports its hash
+DLG = ("import os, sys, hashlib; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path.insert(0, sys.argv[1])\n"
+       "from PyQt6.QtWidgets import QApplication, QPlainTextEdit\n"
+       "app = QApplication([])\n"
+       "from deskhand.gui.panel import degisiklik_diyalogu\n"
+       "metin = 'yasak pencereler:\\n' + ''.join(f'^P-{n:03d}$\\n' for n in range(300))\n"
+       "dlg, alan = degisiklik_diyalogu(metin)\n"
+       "print('TAM', alan.toPlainText() == metin, alan.isReadOnly(), isinstance(alan, QPlainTextEdit))\n"
+       "print('IZ', dlg.gosterilen_iz() == hashlib.sha256(metin.encode()).hexdigest())\n")
+r = subprocess.run([sys.executable, "-c", DLG, _yalitim.KOK], capture_output=True, text=True, timeout=60)
+kontrol("EK-2: panel diyaloğu metni eksiksiz, kaydırılabilir salt okunur alanda gösterir ve izini verir",
+        "TAM True True True" in r.stdout and "IZ True" in r.stdout, (r.stdout + r.stderr)[-500:])
+
 print(f"\n{gecen}/{toplam} H3-INC3 testi geçti")
 sys.exit(0 if gecen == toplam else 1)
