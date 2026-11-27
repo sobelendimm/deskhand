@@ -216,7 +216,8 @@ def sim_girdi(gecikme=0.003, yavas_parca=None, insan_plani=None):
     etk = sahte_etk(hazir_once=0.0)
     sim = SimKWin(etk, gecikme)
     g = kde.Girdi.__new__(kde.Girdi)
-    g.au = types.SimpleNamespace(baslik=lambda k: "Steam", fare=lambda: (None, None, None))
+    # aktif: odak hedefte kalır (kelime başı odak yoklaması B1a, 4348589); odak kaybı test_coklu_pencere'de sınanır
+    g.au = types.SimpleNamespace(baslik=lambda k: "Steam", fare=lambda: (None, None, None), aktif=lambda: "{steam}")
     g.denetle = lambda k, d: None
     g.etk, g.etk_sahibi, g.merkez, g.p = etk, False, None, None
     g.t0 = g.son_etk = time.monotonic()
