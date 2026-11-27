@@ -61,7 +61,8 @@ jobs:
             libxcb-image0 libxcb-render-util0 libxcb-xinerama0 libgl1 fonts-dejavu-core
 
       # libei (deskhand-eis, the KWin background desktop's input helper) is optional: the Makefile skips
-      # that target when it is missing, and the KWin suites print "ATLANDI" without KWin >= 6.8.
+      # that target when it is missing or older than LIBEI_EN_AZ (ei_ping; Ubuntu 24.04 ships an older libei),
+      # and the KWin suites print "ATLANDI" without KWin >= 6.8.
       - name: Optional libei headers
         continue-on-error: true
         run: sudo apt-get install -y --no-install-recommends libei-dev

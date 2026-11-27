@@ -31,15 +31,21 @@ deskhand-goruntu: deskhand-goruntu.c
 	fi
 
 EIS_PAKETLER = libei-1.0 xkbcommon libsystemd
+# ei_ping / ei_new_ping / EI_EVENT_PONG (kapanış eşitlemesi) libei 1.3.901'de geldi (libei kaynağı: src/libei.h,
+# etiket 1.3.0'da yok, 1.3.901'de var; ilk kararlı 1.4.0). Daha eski libei (ör. Ubuntu 24.04) derlenemez → atla.
+LIBEI_EN_AZ = 1.3.901
 
-# libei/xkbcommon/libsystemd geliştirme dosyaları yoksa açık bir iletiyle atlanır (çıkış 0: `make` diğer hedefleri
-# derlemeye devam eder; deskhand-eis yokken arka plan KWin oturumu kurulamaz, Xvfb kalır)
+# libei/xkbcommon/libsystemd geliştirme dosyaları yoksa ya da libei LIBEI_EN_AZ'dan eskiyse açık bir iletiyle
+# atlanır (çıkış 0: `make` diğer hedefleri derlemeye devam eder; deskhand-eis yokken arka plan KWin oturumu
+# kurulamaz, Xvfb kalır). doktor.py (satir_yardimcilar) aynı sınırı okur.
 deskhand-eis: deskhand-eis.c deskhand-eis-tuslar.h
-	@if pkg-config --exists $(EIS_PAKETLER) 2>/dev/null; then \
+	@if ! pkg-config --exists $(EIS_PAKETLER) 2>/dev/null; then \
+	  echo "deskhand-eis ATLANDI: libei / libxkbcommon / libsystemd geliştirme dosyaları yok (pkg-config $(EIS_PAKETLER))" >&2; \
+	elif ! pkg-config --atleast-version=$(LIBEI_EN_AZ) libei-1.0; then \
+	  echo "deskhand-eis ATLANDI: libei $$(pkg-config --modversion libei-1.0) eski, en az $(LIBEI_EN_AZ) gerekir (ei_ping)" >&2; \
+	else \
 	  $(CC) $(CPPFLAGS) $(CFLAGS) -Wextra $(LDFLAGS) -o $@ deskhand-eis.c $$(pkg-config --cflags --libs $(EIS_PAKETLER)) -lm \
 	  || exit 1; \
-	else \
-	  echo "deskhand-eis ATLANDI: libei / libxkbcommon / libsystemd geliştirme dosyaları yok (pkg-config $(EIS_PAKETLER))" >&2; \
 	fi
 
 tuslar:
