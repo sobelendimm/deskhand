@@ -6,7 +6,7 @@ Versions 0.6.0 to 0.9.1 were local builds and were never published; 0.10.0 is th
 release after 0.5.4. Every entry between them is listed here so a 0.5.4 user sees the whole change.
 Security fixes are marked **Security**.
 
-## 0.10.0 (unreleased)
+## 0.10.0 (2026-11-28)
 
 The first public release after 0.5.4. **If you run 0.5.4 or older, please update:** MCP `open_app(args)` could run
 commands without approval there (closed in 0.6.0, see below).

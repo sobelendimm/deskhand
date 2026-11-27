@@ -13,9 +13,9 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/sobelendimm/deskhand/releases/download/v0.9.1/deskhand-mcp.mcpb",
+      "identifier": "https://github.com/sobelendimm/deskhand/releases/download/v0.10.0/deskhand-mcp.mcpb",
       "version": "0.10.0",
-      "fileSha256": "8299a463df0e2761c12707b4e4faab5a28717eef1a2a922ea13949f01a074c09",
+      "fileSha256": "77e80ae16dabcc88bd983b989fe9a7c7c6e5d86fae66a606099cc6ae01c1024d",
       "transport": {
         "type": "stdio"
       }

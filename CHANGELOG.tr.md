@@ -2,7 +2,7 @@
 
 *Asıl dosya İngilizcedir: [CHANGELOG.md](CHANGELOG.md). Bu dosya Türkçe özettir; 0.10.0 ve öncesinin ayrıntısı İngilizce dosyadadır.*
 
-## 0.10.0 (yayımlanmadı)
+## 0.10.0 (2026-11-28)
 
 0.5.4'ten sonraki ilk herkese açık sürüm. **0.5.4 ya da daha eskisini kullanıyorsanız lütfen güncelleyin:** orada MCP
 `open_app(args)` onaysız komut çalıştırabiliyordu (0.6.0'da kapatıldı, aşağıya bakın).

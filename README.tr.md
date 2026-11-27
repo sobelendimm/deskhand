@@ -2,7 +2,7 @@
 
 *English: [README.md](README.md)*
 
-[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE) [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sobelendimm%2Fdeskhand-informational)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sobelendimm/deskhand) [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ea4aaa)](https://github.com/sponsors/sobelendimm)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE) [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sobelendimm%2Fdeskhand-informational)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sobelendimm/deskhand)
 
 **Deskhand, yapay zekâ ajanlarının (Claude Code ve diğer MCP istemcileri) KDE Plasma
 masaüstünüzü güvenle kullanmasını sağlar: ister sizin ekranınızda, ister siz film izlerken
@@ -288,8 +288,8 @@ Yardımcılar (`kdotool`, `dotool`, `bwrap`) yalnız `/usr/bin` ve `/bin` içind
 daha yeni olmalı ve sistem `python3`'ü tarafından içe aktarılabilmeli.
 
 Dağıtımınızın desteklenmesini ister misiniz? `deskhand doctor` çıktısıyla [bir issue açın](https://github.com/sobelendimm/deskhand/issues)
-ya da [çalışmaya destek olun](https://github.com/sponsors/sobelendimm): başka sistemlerde denemek gerçekten zaman alıyor,
-başka kurulumlardan gelen raporlar kapsamı genişletmenin en hızlı yolu.
+açın: başka sistemlerde denemek gerçekten zaman alıyor, başka kurulumlardan gelen raporlar kapsamı genişletmenin
+en hızlı yolu.
 
 ## Kurulum
 
@@ -564,12 +564,11 @@ bilgisayarı kullanmıyorken çalıştırın: `tests/ekranli/hepsi.sh` hepsini k
 Firefox'unu açar, sizinkine dokunmaz; `--insansiz` onay penceresinde sizden tıklama isteyen iki adımı atlar).
 Bkz. [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Sponsor
+## Destek
 
-Deskhand özgür yazılımdır ve tek kişi tarafından yazılıp bakımı yapılır. Size zaman kazandırıyorsa ya da
-ajan araçlarının Linux/KDE tarafının gelişmesini istiyorsanız çalışmayı
-[GitHub Sponsors](https://github.com/sponsors/sobelendimm) üzerinden destekleyebilirsiniz. Hata bildirimleri,
-başka Plasma kurulumlarında deneme ve çekme istekleri de en az o kadar işe yarar.
+Deskhand özgür yazılımdır ve tek kişi tarafından yazılıp bakımı yapılır. Size zaman kazandırıyorsa
+GitHub'da bir yıldız başkalarının bulmasına yardım eder; hata bildirimleri, başka Plasma kurulumlarında
+deneme ve çekme istekleri projeye en çok katkıyı sağlar. GitHub Sponsors sayfası yolda.
 
 ## Lisans
 
