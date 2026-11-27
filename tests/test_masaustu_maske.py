@@ -136,5 +136,15 @@ except RuntimeError:
 finally:
     erisim._uclar = _uclar_eski
 
+
+# _tara son adımı: bölünmüş kart (süzmeden önce, iç _ham alanı silinir)
+oglar = [dict(erisim._ayrinti(Atspi, Oge(f"Alan {i}", p), "text", SahteDurum(), S), x=60 * i, y=0, w=50, h=20)
+         for i, p in enumerate(["4111", "1111", "1111", "1111"])] + \
+        [dict(erisim._ayrinti(Atspi, Oge("Şehir", "Ankara"), "text", SahteDurum(), S), x=0, y=40, w=50, h=20)]
+erisim._bolunmus_maskele(oglar)
+kontrol("masaüstü: 4 alana bölünmüş kart → hepsi ***, sıradan alan korunur, _ham silinir",
+        [o.get("deger") for o in oglar] == ["***"] * 4 + ["Ankara"] and not any("_ham" in o for o in oglar),
+        str([o.get("deger") for o in oglar]))
+
 print(f"\n{gecen}/{toplam} geçti")
 sys.exit(0 if gecen == toplam else 1)

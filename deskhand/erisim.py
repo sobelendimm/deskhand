@@ -570,6 +570,8 @@ def _ayrinti(Atspi, o, rol, ss, S, eylem_hepsi=False):
                     deger = Atspi.Text.get_text(ti, 0, DEGER_SINIRI + 1)
         except Exception:  # noqa: BLE001
             deger = None
+        if deger and rol != "slider":
+            e["_ham"] = deger  # iç alan: _tara bölünmüş kart denetimi (süzmeden önce) için; _bolunmus_maskele siler
         if deger:
             # masaüstü (Qt/GTK): id/placeholder/autocomplete HİÇ yok (OLCUM-QT-GTK) → web'in tanıtıcı kuralı UYGULANMAZ;
             # içerik kuralları (Luhn, kısa kod, harf+rakam kod) her alanda, ad yalnız zararsız ipucu muafiyeti için
@@ -704,12 +706,25 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
             else:
                 kesik = True
     kesik = kesik or bool(yigin)  # süre ya da öge sınırı doldu: taranmamış dal kaldı
+    _bolunmus_maskele(sonuc)  # görünür süzgecinden ÖNCE: parçanın biri ekran dışında olsa da hepsi denetlenir
     if eylem_hepsi:  # güvenlik (yokluğa dayanan karar): pencereyle KESİŞEN her öge; merkezi dışarıdaki öge de alanı
         # örtebilir (SONKAPI-B B1: cx=-145 düğme textarea'yı örtüyordu, listede yoktu, kesik False)
         gorunen = [o for o in sonuc if o["x"] < W and o["x"] + o["w"] > 0 and o["y"] < H and o["y"] + o["h"] > 0]
     else:
         gorunen = [o for o in sonuc if 0 <= o["cx"] < W and 0 <= o["cy"] < H]
     return {"ogeler": gorunen, "sure": time.monotonic() - t0, "kesik": kesik}
+
+
+def _bolunmus_maskele(sonuc: list[dict]) -> None:
+    """Birden çok alana bölünmüş kart numarası (maske.bolunmus_kart; belge sırası + kutu sırası + pencere içi
+    permütasyon): ilgili alanların değeri "***". İç `_ham` alanı her ögeden silinir (dışarı çıkmaz)."""
+    alanlar = []
+    for i, o in enumerate(sonuc):
+        ham = o.pop("_ham", None)
+        if ham:
+            alanlar.append((i, ham, (o.get("x", 0), o.get("y", 0), o.get("w", 0), o.get("h", 0))))
+    for i in maske.bolunmus_kart(alanlar):
+        sonuc[i]["deger"] = "***"
 
 
 def _yoldan_bul(Atspi, cerceve, yol, rol, ad):
