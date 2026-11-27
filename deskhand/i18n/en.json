@@ -1726,5 +1726,7 @@
  "uygulama erişim seviyeleri": "application access levels",
  "yasak pencereler": "forbidden windows",
  "{ayar}: panelin kaydı «{eski}», dosyada «{yeni}»": "{ayar}: the panel's record «{eski}», in the file «{yeni}»",
- "İstek onaylanmadı ({neden}).": "The request was not approved ({neden})."
+ "İstek onaylanmadı ({neden}).": "The request was not approved ({neden}).",
+ "Deskhand ayar dosyasının ({dosya}) önceki onaylı değeri doğrulanamadı (cüzdan kilitli/yok); güvenli tarafta hiçbir girdi gönderilmez; Deskhand paneli açın.": "The previously approved value of the Deskhand settings file ({dosya}) could not be verified (wallet locked/missing); to stay safe no input is sent; open the Deskhand panel.",
+ "Önceki onaylı ayarlar doğrulanamadı (cüzdan kilitli/yok); dosyadaki değer kullanılıyor.": "The previously approved settings could not be verified (wallet locked/missing); the value in the file is used."
 }

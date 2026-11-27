@@ -433,6 +433,37 @@ ANAHTARLIK.kilitli = False
 getattr(liste_koruma, "_anahtar_unut", lambda: None)()
 liste_koruma.onbellek_sil()
 
+# ================================================================ TARAMA-3 (a): first start only when the key ring says "no item"
+import shutil  # noqa: E402
+import tempfile  # noqa: E402
+
+shm = tempfile.mkdtemp(prefix="deskhand-test-", dir="/dev/shm" if os.path.isdir("/dev/shm") else None)
+try:
+    ortam = dict(os.environ, DESKHAND_ANAHTARLIK="kapali")
+    for ad in ("DESKHAND_CONFIG_DIR", "DESKHAND_STATE_DIR", "DESKHAND_CACHE_DIR", "DESKHAND_DATA_DIR"):
+        ortam[ad] = os.path.join(shm, ad.split("_")[1].lower())
+        os.makedirs(ortam[ad])
+    with open(os.path.join(ortam["DESKHAND_CONFIG_DIR"], "yasak-pencereler.txt"), "w") as f:
+        f.write("")  # the agent emptied the list and deleted every mark (none in this state dir)
+    YOK_KASA = ("from deskhand import liste_koruma as _lk\n"
+                "class _Y:\n"
+                "    def oku(self):\n"
+                "        return None\n"
+                "    def yaz(self, v):\n"
+                "        raise OSError('client')\n"
+                "_lk.isaret_anahtarlik_ayarla(_Y())\n")
+    gercek_disi = "/dev/shm" if shm.startswith("/dev/shm") else "?"
+    r = subprocess.run([sys.executable, "-c", ISTEMCI_KAPALI, _yalitim.KOK], capture_output=True, text=True,
+                       timeout=60, env=ortam)
+    kontrol(f"tarama-3: işaretler silindi + DESKHAND_ANAHTARLIK=kapali + panel kapalı + boş yasak → Dur 10 "
+            f"({gercek_disi})", '"dur": 10' in r.stdout, r.stdout + r.stderr[-300:])
+    r = subprocess.run([sys.executable, "-c", ISTEMCI_KAPALI.replace("\n", "\n" + YOK_KASA, 1), _yalitim.KOK],
+                       capture_output=True, text=True, timeout=60, env=dict(ortam, DESKHAND_ANAHTARLIK=""))
+    kontrol("tarama-3: anahtarlık kesin 'öge yok' + işaret yok → ilk açılış, dosya kabul", '"yasak": ""' in r.stdout,
+            r.stdout + r.stderr[-300:])
+finally:
+    shutil.rmtree(shm, ignore_errors=True)
+
 # ================================================================ TARAMA-2 (2): DUR removal is a panel-side request
 from deskhand import guvenlik as _g  # noqa: E402
 
@@ -472,6 +503,34 @@ try:
 finally:
     onay._KANAL = eski_kanal
 kontrol("tarama-2: SON_DUR_IZNI (zamana bağlı genel onay) yok", not hasattr(onay, "SON_DUR_IZNI"))
+
+# TARAMA-3 (b): the decision is bound to what the panel showed, not to the file at answer time
+onay._KANAL = SahteKanal()
+try:
+    _g.dur_ac("kullanici")
+    i = dur_istegi()
+    with open(onay.istek_yolu(i)) as f:
+        icerik = json.load(f)
+    icerik["tur"] = ""
+    with open(onay.istek_yolu(i), "w") as f:
+        json.dump(icerik, f)  # shown as an ordinary question…
+    onay.istek_oku(onay.istek_yolu(i))  # …the panel reads it for its dialog
+    icerik["tur"] = TUR_DUR
+    with open(onay.istek_yolu(i), "w") as f:
+        json.dump(icerik, f)  # …then the requester turns it into a DUR request
+    onay.yanitla(i, "izin")
+    kontrol("tarama-3: diyalog gösterildikten sonra istek DUR türüne çevrilir → Evet DUR'u kaldırmaz", _g.dur_acik())
+    j = dur_istegi()
+    onay.istek_oku(onay.istek_yolu(j))
+    ilk_ = onay.yanitla(j, "izin")
+    kalkti = not _g.dur_acik()
+    _g.dur_ac("kullanici")
+    ikinci = onay.yanitla(j, "izin")
+    kontrol("tarama-3: DUR sorusu Evet → yalnız o istek, DUR kalkar (ikinci yanıt etkisiz)",
+            ilk_ and kalkti and not ikinci and _g.dur_acik(), f"{ilk_} {kalkti} {ikinci}")
+finally:
+    onay._KANAL = eski_kanal
+    _g.dur_kapat("kullanici")
 
 eski_iste = onay.iste_sonuc
 sayac = []

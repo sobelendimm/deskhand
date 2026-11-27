@@ -72,6 +72,8 @@ TABAN = {KAPSAM: "hepsi", KIMLIK: "", KALICI: "", SURE: str(SURE_VARSAYILAN)}  #
 ISARET_SURUM = 3
 ONBELLEK_SN = 0.3  # istemci: panelden alınan listeyi bu kadar süre yeniden sormaz (pencere listesinde her pencere
 #                   için denetim); panelin Kaydet'i en geç bu kadar sonra geçerli. Dosya yolu önbelleksiz.
+MESAJ_DOGRULANAMADI = N_("Deskhand ayar dosyasının ({dosya}) önceki onaylı değeri doğrulanamadı (cüzdan kilitli/yok); "
+                         "güvenli tarafta hiçbir girdi gönderilmez; Deskhand paneli açın.")
 MESAJ_KAYIP = N_("Deskhand ayar dosyası ({dosya}) kayıp ya da panel dışında değişti; güvenli tarafta hiçbir girdi "
                  "gönderilmez; Deskhand paneli açın (panel kendi kaydını geri yükler).")
 _AYAR_ADI = {"yasak": N_("yasak pencereler"), "seviye": N_("uygulama erişim seviyeleri"), KAPSAM: N_("onay kapsamı"),
@@ -131,6 +133,16 @@ _DURUM_KILIT = threading.RLock()
 _DURUM_ONBELLEK_SN = 1.0
 
 
+def _test_kumu() -> bool:
+    """The settings AND the marks live in a /tmp sandbox (tests/_yalitim: mkdtemp). A real profile never does. Only
+    then does DESKHAND_ANAHTARLIK=kapali mean "no item"; anywhere else it is a missing wallet: closed-fail (security
+    scan 2/3). Code that can point these variables elsewhere reads its own settings anyway (docs: threat model)."""
+    def tmp_altinda(yol: str) -> bool:
+        y = os.path.realpath(yol)
+        return y.startswith("/tmp/") and y != "/tmp/"
+    return tmp_altinda(yollar.config_dir()) and tmp_altinda(yollar.state_dir())
+
+
 def _kasa_nesnesi():
     global _KASA
     if _KASA is None:
@@ -151,6 +163,8 @@ def _kasa_nesnesi():
                 return None
 
             def oku(self):
+                if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali" and _test_kumu():
+                    return None  # test sandbox (tests/_yalitim): "no item" (a first start), never the real wallet
                 try:
                     return self.anahtar(False)
                 except AnahtarYok as e:
@@ -418,6 +432,8 @@ class Koruyucu:
         self._kilit = threading.Lock()
         self.bellek: dict[str, str | None] = {}
         self._gecmis = isaret_gecmisi()  # before this start writes any mark
+        self._ilk = ilk_kurulum()  # the key ring answered "no item" AND no mark: a first start
+        self._dogrulanamadi_uyarildi = False
         for tur in TUM:
             self._acilis(tur)
         if kasa_nedeni():  # once per start, visible: why loosening values are being asked / not applied
@@ -489,9 +505,14 @@ class Koruyucu:
                 self._kabul(tur, d)
                 return
         elif tur in TURLER:
-            if not self._gecmis:
-                # no signed state AND no mark at all (first start, or a wallet that never held the panel's record):
-                # the default is the built-in list only (yasak) and no rule (seviye); any file is that or stricter
+            if self._ilk or not self._gecmis:
+                # first start (key ring: no item, no mark), or no mark while the wallet cannot be read: the default
+                # is the built-in list only (yasak) and no rule (seviye); any file is that or stricter. In the second
+                # case the previous approved values cannot be checked: said once, visibly (clients refuse: Dur 10)
+                if not self._ilk and not self._dogrulanamadi_uyarildi:
+                    self._dogrulanamadi_uyarildi = True
+                    self.uyari(_("Önceki onaylı ayarlar doğrulanamadı (cüzdan kilitli/yok); dosyadaki değer "
+                                 "kullanılıyor."))
                 if d is None and tur == "yasak":
                     from .guvenlik import VARSAYILAN_YASAK
                     d = _(VARSAYILAN_YASAK)
@@ -902,8 +923,10 @@ def _dosyadan(tur: str, olustur: bool = True) -> str | None:
         if not siki_mi(tur, mevcut, ref):
             raise Dur(10, _(MESAJ_KAYIP).format(dosya=yol))
         return mevcut
-    if isaret_gecmisi():  # the panel signed before but its record cannot be read: closed-fail (scan 2, finding 1)
-        raise Dur(10, _(MESAJ_KAYIP).format(dosya=yol))
+    if not ilk_kurulum():  # no signed record and not a first start (marks exist, or the key ring cannot answer:
+        # locked wallet, no Secret Service, DESKHAND_ANAHTARLIK=kapali): closed-fail (security scan 2/3); the panel
+        # reads its own wallet and restores the approved value
+        raise Dur(10, _(MESAJ_DOGRULANAMADI).format(dosya=yol))
     if mevcut is None and tur == "yasak":  # no signed state and no mark ever: the default list
         from .guvenlik import VARSAYILAN_YASAK
         mevcut = _(VARSAYILAN_YASAK)

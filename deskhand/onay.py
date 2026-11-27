@@ -856,9 +856,19 @@ def iste(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran", sur
 
 # ---------------------------------------------------------------- panel tarafı
 
+_GORULEN: dict[str, tuple[str, str]] = {}  # panel: FIRST-seen (type, sha256 of the file) of each request (scan 3)
+_YANITLANAN: set[str] = set()                 # panel: requests already approved in this process (single use)
+
+
 def istek_oku(yol: str) -> dict | None:
-    """Doğrulanmış istek sözlüğü ya da None (biçimsiz/eksik alan)."""
-    d = _json_oku(yol)
+    """Doğrulanmış istek sözlüğü ya da None (biçimsiz/eksik alan). Panel side: the first read of each request is kept
+    in memory (_GORULEN: type + file digest); d["_iz"] is the current one (yanitla refuses a Yes when they differ)."""
+    try:
+        with open(yol, "rb") as f:
+            ham = f.read(1024 * 1024)
+        d = json.loads(ham.decode("utf-8"))
+    except (OSError, ValueError):
+        return None
     if not isinstance(d, dict) or not _gecerli_id(d.get("id")):
         return None
     if os.path.basename(yol) != f"istek-{d['id']}.json":
@@ -879,6 +889,11 @@ def istek_oku(yol: str) -> dict | None:
     d["tur"] = d.get("tur") if d.get("tur") in (TUR_DEVIR, TUR_DUR) else ""
     g = d.get("goruntu")
     d["goruntu"] = g if isinstance(g, str) and os.path.isfile(g) else None
+    import hashlib
+    d["_iz"] = (d["tur"], hashlib.sha256(ham).hexdigest())
+    if len(_GORULEN) > 4096:  # bounded (requests live minutes); a forgotten one is simply "seen" again
+        _GORULEN.clear()
+    _GORULEN.setdefault(d["id"], d["_iz"])
     if d["tur"] == TUR_DUR:  # the panel shows its OWN fixed text: nothing the requester wrote reaches the dialog
         d.update(eylem=_("DUR kaldırılsın mı?"), hedef="DUR", goruntu=None, masaustu="ekran", masa="",
                  ayrinti=_("Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin."))
@@ -953,14 +968,24 @@ def yanitla(istek_id: str, karar: str, simdi: float | None = None) -> bool:
     if not _gecerli_id(istek_id) or karar not in KARARLAR:
         return False
     simdi = time.time() if simdi is None else simdi
+    gorulen = _GORULEN.get(istek_id)  # what the panel showed (first read), taken BEFORE reading the file again
     d = istek_oku(istek_yolu(istek_id))
     if d is None or (karar == "izin" and d["son_zaman"] <= simdi):
         return False  # süresi geçmiş isteğe İZİN verilmez (red her zaman verilebilir)
     k = _KANAL
-    if (k is not None and k.yanitlandi(istek_id)) or os.path.exists(yanit_yolu(istek_id)):
+    if (k is not None and k.yanitlandi(istek_id)) or os.path.exists(yanit_yolu(istek_id)) or \
+            istek_id in _YANITLANAN:
         return False  # tek kullanımlık: ilk karar kesin
     if karar == "izin":
-        if d["tur"] == TUR_DUR:
+        simdiki = d["_iz"]
+        if gorulen is not None and simdiki != gorulen:
+            # security scan 3: the request file changed after the panel showed it (e.g. turned into a DUR request):
+            # the user's Yes was given to something else → refused, visibly
+            from .gunluk import gunluk
+            gunluk(f"UYARI: onay isteği {istek_id} gösterildikten sonra değişti; Evet uygulanmadı (red)")
+            return False
+        _YANITLANAN.add(istek_id)
+        if (gorulen or simdiki or ("", ""))[0] == TUR_DUR:
             # the user's Yes to THIS request: the panel removes DUR itself (the requester never does), once
             from . import guvenlik
             guvenlik.dur_kapat("kullanici")

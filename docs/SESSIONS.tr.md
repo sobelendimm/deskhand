@@ -475,7 +475,9 @@ imzasız işarete düşüş yok; herhangi bir işaret varsa (panel daha önce im
 yasak pencereler ve erişim seviyeleri panelde sorulur, panel kapalıyken reddedilir (Dur 10). **Kapsamda:** yalnız dosya yazan süreç (ajanın kabuğu, düzenleyici, istemle yönlendirilmiş
 ajan). **Kapsam dışı:** aynı kullanıcıyla çalışıp Secret Service ögesini BİLEREK okuyan ya da değiştiren kod (KDE
 Cüzdanı'nda uygulama başına erişim denetimi yok; bunun için ajan kabuğunun oturum veri yolundan yalıtılması gerekir);
-cüzdan açıkken ögenin silinmesi ilk açılış gibi görünür.
+cüzdan açıkken ögenin silinmesi ilk açılış gibi görünür. Bir Deskhand sürecinin ortam değişkenlerini ya da Python yolunu
+belirleyebilen kod orada kendi kodunu koşturur: istemci tarafı denetimler en iyi çabadır; sınır panel + cüzdandır (kilitli/
+olmayan cüzdan ya da `DESKHAND_ANAHTARLIK=kapali` testlerin /tmp kumu dışında asla ilk açılış sayılmaz).
 
 - **Kaydetme:** kopya silinmeden hemen önce (bekçi, süpürme, masaüstü kapanışı) kopyanın `cookies.sqlite`'ındaki (ve
   Firefox yazdıysa kopyanın `sessionstore-backups/recovery.jsonlz4`'ündeki) listedeki sitelere ait çerezler ŞİFRELİ
