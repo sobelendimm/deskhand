@@ -17,6 +17,7 @@ org.a11y.Status.IsEnabled), Chromium/Electron için --force-renderer-accessibili
 from __future__ import annotations
 
 import contextlib
+import re
 import threading
 import time
 from collections.abc import Container
@@ -473,11 +474,42 @@ def _bicimle(o, ad_siniri, bus=None) -> dict:
     return sonuc
 
 
+_NITELIK_TUR, _NITELIK_ARA = 4, 0.05  # nitelik önbelleği durulma: en çok tur, turlar arası sn (_ayrinti_ekle)
+# alanı tanıtan nitelikler: son anlık görüntüde hiçbiri yoksa (yalnız tag/display/explicit-name) değer doğrulanamaz
+_TANITICI_NITELIK = ("id", "autocomplete", "placeholder", "placeholder-text", "text-input-type")
+_KISA_KOD = re.compile(r"\d{3,8}")  # ipucusuz alanda CVC/OTP biçimi (yanlış pozitif kabul: adet, yıl)
+_KART_PARCA = re.compile(r"\d{4,6}")  # bölünmüş kart numarası parçası (4+4+4+4, 4+6+5, 4+6+4)
+
+
+def _tanitici_var(nit) -> bool:
+    """Nitelik sözlüğünde alanı tanıtan (boş olmayan) nitelik var mı?"""
+    return isinstance(nit, dict) and any(nit.get(a) for a in _TANITICI_NITELIK)
+
+
+def _bolunmus_kart(sirali: list[tuple]) -> list:
+    """Belge sırasında ardışık 2–5 alanın değerleri (her biri yalnız 4–6 rakam) birleşince 13–19 hane ve Luhn'lu kart
+    numarası oluyorsa o alanların ögeleri (ipucundan bağımsız). sirali: [(öge, ham değer)]."""
+    from .guvenlik import kart_numarasi
+    parca = [_KART_PARCA.fullmatch(v.strip()) is not None for _, v in sirali]
+    gizli = []
+    for i in range(len(sirali)):
+        for j in range(i + 2, min(i + 5, len(sirali)) + 1):
+            if not all(parca[i:j]):
+                break
+            pencere = [v.strip() for _, v in sirali[i:j]]
+            if 13 <= sum(map(len, pencere)) <= 19 and kart_numarasi(" ".join(pencere)):
+                gizli += [o for o, _ in sirali[i:j]]
+    return gizli
+
+
 def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> None:
     """Yalnız döndürülecek ögeler için: bağlantıların adresi (href), giriş alanlarının değeri, seçim kutusunun seçili
     seçeneği. Parola alanının değeri OKUNMAZ. Giriş alanı değeri erisim._deger_temizle ile süzülür (masaüstü yoluyla
     AYNI): ad, açıklama ve autocomplete/id/placeholder/text-input-type nitelikleri kart/parola/PIN/OTP/CVC alanı
-    gösteriyorsa değer "***"; yalnız maske karakterlerinden oluşan değer atlanır; denetim karakterleri ayıklanır."""
+    gösteriyorsa değer "***"; nitelikleri doğrulanamayan alan (tanıtıcı nitelik yok ya da durulmadı), ipucusuz (id/
+    placeholder/autocomplete yok) 3–8 haneli rakam değeri, Luhn'lu kart numarası (tek alanda ya da ardışık 4–6 haneli
+    alanlara bölünmüş) değeri de "***"; yalnız maske karakterlerinden oluşan değer atlanır; denetim karakterleri
+    ayıklanır."""
     m, hedef = [], []
     yol_of = {id(o): h["_yol"] for o, h in zip(ogeler, ham)}
     for o, h in zip(ogeler, ham):
@@ -518,23 +550,50 @@ def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> N
             o[alan] = v if len(v) <= 300 else v[:299] + "…"
     if degerler:
         from .erisim import _DEGER_NITELIKLERI, _deger_temizle
-        # Firefox, ögenin niteliklerini ilk sorguda BOŞ ({}) döndürebiliyor (ölçüldü: sayfadaki ilk giriş alanı; ikinci
-        # sorguda id/placeholder-text/text-input-type gelir) → değeri olan ve niteliği boş alanlar bir kez daha sorulur
-        bos = [t for t in degerler if t[1] and not t[3]]
-        if bos:
-            for t, v in zip(bos, yol.toplu([_m(bus, yol_of[id(t[0])], ERISIM, "GetAttributes") for t in bos])):
-                nit = _deg(v, {}) or {}
-                t[3].update(nit if isinstance(nit, dict) else {})
+        from .guvenlik import kart_numarasi
+        # Firefox nitelik önbelleği: oturumdaki İLK GetAttributes {} döner ve önbelleği açar (ölçüldü, hangi öge olursa);
+        # öteki alanlar önbellek dolana dek id'siz (kısmi) gelebilir, boş yanıt hiç olmadan da (-j 4 yükte cc-number/cvc
+        # değeri maskesiz döndü, kart-DHV; K2 PoC P3). Değeri olan HER alanın nitelikleri, iki ardışık YENİ tur aynı
+        # gelene dek yeniden sorulur (ilk toplu yanıt kıyasa girmez). Kısmi yanıt da kararlı olabilir (PoC P1/P2): son
+        # anlık görüntüde tanıtıcı nitelik (_TANITICI_NITELIK) yoksa, boş kalan ya da durulmayan alanın değeri
+        # doğrulanamaz → "***" (kapalı-başarısız).
+        dogrulanamaz = set()
+        sor = [t for t in degerler if t[1]]
+        if sor:
+            son, kararli = None, False
+            for tur in range(_NITELIK_TUR):
+                if tur:
+                    time.sleep(_NITELIK_ARA)
+                yeni = [_deg(v, {}) or {} for v in yol.toplu([_m(bus, yol_of[id(t[0])], ERISIM, "GetAttributes")
+                                                              for t in sor])]
+                yeni = [n if isinstance(n, dict) else {} for n in yeni]
+                kararli, son = yeni == son, yeni
+                if kararli and all(son):
+                    break
+            for t, n in zip(sor, son):
+                t[3].clear()
+                t[3].update(n)
+                if not (kararli and _tanitici_var(n)):
+                    dogrulanamaz.add(id(t[0]))
+        sirali = []  # (öge, ham değer) belge sırasında: bölünmüş kart numarası denetimi (ipucu maskesinden önceki değer)
         for o, v, aciklama, nit in degerler:
             if not v or not isinstance(v, str):
                 continue
+            sirali.append((o, v))
             ipucu = [ad_of.get(id(o), "") or o.get("ad", "")] + aciklama
             ipucu += [str(nit[a]) for a in _DEGER_NITELIKLERI if nit.get(a)]
             if str(nit.get("text-input-type", "")).lower() == "password":
                 ipucu.append("parola")
             v = _deger_temizle(v, *ipucu)
+            if v and (id(o) in dogrulanamaz or kart_numarasi(v)):  # ipucundan bağımsız: kart numarası değeri de gizli
+                v = "***"
+            # ipucusuz (id/placeholder/autocomplete yok) kısa rakam kodu CVC/OTP olabilir: adı sade olsa da gizli
+            if v and _KISA_KOD.fullmatch(v.strip()) and not any(nit.get(a) for a in _DEGER_NITELIKLERI):
+                v = "***"
             if v:
                 o["deger"] = v if len(v) <= 300 else v[:299] + "…"
+        for o in _bolunmus_kart(sirali):
+            o["deger"] = "***"
     if not secenek_m:
         return
     listeler = yol.toplu(secenek_m)
