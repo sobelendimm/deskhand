@@ -626,6 +626,7 @@
   "gui/metinler.py:174"
  ],
  "Ayrıntı": [
+  "gui/gorev.py:38",
   "gui/metinler.py:120"
  ],
  "AÇIK": [
@@ -677,6 +678,9 @@
  ],
  "Bileşen": [
   "gui/metinler.py:254"
+ ],
+ "Bir daha sorma": [
+  "gui/gorev.py:32"
  ],
  "Bir görev zaten çalışıyor (başka bir panel ya da komuttan).": [
   "gorev.py:512"
@@ -921,6 +925,9 @@
  ],
  "Deskhand bir iş yapmak istiyor": [
   "mesgul.py:49"
+ ],
+ "Deskhand durduruldu — görev başlatmak için önce üstteki «Devam et» düğmesine basın.": [
+  "gui/gorev.py:27"
  ],
  "Deskhand onay/panel penceresi /{desen}/": [
   "api.py:223"
@@ -1197,8 +1204,14 @@
  "Görev kilidi açılamadı: {hata}": [
   "gorev.py:515"
  ],
+ "Görev metni": [
+  "gui/gorev.py:39"
+ ],
  "Görev metnine parola ya da kart numarası yazmayın.": [
   "gui/metinler.py:332"
+ ],
+ "Görev sonucu": [
+  "gui/gorev.py:41"
  ],
  "Görev sonuç vermeden bitti.": [
   "gorev.py:618"
@@ -1226,6 +1239,9 @@
  ],
  "Görevi başlat": [
   "gui/metinler.py:333"
+ ],
+ "Görevi durdur": [
+  "gui/gorev.py:29"
  ],
  "Görevi hemen durdurur. Görünmez masaüstü açık kalır.": [
   "gui/metinler.py:271"
@@ -1593,6 +1609,9 @@
  "Model": [
   "gui/metinler.py:275"
  ],
+ "Model seçimi kaydedilemedi. Görevler bu oturumda yine seçtiğiniz modelle çalışır; panel yeniden açılınca önceki seçim döner. Ne yapmalı: ayarlar klasörünün yazılabilir olduğunu denetleyip modeli yeniden seçin.": [
+  "gui/gorev.py:33"
+ ],
  "N kez tıkla": [
   "cli.py:485"
  ],
@@ -1683,6 +1702,9 @@
  ],
  "Oturum köprüsü": [
   "oturum/cli.py:61"
+ ],
+ "Oturumla girilebilecek siteler": [
+  "gui/gorev.py:40"
  ],
  "Oturumla girilebilecek siteler:": [
   "gui/metinler.py:320"
@@ -2007,6 +2029,9 @@
  ],
  "Yalnız kartla ödeme": [
   "gui/metinler.py:193"
+ ],
+ "Yalnız çalışan görevi durdurur; görünmez masaüstü açık kalır. Tüm girdileri durdurmak için üstteki DUR düğmesini kullanın.": [
+  "gui/gorev.py:30"
  ],
  "Yanıt yoksa": [
   "gui/metinler.py:144"
@@ -5508,6 +5533,9 @@
  "{zaman} · {durum} · {metin}": [
   "gui/metinler.py:293"
  ],
+ "«Bir daha sorma» seçimi kaydedilemedi; onay bir sonraki görevde yine sorulur. Ne yapmalı: ayarlar klasörünün yazılabilir olduğunu denetleyin.": [
+  "gui/gorev.py:36"
+ ],
  "«{ad}» simgesi silinsin mi? Bu simgeyi kullanan akışlar artık onu bulamaz.": [
   "gui/metinler.py:248"
  ],
@@ -5534,6 +5562,9 @@
  ],
  "Ödeme/yetki/hesap silme gibi hassas bir düğme": [
   "guvenlik.py:1610"
+ ],
+ "Önce görevi yazın: kutuya ne yapılmasını istediğinizi yazıp yeniden Başlat'a basın.": [
+  "gui/gorev.py:28"
  ],
  "Önizleme gizlendi: yasak pencereler denetlenemedi ({hata})": [
   "gui/metinler.py:361"

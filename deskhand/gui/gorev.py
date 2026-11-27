@@ -9,18 +9,54 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette
-from PyQt6.QtWidgets import (QApplication, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-                             QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+                             QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QToolButton,
+                             QVBoxLayout, QWidget)
 
 from .. import ayarlar, gorev, gorev_kipi
-from ..i18n import _
+from ..i18n import N_, _
 from . import metinler as T
 from .dil import Metinler
-from .durum import Durum
+from .durum import RENK, Durum
 from .onizleme import MaskeHatasi, Onizleme, maskeli_goruntu, pil_qimage
 
 CANLI_MS = 1000  # ~1 kare/sn (yalnız görev çalışırken ve sekme görünürken)
 KIRMIZI, YESIL, GRI = "#e03131", "#2f9e44", "#8a8f98"
+
+# UX-E (Y5/O8): bu sekmeye özgü yeni metinler (gui/metinler.py başka görevin dosyası; aynı N_ → _ kalıbı)
+G_DUR_SERIDI = N_("Deskhand durduruldu — görev başlatmak için önce üstteki «Devam et» düğmesine basın.")
+G_BOS_METIN = N_("Önce görevi yazın: kutuya ne yapılmasını istediğinizi yazıp yeniden Başlat'a basın.")
+G_GOREVI_DURDUR = N_("Görevi durdur")
+G_GOREVI_DURDUR_IPUCU = N_("Yalnız çalışan görevi durdurur; görünmez masaüstü açık kalır. "
+                           "Tüm girdileri durdurmak için üstteki DUR düğmesini kullanın.")
+G_BIR_DAHA_SORMA = N_("Bir daha sorma")
+G_MODEL_KAYIT_HATA = N_("Model seçimi kaydedilemedi. Görevler bu oturumda yine seçtiğiniz modelle çalışır; panel "
+                        "yeniden açılınca önceki seçim döner. Ne yapmalı: ayarlar klasörünün yazılabilir olduğunu "
+                        "denetleyip modeli yeniden seçin.")
+G_TERCIH_KAYIT_HATA = N_("«Bir daha sorma» seçimi kaydedilemedi; onay bir sonraki görevde yine sorulur. Ne yapmalı: "
+                         "ayarlar klasörünün yazılabilir olduğunu denetleyin.")
+G_AYRINTI = N_("Ayrıntı")
+G_KUTU_AD = N_("Görev metni")
+G_SITELER_AD = N_("Oturumla girilebilecek siteler")
+G_SONUC_AD = N_("Görev sonucu")
+
+ONAY_ANAHTARI = ("gorev", "baslat_onayi")  # true = her görevde sor (varsayılan); false = "Bir daha sorma"
+
+
+def baslat_onayi_saklanabilir() -> bool:
+    """Ayar çekirdeği "Bir daha sorma" tercihini tanıyor mu (anahtar yoksa kutucuk gösterilmez: boş vaat yok)."""
+    bolum, anahtar = ONAY_ANAHTARI
+    return anahtar in ayarlar.VARSAYILAN.get(bolum, {})
+
+
+def baslat_onayi_sorulsun() -> bool:
+    """Tercih okunamazsa güvenli taraf: sorulur."""
+    if not baslat_onayi_saklanabilir():
+        return True
+    try:
+        return ayarlar.al(*ONAY_ANAHTARI) is not False
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def adim_metni(o: dict) -> str:
@@ -90,13 +126,28 @@ class GorevSekmesi(QWidget):
         self._dusunuyor: QListWidgetItem | None = None
         self._bitis_durumu = ""  # son görevin durumu (durum etiketi)
         self._gecmis: list[dict] = []
+        self.dur = False              # panel DUR'u açık mı (durum_guncelle ile; yoklama yok)
+        self._bos_uyari = False       # boş metinle Başlat → görünür ileti + kutu vurgusu
+        self._model_kayitsiz: str | None = None  # kaydedilemeyen model seçimi (bu oturumda yine kullanılır)
+        self._hata: tuple[str, str] | None = None  # (metin kimliği, ayrıntı)
 
         kok = QVBoxLayout(self)
+        self.l_dur = QLabel()  # DUR açıkken görev başlatılamaz: görünür neden + ne yapmalı
+        self.l_dur.setObjectName("gorevDurSeridi")
+        self.l_dur.setWordWrap(True)
+        self.l_dur.setStyleSheet(f"QLabel#gorevDurSeridi {{ border: 2px solid {RENK['dur']}; border-radius: 6px;"
+                                 f" padding: 8px 14px; font-weight: 700; }}")
+        self.mt(self.l_dur.setText, G_DUR_SERIDI)
+        self.l_dur.setVisible(False)
+        kok.addWidget(self.l_dur)
         self.kutu = GorevKutusu()
         self.kutu.setMaximumHeight(96)
+        self.kutu.setProperty("hata", False)
         self.mt(self.kutu.setPlaceholderText, T.G_KUTU_IPUCU)
+        self.mt(self.kutu.setAccessibleName, G_KUTU_AD)
         kok.addWidget(self.kutu)
         self.kutu.gonder.connect(self.baslat)
+        self.kutu.textChanged.connect(self._bos_uyari_kaldir)
         self.l_parola = QLabel()  # görev metni geçmişe/Claude'a gider: sır yazılmasın
         self.mt(self.l_parola.setText, T.G_PAROLA_UYARI)
         kok.addWidget(self.l_parola)
@@ -106,6 +157,7 @@ class GorevSekmesi(QWidget):
         self.siteler = QLineEdit()
         self.mt(self.siteler.setPlaceholderText, T.G_SITELER_IPUCU)
         self.mt(self.siteler.setToolTip, T.G_SITELER_ACIKLAMA)
+        self.mt(self.siteler.setAccessibleName, G_SITELER_AD)
         site_sira.addWidget(self.l_siteler)
         site_sira.addWidget(self.siteler, 1)
         kok.addLayout(site_sira)
@@ -118,8 +170,8 @@ class GorevSekmesi(QWidget):
         self.mt(self.b_baslat.setToolTip, T.G_BASLAT_IPUCU)
         self.b_baslat.clicked.connect(self.baslat)
         self.b_durdur = QPushButton()
-        self.mt(self.b_durdur.setText, T.G_DURDUR)
-        self.mt(self.b_durdur.setToolTip, T.G_DURDUR_IPUCU)
+        self.mt(self.b_durdur.setText, G_GOREVI_DURDUR)
+        self.mt(self.b_durdur.setToolTip, G_GOREVI_DURDUR_IPUCU)
         self.b_durdur.clicked.connect(self.durdur)
         self.b_devral = QPushButton()
         self.mt(self.b_devral.setToolTip, T.G_DEVRAL_IPUCU)
@@ -144,6 +196,24 @@ class GorevSekmesi(QWidget):
         self.l_durum = QLabel()
         self.l_durum.setWordWrap(True)
         kok.addWidget(self.l_durum)
+        # ayar kaydı hatası: ne oldu + ne yapmalı; teknik ayrıntı katlı (Ayrıntı düğmesi)
+        hata_sira = QHBoxLayout()
+        self.l_hata = QLabel()
+        self.l_hata.setWordWrap(True)
+        self.b_ayrinti = QToolButton()
+        self.b_ayrinti.setCheckable(True)
+        self.b_ayrinti.setMinimumSize(24, 24)
+        self.mt(self.b_ayrinti.setText, G_AYRINTI)
+        self.b_ayrinti.toggled.connect(lambda acik: self.l_ayrinti.setVisible(acik and self._hata is not None))
+        hata_sira.addWidget(self.l_hata, 1)
+        hata_sira.addWidget(self.b_ayrinti, 0, Qt.AlignmentFlag.AlignTop)
+        kok.addLayout(hata_sira)
+        self.l_ayrinti = QLabel()
+        self.l_ayrinti.setWordWrap(True)
+        self.l_ayrinti.setTextFormat(Qt.TextFormat.PlainText)
+        self.l_ayrinti.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        kok.addWidget(self.l_ayrinti)
+        self._hata_yaz()
 
         bolme = QSplitter(Qt.Orientation.Horizontal)
         sol = QWidget()
@@ -162,6 +232,7 @@ class GorevSekmesi(QWidget):
         sl.addWidget(self.l_sonuc)
         self.sonuc = QPlainTextEdit()
         self.sonuc.setReadOnly(True)
+        self.mt(self.sonuc.setAccessibleName, G_SONUC_AD)
         self.sonuc.setMaximumHeight(110)
         sl.addWidget(self.sonuc)
         self.l_gecmis = QLabel()
@@ -204,15 +275,40 @@ class GorevSekmesi(QWidget):
         self.c_model.blockSignals(False)
 
     def _model_secildi(self, *_a) -> None:
+        kod = self.c_model.currentData()
         try:
-            ayarlar.ayarla("gorev", "model", self.c_model.currentData())
-        except (ValueError, OSError):
-            pass
+            ayarlar.ayarla("gorev", "model", kod)
+        except Exception as e:  # noqa: BLE001 - sessiz yutma yok: görünür ileti, seçim bu oturumda kullanılır
+            self._model_kayitsiz = kod
+            self._hata_goster(G_MODEL_KAYIT_HATA, e)
+            return
+        self._model_kayitsiz = None
+        if self._hata and self._hata[0] == G_MODEL_KAYIT_HATA:
+            self._hata_goster(None)
+
+    # -------- görünür ayar hatası (ne oldu + ne yapmalı; ayrıntı katlı)
+    def _hata_goster(self, kimlik: str | None, hata: BaseException | None = None) -> None:
+        self._hata = (kimlik, str(hata) or type(hata).__name__) if kimlik else None
+        self.b_ayrinti.setChecked(False)
+        self._hata_yaz()
+
+    def _hata_yaz(self) -> None:
+        h = self._hata
+        self.l_hata.setVisible(h is not None)
+        self.b_ayrinti.setVisible(h is not None)
+        self.l_ayrinti.setVisible(h is not None and self.b_ayrinti.isChecked())
+        if h is not None:
+            self.l_hata.setText(_(h[0]))
+            self.l_ayrinti.setText(h[1])
+            pal = self.l_hata.palette()
+            pal.setColor(QPalette.ColorRole.WindowText, QColor(RENK["dur"]))
+            self.l_hata.setPalette(pal)
 
     # -------- düğmeler / durum
     def _dugmeler(self) -> None:
         c = self.calisiyor
-        self.b_baslat.setEnabled(not c)
+        self.b_baslat.setEnabled(not c and not self.dur)
+        self.l_dur.setVisible(self.dur)
         self.b_durdur.setEnabled(c and not self.durduruluyor)
         self.kutu.setReadOnly(c)
         self.siteler.setReadOnly(c)
@@ -221,7 +317,9 @@ class GorevSekmesi(QWidget):
         self.b_devral.setEnabled(self.sanal is not None)
 
     def _durum_yaz(self) -> None:
-        if self.calisiyor:
+        if self._bos_uyari and not self.calisiyor:
+            m = _(G_BOS_METIN)
+        elif self.calisiyor:
             if self.durduruluyor:
                 m = _(T.G_DURDURULUYOR)
             elif self.bekleyen:
@@ -235,15 +333,23 @@ class GorevSekmesi(QWidget):
         else:
             m = _(T.G_HAZIR)
         self.l_durum.setText(m)
+        # DUR açıkken boşta "Hazır… Başlat'a basın" şeritle çelişir: gizlenir (neden + ne yapmalı şeritte)
+        self.l_durum.setVisible(not (self.dur and not self.calisiyor))
         pal = self.l_durum.palette()
         renk = QColor("#e8a317") if self.calisiyor and self.bekleyen else self.palette().color(QPalette.ColorRole.WindowText)
         pal.setColor(QPalette.ColorRole.WindowText, renk)
         self.l_durum.setPalette(pal)
 
     def durum_guncelle(self, d: Durum) -> None:
-        """Panel durumu: bekleyen onay sayısı (kart ödemesi vb.; diyalog panelde zaten açılır)."""
+        """Panel durumu: bekleyen onay sayısı (kart ödemesi vb.; diyalog panelde zaten açılır) ve DUR (açıkken görev
+        başlatma yollarının hepsi kapalı + şerit; kalkınca hemen açılır)."""
         if d.bekleyen != self.bekleyen:
             self.bekleyen = d.bekleyen
+            self._durum_yaz()
+        dur = d.ad == "dur"
+        if dur != self.dur:
+            self.dur = dur
+            self._dugmeler()
             self._durum_yaz()
 
     def sanal_guncelle(self, s: dict | None) -> None:
@@ -260,16 +366,22 @@ class GorevSekmesi(QWidget):
     def tazele(self) -> None:
         self.mt.tazele()
         self.devral_durumu(self.b_devral.text() == _(T.G_BIRAK))
+        self._hata_yaz()
         self._durum_yaz()
         self.gecmis_yenile()
         self.onizleme.update()
 
     # -------- başlat / durdur
     def baslat(self) -> None:
-        if self.calisiyor:
+        if self.calisiyor or self.dur:  # DUR açıkken hiçbir yol (düğme, Ctrl+Enter, doğrudan çağrı) başlatmaz
             return
         metin = self.kutu.toPlainText().strip()
-        if not metin:
+        if not metin:  # sessiz kalma: kısa ileti + kutu vurgusu + odak
+            self._bos_uyari = True
+            self.kutu.setProperty("hata", True)
+            self.kutu.setStyleSheet(f"GorevKutusu {{ border: 2px solid {RENK['dur']}; border-radius: 4px; }}")
+            self.kutu.setFocus()
+            self._durum_yaz()
             return
         gecerli, ret = gorev_kipi.site_ayristir_ayrintili(self.siteler.text())
         if ret:  # joker / tek başına genel son ek / geçersiz ad: açık ileti, görev başlamaz
@@ -278,7 +390,7 @@ class GorevSekmesi(QWidget):
             self._durum_yaz()
             return
         siteler = ", ".join(gecerli)
-        if self.onay_iste and not self._onayla(metin, siteler):
+        if self.onay_iste and baslat_onayi_sorulsun() and not self._onayla(metin, siteler):
             return
         self.liste.clear()
         self._adimlar.clear()
@@ -287,7 +399,8 @@ class GorevSekmesi(QWidget):
         self.adim_sayisi = 0
         self._bitis_durumu = ""
         try:
-            self.g = self.gorev_f(olay_cb=self.olay_geldi.emit)
+            ek_g = {"model": self._model_kayitsiz} if self._model_kayitsiz else {}
+            self.g = self.gorev_f(olay_cb=self.olay_geldi.emit, **ek_g)
             ek = {"siteler": siteler} if siteler else {}
             try:
                 self.g.baslat(metin, **ek)
@@ -318,8 +431,24 @@ class GorevSekmesi(QWidget):
                         QMessageBox.StandardButton.Cancel, self)
         b = k.addButton(_(T.G_BASLAT), QMessageBox.ButtonRole.AcceptRole)
         k.setDefaultButton(b)
+        if baslat_onayi_saklanabilir():
+            k.setCheckBox(QCheckBox(_(G_BIR_DAHA_SORMA), k))  # ebeveyn k: Python çöp toplayıcısı silmesin
         k.exec()
-        return k.clickedButton() is b
+        kabul = k.clickedButton() is b
+        cb = k.checkBox()
+        if kabul and cb is not None and cb.isChecked():
+            try:
+                ayarlar.ayarla(*ONAY_ANAHTARI, False)
+            except Exception as e:  # noqa: BLE001 - görünür ileti; onay sonraki görevde yine sorulur
+                self._hata_goster(G_TERCIH_KAYIT_HATA, e)
+        return kabul
+
+    def _bos_uyari_kaldir(self) -> None:
+        if self._bos_uyari and self.kutu.toPlainText().strip():
+            self._bos_uyari = False
+            self.kutu.setProperty("hata", False)
+            self.kutu.setStyleSheet("")
+            self._durum_yaz()
 
     def _masaustu_kapat_onayla(self) -> bool:
         k = QMessageBox(QMessageBox.Icon.Warning, _(T.G_MASAUSTU_ACIK_BASLIK), _(T.G_MASAUSTU_ACIK_METIN),
