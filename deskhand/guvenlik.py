@@ -1446,7 +1446,185 @@ def _panelden_onay(eylem, hedef, ayrinti, goruntu=None, ajan_eylem=None):
     return s.izin, s.mesaj
 
 
-ONAY_GORUNTU = (480, 200)  # onay isteğindeki küçük görüntü: tıklama noktasının çevresi (pencere pikseli)
+# ---------------------------------------------------------------- onay iletisi (panel diyaloğu, insan dili; UX-C)
+# The panel turns a request (eylem/hedef/ayrinti as the requester wrote them, in the REQUESTER's language) into one
+# plain "what will happen" sentence + one risk line in the PANEL's language; the raw strings only go to the folded
+# details. Presentation only: who approves, timeout → deny and the default button are unchanged (gui/onay_diyalog.py).
+# Kinds: odeme, dugme, tus, ucbirim, pano, devir, sistem, parola, uygulama, dur, diger.
+ONAY_TURLERI = ("odeme", "dugme", "tus", "ucbirim", "pano", "devir", "sistem", "parola", "uygulama", "dur", "diger")
+
+# requester's action template (msgid; its translations are matched too) → (kind, sentence msgid)
+_ONAY_EYLEM_SABLON = (
+    (N_("Düğmeye tıkla: “{dugme}”"), "dugme", N_("Claude, “{dugme}” düğmesine basmak istiyor.")),
+    (N_("Hassas sayfada {eylem}"), "odeme", N_("Claude, bir ödeme ya da onay sayfasında işlem yapmak istiyor ({eylem}).")),
+    (N_("Kart bilgisi yaz"), "odeme", N_("Claude, bir kart bilgisi yazmak istiyor.")),
+    (N_("Riskli tuş: {kombinasyon}"), "tus", N_("Claude, {kombinasyon} tuşlarına basmak istiyor.")),
+    (N_("Uçbirime komut yaz: {komut}"), "ucbirim", N_("Claude, uçbirime şu komutu yazmak istiyor: {komut}")),
+    (N_("Uçbirimde komut çalıştır: {satir}"), "ucbirim", N_("Claude, uçbirimde şu komutu çalıştırmak istiyor: {satir}")),
+    (N_("Komut başlat: {komut}"), "ucbirim", N_("Claude, şu komutu çalıştırmak istiyor: {komut}")),
+    (N_("Panoyu yapıştır"), "pano", N_("Claude, panonuzdaki metni bu pencereye yapıştırmak istiyor.")),
+    (N_("Panoyu oku"), "pano", N_("Claude, panonuzdaki metni okumak istiyor.")),
+    (N_("Sistem istemine girdi: {ad}"), "sistem",
+     N_("Claude, bir sistem izin/parola penceresine ({ad}) girdi göndermek istiyor.")),
+    (N_("Parola alanına yaz"), "parola", N_("Claude, bir parola alanına yazmak istiyor.")),
+    (N_("Uygulama başlat: {ad}"), "uygulama", N_("Claude, doğrulanmamış bir uygulamayı başlatmak istiyor: {ad}")),
+)
+# MCP tool names used as the action (mcp_sunucu._onay_iste / handoff): fixed identifiers, never translated
+_ONAY_ARAC = {"clipboard": ("pano", N_("Claude, panonuzdaki metni okumak istiyor.")),
+              "run_flow": ("diger", N_("Claude, önceden onaylanmış adımlar içeren bir akışı çalıştırmak istiyor.")),
+              "human_verification": ("devir", None)}
+# MCP fallback path: action = tool name, details = the guard's stop message → kind by the message's fixed prefix
+_ONAY_DUR_ONEK = (("HASSAS düğme", "dugme"), ("HASSAS sayfa", "odeme"), ("HASSAS: kart", "odeme"),
+                  ("HASSAS: parola", "parola"), ("HASSAS pano", "pano"), ("RİSKLİ TUŞ", "tus"),
+                  ("UÇBİRİM", "ucbirim"), ("RİSKLİ KOMUT", "ucbirim"), ("SİSTEM İSTEMİ", "sistem"))
+_ONAY_TUR_CUMLE = {
+    "odeme": N_("Claude, ödeme yapabilecek bir işlem için izin istiyor."),
+    "dugme": N_("Claude, geri alınamaz olabilecek bir düğmeye basmak istiyor."),
+    "tus": N_("Claude, riskli bir tuş kısayoluna basmak istiyor."),
+    "ucbirim": N_("Claude, uçbirimde bir komut çalıştırmak istiyor."),
+    "pano": N_("Claude, panonuzdaki metni kullanmak istiyor."),
+    "devir": N_("Claude sizi bekliyor: bir insan doğrulamasını (CAPTCHA) sizin çözmeniz gerekiyor."),
+    "sistem": N_("Claude, bir sistem izin/parola penceresine girdi göndermek istiyor."),
+    "parola": N_("Claude, bir parola alanına yazmak istiyor."),
+    "uygulama": N_("Claude, doğrulanmamış bir uygulamayı başlatmak istiyor."),
+    "dur": N_("Bir komut DUR anahtarını kaldırmak istiyor."),
+    "diger": N_("Claude bir işlem için izninizi istiyor."),
+}
+_ONAY_RISK = {
+    "odeme": N_("Bu bir ödeme işlemi olabilir; para çekilebilir."),
+    "dugme": N_("Bu düğme yetki verme ya da hesap silme gibi geri alınamaz bir iş yapabilir."),
+    "tus": N_("Bu kısayol pencereyi ya da oturumu kapatabilir; kaydedilmemiş iş kaybolabilir."),
+    "ucbirim": N_("Bu komut dosyaları silebilir ya da sistemi değiştirebilir."),
+    "pano": N_("Panoda parola ya da özel bilgi olabilir; Claude bu metni görebilir."),
+    "devir": N_("Claude doğrulamayı çözmez; siz çözmezseniz iş burada durur."),
+    "sistem": N_("Bu pencere bilgisayarınızda yönetici yetkisi verebilir."),
+    "parola": N_("Parola hesabınıza erişim verir; yalnız siz istediyseniz izin verin."),
+    "uygulama": N_("Bu uygulamanın ne yapacağı doğrulanamadı; tanımıyorsanız reddedin."),
+    "dur": N_("DUR kalkınca Claude yeniden girdi gönderebilir; siz istemediyseniz reddedin."),
+    "diger": N_("Ne yapılacağı Ayrıntılar bölümünde; emin değilseniz reddedin."),
+}
+_GIZLI_IZ = re.compile(r"\*\*\*\(\d+\)")  # _yazilacak(…, gizli=True): only the length of a secret text
+_SABLON_ONBELLEK: dict = {}
+
+
+def _sablon_deseni(sablon: str):
+    d = _SABLON_ONBELLEK.get(sablon)
+    if d is None:
+        parca = re.split(r"\{(\w+)\}", sablon)
+        d = re.compile("".join(re.escape(p) if i % 2 == 0 else f"(?P<{p}>.*)" for i, p in enumerate(parca)), re.S)
+        _SABLON_ONBELLEK[sablon] = d
+    return d
+
+
+def _sablon_cevirileri(msgid: str) -> list[str]:
+    """msgid + every catalog translation of it (the requester may run in another language than the panel)."""
+    from . import i18n
+    out = [msgid]
+    for kod in getattr(i18n, "DILLER", {}):
+        c = _SABLON_ONBELLEK.setdefault(("katalog", kod), i18n.katalog_oku(kod)).get(msgid)
+        if c and c not in out:
+            out.append(c)
+    return out
+
+
+def _onek_cevirileri(onek: str) -> list[str]:
+    """A stop message's fixed prefix + its translations: the catalog value of every message starting with it, cut at
+    the first "(" (the prefix shape: "HASSAS düğme (…" → "SENSITIVE button"). Prefixes shorter than 6 are dropped."""
+    anahtar = ("onek", onek)
+    if anahtar not in _SABLON_ONBELLEK:
+        from . import i18n
+        out = [onek]
+        for kod in getattr(i18n, "DILLER", {}):
+            for k, v in _SABLON_ONBELLEK.setdefault(("katalog", kod), i18n.katalog_oku(kod)).items():
+                if k.startswith(onek):
+                    p = v.split("(")[0].strip()
+                    if len(p) >= 6 and p not in out:
+                        out.append(p)
+        _SABLON_ONBELLEK[anahtar] = out
+    return _SABLON_ONBELLEK[anahtar]
+
+
+def _onay_turu(istek: dict) -> tuple[str, str | None, dict]:
+    """→ (kind, sentence msgid or None, fields captured from the requester's action text)."""
+    tur, eylem, ayrinti = istek.get("tur") or "", str(istek.get("eylem") or ""), str(istek.get("ayrinti") or "")
+    if tur == "devir":
+        return "devir", None, {}
+    if tur == "dur":
+        return "dur", None, {}
+    if eylem in _ONAY_ARAC:
+        t, cumle = _ONAY_ARAC[eylem]
+        return t, cumle, {}
+    for sablon, t, cumle in _ONAY_EYLEM_SABLON:
+        for metin in _sablon_cevirileri(sablon):
+            m = _sablon_deseni(metin).fullmatch(eylem)
+            if m:
+                alan = m.groupdict()
+                if t == "dugme" and para_mi(alan.get("dugme", "")):
+                    t = "odeme"
+                return t, cumle, alan
+    ilk = ayrinti.lstrip()
+    for onek, t in _ONAY_DUR_ONEK:
+        for metin in _onek_cevirileri(onek):
+            if ilk.startswith(metin):
+                if t == "dugme" and para_mi(ayrinti):
+                    t = "odeme"
+                return t, None, {}
+    return "diger", None, {}
+
+
+def _yasak_baslik_mi(hedef: str) -> bool:
+    try:
+        desenler = yasak_desenler()
+    except Exception:  # noqa: BLE001 - list unreadable (e.g. tampered): the built-in ones still apply
+        desenler = list(YERLESIK_YASAK)
+    for d in desenler:
+        try:
+            if re.search(d, hedef, re.I):
+                return True
+        except re.error:
+            continue
+    return False
+
+
+def onay_iletisi(istek: dict) -> dict:
+    """Panel onay diyaloğunun metni (insan dili, panelin dilinde). → {"tur", "baslik", "risk", "hedef", "ayrinti"}:
+    baslik = tek cümle "ne olacak", risk = tek satır risk, hedef = gösterilecek pencere adı, ayrinti = katlanır alanın
+    metni (ham eylem, hedef, ham ayrıntı, isteyen süreç). Gizli yazı yalnız sabit yer tutucuyla görünür
+    (gizli_yer); gizli yazının eşlik ettiği istekte ya da yasak pencerede başlık "(başlık gizlendi)" olur ve hiçbir
+    alanda geçmez."""
+    eylem, hedef = str(istek.get("eylem") or ""), str(istek.get("hedef") or "")
+    ham_ayrinti = str(istek.get("ayrinti") or "")
+    tur, cumle, alan = _onay_turu(istek)
+    gizli_var = bool(_GIZLI_IZ.search(eylem) or _GIZLI_IZ.search(ham_ayrinti))
+    baslik_gizli = bool(hedef.strip()) and (gizli_var or _yasak_baslik_mi(hedef))
+    gizli_baslik = _("(başlık gizlendi)")
+
+    def temiz(s: str) -> str:
+        s = _GIZLI_IZ.sub(lambda _m: gizli_yer(), str(s))
+        if baslik_gizli:
+            s = s.replace(hedef, gizli_baslik)
+        return s
+
+    if tur == "odeme" and "eylem" in alan:
+        alan["eylem"] = _(alan["eylem"].strip())  # "Enter/boşluk", "tıklama": the guard's own translatable words
+    alan = {k: temiz(v.strip()) for k, v in alan.items()}
+    try:
+        baslik = _(cumle).format(**alan) if cumle else _(_ONAY_TUR_CUMLE[tur])
+    except (KeyError, IndexError, ValueError):
+        baslik = _(_ONAY_TUR_CUMLE[tur])
+    baslik = " ".join(temiz(baslik).split())  # one line
+    satirlar = [_("Eylem") + ": " + temiz(eylem)]
+    if hedef.strip():
+        satirlar.append(_("Pencere") + ": " + (gizli_baslik if baslik_gizli else hedef))
+    if ham_ayrinti.strip():
+        satirlar.append(_("Ayrıntı") + ": " + temiz(ham_ayrinti))
+    if istek.get("pid"):
+        satirlar.append(_("İsteyen süreç") + f": PID {istek['pid']}")
+    return {"tur": tur, "baslik": baslik, "risk": _(_ONAY_RISK[tur]),
+            "hedef": gizli_baslik if baslik_gizli else hedef, "ayrinti": "\n".join(satirlar)}
+
+
+ONAY_GORUNTU =(480, 200)  # onay isteğindeki küçük görüntü: tıklama noktasının çevresi (pencere pikseli)
 
 
 def hedef_goruntusu(k, nokta=None):
@@ -1666,8 +1844,9 @@ def ucbirim_komut_engel(k, onayli, metin, gizli=False, goruntu_al=True):
         ayrinti = neden + "\n" + _("uçbirim: {sinif}").format(sinif=sinif) + "\n" + \
             _("yazılacak: {metin}").format(metin=_yazilacak(metin, gizli))
         goruntu = None if getattr(_EYLEM, "onaylandi", False) or not goruntu_al else hedef_goruntusu(pen)
-        izin, onay_neden = _panelden_onay(_("Uçbirime komut yaz: {komut}").format(komut=_yazilacak(metin, gizli)), b,
-                                          ayrinti, goruntu)
+        # secret text: the title may preview it (editors/terminals) → the request (panel + log) carries no title
+        izin, onay_neden = _panelden_onay(_("Uçbirime komut yaz: {komut}").format(komut=_yazilacak(metin, gizli)),
+                                          _("(başlık gizlendi)") if gizli else b, ayrinti, goruntu)
         if not izin:
             with baslik_gizle(gizli):  # CLI yolu da: gizli yazının iletisinde başlık (önizleme) yok
                 bg = baslik_goster(b)
