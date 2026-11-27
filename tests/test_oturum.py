@@ -907,6 +907,35 @@ def test_kapanis_korumali_kopya():
     kontrol("EK-1 kapanış: süresi dolmuş işaretli kopya silinir", not os.path.exists(korunan))
 
 
+def test_kapanis_koru_durumlari():
+    """ABM-F1-R3 N5: doğrulama bitmeden masaüstü kapandı → sahte "yeniden başlatılamadı" yok. acildi: yeni Firefox
+    açılmıştı → işaret kalkar, kopya olağan silinir; bekliyor: kopya korunur, uyarı "doğrulanmadan kapandı" der;
+    basarisiz: "yeniden başlatılamadı"."""
+    from deskhand.oturum import kopya_bekcisi
+    yollar_ = {}
+    for durum in ("acildi", "bekliyor", "basarisiz"):
+        k = kopya.yeni_kopya_dizini("firefox")
+        kopya_bekcisi.koru_isaretle(k, "bellek-yeniden", durum)
+        yollar_[durum] = k
+    kontrol("N5 koru_durum işaret durumunu okur",
+            [kopya_bekcisi.koru_durum(yollar_[x]) for x in ("acildi", "bekliyor", "basarisiz")]
+            == ["acildi", "bekliyor", "basarisiz"])
+    uyarilar = oturum.kapanis()
+    metin = " | ".join(uyarilar)
+    kontrol("N5 kapanış: 'acildi' (doğrulama kapanışa kaldı) kopyası olağan silinir, uyarı yok",
+            not os.path.exists(yollar_["acildi"]) and os.path.basename(yollar_["acildi"]) not in metin, metin)
+    kontrol("N5 kapanış: 'bekliyor' kopyası korunur, 'yeniden başlatılamadı' denmez",
+            os.path.isdir(yollar_["bekliyor"]) and any(os.path.basename(yollar_["bekliyor"]) in u
+                                                       and "doğrulanmadan" in u and "başlatılamadı" not in u
+                                                       for u in uyarilar), metin)
+    kontrol("N5 kapanış: 'basarisiz' kopyası korunur, 'yeniden başlatılamadı' der",
+            os.path.isdir(yollar_["basarisiz"]) and any(os.path.basename(yollar_["basarisiz"]) in u
+                                                        and "başlatılamadı" in u for u in uyarilar), metin)
+    for k in (yollar_["bekliyor"], yollar_["basarisiz"]):
+        kopya_bekcisi.koru_kaldir(k)
+    oturum.kapanis()
+
+
 def main():
 
     test_politika()
@@ -928,6 +957,7 @@ def main():
     test_flatpak_ornek()
     test_degisim()
     test_kapanis_korumali_kopya()
+    test_kapanis_koru_durumlari()
     test_profil_grubu_yalitimi()
     test_cli()
     print(f"\n{gecen}/{toplam} geçti")

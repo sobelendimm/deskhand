@@ -274,13 +274,23 @@ def _kapanis_ic() -> list[str]:
         yol = os.path.join(kok, ad)
         if not os.path.isdir(yol) or os.path.islink(yol) or os.path.realpath(yol) in korunan:
             continue
-        if kopya_bekcisi.korunuyor(yol):  # bellek bekçisi: bekleyen/başarısız Firefox yeniden başlatmasının oturum yedeği
+        koru = kopya_bekcisi.koru_durum(yol)  # bellek bekçisi: Firefox yeniden başlatmasının oturum yedeği
+        if koru == "acildi":  # yeni Firefox açılmıştı, doğrulama kapanışa kaldı: başarılı sayılır, olağan silme
+            kopya_bekcisi.koru_kaldir(yol)
+        elif koru is not None:
             yedek = os.path.join(yol, "sessionstore-backups", "deskhand-yedek.jsonlz4")
             yedek = yedek if os.path.isfile(yedek) else yol
-            gunluk(f"oturum: {ad} kopyası korunuyor (Firefox yeniden başlatılamadı); silinmedi, oturum yedeği: {yedek} "
-                   f"({int(kopya_bekcisi.KORU_AZAMI // 3600)} sa sonra süpürülür)")
-            uyarilar.append(_("oturum: {ad} kopyası silinmedi (Firefox yeniden başlatılamadı); oturum yedeği: {yedek}")
-                            .format(ad=ad, yedek=yedek))
+            sa = int(kopya_bekcisi.KORU_AZAMI // 3600)
+            if koru == "bekliyor":  # sonuç bilinmiyor: yedek korunur ama "başarısız" denmez
+                gunluk(f"oturum: {ad} kopyası korunuyor (Firefox yeniden başlatması doğrulanmadan masaüstü kapandı); "
+                       f"silinmedi, oturum yedeği: {yedek} ({sa} sa sonra süpürülür)")
+                uyarilar.append(_("oturum: {ad} kopyası silinmedi (Firefox yeniden başlatması doğrulanmadan masaüstü "
+                                  "kapandı); oturum yedeği: {yedek}").format(ad=ad, yedek=yedek))
+            else:
+                gunluk(f"oturum: {ad} kopyası korunuyor (Firefox yeniden başlatılamadı); silinmedi, oturum yedeği: "
+                       f"{yedek} ({sa} sa sonra süpürülür)")
+                uyarilar.append(_("oturum: {ad} kopyası silinmedi (Firefox yeniden başlatılamadı); oturum yedeği: "
+                                  "{yedek}").format(ad=ad, yedek=yedek))
             continue
         try:
             with open(os.path.join(yol, PARMAK_DOSYA)) as f:

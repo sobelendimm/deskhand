@@ -95,7 +95,15 @@ def taklit_yeniden(d, g, son=None):
 
 bb.firefox_yeniden_baslat = taklit_yeniden
 bb._engel = lambda ad, d=None: None
-T = time.time()
+GERCEK_CANLI = bb._kayit_canli
+bb._kayit_canli = lambda g, cg: True  # taklit bölümü: kayıtlar (/k/a) canlı sayılır; gerçek yol bölümünde gerçeği
+T = time.time()  # duvar saati (boşta denetimi: son_kullanim bir mtime)
+M = bb._mono()   # süre saati (CLOCK_BOOTTIME): 10 dk / geri çekilme / 24 sa
+
+
+def bakim_at(ofs=0.0, duvar=None):
+    """ofs sn sonrası bakım (iki saat birlikte ilerler; duvar: duvar saatini ayrıca kaydır)."""
+    return bb.bakim(AD, simdi=T + ofs + (duvar or 0.0), mono=M + ofs)
 
 
 def sifirla():
@@ -132,7 +140,7 @@ du = bb.bellek_durumu(CG)
 SON["t"] = T - 1000
 kontrol("B3: oran anon+shmem üzerinden (memory.current %92 ama önbellek hariç %30 → uyarı yok, bakım yok)",
         abs(du["oran"] - 0.30) < 0.001 and du["current"] > 0.9 * MAX and bb.bellek_uyarisi(du) is None
-        and bb.bakim(AD, simdi=T) is None and reclaim_icerik() == "", du)
+        and bakim_at(0) is None and reclaim_icerik() == "", du)
 
 sifirla()
 cg_yaz(0.85)
@@ -145,7 +153,7 @@ r = bb.uyari_ekle({"status": "ok"})
 kontrol("oran 0,85 → memory_warning dolu", "85" in (r.get("memory_warning") or "") and "Firefox" in r["memory_warning"],
         r)
 kontrol("oran 0,85 → masaüstü açık kalır (görev ortasında bakım yok, kapatma yok)",
-        bb.bakim(AD, simdi=T + 5) is None and not DURDURULDU and not YENIDEN and reclaim_icerik() == "")
+        bakim_at(5) is None and not DURDURULDU and not YENIDEN and reclaim_icerik() == "")
 kontrol("uyarı yalnız sözlüğe eklenir; hata sonucu (CallToolResult vb.) dokunulmaz",
         bb.uyari_ekle("metin") == "metin" and bb.uyari_ekle({"memory_warning": "x"}) == {"memory_warning": "x"})
 
@@ -154,7 +162,7 @@ sifirla()
 cg_yaz(0.86)
 SON["t"] = T - 200
 os.environ.pop(bb.ORTAM_FF, None)
-s = bb.bakim(AD, simdi=T)
+s = bakim_at(0)
 kontrol("boşta + ≥0,85 → yalnız Firefox yeniden başlar, masaüstü açık kalır",
         s and s["is"] == "firefox_yeniden" and YENIDEN == ["/k/a"] and not DURDURULDU and reclaim_icerik() == "", s)
 r = bb.uyari_ekle({})
@@ -163,14 +171,14 @@ kontrol("yeniden başlatma memory_warning'de bildirilir (sekme sayısı, yeniden
         and "azaltmadı" not in r["memory_warning"], r)
 YENIDEN.clear()
 cg_yaz(0.86)
-s2 = bb.bakim(AD, simdi=T + 120)
+s2 = bakim_at(120)
 kontrol("Firefox yeniden başlatma 10 dk içinde ikinci kez yapılmaz (yerine reclaim)",
         not YENIDEN and s2 and s2["is"] == "reclaim", s2)
 
 sifirla()
 cg_yaz(0.9)
 os.environ[bb.ORTAM_FF] = "kapali"
-s = bb.bakim(AD, simdi=T)
+s = bakim_at(0)
 kontrol("DESKHAND_FF_YENIDEN=kapali → yeniden başlatma yok (reclaim yapılır)",
         not YENIDEN and s and s["is"] == "reclaim" and reclaim_icerik() == bb.RECLAIM_MIKTAR, s)
 kontrol("DESKHAND_FF_YENIDEN=kapali → uyarı yeniden başlatma vaat etmez",
@@ -197,7 +205,7 @@ sifirla()
 cg_yaz(0.9)
 SON["t"] = T - 1000
 ETKI["sonra"] = 0.88  # %10'dan az düşüş
-s = bb.bakim(AD, simdi=T)
+s = bakim_at(0)
 k = bb._durum_oku(AD)
 r = bb.uyari_ekle({})
 kontrol("B3: oran %10'dan az düştü → 'etkisiz' uyarısı + 60 dk geri çekilme",
@@ -205,11 +213,11 @@ kontrol("B3: oran %10'dan az düştü → 'etkisiz' uyarısı + 60 dk geri çeki
         and "azaltmadı" in (r.get("memory_warning") or ""), (s, k, r))
 YENIDEN.clear()
 cg_yaz(0.9)
-s = bb.bakim(AD, simdi=T + 700)
+s = bakim_at(700)
 kontrol("B3: geri çekilme süresinde (10 dk geçti, 60 dk dolmadı) yeniden başlatma yok (reclaim yapılır)",
         not YENIDEN and s and s["is"] == "reclaim", s)
 cg_yaz(0.9)
-s = bb.bakim(AD, simdi=T + 3700)
+s = bakim_at(3700)
 k = bb._durum_oku(AD)
 kontrol("B3: geri çekilme sonrası yine etkisiz → geri çekilme iki katı (120 dk)",
         YENIDEN == ["/k/a"] and k.get("geri_cekilme_sn") == 7200, (s, k))
@@ -224,23 +232,23 @@ yapilan = []
 for i in range(5):
     cg_yaz(0.9)
     YENIDEN.clear()
-    s = bb.bakim(AD, simdi=T + i * 700)
+    s = bakim_at(i * 700)
     yapilan.append(bool(YENIDEN))
 kontrol("B3: 24 saatte en çok 3 yeniden başlatma (sonrakiler yalnız reclaim)", yapilan == [True, True, True, False, False],
         yapilan)
 cg_yaz(0.9)
 YENIDEN.clear()
-bb.bakim(AD, simdi=T + 86400 + 10)
+bakim_at(86400 + 10)
 kontrol("B3: 24 saat dolunca sınır açılır", YENIDEN == ["/k/a"])
 
 # ---------------------------------------------------------------- reclaim
 sifirla()
 cg_yaz(0.65)
 SON["t"] = T - 130
-s1 = bb.bakim(AD, simdi=T)
+s1 = bakim_at(0)
 reclaim_bosalt()
-s2 = bb.bakim(AD, simdi=T + 300)
-s3 = bb.bakim(AD, simdi=T + 601)
+s2 = bakim_at(300)
+s3 = bakim_at(601)
 kontrol("reclaim 10 dk'da bir (boşta + ≥0,60): 0. sn evet, 300. sn hayır, 601. sn evet",
         s1 and s1["is"] == "reclaim" and s2 is None and s3 and s3["is"] == "reclaim" and reclaim_icerik() == "512M",
         (s1, s2, s3))
@@ -248,7 +256,7 @@ sifirla()
 os.unlink(os.path.join(CGD, "memory.reclaim"))
 os.mkdir(os.path.join(CGD, "memory.reclaim"))  # yazılamaz → reclaim başarısız
 cg_yaz(0.65)
-s = bb.bakim(AD, simdi=T)
+s = bakim_at(0)
 os.rmdir(os.path.join(CGD, "memory.reclaim"))
 cg_yaz(0.65)
 kontrol("NIT: başarısız reclaim günlüğe başarısız diye yazılır", s and s["ok"] is False
@@ -256,13 +264,13 @@ kontrol("NIT: başarısız reclaim günlüğe başarısız diye yazılır", s an
 sifirla()
 cg_yaz(0.65)
 SON["t"] = T - 60
-kontrol("boşta değilken (60 sn) reclaim yok", bb.bakim(AD, simdi=T) is None and reclaim_icerik() == "")
+kontrol("boşta değilken (60 sn) reclaim yok", bakim_at(0) is None and reclaim_icerik() == "")
 cg_yaz(0.5)
 SON["t"] = T - 1000
-kontrol("oran 0,5 → reclaim yok", bb.bakim(AD, simdi=T) is None and reclaim_icerik() == "")
+kontrol("oran 0,5 → reclaim yok", bakim_at(0) is None and reclaim_icerik() == "")
 bb._engel = lambda ad, d=None: "devral"
 cg_yaz(0.95)
-kontrol("Devral / bekleyen onay → bakım yok", bb.bakim(AD, simdi=T) is None and not YENIDEN and reclaim_icerik() == "")
+kontrol("Devral / bekleyen onay → bakım yok", bakim_at(0) is None and not YENIDEN and reclaim_icerik() == "")
 
 # B2: görev masaüstünde yeniden başlatma/reclaim yok
 bb._engel = GERCEK_ENGEL
@@ -271,7 +279,7 @@ cg_yaz(0.95)
 SON["t"] = T - 1000
 D["gorev"] = {"kimlik": "g1"}
 kontrol("B2: görevli masaüstünde (d.gorev) _engel 'gorev', yeniden başlatma ve reclaim yok",
-        bb._engel(AD, dict(D)) == "gorev" and bb.bakim(AD, simdi=T) is None and not YENIDEN and reclaim_icerik() == "")
+        bb._engel(AD, dict(D)) == "gorev" and bakim_at(0) is None and not YENIDEN and reclaim_icerik() == "")
 D.pop("gorev")
 kontrol("B2: görev yokken gerçek _engel engellemez", bb._engel(AD, dict(D)) is None)
 bb._engel = lambda ad, d=None: None
@@ -288,6 +296,65 @@ kaynak_m = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
                 encoding="utf-8").read()
 kontrol("B5: masaustu_durdur bekçi durumunu temizler",
         re.search(r"def masaustu_durdur.*?bellek_bekcisi\.durum_temizle\(ad\).*?\ndef ", kaynak_m, re.S) is not None)
+
+# N2: sayaçlar masaüstü kimliğine bağlı (çökmüş masaüstünden kalan durum dosyası yeni masaüstüne geçmez)
+for kim, beklenen, ad_ in (("eski", ["/k/a"], "başka kimliğin (çökmüş masaüstü) sayaçları yok sayılır → yeniden başlatılır"),
+                           ("test", [], "aynı kimliğin sayaçları geçerli → yeniden başlatma yok")):
+    sifirla()
+    cg_yaz(0.9)
+    SON["t"] = T - 1000
+    bb._durum_yaz(AD, {"kimlik": kim, "acilis": bb._acilis(), "geri_cekilme_sn": 7200.0, "geri_cekilme_bitis": M + 7000,
+                       "yeniden_gecmis": [M - 10, M - 20, M - 30], "son_yeniden": M - 10})
+    bakim_at(0)
+    kontrol(f"N2: {ad_}", beklenen == YENIDEN, (YENIDEN, bb._durum_oku(AD)))
+sifirla()
+cg_yaz(0.9)
+bb._durum_yaz(AD, {"kimlik": "test", "acilis": "baska-acilis", "geri_cekilme_bitis": M + 7000, "son_yeniden": M - 10})
+bakim_at(0)
+kontrol("N2: önceki açılışın (boot) süre damgaları yok sayılır", YENIDEN == ["/k/a"], YENIDEN)
+
+# N3: geri çekilmeye üst sınır (24 sa); süreler süre saatiyle (duvar saati sıçraması etkilemez)
+sifirla()
+cg_yaz(0.9)
+SON["t"] = T - 1000
+ETKI["sonra"] = 0.88
+bb._durum_yaz(AD, {"kimlik": "test", "acilis": bb._acilis(), "geri_cekilme_sn": 4 * 86400.0})
+bakim_at(0)
+k = bb._durum_oku(AD)
+kontrol("N3: geri çekilme 24 sa'yı geçmez (önceki 4 gün → 24 sa)", YENIDEN == ["/k/a"]
+        and k.get("geri_cekilme_sn") == bb.GERI_CEKILME_AZAMI_SN == 86400.0
+        and k.get("geri_cekilme_bitis") == M + 86400.0, k)
+sifirla()
+cg_yaz(0.9)
+bb._durum_yaz(AD, {"kimlik": "test", "acilis": bb._acilis(), "geri_cekilme_sn": 3600.0, "geri_cekilme_bitis": M + 10 * 86400})
+bakim_at(0)
+kontrol("N3: sınırı aşan (bozuk/ileri) geri çekilme damgası geçersiz sayılır", YENIDEN == ["/k/a"], bb._durum_oku(AD))
+sifirla()
+cg_yaz(0.9)
+ETKI["sonra"] = 0.88
+bakim_at(0)  # etkisiz → 60 dk geri çekilme
+YENIDEN.clear()
+cg_yaz(0.9)
+SON["t"] = T + 365 * 86400 - 1000
+bakim_at(700, duvar=365 * 86400)  # duvar saati 1 yıl ileri sıçradı, süre saatinde 700 sn geçti
+ileri = list(YENIDEN)
+cg_yaz(0.9)
+SON["t"] = T - 30 * 86400 - 1000
+bakim_at(3700, duvar=-30 * 86400)  # duvar saati 30 gün geri; süre saatinde 3700 sn geçti
+kontrol("N3: duvar saati ileri sıçraması geri çekilmeyi atlatmaz, geri sıçraması uzatmaz",
+        ileri == [] and YENIDEN == ["/k/a"], (ileri, YENIDEN))
+ETKI["sonra"] = 0.5
+
+# N5: bosta_neden bekleyen yeniden başlatmayı görür (doğrulama sürerken masaüstü boşta kapatılmaz)
+sifirla()
+SON["t"] = T - 7200
+bos_once = masaustu.bosta_neden(AD, simdi=T)
+bb._durum_yaz(AD, {"kimlik": "test", "acilis": bb._acilis(), "bekleyen": {"mono": bb._mono(), "kimlik": "test",
+                                                                        "id": "b1", "kopyalar": []}})
+bos_bekle = masaustu.bosta_neden(AD, simdi=T)
+kontrol("N5: bekleyen yeniden başlatma varken bosta_neden kapatmaz", bos_once is None and bos_bekle == "bellek-yeniden",
+        (bos_once, bos_bekle))
+sifirla()
 
 # ---------------------------------------------------------------- başlatma kaydı
 kopya = tempfile.mkdtemp(prefix="kopya-", dir=_yalitim.GECICI)
@@ -345,6 +412,8 @@ def sahte_baslat(argv, env=None, kopya=None, ev=(), **k):
 
 masaustu.baslat = sahte_baslat
 bb.firefox_yeniden_baslat = GERCEK_YENIDEN
+bb._kayit_canli = GERCEK_CANLI
+bb.KAPANIS_PAYI_SN = 0.5
 bb.ACILIS_SN = 3.0
 bb.DOGRULA_SN = 1.0
 bb.KAPANIS_SN = 3.0
@@ -486,6 +555,116 @@ en_kotu = bb.AZAMI_KAYIT * (bb.KAPANIS_AZAMI_SN + bb.ESKI_BEKLE_SN)
 kontrol("B4: 3 kayıtta kilitli kısım KILIT_BEKLE'yi aşmaz (ölçülen + en kötü durum sınırı)",
         SAHTE["baslat"] == 3 and sure < 10 and en_kotu < kilit_bekle and all(olu(p_) for _k, p_ in uc),
         (sure, en_kotu, kilit_bekle, SAHTE))
+for q in SUREC:
+    if q.poll() is None:
+        q.kill()
+
+
+def kayit_kopyalari():
+    return [g.get("kopya") for g in bb._kayitlar(CALISMA)]
+
+
+# N1: ölü kayıtlar bakım yuvalarını yemez: 3 Firefox kapandı, 4. canlı Firefox yeniden başlatılır; ölüler budanır
+SAHTE["mod"], SAHTE["baslat"] = "normal", 0
+dort = kurulum(n=4)
+import shutil  # noqa: E402
+for i, (k_, p_) in enumerate(dort[:3]):
+    p_.kill()
+    olu(p_)
+    if i < 2:
+        shutil.rmtree(k_)  # kopya silinmiş (kopya-yok); üçüncünün kopyası duruyor ama Firefox'u kapalı
+canli_ky, canli_p = dort[3]
+bb._ONBELLEK.clear()
+u_once = bb.uyari_metni(AD) or ""
+s = bb.bakim(AD, simdi=time.time())
+bitir()
+kontrol("N1: 3 Firefox kapandı, 4. canlı Firefox yeniden başlatılır",
+        s and s.get("is") == "firefox_yeniden" and SAHTE["baslat"] == 1 and olu(canli_p)
+        and "boşta kalınca Firefox" in u_once, (s, SAHTE, u_once))
+kontrol("N1: ölü kayıtlar tarayicilar.json'dan budanır (canlı kayıt kalır)",
+        kayit_kopyalari() == [canli_ky], kayit_kopyalari())
+for q in SUREC:
+    if q.poll() is None:
+        q.kill()
+time.sleep(0.2)
+bb._durum_yaz(AD, {})  # 10 dk / 24 sa sayaçları sıfır: yalnız kayıtların canlılığı belirlesin
+bb._ONBELLEK.clear()
+cg_yaz(0.9)
+u_olu = bb.uyari_metni(AD) or ""
+kontrol("N1: yalnız ölü kayıt varken uyarı 'yeniden başlatılır' demez",
+        "boşta kalınca Firefox" not in u_olu and "gereksiz sekme" in u_olu, u_olu)
+
+# N6: kurtarma dosyası eski (boşta Firefox) → günlük 10 dk'da bir değil, yalnız durum değişince
+(ky, p0), = kurulum(kurtarma=False)
+SAHTE["baslat"] = 0
+say0 = gunluk_metni().count("yeniden başlatılmadı")
+bb.bakim(AD, simdi=time.time())
+say1 = gunluk_metni().count("yeniden başlatılmadı")
+bb.bakim(AD, simdi=time.time(), mono=bb._mono() + 700)
+bb.bakim(AD, simdi=time.time(), mono=bb._mono() + 1400)
+say2 = gunluk_metni().count("yeniden başlatılmadı")
+bb._ONBELLEK.clear()
+kontrol("N6: aynı 'kurtarma yok' durumu günlüğe bir kez yazılır (uyarı sürer)",
+        say1 == say0 + 1 and say2 == say1 and "yeniden başlatılmadı" in (bb.uyari_metni(AD) or ""), (say0, say1, say2))
+p0.kill()
+
+# N4: bayat-bekleyen dalı canlı doğrulama iş parçacığını bekler; doğrulama tek kez sonuçlanır
+(ky, p0), = kurulum()
+SAHTE["mod"], SAHTE["baslat"] = "normal", 0
+bb.DOGRULA_SN = 2.0
+say0 = gunluk_metni().count("Firefox yeniden başlatıldı")
+bb.bakim(AD, simdi=time.time())
+gercek_mono = bb._mono
+bb._mono = lambda: gercek_mono() + 400  # uyku / saat sıçraması: bekleyen 180 sn'den eski görünür
+s_bayat = bb.bakim(AD, simdi=time.time())
+bb._mono = gercek_mono
+bitir()
+say1 = gunluk_metni().count("Firefox yeniden başlatıldı")
+kontrol("N4: iş parçacığı canlıyken bayat-bekleyen dalı sonuçlandırmaz; sonuç tek kez yazılır",
+        s_bayat is None and say1 == say0 + 1 and "bekleyen" not in bb._durum_oku(AD), (s_bayat, say0, say1))
+bb.DOGRULA_SN = 1.0
+k_ = bb._durum_oku(AD)
+k_["bekleyen"] = {"mono": bb._mono() - 1000, "kimlik": "test", "id": "x1", "once_current": 1, "once_kullanim": 1,
+                  "kopyalar": [{"kopya": ky, "pid": 1, "sekme": 1, "olduruldu": True}]}
+bb._durum_yaz(AD, k_)
+say0 = gunluk_metni().count("Firefox yeniden başlatıldı")
+bb.bakim(AD, simdi=time.time())  # iş parçacığı yok (süreç ölmüş gibi): bayat dal sonuçlandırır
+ikinci = bb._sonuclandir(AD, dict(D), {"current": 1, "kullanim": 1}, [({"pid": 1}, {"ok": True, "kopya": ky})],
+                         bb._mono(), bekleyen_id="x1")
+kontrol("N4: aynı bekleyen ikinci kez sonuçlandırılmaz (bayat dal + geç gelen iş parçacığı)",
+        ikinci is None and gunluk_metni().count("Firefox yeniden başlatıldı") == say0 + 1,
+        (ikinci, gunluk_metni().count("Firefox yeniden başlatıldı") - say0))
+for q in SUREC:
+    if q.poll() is None:
+        q.kill()
+
+# N5: doğrulama bitmeden masaüstü kapandı → sahte "yeniden başlatılamadı" yok; başarılı açılışın işareti kalkar
+(ky, p0), = kurulum()
+SAHTE["mod"], SAHTE["baslat"] = "normal", 0
+bb.DOGRULA_SN = 3.0
+bb.bakim(AD, simdi=time.time())
+bb._bekle(lambda: kopya_bekcisi.koru_durum(ky) == "acildi", 3.0)
+acildi = kopya_bekcisi.koru_durum(ky)
+GERCEK_DURUM = masaustu.durum
+masaustu.durum = lambda *a, **k: None  # masaüstü kapandı (durum kaydı yok)
+for q in SUREC:  # kapanış uygulamaları öldürür
+    if q.poll() is None:
+        q.kill()
+bitir()
+masaustu.durum = GERCEK_DURUM
+bb._ONBELLEK.clear()
+h = bb._durum_oku(AD).get("son_hata_olay")
+kontrol("N5: açıldıktan sonra masaüstü kapandı → hata kaydı/uyarısı yok; işaret 'acildi' (kapanış olağan siler)",
+        acildi == "acildi" and h is None and "yeniden başlatılamadı" not in (bb.uyari_metni(AD) or ""), (acildi, h))
+(ky, p0), = kurulum()
+bb._sonuclandir(AD, dict(D), {"current": 1, "kullanim": 1}, [({"pid": 1}, {"ok": True, "kopya": ky})], bb._mono())
+kopya_bekcisi.koru_isaretle(ky, "bellek-yeniden")
+masaustu.durum = lambda *a, **k: None
+bb._sonuclandir(AD, dict(D), {"current": 1, "kullanim": 1}, [({"pid": 1}, {"ok": True, "kopya": ky})], bb._mono())
+masaustu.durum = GERCEK_DURUM
+kontrol("N5: başarılı yeniden başlatmanın koruma işareti masaüstü kapanmış olsa da kalkar",
+        not kopya_bekcisi.korunuyor(ky))
+bb.DOGRULA_SN = 1.0
 for q in SUREC:
     if q.poll() is None:
         q.kill()

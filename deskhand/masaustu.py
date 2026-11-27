@@ -440,6 +440,12 @@ def bosta_neden(ad: str | None = None, simdi: float | None = None) -> str | None
             return "onay"
     except Exception:  # noqa: BLE001 - karar verilemedi: kapatma
         return "onay?"
+    try:  # bellek bekçisinin doğrulaması süren Firefox yeniden başlatması: kapanış onu "başarısız" gösterirdi
+        from . import bellek_bekcisi
+        if bellek_bekcisi.bekleyen_var(ad, d):
+            return "bellek-yeniden"
+    except Exception:  # noqa: BLE001 - karar verilemedi: kapatma
+        return "bellek?"
     son = son_kullanim(ad)
     simdi = time.time() if simdi is None else simdi
     if son is None or simdi - son < dk * 60:

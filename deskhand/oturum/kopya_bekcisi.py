@@ -90,14 +90,19 @@ def sahip_yaz(yol: str, kayit: dict) -> None:
             pass
 
 
-def koru_isaretle(yol: str, neden: str) -> None:
+KORU_DURUMLARI = ("bekliyor", "acildi", "basarisiz")
+
+
+def koru_isaretle(yol: str, neden: str, durum: str = "bekliyor") -> None:
     """Kopyayı silinmeye karşı işaretle (ör. bellek bekçisinin bekleyen ya da başarısız Firefox yeniden başlatması: oturum
-    yedeği kopyanın içinde). İşaret KORU_AZAMI sn geçerlidir; sonra kopya yine süpürülebilir (tmpfs dolmasın)."""
+    yedeği kopyanın içinde). İşaret KORU_AZAMI sn geçerlidir; sonra kopya yine süpürülebilir (tmpfs dolmasın). durum:
+    bekliyor (doğrulama sürüyor) | acildi (yeni Firefox göründü, doğrulama sürüyor) | basarisiz; masaüstü kapanışı
+    (oturum._kapanis_ic) buna göre siler ya da korur."""
     gecici = os.path.join(yol, f"{KORU_DOSYA}.{os.getpid()}.tmp")
     try:
         fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump({"neden": str(neden), "zaman": time.time(), "pid": os.getpid()}, f)
+            json.dump({"neden": str(neden), "durum": str(durum), "zaman": time.time(), "pid": os.getpid()}, f)
         os.replace(gecici, os.path.join(yol, KORU_DOSYA))
     except OSError:
         try:
@@ -113,19 +118,28 @@ def koru_kaldir(yol: str) -> None:
         pass
 
 
-def korunuyor(yol: str) -> bool:
-    """Kopyada geçerli (KORU_AZAMI sn'den yeni) koruma işareti var mı? Okunamayan işaret dosyanın yaşıyla değerlendirilir."""
+def koru_durum(yol: str) -> str | None:
+    """Geçerli (KORU_AZAMI sn'den yeni) koruma işaretinin durumu (bekliyor | acildi | basarisiz) ya da None. Okunamayan
+    işaret dosyanın yaşıyla değerlendirilir; durumu olmayan/tanınmayan işaret "basarisiz" sayılır (güvenli taraf)."""
     isaret = os.path.join(yol, KORU_DOSYA)
     try:
         st = os.lstat(isaret)
     except OSError:
-        return False
+        return None
+    durum = "basarisiz"
     try:
         with open(isaret, encoding="utf-8") as f:
-            zaman = float(json.load(f).get("zaman"))
+            v = json.load(f)
+        zaman = float(v.get("zaman"))
+        durum = v.get("durum") if v.get("durum") in KORU_DURUMLARI else "basarisiz"
     except (OSError, ValueError, TypeError, AttributeError):
         zaman = st.st_mtime
-    return time.time() - zaman < KORU_AZAMI
+    return durum if time.time() - zaman < KORU_AZAMI else None
+
+
+def korunuyor(yol: str) -> bool:
+    """Kopyada geçerli (KORU_AZAMI sn'den yeni) koruma işareti var mı?"""
+    return koru_durum(yol) is not None
 
 
 def kullanilanlar(yollar) -> set[str]:

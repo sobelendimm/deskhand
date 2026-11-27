@@ -1744,5 +1744,6 @@
  "başlatma reddedildi": "start was refused",
  "beklenmedik hata": "unexpected error",
  "doğrulama tamamlanamadı": "verification could not finish",
- "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatılamadı); oturum yedeği: {yedek}": "session: copy {ad} was kept (Firefox could not be restarted); session backup: {yedek}"
+ "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatılamadı); oturum yedeği: {yedek}": "session: copy {ad} was kept (Firefox could not be restarted); session backup: {yedek}",
+ "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatması doğrulanmadan masaüstü kapandı); oturum yedeği: {yedek}": "session: copy {ad} was kept (the desktop stopped before the Firefox restart was verified); session backup: {yedek}"
 }
