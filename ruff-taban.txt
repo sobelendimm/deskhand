@@ -1,6 +1,5 @@
 # ruff baseline for tools/kontrol.sh: one line per finding, "file:code" (generated 2026-11-27 with tools/kontrol.sh --taban-uret).
 # Findings listed here do not block a commit; new ones do. Do not add new findings by hand: fix them.
-deskhand/api.py:B007
 deskhand/api.py:E741
 deskhand/api.py:F401
 deskhand/api.py:F401
