@@ -740,12 +740,158 @@ def tum_pencereler():
     return set(kimlikler()) if kimlikler else {w for w, _, _ in au.pencereler()}
 
 
+# ---------------------------------------------------------------- ABM-F3: aynı süreçte 2. pencere
+
+# Firefox'un ilk açılışında atılan bayraklar: uzaktan komut sunucusu açık kalsın ki aynı profille gelen 2. `open`
+# çalışan sürece "yeni pencere" diye iletilsin. Güvenli: her kopyanın profil yolu ayrı; sunucuya yalnız aynı ad
+# alanından (nsenter, arka_ortak.kumda_baslat) ulaşılır, kullanıcının Firefox'u ayrı veri yolu/ad alanında.
+_UZAK_KAPATAN = ("--no-remote", "-no-remote", "--new-instance", "-new-instance")
+YENI_PENCERE_BEKLE_SN = 10.0  # istemci (2. pencere isteği) bu sürede 0 ile çıkmazsa ayrı süreçle açılır
+
+
+def _tarayici_turu(argv) -> str | None:
+    """Kopyalı arka plan tarayıcısı türü: "firefox" (yerli Gecko, --profile) | "chromium" (yerli, --user-data-dir)."""
+    asil = _asil_komut(argv)
+    if not asil:
+        return None
+    ad = os.path.basename(asil[0]).lower()
+    if ad in FIREFOX_IKILILERI and any(a in ("--profile", "-profile") for a in asil):
+        return "firefox"
+    if ad in CHROMIUM_IKILILERI and ad not in _ELECTRON_IKILILERI and \
+            any(str(a).startswith("--user-data-dir=") for a in asil):
+        return "chromium"
+    return None
+
+
+_ELECTRON_IKILILERI = {"code", "code-oss", "codium", "vscodium", "cursor", "discord", "vesktop", "slack",
+                       "signal-desktop", "obsidian", "spotify", "teams-for-linux", "ferdium", "element-desktop",
+                       "bitwarden", "postman", "insomnia", "typora", "mattermost-desktop", "joplin-desktop",
+                       "figma-linux", "notion-app"}
+
+
+def uzak_acik(argv) -> list:
+    """Firefox komutundan uzaktan komutu kapatan bayrakları at (diğer komutlar aynen)."""
+    argv = list(argv)
+    if _tarayici_turu(argv) != "firefox":
+        return argv
+    return [a for a in argv if a not in _UZAK_KAPATAN]
+
+
+def _belgeler(argv) -> list:
+    """Komuttaki belge/adres argümanları (program, seçenekler ve --profile değeri hariç)."""
+    out, atla = [], False
+    for a in list(argv)[1:]:
+        if atla:
+            atla = False
+        elif a in ("--profile", "-profile"):
+            atla = True
+        elif not str(a).startswith("-"):
+            out.append(a)
+    return out
+
+
+def yeni_pencere_argv(tur: str, kopya: str, argv) -> list:
+    """Çalışan tarayıcıya (kopya) 'yeni pencere' isteği gönderen istemci komutu; argv'deki belgeler taşınır."""
+    exe = _asil_komut(argv)[0]
+    profil = ["--profile", kopya] if tur == "firefox" else [f"--user-data-dir={kopya}"]
+    return [exe, *profil, "--new-window", *_belgeler(_asil_komut(argv))]
+
+
+def _ana_tarayici(d: dict, tur: str, haric: str | None) -> tuple[int, str] | None:
+    """Bu masaüstünün kafesinde, oturum kopyasıyla çalışan ANA tarayıcı süreci (Firefox: uzaktan komut açık) →
+    (pid, kopya) | None. Kopya yalnız bu masaüstünün kopya kökünün doğrudan alt dizini olabilir."""
+    from . import bellek_bekcisi
+    from .oturum import politika
+    kok = os.path.realpath(politika.kopya_dizini())
+    haric_g = os.path.realpath(haric) if haric else None
+    for pid in bellek_bekcisi._kafes_pidleri(d.get("cgroup") or ""):
+        a = bellek_bekcisi._argv(pid)
+        a = " ".join(a).split() if a and " " in a[0] else a  # Chromium argv'yi tek dizgeye yeniden yazar
+        if not a or _tarayici_turu(a) != tur:
+            continue
+        if tur == "firefox":
+            if "-contentproc" in a or any(x in _UZAK_KAPATAN for x in a):
+                continue
+            kp = bellek_bekcisi._profil(a)
+        else:
+            if any(x.startswith("--type=") for x in a):
+                continue
+            kp = next((x.split("=", 1)[1] for x in a if x.startswith("--user-data-dir=")), None)
+        if not kp:
+            continue
+        g = os.path.realpath(kp)
+        if g != haric_g and os.path.dirname(g) == kok and os.path.isdir(g) and not os.path.islink(kp):
+            return pid, kp
+    return None
+
+
+def ayni_surecte_ac(komut, kopya, env, fp):
+    """Arka planda aynı masaüstünde aynı türden kopyalı tarayıcı çalışıyorsa 2. `open` onun SÜRECİNDE yeni pencere
+    açar (aynı kum havuzu/profil; yeni tmpfs ev yok): istemci çalışan sürecin ad alanında (nsenter) başlar, isteği
+    iletip çıkar. Başarıda politikanın bu açılış için hazırladığı yeni kopya silinir, F1 başlatma kaydı ve kopya
+    sahibi DEĞİŞMEZ (yeni pencere kayıttaki sürecin içindedir; yeniden başlatma oturumla geri getirir).
+    → istemci Popen | None (çalışan yok / istemci başarısız: çağıran ayrı süreçle açar)."""
+    import subprocess
+    from . import arka_ortak, gorev_kipi, masaustu
+    tur = _tarayici_turu(komut)
+    if not tur or not kopya:
+        return None
+    d = masaustu.gerekli()
+    hedef = _ana_tarayici(d, tur, kopya)
+    if hedef is None:
+        return None
+    gorev_kipi.masaustu_kapisi(d)  # masaustu.baslat ile aynı kapılar: görev masaüstü, doğrulanmış bağlantı
+    d = masaustu.baglanti_denetle(d)
+    pid, eski = hedef
+    argv = yeni_pencere_argv(tur, eski, komut)
+    if masaustu.tur(d) == "kwin" and d.get("xwayland"):  # istemci çalışan süreçle aynı görüntü yolundan (XWayland)
+        from . import kwin_oturum
+        argv, chromium_env = kwin_oturum.chromium_x11(argv)
+        env = {**kwin_oturum.gecko_ipuclari(argv), **chromium_env, **(env or {})}
+    p = arka_ortak.kumda_baslat(d, pid, argv, masaustu.uygulama_ortami(d, env), stdout=fp, stderr=fp)
+    try:
+        kod = p.wait(YENI_PENCERE_BEKLE_SN)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.wait()
+        kod = None
+    if kod != 0:
+        gunluk(f"ac | 2. pencere istemcisi başarısız ({kod}); ayrı süreç açılıyor")
+        return None
+    from . import oturum
+    oturum.temizle(kopya)
+    gunluk(f"ac | 2. pencere aynı süreçte | pid {pid} | {os.path.basename(eski)}")
+    return p
+
+
+def flatpak_tarayici_denetle(komut) -> None:
+    """Arka planda Flatpak tarayıcısı (Chrome…) başlatılmaz: hemen Dur(16) + kök neden + öneri (pencere beklenmez)."""
+    from .oturum import chromium
+    from .oturum.cozum import _flatpak_kimligi
+    from .hata import OTURUM_POLITIKASI
+    asil = _asil_komut(komut)
+    if len(komut) >= 3 and os.path.basename(komut[0]) == "gio" and komut[1] == "launch":
+        asil = _asil_komut(_desktop_exec(komut[2]))
+    kimlik = _flatpak_kimligi(asil)[0] if asil else None
+    if kimlik and chromium.flatpak_tarayici_mi(kimlik):
+        raise Dur(OTURUM_POLITIKASI, chromium.flatpak_tarayici_nedeni(kimlik))
+
+
 def _baslat(au, komut, fp, env=None, kopya=None, girdi=None, ev=()):
     """Arka ucun oturumunda başlat; arka uç çıktı dosyası destekliyorsa stdout/stderr oraya. kopya: oturum
     politikasının kopyası (yalnız arka plan arka uçları alır; ad alanına yalnız o bağlanır); girdi: onaylı kullanıcı
     girdisinin özel .desktop kopyası (arka planda ad alanına salt okunur bağlanır: RUNTIME_DIR orada boştur); ev:
-    politikanın uygulama başına ev dizini beyaz liste girdileri (yalnız arka plan arka uçları alır)."""
+    politikanın uygulama başına ev dizini beyaz liste girdileri (yalnız arka plan arka uçları alır).
+    Arka planda (ABM-F3): Flatpak tarayıcısı → Dur 16; aynı türden kopyalı tarayıcı çalışıyorsa yeni pencere o
+    süreçte (ayni_surecte_ac); Firefox ilk açılışta uzaktan komut açık başlar (uzak_acik)."""
     p = inspect.signature(au.baslat).parameters
+    if "kopya" in p:  # arka plan arka uçları (sanal: kwin | xvfb)
+        flatpak_tarayici_denetle(komut)
+        if kopya:
+            komut = uzak_acik(komut)
+            yp = ayni_surecte_ac(komut, kopya, env, fp)
+            if yp is not None:
+                return yp
     ek = {"kopya": kopya} if kopya and "kopya" in p else {}
     if girdi and "girdi" in p:
         ek["girdi"] = girdi
@@ -765,6 +911,9 @@ def oturum_hazirla(uygulama, siteler=None, ham_komut=False):
     from . import oturum
     from .hata import OTURUM_POLITIKASI
     h = oturum.hazirla(uygulama, siteler or None, ham_komut=ham_komut)
+    if not ham_komut:  # ABM-F3: Flatpak tarayıcısı → 16 + kök neden; yerli chromium → boş profil kopyası
+        from .oturum import chromium
+        h = chromium.on_karari(h) or h
     if h.karar == "kapali":
         raise Dur(10, _("{uygulama}: oturum politikası 'kapali'").format(uygulama=uygulama)
                   + (f" ({h.aciklama})" if h.aciklama else ""))

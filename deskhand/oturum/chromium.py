@@ -58,13 +58,69 @@ def veri_dizini_kopyala(kaynak: str, hedef: str, profil: str = "Default") -> dic
     return {"kopyalanan": sayac}
 
 
-def chromium_argv(uygulama: str, hedef: str, ek=None) -> list[str]:
-    """Yerel Chromium ailesi başlatma argümanları (köprü eklendiğinde kullanılmak üzere). Başlatmaz."""
+def chromium_argv(uygulama: str, hedef: str, ek=None, parola_deposu: str | None = None) -> list[str]:
+    """Yerel Chromium ailesi başlatma argümanları. parola_deposu verilmezse anahtar_deposu (köprü için). Başlatmaz."""
     exe = {"chromium": "chromium", "vivaldi": "vivaldi", "chrome": "google-chrome-stable",
            "brave": "brave"}.get(uygulama, uygulama)
-    return [exe, f"--user-data-dir={hedef}", f"--password-store={anahtar_deposu(uygulama)}",
+    return [exe, f"--user-data-dir={hedef}", f"--password-store={parola_deposu or anahtar_deposu(uygulama)}",
             "--disable-sync", "--no-first-run", "--no-default-browser-check",
             f"--disk-cache-size={DISK_CACHE_BAYT}", *(ek or [])]
+
+
+# ------------------------------------------------------------------ (A2) yerli Chromium: BOŞ profil (ABM-F3)
+# Kullanıcının profili kopyalanmaz (çerez/parola anahtarlıkta şifreli; röle yazılmaz: N1b). Boş --user-data-dir +
+# --password-store=basic: Chromium anahtarlığa HİÇ gitmez → kullanıcının "Chromium Safe Storage" kaydı ezilemez.
+# Yalnız Flatpak OLMAYAN `chromium` politikası (ölçüldü: rapor-ABM-OLC S5). Chrome/Brave/Vivaldi değişmez ("on").
+YERLI_DESTEKLI = ("chromium",)
+
+# Flatpak tarayıcıları görünmez masaüstünde AÇILMAZ (rapor-ABM-OLC: com.google.Chrome ölçüldü; aynı başlatıcı düzeni)
+FLATPAK_TARAYICILARI = ("com.google.Chrome", "org.chromium.Chromium", "com.brave.Browser", "com.vivaldi.Vivaldi",
+                        "com.microsoft.Edge", "com.opera.Opera", "io.github.ungoogled_software.ungoogled_chromium")
+
+
+def yerli_hazirla(uygulama: str = "chromium", ek=None) -> dict:
+    """Yerli Chromium için BOŞ profil kopyası (tmpfs, kopya kökünde; kopya bekçisi ve kapanış onu siler) + argv
+    (erişilebilirlik bayrağıyla). → {kopya_yolu, argv, not}. Başlatmaz."""
+    from ..uygulama import ERISIM_BAYRAGI
+    hedef = kopya_mod.yeni_kopya_dizini(uygulama)
+    kopya_mod.izinleri_daralt(hedef)
+    return {"kopya_yolu": hedef, "argv": chromium_argv(uygulama, hedef, [ERISIM_BAYRAGI, *(ek or [])], "basic"),
+            "not": _("{ad} boş profille açıldı: kayıtlı girişler yok (şifre deposu rölesi yok, anahtarlığa "
+                     "dokunulmaz)").format(ad=uygulama.capitalize())}
+
+
+def flatpak_tarayici_nedeni(kimlik: str) -> str:
+    """Flatpak tarayıcısının görünmez masaüstünde açılmama kök nedeni + öneri (kod 16 iletisi)."""
+    return _("{kimlik} (Flatpak) görünmez masaüstünde açılmaz: kök neden, ad alanındaki boş ev dizininde "
+             "~/.var/app/{kimlik} yok ve Flatpak başlatıcısının X yetkisi yok; başlatıcı iç içe bwrap'ten önce çıkıyor "
+             "(ölçüldü). Öneri: yerli chromium kullanın (open chromium; boş profil, kayıtlı girişler yok) ya da "
+             "Ekranımda yap.").format(kimlik=kimlik)
+
+
+def flatpak_tarayici_mi(kimlik: str | None) -> bool:
+    return bool(kimlik) and kimlik in FLATPAK_TARAYICILARI
+
+
+def on_karari(h):
+    """oturum.hazirla'nın "on" kararı (şifre deposu gerektiren tarayıcı) için ABM-F3 kuralı:
+      - çözüm bir Flatpak tarayıcısıysa → Dur(16) + kök neden + "yerli chromium" önerisi (hemen; başlatma denenmez);
+      - YALNIZ yerli `chromium` politikasına uyuyorsa → Hazirlik(kopya): boş profil, a11y bayrağı, "kayıtlı girişler yok";
+      - başka her durumda None (karar aynen kalır). h "on" değilse None."""
+    from ..hata import OTURUM_POLITIKASI, Dur
+    if getattr(h, "karar", None) != "on":
+        return None
+    ayr = getattr(h, "ayrinti", None) or {}
+    flatpaklar = list((ayr.get("cozum") or {}).get("flatpak") or [])
+    for fk in flatpaklar:
+        if flatpak_tarayici_mi(fk):
+            raise Dur(OTURUM_POLITIKASI, flatpak_tarayici_nedeni(fk))
+    politikalar = list(ayr.get("politikalar") or [])
+    if flatpaklar or not politikalar or any(p not in YERLI_DESTEKLI for p in politikalar):
+        return None
+    b = yerli_hazirla(politikalar[0])
+    from . import Hazirlik
+    return Hazirlik(karar="kopya", argv=b["argv"], kopya_yolu=b["kopya_yolu"], aciklama=b["not"],
+                    gerekli_keyring=False, ayrinti={**ayr, "yerli_bos_profil": True})
 
 
 # ------------------------------------------------------------------ (B) Flatpak Electron (köprüsüz)

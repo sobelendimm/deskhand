@@ -125,6 +125,55 @@ r2 = ad_alani('ls -A "$HOME/.config/chromium/" | wc -l')
 kontrol("birim: başka bir başlatma önceki başlatmanın yazdığını görmez (ad alanına özel)", r2.stdout.strip() == "0",
         r2.stdout + r2.stderr)
 
+# ---------------------------------------------------------------- A2) ABM-F3 birim: tarayıcı kararları (ekransız)
+from deskhand import uygulama  # noqa: E402
+from deskhand.hata import Dur  # noqa: E402
+from deskhand.oturum import Hazirlik  # noqa: E402
+
+yk = chromium.yerli_hazirla("chromium", ["about:blank"])
+kontrol("F3 birim: yerli Chromium boş profil kopyası + --password-store=basic (anahtarlık rölesi yok)",
+        os.path.isdir(yk["kopya_yolu"]) and not {"Default", "Local State"} & set(os.listdir(yk["kopya_yolu"])) and
+        "--password-store=basic" in yk["argv"] and not any("kwallet" in a for a in yk["argv"]) and
+        f"--user-data-dir={yk['kopya_yolu']}" in yk["argv"], str(yk))
+kontrol("F3 birim: yerli Chromium erişilebilirlik bayrağıyla açılır", uygulama.ERISIM_BAYRAGI in yk["argv"], str(yk))
+kontrol("F3 birim: yerli Chromium notu 'kayıtlı girişler yok' der", "kayıtlı girişler yok" in yk["not"], yk["not"])
+kopya.temizle(yk["kopya_yolu"])
+
+
+def _on(politikalar, flatpak=()):
+    return Hazirlik(karar="on", aciklama="eski", gerekli_keyring=True,
+                    ayrinti={"politikalar": list(politikalar), "cozum": {"flatpak": list(flatpak)}})
+
+
+t0 = time.monotonic()
+try:
+    chromium.on_karari(_on(["chrome"], ["com.google.Chrome"]))
+    e = None
+except Dur as x:
+    e = x
+kontrol("Flatpak Chrome (birim): 30 sn içinde kod 16 + kök neden + yerli chromium önerisi",
+        e is not None and e.kod == 16 and "~/.var/app/com.google.Chrome" in e.mesaj and "X yetkisi" in e.mesaj and
+        "chromium" in e.mesaj and time.monotonic() - t0 < 30, repr(e and e.mesaj))
+h = chromium.on_karari(_on(["chromium"]))
+kontrol("F3 birim: politika 'on' + yerli Chromium → kopya kararı (boş profil, a11y)",
+        h is not None and h.karar == "kopya" and h.kopya_yolu and uygulama.ERISIM_BAYRAGI in h.argv and
+        "kayıtlı girişler yok" in h.aciklama, repr(h))
+if h is not None and h.kopya_yolu:
+    kopya.temizle(h.kopya_yolu)
+kontrol("F3 birim: başka 'on' uygulaması (vivaldi, brave, Flatpak olmayan chrome) değişmez",
+        chromium.on_karari(_on(["vivaldi"])) is None and chromium.on_karari(_on(["chrome"])) is None)
+kontrol("F3 birim: Firefox ilk açılışta uzaktan komut AÇIK (--no-remote/--new-instance atılır; 2. pencere için)",
+        uygulama.uzak_acik(["firefox", "--profile", "/k", "--no-remote", "--new-instance", "about:blank"]) ==
+        ["firefox", "--profile", "/k", "about:blank"] and
+        uygulama.uzak_acik(["chromium", "--no-remote"]) == ["chromium", "--no-remote"])
+kontrol("F3 birim: 2. pencere istemcisi yalnız belgeleri taşır (profil/bayrak değil)",
+        uygulama.yeni_pencere_argv("firefox", "/k2", ["firefox", "--profile", "/k1", "--no-remote", "https://a.b/",
+                                                     "about:blank"]) ==
+        ["firefox", "--profile", "/k2", "--new-window", "https://a.b/", "about:blank"] and
+        uygulama.yeni_pencere_argv("chromium", "/k2", ["chromium", "--user-data-dir=/k1", "--no-first-run",
+                                                      "--force-renderer-accessibility", "https://a.b/"]) ==
+        ["chromium", "--user-data-dir=/k2", "--new-window", "https://a.b/"])
+
 # ---------------------------------------------------------------- B) görünmez masaüstünde gerçek Chromium
 if not (shutil.which("chromium") and shutil.which("bwrap")):
     print("B) atlandı: chromium ya da bwrap yok")
@@ -266,6 +315,141 @@ try:
     finally:
         arka_ortak._EV_ZORLA = None
         srv.shutdown()
+
+    # ---------------------------------------------------------------- C) ABM-F3: aynı süreçte 2. pencere
+    print("\nC) ABM-F3 tarayıcılar (gerçek görünmez masaüstü)")
+    from deskhand import bellek_bekcisi  # noqa: E402
+
+    def kafes_mb():
+        try:
+            with open(os.path.join("/sys/fs/cgroup", d["cgroup"].lstrip("/"), "memory.current")) as f:
+                return int(f.read()) / 2**20
+        except (OSError, KeyError, ValueError):
+            return 0.0
+
+    def pencereler():
+        return {w for w, _b, _g in au.pencereler()}
+
+    def ana_surecler(tur_, kp):
+        """Kafesteki ANA tarayıcı süreçleri (içerik/yardımcı süreçler hariç) bu kopyayla."""
+        out = []
+        for pid in bellek_bekcisi._kafes_pidleri(d["cgroup"]):
+            a = bellek_bekcisi._argv(pid)
+            a = " ".join(a).split() if a and " " in a[0] else a  # Chromium argv'yi tek dizgeye yazar
+            if not a:
+                continue
+            if tur_ == "firefox" and os.path.basename(a[0]) in ("firefox", "firefox-bin") and "-contentproc" not in a \
+                    and kp in a:
+                out.append(pid)
+            if tur_ == "chromium" and "chrom" in os.path.basename(a[0]) and f"--user-data-dir={kp}" in a and \
+                    not any(x.startswith("--type=") for x in a):
+                out.append(pid)
+        return out
+
+    def ac(argv, ad, kp):
+        with api.hedef("sanal"):
+            return api.uygulama_ac(argv, ad, [], None, None, 30.0, kopya=kp)
+
+    def kimlik(r):
+        return str((r.get("window") or {}).get("id") or "")
+
+    if shutil.which("firefox"):
+        time.sleep(2)
+        m0 = kafes_mb()
+        k1 = kopya.yeni_kopya_dizini("firefox")
+        r1 = ac(["firefox", "--profile", k1, "--no-remote", "--new-instance", "about:blank"], "Firefox", k1)
+        time.sleep(5)
+        m1, ana1 = kafes_mb(), ana_surecler("firefox", k1)
+        kayit1 = bellek_bekcisi._kayitlar(d["calisma"])
+        k2 = kopya.yeni_kopya_dizini("firefox")
+        t0 = time.monotonic()
+        r2 = ac(["firefox", "--profile", k2, "--no-remote", "--new-instance", "about:blank"], "Firefox", k2)
+        sure2 = time.monotonic() - t0
+        time.sleep(5)
+        m2, ana2 = kafes_mb(), ana_surecler("firefox", k1)
+        kayit2 = bellek_bekcisi._kayitlar(d["calisma"])
+        print(f"   firefox: kafes {m0:.0f} → 1 pencere {m1:.0f} → 2 pencere {m2:.0f} MB; ana {ana1} → {ana2}; "
+              f"2. açılış {sure2:.1f} sn; pencereler {kimlik(r1)} {kimlik(r2)}")
+        kontrol("2. open firefox → yeni pencere, süreç ağacı tek, toplam bellek < 2 örnek",
+                r1.get("status") == "opened" and r2.get("status") == "opened" and kimlik(r1) != kimlik(r2) and
+                len(ana1) == 1 and ana2 == ana1 and not ana_surecler("firefox", k2) and
+                (m2 - m0) < 2 * (m1 - m0), f"{r1} {r2} ana {ana1}/{ana2} MB {m0:.0f}/{m1:.0f}/{m2:.0f}")
+        kontrol("ikinci pencere F1 kaydında (tek kayıt, ilk kopya, aynı süreç; 2. kopya silindi)",
+                len(kayit2) == 1 and kayit2 == kayit1 and os.path.realpath(kayit2[0]["kopya"]) == os.path.realpath(k1)
+                and bellek_bekcisi.firefox_ana_pidleri(d["cgroup"], k1) == ana2 and not os.path.exists(k2),
+                f"{kayit1} → {kayit2}; k2 var: {os.path.exists(k2)}")
+        for p_ in ana2:
+            os.kill(p_, 15)
+        time.sleep(3)
+    else:
+        print("C) firefox yok: Firefox 2. pencere atlandı")
+
+    def chromium_analari():
+        """Kopya kökünde --user-data-dir'li bütün ANA Chromium süreçleri (B'nin (3) kopyalı örneği dahil)."""
+        from deskhand.oturum import politika
+        kok_ = os.path.realpath(politika.kopya_dizini())
+        out = []
+        for pid in bellek_bekcisi._kafes_pidleri(d["cgroup"]):
+            a = bellek_bekcisi._argv(pid)
+            a = " ".join(a).split() if a and " " in a[0] else a
+            if a and "chrom" in os.path.basename(a[0]) and not any(x.startswith("--type=") for x in a) and any(
+                    x.startswith("--user-data-dir=") and os.path.dirname(os.path.realpath(x.split("=", 1)[1])) == kok_
+                    for x in a):
+                out.append(pid)
+        return out
+
+    h1 = chromium.on_karari(_on(["chromium"]))
+    r1 = ac([*h1.argv, "about:blank"], "Chromium", h1.kopya_yolu)
+    time.sleep(3)
+    ana1 = chromium_analari()
+    h2 = chromium.on_karari(_on(["chromium"]))
+    r2 = ac([*h2.argv, "about:blank"], "Chromium", h2.kopya_yolu)
+    time.sleep(3)
+    ana2 = chromium_analari()
+    print(f"   chromium: kopyalı ana süreçler {ana1} → {ana2}; pencereler {kimlik(r1)} {kimlik(r2)}")
+    kontrol("2. open chromium → aynı süreçte yeni pencere (kopyalı ana süreç sayısı artmadı, 2. kopya silindi)",
+            r1.get("status") == "opened" and r2.get("status") == "opened" and kimlik(r1) != kimlik(r2) and
+            len(ana1) == 1 and ana2 == ana1 and not os.path.exists(h2.kopya_yolu), f"{r1} {r2} ana {ana1}/{ana2}")
+    agac = {"items": []}
+    bitis = time.monotonic() + 20
+    while time.monotonic() < bitis and not agac["items"]:
+        try:
+            with api.hedef("sanal"):
+                agac = api.agac_oku(kimlik(r1), hepsi=True)
+        except Dur as e:
+            agac = {"items": [], "hata": e.mesaj}
+        time.sleep(1)
+    roller = sorted({o["role"] for o in agac["items"]})
+    print(f"   chromium a11y: {len(agac['items'])} öge, roller {roller[:8]}")
+    kontrol("chromium a11y ağacı available (AT-SPI ögeleri okunuyor)", len(agac["items"]) > 0, str(agac)[:300])
+
+    fp = subprocess.run(["flatpak", "info", "com.google.Chrome"], capture_output=True) if shutil.which("flatpak") \
+        else None
+    if fp is not None and fp.returncode == 0:
+        t0 = time.monotonic()
+        try:
+            uygulama.oturum_hazirla("com.google.Chrome")
+            e = None
+        except Dur as x:
+            e = x
+        sure = time.monotonic() - t0
+        print(f"   Flatpak Chrome (politika): {sure:.2f} sn, kod {e and e.kod}")
+        kontrol("Flatpak Chrome: 30 sn içinde ayakta ya da kod 16 + neden (politika yolu)",
+                e is not None and e.kod == 16 and "~/.var/app" in e.mesaj and sure < 30, repr(e and e.mesaj))
+        t0 = time.monotonic()
+        try:
+            ac(["flatpak", "run", "com.google.Chrome", "about:blank"], "Chrome", None)
+            e = None
+        except Dur as x:
+            e = x
+        sure = time.monotonic() - t0
+        print(f"   Flatpak Chrome (başlatma): {sure:.2f} sn, kod {e and e.kod}")
+        kontrol("Flatpak Chrome: 30 sn içinde ayakta ya da kod 16 + neden (başlatma yolu; hiçbir süreç başlamadı)",
+                e is not None and e.kod == 16 and "chromium" in e.mesaj and sure < 30 and
+                not any("com.google.Chrome" in " ".join(bellek_bekcisi._argv(p_))
+                        for p_ in bellek_bekcisi._kafes_pidleri(d["cgroup"])), repr(e and e.mesaj))
+    else:
+        print("C) Flatpak Chrome kurulu değil: atlandı")
 finally:
     masaustu.masaustu_durdur()
 

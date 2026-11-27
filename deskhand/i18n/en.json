@@ -1736,5 +1736,9 @@
  "bellek için Firefox {saat} saatinde yeniden başlatıldı ({once} → {sonra} MB, {sekme} sekme geri yüklendi); pencere kimlikleri değişti, yeniden gözlem yapın": "Firefox was restarted at {saat} to free memory ({once} → {sonra} MB, {sekme} tabs restored); window ids changed, observe again",
  "boşta kalınca Firefox oturumu geri yüklenerek yeniden başlatılır (sekmeler geri gelir, pencere kimlikleri değişir)": "when idle, Firefox is restarted with its session restored (tabs come back, window ids change)",
  "gereksiz sekme ve pencereleri kapatın": "close tabs and windows you no longer need",
- "görünmez masaüstü bellek sınırının %{yuzde} kadarını kullanıyor ({cur} / {max} MB)": "the invisible desktop is using {yuzde}% of its memory limit ({cur} / {max} MB)"
+ "görünmez masaüstü bellek sınırının %{yuzde} kadarını kullanıyor ({cur} / {max} MB)": "the invisible desktop is using {yuzde}% of its memory limit ({cur} / {max} MB)",
+ "hedef süreç bu masaüstünün kafesinde değil: {pid}": "target process is not in this desktop's memory cage: {pid}",
+ "hedef süreç yalıtılmış ad alanında değil: {pid}": "target process is not in an isolated namespace: {pid}",
+ "{ad} boş profille açıldı: kayıtlı girişler yok (şifre deposu rölesi yok, anahtarlığa dokunulmaz)": "{ad} opened with an empty profile: no saved logins (no password store relay; the keyring is not touched)",
+ "{kimlik} (Flatpak) görünmez masaüstünde açılmaz: kök neden, ad alanındaki boş ev dizininde ~/.var/app/{kimlik} yok ve Flatpak başlatıcısının X yetkisi yok; başlatıcı iç içe bwrap'ten önce çıkıyor (ölçüldü). Öneri: yerli chromium kullanın (open chromium; boş profil, kayıtlı girişler yok) ya da Ekranımda yap.": "{kimlik} (Flatpak) does not open on the background desktop: root cause, the empty home directory in the namespace has no ~/.var/app/{kimlik} and the Flatpak launcher has no X authorization; the launcher exits before the nested bwrap (measured). Suggestion: use native chromium (open chromium; empty profile, no saved logins) or Do it on my screen."
 }
