@@ -477,7 +477,7 @@ class ArkaPlanSekmesi(QWidget):
         if self.buyuk is None:
             self.buyuk = OnizlemePenceresi(_(K_BUYUK_BASLIK), self)
             self.buyuk.onizleme.satirlar.connect(self.gonder)
-        self.buyuk.onizleme.devral = self.onizleme.devral
+        self.buyuk.devral_ayarla(self.onizleme.devral)
         self.buyuk.onizleme.bos_metin = self.onizleme.bos_metin
         self.buyuk.show()
         self.buyuk.raise_()
@@ -531,8 +531,7 @@ class ArkaPlanSekmesi(QWidget):
             self.b_devral.setEnabled(self.sanal is not None and serbest)
             self.onizleme.devral = False
         if self.buyuk is not None:
-            self.buyuk.onizleme.devral = self.onizleme.devral
-            self.buyuk.onizleme.update()
+            self.buyuk.devral_ayarla(self.onizleme.devral)
         _bant_guncelle(self)
         self.onizleme.update()
         self._zamanlayici()
@@ -546,6 +545,9 @@ class ArkaPlanSekmesi(QWidget):
 
     def tazele(self) -> None:
         self.mt.tazele()
+        if self.buyuk is not None:
+            self.buyuk.baslik_ayarla(_(K_BUYUK_BASLIK))
+            self.buyuk.tazele()
         if self._isci is None:  # başlatılıyor/durduruluyor metni iş bitince zaten yenilenir
             self.sanal_guncelle(self.sanal)
         self.onizleme.update()
