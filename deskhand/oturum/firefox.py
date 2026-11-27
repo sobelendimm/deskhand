@@ -194,18 +194,22 @@ def _bilinen_konaklar(kaynak: str, cookies_db: str, recovery: dict) -> set[str]:
         # read from a consistent temporary 0700 copy of the db + its WAL (kopya.sqlite_yedek; the profile is never
         # opened, no -wal/-shm is created there): with Firefox open, recent visits are still only in the WAL, which
         # an `immutable=1` read of the profile file would miss
-        with tempfile.TemporaryDirectory(prefix="deskhand-places-") as td:
-            os.chmod(td, 0o700)
-            gecici = os.path.join(td, "places.sqlite")
-            try:
-                kopya_mod.sqlite_yedek(yer, gecici)
-                con = sqlite3.connect(f"file:{quote(gecici)}?mode=ro", uri=True)
+        # the temporary directory itself is inside the try: when it cannot be created (tmpfs full, no /tmp) the
+        # fallback below still runs instead of the OSError aborting hazirla
+        gecici = None
+        try:
+            with tempfile.TemporaryDirectory(prefix="deskhand-places-") as td:
+                os.chmod(td, 0o700)
+                kopya_yolu = os.path.join(td, "places.sqlite")
+                kopya_mod.sqlite_yedek(yer, kopya_yolu)
+                con = sqlite3.connect(f"file:{quote(kopya_yolu)}?mode=ro", uri=True)
                 try:
                     konaklar |= {str(r[0]).lower() for r in con.execute("SELECT DISTINCT host FROM moz_origins")}
                 finally:
                     con.close()
-            except (sqlite3.Error, OSError):
-                gecici = None
+                gecici = kopya_yolu
+        except (sqlite3.Error, OSError):
+            gecici = None
         if gecici is None:  # copy failed (e.g. tmpfs full): the main file alone (no WAL) still gives older visits
             try:
                 con = sqlite3.connect(f"file:{quote(yer)}?mode=ro&immutable=1", uri=True)

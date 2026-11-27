@@ -22,8 +22,10 @@ desenleri ve diğer girdiler hiçbir izinle etkilenmez (bir alan kalan herhangi 
 from __future__ import annotations
 
 import fnmatch
+import functools
 import os
 import tomllib
+import unicodedata
 
 from .. import yollar
 
@@ -45,7 +47,7 @@ _VARSAYILAN_AD = "_varsayilan"
 def kimlik_alani_mi(alan: str) -> bool:
     """Alan (çerez alanı, baştaki nokta önemsiz) bir kimlik sağlayıcısının merkezi kimlik alanı ya da onun üst alanı mı
     (".google.com" çerezi accounts.google.com'a da gider). Kapanış uyarısı yalnız bunları kullanıcıya gösterir."""
-    alan = (alan or "").strip().lower().lstrip(".").rstrip(".")
+    alan = _alan_normu(alan or "")[0].lstrip(".")
     if not alan:
         return False
     for kaliplar in KIMLIK_ALANLARI.values():
@@ -167,8 +169,10 @@ class Politika:
         from ..arka_ortak import gecerli_politika_ev_girdisi
         self.ev = tuple(g for g in (ham.get("ev") or ()) if gecerli_politika_ev_girdisi(g)) \
             if isinstance(ham.get("ev"), (list, tuple)) else ()
-        self._reddet = tuple(site.get("reddet", ()))
-        self._izin = tuple(site.get("izin", ()))
+        # rules are normalised once on load (_alan_normu): equivalent spellings (trailing dot, case, IDNA dots,
+        # Unicode ↔ punycode) behave the same; hosts are normalised the same way when compared
+        self._reddet = tuple(_kural_normu(k) for k in site.get("reddet", ()))
+        self._izin = tuple(_kural_normu(k) for k in site.get("izin", ()))
         self.bilinen = True
 
     def karar(self, calisiyor: bool) -> str:
@@ -179,16 +183,19 @@ class Politika:
         değişmez). Yalnız KIMLIK_ALANLARI'ndaki tam girdiler çıkar; desenler (`*bank*`, `*.gov.tr`) ve diğer alanlar
         aynen kalır. Bilinmeyen sağlayıcı adı yok sayılır. Çağıran görev kipinde ÇAĞIRMAZ."""
         import copy
-        cikar = {a for s in (saglayicilar or ()) for a in KIMLIK_ALANLARI.get(s, ())}
+        cikar = {_kural_normu(a) for s in (saglayicilar or ()) for a in KIMLIK_ALANLARI.get(s, ())}
         if not cikar:
             return self
         yeni = copy.copy(self)
-        yeni._reddet = tuple(k for k in self._reddet if str(k).strip().lower() not in cikar)
+        yeni._reddet = tuple(k for k in self._reddet if k not in cikar)  # both sides in _alan_normu form
         return yeni
 
     # ---- site süzme ----
     def site_reddedildi(self, alan: str) -> bool:
-        """alan ret listesinde mi (kendisi ya da üst alanı)?"""
+        """alan ret listesinde mi (kendisi ya da üst alanı)? Any spelling (_alan_normu); a host whose IDNA label cannot
+        be converted is rejected (closed-fail: its real name is unknown)."""
+        if alan and not _alan_normu(alan)[1]:
+            return True
         return _alan_eslesir(alan, self._reddet)
 
     def cerez_reddedildi(self, host: str, bilinen_konaklar=()) -> bool:
@@ -203,28 +210,34 @@ class Politika:
             literally it would drop every domain cookie, so it only rejects `.alan` with evidence: a host known from
             the profile (`bilinen_konaklar`: cookie hosts, site storage, session cookies, open tabs, places.sqlite
             history incl. its WAL) that is a subdomain of alan and is rejected.
+          The fixed part before the trailing `*`s is still decided from the rule alone (`*.bank.com*` → as
+          `*.bank.com`: `*` may match the empty string), so a trailing `*` never weakens a fixed-tail rule.
+        Host and rules are compared in one spelling (_alan_normu: case, trailing dots, IDNA dots, Unicode ↔ punycode);
+        a host with an unconvertible IDNA label is rejected (closed-fail).
         Residual limit: a trailing-`*` rule does not cover a subdomain the profile has never seen."""
-        h = (host or "").strip().lower()
-        alan = h.lstrip(".").rstrip(".")
+        h, tamam = _alan_normu(host or "")
+        alan = h.lstrip(".")
         if not alan:
             return False
-        if self.site_reddedildi(alan):
+        if not tamam or self.site_reddedildi(alan):
             return True
         if not h.startswith("."):
             return False
         for k in self._reddet:
-            k = str(k).strip().lower()
             if not k:
                 continue
             # plain rule equal to / under alan (also a leading-dot rule `.bank.com` → `.bank.com`)
             if "*" not in k and "?" not in k and "[" not in k and (k == alan or k.endswith("." + alan)):
                 return True
-            # the ONLY switch between "decided from the rule" and "needs evidence": the trailing `*`
-            if not k.endswith("*") and _alt_alana_uyabilir(k, alan):
+            # the ONLY switch between "decided from the rule" and "needs evidence": the trailing `*`; its fixed part
+            # (the rule with the trailing `*`s removed) is decided from the rule as well
+            sabit = k.rstrip("*")
+            if sabit and _alt_alana_uyabilir(sabit, alan):
                 return True
         for b in bilinen_konaklar or ():
-            b = str(b).strip().lower().lstrip(".").rstrip(".")
-            if b != alan and b.endswith("." + alan) and self.site_reddedildi(b):
+            b, b_tamam = _alan_normu(str(b))
+            b = b.lstrip(".")
+            if b != alan and b.endswith("." + alan) and (not b_tamam or self.site_reddedildi(b)):
                 return True
         return False
 
@@ -312,18 +325,65 @@ def _alt_alana_uyabilir(kural: str, alan: str) -> bool:
     return False
 
 
+# IDNA label separators besides "." (UTS #46 / RFC 3490 §3.1): a rule or host written with them is the same name
+_IDNA_NOKTALARI = ("。", "．", "｡")
+
+
+@functools.lru_cache(maxsize=8192)
+def _alan_normu(metin: str) -> tuple[str, bool]:
+    """One spelling for a host name or a reject/allow rule, so that equivalent spellings compare equal: whitespace
+    trimmed, IDNA dots → ".", lower case, trailing dot(s) dropped, every label that is non-ASCII or an ACE label
+    (`xn--…`) → its nameprep'd Unicode form (`bankası`, `xn--bankas-u9a` and `BANKASI`-like case variants meet).
+    ASCII labels, empty labels (a leading dot keeps its meaning) and glob characters are left as they are.
+    Returns (form, converted): converted=False when some label could not be converted (broken punycode, an ACE label
+    that decodes to ASCII or to upper-case / unnormalised text, a character nameprep prohibits); that label is kept lower-cased as written. Callers treat
+    an unconvertible HOST as rejected (closed-fail); an unconvertible rule keeps its written form."""
+    s = str(metin or "").strip()
+    for n in _IDNA_NOKTALARI:
+        s = s.replace(n, ".")
+    s = s.lower().rstrip(".")
+    if s.isascii() and "xn--" not in s:
+        return s, True  # fast path: plain ASCII names (almost every host)
+    from encodings import idna
+    etiketler, tamam = [], True
+    for e in s.split("."):
+        try:
+            if e.startswith("xn--"):
+                u = e[4:].encode("ascii").decode("punycode")
+                if not u or u.isascii():
+                    raise UnicodeError("ACE label without non-ASCII characters")
+                if unicodedata.normalize("NFC", u).lower() != u:  # IDNA never encodes upper case / unnormalised
+                    raise UnicodeError("non-canonical ACE label")   # text (`xn--bankas-n9a` = "bankasİ")
+                e = idna.nameprep(u)
+            elif not e.isascii():
+                e = idna.nameprep(e)
+        except (UnicodeError, ValueError):
+            tamam = False
+        etiketler.append(e)
+    return ".".join(etiketler), tamam
+
+
+def _kural_normu(kural) -> str:
+    """A rule (or a provider entry) in _alan_normu form; an unconvertible label is kept as written."""
+    return _alan_normu(str(kural))[0]
+
+
 def _alan_eslesir(alan: str, kaliplar) -> bool:
-    alan = (alan or "").strip().lower().rstrip(".")
+    """alan (any spelling) matches one of the fnmatch rules (any spelling). A plain rule (no `*`, `?`, `[`) also
+    covers subdomains, and a leading dot on a plain rule (`.bank.com`) means the same as `bank.com`. An unconvertible
+    alan only matches as written: callers that reject decide closed-fail themselves (Politika.site_reddedildi)."""
+    alan = _alan_normu(alan)[0] if alan else ""
     if not alan:
         return False
     for k in kaliplar:
-        k = str(k).strip().lower()
+        k = _kural_normu(k)
         if not k:
             continue
-        if fnmatch.fnmatch(alan, k):
+        if fnmatch.fnmatchcase(alan, k):
             return True
-        # kalıp düz alan adıysa alt alanları da yakala (github.com → api.github.com)
-        if "*" not in k and "?" not in k and (alan == k or alan.endswith("." + k)):
+        # kalıp düz alan adıysa alt alanları da yakala (github.com → api.github.com; .github.com aynı anlamda)
+        duz = k.lstrip(".")
+        if duz and "*" not in k and "?" not in k and "[" not in k and (alan == duz or alan.endswith("." + duz)):
             return True
     return False
 

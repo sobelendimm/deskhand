@@ -602,9 +602,21 @@ alt alana gidebiliyorsa o da reddedilir (`Politika.cerez_reddedildi`). Kuralın 
   Bilinen konaklar: çerez konakları, site deposu klasörleri (`storage/default`), `recovery.jsonlz4`'teki oturum
   çerezi ve açık sekme konakları, `places.sqlite` köken listesi. `places.sqlite` WAL'ıyla birlikte geçici 0700
   kopyadan okunur; Firefox açıkken WAL'da duran yeni ziyaretler de sayılır, profilde dosya oluşmaz.
-- **Kalan sınır:** profilde hiç görülmemiş (ziyaret edilmemiş, çerezi/deposu olmayan) bir alt alan, sonu `*` olan
-  kuralla kapsanmaz. Böyle bir alt alanı kesin dışarıda tutmak için sonu sabit bir kural ekleyin
-  (`bank.ornek.com` ya da `*.bank.ornek.com`).
+  Sondaki `*`'lar atıldığında kalan sabit kısım yine kuraldan karara bağlanır (`*` boş dizgiyle de eşleşir):
+  `*.bank.com*`, `*.bank.com` gibi `.bank.com`'u kanıtsız reddeder; `*bank*` → `*bank` hiçbir `.com` alanına
+  uymaz, kanıt ister.
+- **Bilinen sınır (bilerek böyle kalır):** sonu `*` olan kural yalnız profilde GÖRÜLMÜŞ alt alanların alan
+  çerezini düşürür; hiç görülmemiş (ziyaret edilmemiş, çerezi/deposu olmayan) bir alt alan kapsanmaz. Böyle bir alt
+  alanı kesin dışarıda tutmak için sonu sabit bir kural ekleyin (`bank.ornek.com` ya da `*.bank.ornek.com`).
+- **Yazım eşdeğerliği:** kural yüklenirken ve konak/çerez alanı karşılaştırılırken aynı biçime indirilir: küçük harf,
+  sondaki nokta(lar) atılır, IDNA noktaları (`。` `．` `｡`) `.` olur, Unicode ve punycode (`xn--…`) etiketler aynı
+  (nameprep'li Unicode) biçimde karşılaştırılır: `*.bankası.com` kuralı `.xn--bankas-u9a.com` çerezini de reddeder
+  (tersi de). Düz kuraldaki baştaki nokta (`.bank.com`) `bank.com` ile aynı anlamdadır (alan + alt alanları).
+  Çözülemeyen bir IDNA etiketi taşıyan konak/çerez alanı (bozuk punycode, büyük harf ya da normalleşmemiş metin
+  kodlayan `xn--` etiketi) reddedilir (kapalı-başarısız).
+- **Banka/ödeme oturumları bu sürümde hiç taşınmaz:** varsayılan listedeki banka/ödeme girdileri hiçbir panel izniyle
+  (Hesap oturumları) ya da görevle açılmaz. 1.0.0'da kullanıcının açık onayıyla ve YALNIZ o görev için taşınacak
+  (görev başına yetki anahtarları).
 
 Kopya (`firefox.hazirla`) ve `sessions check` aynı kuralı ve aynı bilinen konak kümesini kullanır. Kopyanın
 `cookies.sqlite`'ı süzmeden sonra `VACUUM INTO` ile yeniden kurulur: silinen değerler dosya baytlarında kalmaz.
