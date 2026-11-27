@@ -45,10 +45,14 @@ VARSAYILAN: dict = {
     "surum": 2,
     "min_tiklama_hedefi_px": 24,  # WCAG 2.5.8
     "kontrast_min": 4.5,          # WCAG 1.4.3
+    "renk_ayrim_min_de": 20,      # vurgu/durum renkleri arası en küçük CIEDE2000 (UYUM kuralı, test pencere renkleri)
+    "doygunluk": {"s_min": 0.75, "l_min": 0.35, "l_max": 0.65},  # "yüksek doygun vurgu" tanımı (HSL; DOYGUNLUK)
     "renk": {"acik": _renk_kipi(_ACIK), "koyu": _renk_kipi(_KOYU)},
     "durum": {
-        "bos": "#8a8f98", "ekran": "#e8590c", "arka": "#1c7ed6", "dur": "#e03131", "dur_metin": "#ffffff",
-        "dur_uzerinde": "#fb3737", "rozet": "#fab005", "basari": "#2f9e44", "hata": "#e03131", "uyari": "#e8a317",
+        # UX-K: sakin durum renkleri (koyu zemine kontrast ≥ 3, birbirinden ΔE2000 ≥ renk_ayrim_min_de; tek doygun
+        # vurgu = Highlight). tools/tasarim_kapi.py UYUM/DOYGUNLUK kuralları denetler.
+        "bos": "#80858d", "ekran": "#e0844a", "arka": "#d27fc0", "dur": "#e5606a", "dur_metin": "#1b1e20",
+        "dur_uzerinde": "#ef7a83", "rozet": "#d9bd4c", "basari": "#4caf6e", "hata": "#e5606a", "uyari": "#d9bd4c",
         "soluk": "#8a8f98", "tepsi_on": "#ffffff", "tepsi_cizgi": "#2b2b2b",
     },
     "yazi": {"aile": None, "baslik_olcek": 1.08, "durum_olcek": 1.2, "diyalog_soru_olcek": 1.25,
@@ -200,3 +204,58 @@ def kontrast(on: QColor, arka: QColor) -> float:
                              on.blueF() * al + arka.blueF() * (1 - al))
     a, b = _goreli_parlaklik(on), _goreli_parlaklik(arka)
     return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+
+# ---------------------------------------------------------------- renk farkı (CIEDE2000)
+def _lab(renk) -> tuple[float, float, float]:
+    """#rrggbb ya da QColor → CIELAB (D65, sRGB)."""
+    c = QColor(renk)
+
+    def kanal(x: float) -> float:
+        return x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4
+    r, g, b = kanal(c.redF()), kanal(c.greenF()), kanal(c.blueF())
+    x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
+    y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+
+    def f(t: float) -> float:
+        return t ** (1 / 3) if t > 216 / 24389 else (24389 / 27 * t + 16) / 116
+    return 116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))
+
+
+def de2000_lab(lab1, lab2) -> float:
+    """CIEDE2000 renk farkı (Sharma, Wu, Dalal 2005; kL = kC = kH = 1)."""
+    from math import atan2, cos, degrees, exp, hypot, radians, sin, sqrt
+    L1, a1, b1 = lab1
+    L2, a2, b2 = lab2
+    cm = (hypot(a1, b1) + hypot(a2, b2)) / 2
+    g = 0.5 * (1 - sqrt(cm ** 7 / (cm ** 7 + 25 ** 7)))
+    a1p, a2p = (1 + g) * a1, (1 + g) * a2
+    c1p, c2p = hypot(a1p, b1), hypot(a2p, b2)
+    h1p = degrees(atan2(b1, a1p)) % 360 if c1p else 0.0
+    h2p = degrees(atan2(b2, a2p)) % 360 if c2p else 0.0
+    dl, dc = L2 - L1, c2p - c1p
+    if c1p * c2p == 0:
+        dh = 0.0
+    else:
+        dh = h2p - h1p
+        dh = dh - 360 if dh > 180 else dh + 360 if dh < -180 else dh
+    dhh = 2 * sqrt(c1p * c2p) * sin(radians(dh / 2))
+    lm, cmp_ = (L1 + L2) / 2, (c1p + c2p) / 2
+    if c1p * c2p == 0:
+        hm = h1p + h2p
+    elif abs(h1p - h2p) <= 180:
+        hm = (h1p + h2p) / 2
+    else:
+        hm = (h1p + h2p + 360) / 2 if h1p + h2p < 360 else (h1p + h2p - 360) / 2
+    t = (1 - 0.17 * cos(radians(hm - 30)) + 0.24 * cos(radians(2 * hm)) + 0.32 * cos(radians(3 * hm + 6))
+         - 0.20 * cos(radians(4 * hm - 63)))
+    sl = 1 + 0.015 * (lm - 50) ** 2 / sqrt(20 + (lm - 50) ** 2)
+    sc, sh = 1 + 0.045 * cmp_, 1 + 0.015 * cmp_ * t
+    rt = -2 * sqrt(cmp_ ** 7 / (cmp_ ** 7 + 25 ** 7)) * sin(radians(60 * exp(-(((hm - 275) / 25) ** 2))))
+    return sqrt((dl / sl) ** 2 + (dc / sc) ** 2 + (dhh / sh) ** 2 + rt * (dc / sc) * (dhh / sh))
+
+
+def de2000(renk1, renk2) -> float:
+    """İki renk (#rrggbb ya da QColor) arasındaki CIEDE2000 farkı."""
+    return de2000_lab(_lab(renk1), _lab(renk2))

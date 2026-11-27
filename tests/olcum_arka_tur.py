@@ -25,6 +25,8 @@ from deskhand.arka_uc import EKRAN, sec  # noqa: E402
 KOK = _yalitim.KOK
 GECICI = _yalitim.GECICI
 PENCERE = os.path.join(KOK, "tests", "yardimci", "kwin_test_pencere.py")
+sys.path.insert(0, os.path.dirname(PENCERE))
+import kwin_renk as KR  # noqa: E402  (test penceresi renkleri, UX-K)
 BOSTA = int(sys.argv[sys.argv.index("--bosta") + 1]) if "--bosta" in sys.argv else 0
 FIREFOX = "--firefox" in sys.argv
 sonuc = {"tur_istenen": os.environ.get("DESKHAND_ARKA_TUR", "")}
@@ -105,14 +107,14 @@ for _ in range(10):
     s.append((time.perf_counter() - t) * 1000)
 sonuc["pencere_listesi_ms"] = medyan(s)
 
-# düğmenin yeri (eflatun kutu)
+# düğmenin yeri (mavi düğme)
 import numpy as np  # noqa: E402
 a = np.asarray(au.goruntu()).astype(int)
-mk = (abs(a[:, :, 0] - 255) <= 6) & (a[:, :, 1] <= 6) & (abs(a[:, :, 2] - 255) <= 6)
+mk = (np.abs(a - KR.DUGME) <= 6).all(axis=2)
 ys, xs = np.nonzero(mk)
 W, H = au.ekran_alani()[2:]
 cx, cy = (xs.min() + xs.max()) / 2, (ys.min() + ys.max()) / 2
-mk = (a[:, :, 0] <= 6) & (abs(a[:, :, 1] - 255) <= 6) & (abs(a[:, :, 2] - 255) <= 6)
+mk = (np.abs(a - KR.CERCEVE) <= 6).all(axis=2)
 ys2, xs2 = np.nonzero(mk)
 kx, ky = (xs2.min() + xs2.max()) / 2, (ys2.min() + ys2.max()) / 2
 

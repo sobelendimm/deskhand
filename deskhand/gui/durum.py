@@ -13,9 +13,11 @@ from dataclasses import dataclass
 
 from ..i18n import _
 from . import metinler as T
+from .tema.uret import yukle as _tema_yukle
 
 CALISMA_PENCERESI = 4.0  # son girdi satırı bu kadar yeniyse "çalışıyor"
-RENK = {"bos": "#8a8f98", "ekran": "#e8590c", "arka": "#1c7ed6", "dur": "#e03131", "rozet": "#fab005"}
+_D = _tema_yukle()["durum"]  # tek renk kaynağı: gui/tema/tokens.json (UX-K)
+RENK = {k: _D[k] for k in ("bos", "ekran", "arka", "dur", "rozet", "dur_metin", "dur_uzerinde")}
 
 
 def etiket_kacis(k: str, html: bool = False) -> str:

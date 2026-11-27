@@ -14,7 +14,8 @@ import re
 from .. import yollar
 from .kisayol import VARSAYILAN_TUS
 
-PANEL_VARSAYILAN = {"kisayol_acik": False, "kisayol": VARSAYILAN_TUS}
+PANEL_VARSAYILAN = {"kisayol_acik": False, "kisayol": VARSAYILAN_TUS, "tema": None}  # tema None = tercih yok
+VARSAYILAN_TEMA = "koyu"  # UX-K: kayıtlı tercih yokken panel koyu açılır (kullanıcı onay-2 geri bildirimi)
 KARAR_ANAHTARLARI = ("mesgulken", "sor_sure", "cevapsiz", "tam_ekranda_sor")
 SIRA = ("sor", "arka", "hep-arka", "bekle", "sonra")  # seçeneklerin gösterim sırası
 VARSAYILAN_MESGULKEN = ("sor", "arka", "bekle")
@@ -41,6 +42,14 @@ def panel_oku() -> dict:
     d["kisayol_acik"] = bool(d["kisayol_acik"])
     d["kisayol"] = str(d["kisayol"] or VARSAYILAN_TUS)
     return d
+
+
+def tema_tercihi() -> str:
+    """Kayıtlı panel teması ("sistem" | "acik" | "koyu"); kayıt yok ya da geçersizse VARSAYILAN_TEMA. Kayıtlı tercih
+    hiçbir zaman değiştirilmez (yalnız okunur)."""
+    from .tema.uret import KIPLER
+    t = panel_oku().get("tema")
+    return t if t in KIPLER else VARSAYILAN_TEMA
 
 
 def panel_yaz(d: dict) -> None:

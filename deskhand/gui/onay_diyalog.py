@@ -103,7 +103,9 @@ class OnayDiyalog(QDialog):
         ust = QHBoxLayout()
         ust.setSpacing(12)
         ikon = QLabel()
-        ikon.setPixmap(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning).pixmap(40, 40))
+        # sistem uyarı simgesi sakinleştirilir (doygunluk tavanı): ekranda tek doygun vurgu = Highlight (UX-K)
+        from .ortak import sakin_pixmap
+        ikon.setPixmap(sakin_pixmap(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning).pixmap(40, 40)))
         ikon.setAlignment(Qt.AlignmentFlag.AlignTop)
         ust.addWidget(ikon)
         metin_kutu = QVBoxLayout()

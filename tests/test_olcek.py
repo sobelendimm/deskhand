@@ -100,6 +100,8 @@ atexit.register(lambda: masaustu.durum_oku() is not None and masaustu.masaustu_d
 gecen, toplam = _g0, _t0
 olcum = {}
 PENCERE = os.path.join(_yalitim.KOK, "tests", "yardimci", "kwin_test_pencere.py")
+sys.path.insert(0, os.path.dirname(PENCERE))
+import kwin_renk as KR  # noqa: E402  (test penceresi renkleri, UX-K)
 LOG = os.path.join(_yalitim.PAYLASIM, "olcek.log")
 
 
@@ -223,14 +225,14 @@ if k is None:
 geo = au.geometri(k)
 kontrol("geometri mantıksal: 700x460 (ölçek 1 ile aynı düzen)", geo[2:] == (700, 460), str(geo))
 with api.hedef("sanal"):
-    bekle(lambda: kutu_bul(gorsel.pencere_goruntusu(k, tam=True)[0], (255, 0, 255)), 10, 0.2)  # ilk kare çizilsin
+    bekle(lambda: kutu_bul(gorsel.pencere_goruntusu(k, tam=True)[0], KR.DUGME), 10, 0.2)  # ilk kare çizilsin
     tam_im, geo2, kok_ = gorsel.pencere_goruntusu(k, tam=True)
     man_im, _g, _k = gorsel.pencere_goruntusu(k)
 tam_im.save(os.path.join(_yalitim.PAYLASIM, "qt-tam.png"))
 kontrol("pencere_goruntusu(tam=True): 1400x920 (2×), piksel_olcegi 2; varsayılan: 700x460 (mantıksal)",
         tam_im.size == (1400, 920) and gorsel.piksel_olcegi(tam_im) == 2.0 and man_im.size == (700, 460),
         f"{tam_im.size} {gorsel.piksel_olcegi(tam_im)} {man_im.size}")
-b2, b1 = kutu_bul(tam_im, (255, 0, 255)), kutu_bul(man_im, (255, 0, 255), 30)
+b2, b1 = kutu_bul(tam_im, KR.DUGME), kutu_bul(man_im, KR.DUGME, 30)
 oran = (b2[3] - b2[1] + 1) / (b1[3] - b1[1] + 1) if b1 and b2 else 0
 olcum["Qt düğmesi yüksekliği (tam / mantıksal)"] = f"{b2[3] - b2[1] + 1 if b2 else '?'} / {b1[3] - b1[1] + 1 if b1 else '?'} px"
 if not kontrol("düğme tam görüntüde ~2× piksel (1.9–2.1)", 1.9 <= oran <= 2.1, f"{b2} {b1}"):
@@ -250,7 +252,7 @@ from PIL import Image  # noqa: E402
 
 kucuk = im_m.resize((round(im_m.width * o), round(im_m.height * o)), Image.LANCZOS) if o < 1 else im_m
 sid = mcp_sunucu.cekim_kaydet(k, "sanal", geo_m, kok_m, o * f, kucuk.size)
-bk = kutu_bul(kucuk, (255, 0, 255), 12)
+bk = kutu_bul(kucuk, KR.DUGME, 12)
 px, py = mcp_sunucu.cekim_noktasi(mcp_sunucu._CEKIMLER[sid], (bk[0] + bk[2]) / 2, (bk[1] + bk[3]) / 2)
 kontrol("MCP shot eşlemesi: küçültülmüş tam görüntüdeki düğme → pencere pikseli düğmenin içinde",
         b1 and b1[0] <= px <= b1[2] and b1[1] <= py <= b1[3], f"{px:.0f},{py:.0f} {b1} f={f} o={o:.3f}")
@@ -280,7 +282,7 @@ sm = sr.structured_content
 im_s = Image.open(io.BytesIO(base64.b64decode(sr.content[0].data)))
 kontrol("MCP screenshot: max_edge 1280 içinde, scale = küçültme × 2 (1400 px'ten 1280'e: 1280/700)",
         max(im_s.size) <= 1280 and abs(sm["scale"] - im_s.width / 700) < 0.01, f"{im_s.size} {sm['scale']}")
-bs = kutu_bul(im_s, (255, 0, 255), 12)
+bs = kutu_bul(im_s, KR.DUGME, 12)
 n0 = loglar().count("tik: Kaydet")
 rs, hs = None, None
 try:

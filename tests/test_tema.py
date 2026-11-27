@@ -154,5 +154,80 @@ with open(os.path.join(KOK, "deskhand", "gui", "panel.py"), encoding="utf-8") as
     kaynak = f.read()
 kontrol("panel tema_uygula'yı çağırır", "tema_uygula(" in kaynak)
 
+# ---------------------------------------------------------------- UX-K: varsayılan koyu, kayıtlı tercih korunur
+from deskhand.gui import ayar as A  # noqa: E402
+from deskhand.gui.panel import Panel  # noqa: E402
+
+yol = A.panel_yolu()
+if os.path.exists(yol):
+    os.remove(yol)
+kontrol("tema tercihi yok → koyu", A.tema_tercihi() == "koyu", A.tema_tercihi())
+
+
+def _acilis_temasi() -> str:
+    """Panel.__init__ açılışta seçtiği temayı uygular; kurulumun geri kalanı burada kesilir (yalnız tema adımı)."""
+    import deskhand.gui.panel as P
+
+    class Kes(Exception):
+        pass
+
+    eski = P.AnaPencere
+    P.AnaPencere = lambda *a, **k: (_ for _ in ()).throw(Kes())
+    eski_merkez, P.Panel._merkez_baslat = P.Panel._merkez_baslat, lambda self: None
+    eski_iz = P.Izleyici
+    P.Izleyici = lambda *a, **k: type("I", (), {"ilk_satirlar": []})()
+    try:
+        Panel(app, tepsi=False)
+    except Kes:
+        pass
+    finally:
+        P.AnaPencere, P.Panel._merkez_baslat, P.Izleyici = eski, eski_merkez, eski_iz
+    return uret.sistem_kipi(app.palette())
+
+
+tema.tema_uygula(app, "acik")
+kontrol("açılış: tercih yok → panel koyu açılır", _acilis_temasi() == "koyu")
+kontrol("açılış: tercih yokken panel.json'a tema yazılmaz", not os.path.exists(yol))
+A.panel_yaz({**A.panel_oku(), "tema": "acik"})
+with open(yol, encoding="utf-8") as f:
+    once = f.read()
+kontrol("açılış: kayıtlı tercih 'acik' → panel açık kalır", _acilis_temasi() == "acik")
+with open(yol, encoding="utf-8") as f:
+    kontrol("açılış: kayıtlı tercih değiştirilmez", f.read() == once)
+A.panel_yaz({**A.panel_oku(), "tema": "mor"})
+kontrol("geçersiz kayıtlı tercih → koyu", A.tema_tercihi() == "koyu")
+A.panel_yaz({**A.panel_oku(), "tema": "sistem"})
+kontrol("kayıtlı tercih 'sistem' okunur", A.tema_tercihi() == "sistem")
+d = A.panel_oku()
+d["kisayol_acik"] = True
+A.panel_yaz(d)
+kontrol("başka panel ayarı yazılınca tema tercihi korunur", A.tema_tercihi() == "sistem")
+os.remove(yol)
+
+# ---------------------------------------------------------------- UX-K: renk ayrımı (ΔE2000)
+sys.path.insert(0, os.path.join(KOK, "tests", "yardimci"))
+import kwin_renk as KR  # noqa: E402
+
+from deskhand.masaustu import ZEMIN as XVFB_KOK  # noqa: E402
+
+DE_MIN = T["renk_ayrim_min_de"]
+kontrol("renk_ayrim_min_de tokens.json'da (20)", DE_MIN == 20, str(DE_MIN))
+zeminler = {"pencere": KR.ZEMIN, "kwin_kok": (0, 0, 0),
+            "xvfb_kok": ((XVFB_KOK >> 16) & 255, (XVFB_KOK >> 8) & 255, XVFB_KOK & 255)}
+hepsi = {**KR.ALGILANAN, **zeminler}
+adlar = list(hepsi)
+for i, a1 in enumerate(adlar):
+    for a2 in adlar[i + 1:]:
+        if a1 in zeminler and a2 in zeminler:
+            continue
+        de = uret.de2000(KR.hex_(hepsi[a1]), KR.hex_(hepsi[a2]))
+        kontrol(f"test penceresi: {a1} ~ {a2} ΔE2000 ≥ {DE_MIN}", de >= DE_MIN, f"{de:.1f}")
+for ad, r in KR.ALGILANAN.items():
+    kontrol(f"test penceresi: {ad} sert renk değil (macenta/camgöbeği/sarı yok: kanal 0/255 ikilisi değil)",
+            not all(c in (0, 255) for c in r), str(r))
+with open(os.path.join(KOK, "tests", "yardimci", "kwin_test_pencere.py"), encoding="utf-8") as f:
+    kp = f.read().lower()
+kontrol("test penceresi eski sert renkleri kullanmaz", not any(h in kp for h in ("#ff00ff", "#00ffff", "#ffff00")))
+
 print(f"\n{gecen}/{toplam} geçti")
 sys.exit(0 if gecen == toplam else 1)

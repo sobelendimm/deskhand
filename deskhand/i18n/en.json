@@ -2015,5 +2015,9 @@
  "Son kısım: {metin}": "End: {metin}",
  "onay isteği çok uzun, onaylanamaz → red": "approval request too long, cannot be approved → denied",
  "{dugme} (önce sona kaydırın)": "{dugme} (scroll to the end first)",
- "… (kısaltıldı: {n} karakter daha; komutun tamamı yukarıda)": "… (shortened: {n} more characters; the whole command is shown above)"
+ "… (kısaltıldı: {n} karakter daha; komutun tamamı yukarıda)": "… (shortened: {n} more characters; the whole command is shown above)",
+ "Görünüm": "Appearance",
+ "Koyu tema": "Dark theme",
+ "Açık tema": "Light theme",
+ "Sistem teması": "System theme"
 }

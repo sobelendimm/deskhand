@@ -149,6 +149,47 @@ k3 = kap(QLabel("a"), genis, spacing=6)
 r = kurallar(k3, E2)
 kontrol("aralık ölçeği tokens'tan (aralik_px 4'ün katı): 6 ihlal", r == ["ARALIK"], str(r))
 
+# ---------------------------------------------------------------- DOYGUNLUK / UYUM (UX-K)
+from PyQt6.QtGui import QImage, QPainter  # noqa: E402
+
+kontrol("eşik: renk_ayrim_min_de tokens'tan", E.get("renk_ayrim_min_de") == HAM.get("renk_ayrim_min_de") == 20,
+        str(E.get("renk_ayrim_min_de")))
+kontrol("eşik: doygunluk eşikleri tokens'tan (S ≥ 0,75, L 0,35–0,65)",
+        E.get("doygunluk") == HAM.get("doygunluk") == {"s_min": 0.75, "l_min": 0.35, "l_max": 0.65},
+        str(E.get("doygunluk")))
+kontrol("ΔE2000: aynı renk 0, siyah/beyaz ≈ 100",
+        uret.de2000("#3daee9", "#3daee9") == 0 and abs(uret.de2000("#000000", "#ffffff") - 100) < 0.5)
+# CIEDE2000 Sharma (2005) test verisi 1. çift: Lab(50, 2.6772, -79.7751) / Lab(50, 0, -82.7485) = 2.0425
+kontrol("ΔE2000: Sharma referans çifti 2,0425",
+        abs(uret.de2000_lab((50, 2.6772, -79.7751), (50, 0, -82.7485)) - 2.0425) < 1e-3)
+
+
+def resim(*renkler):
+    """Koyu zeminde her renk için 60x60 dolu kutu (ekrandaki vurgu alanları)."""
+    im = QImage(80 * max(1, len(renkler)), 80, QImage.Format.Format_RGB32)
+    im.fill(QColor("#31363b"))
+    p = QPainter(im)
+    for i, r in enumerate(renkler):
+        p.fillRect(10 + 80 * i, 10, 60, 60, QColor(r))
+    p.end()
+    return im
+
+
+r = [i["kural"] for i in K.doygunluk_denetle(resim("#e8590c", "#1c7ed6"), E, "x")]
+kontrol("DOYGUNLUK: aynı ekranda iki doygun vurgu (turuncu + mavi) tam 1 ihlal", r == ["DOYGUNLUK"], str(r))
+r = [i["kural"] for i in K.doygunluk_denetle(resim("#3daee9"), E, "x")]
+kontrol("DOYGUNLUK: tek doygun vurgu temiz", r == [], str(r))
+r = [i["kural"] for i in K.doygunluk_denetle(resim("#3daee9", "#e5606a", "#d9bd4c"), E, "x")]
+kontrol("DOYGUNLUK: tek doygun vurgu + sakin tonlar temiz", r == [], str(r))
+r = [i["kural"] for i in K.uyum_denetle(HAM, E)]
+kontrol("UYUM: tokens.json koyu paleti temiz (ΔE ≥ min, zemine kontrast ≥ 3)", r == [], str(K.uyum_denetle(HAM, E)))
+eski = {**HAM, "durum": {**HAM["durum"], "arka": "#1c7ed6", "dur": "#e03131", "hata": "#e03131",
+                         "ekran": "#e8590c"}}
+u = K.uyum_denetle(eski, E)
+kontrol("UYUM: eski palet (arka ≈ vurgu, hata ≈ ekran, hata kontrastı 2,7) ihlal verir",
+        {i["kural"] for i in u} == {"UYUM"} and any("arka" in i["deger"] and "vurgu" in i["deger"] for i in u)
+        and any("kontrast" in i["deger"] for i in u), str(u))
+
 # ---------------------------------------------------------------- CLI: bugünkü panel
 ev = tempfile.mkdtemp(prefix="tasarim-kapi-")
 ortam = G.sabit_ortam(ev)

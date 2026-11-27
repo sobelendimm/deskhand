@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 
 from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QImage, QPainter, QPalette
+from PyQt6.QtGui import QColor, QImage, QPainter, QPalette
 from PyQt6.QtWidgets import QSizePolicy, QWidget
 
 from ..i18n import _
@@ -131,10 +131,10 @@ class Onizleme(QWidget):
         p = QPainter(self)
         pal = self.palette()
         bos = self.resim is None or self.resim.isNull()
-        if bos or not self.oranli:  # oranlı görünümde görüntünün yanına gri bant boyanmaz (yer kısıtlıysa zemin görünür)
-            p.fillRect(self.rect(), pal.color(QPalette.ColorRole.Window).darker(115))
+        # UX-K: önizleme zemini ve boş alanlar her temada ve her arka uçta SİYAH (maske kutularıyla aynı renk)
+        p.fillRect(self.rect(), ZEMIN)
         if bos:
-            p.setPen(pal.color(QPalette.ColorRole.PlaceholderText))
+            p.setPen(_bos_metin_rengi())
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.bos_metin)
         else:
             r = self.hedef_rect()
@@ -335,6 +335,34 @@ def maskeli_goruntu(au, sinif_onbellek: dict | None = None):
         return maskele(im, _kutulara(au, [g for _k, g in geolar], (im.width, im.height)))
     except Exception as e:  # noqa: BLE001
         raise MaskeHatasi(e) from e
+
+
+ZEMIN = QColor(0, 0, 0)  # önizleme zemini = maske rengi (maskele: (0, 0, 0))
+
+
+def _bos_metin_rengi() -> QColor:
+    """Siyah zemindeki boş durum yazısı: koyu paletin soluk metni (kontrast tema kipinden bağımsız)."""
+    from .tema.uret import yukle
+    return QColor(yukle()["renk"]["koyu"]["palet"]["PlaceholderText"])
+
+
+def zemin_siyah(im, au) -> object:
+    """Xvfb arka ucunun düz gri kök zemini (masaustu.ZEMIN; OCR için gri tutulur) önizlemede siyah gösterilir: boş
+    masaüstü KWin'deki gibi siyah görünür. Yalnız Xvfb arka ucunda (SanalArkaUc) ve yalnız tam o renkteki pikseller;
+    ajanın gördüğü görüntü (api.goruntu_al) değişmez."""
+    if type(au).__name__ != "SanalArkaUc":
+        return im
+    import numpy as np
+
+    from ..masaustu import ZEMIN as KOK
+    a = np.array(im.convert("RGB"))
+    kok = ((KOK >> 16) & 255, (KOK >> 8) & 255, KOK & 255)
+    m = (a[:, :, 0] == kok[0]) & (a[:, :, 1] == kok[1]) & (a[:, :, 2] == kok[2])
+    if not m.any():
+        return im
+    a[m] = 0
+    from PIL import Image
+    return Image.fromarray(a)
 
 
 def maskele(im, kutular) -> object:

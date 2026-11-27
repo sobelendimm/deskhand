@@ -23,7 +23,9 @@ from .durum import RENK, Durum
 from .onizleme import MaskeHatasi, Onizleme, maskeli_goruntu, pil_qimage
 
 CANLI_MS = 1000  # ~1 kare/sn (yalnız görev çalışırken ve sekme görünürken)
-KIRMIZI, YESIL, GRI = "#e03131", "#2f9e44", "#8a8f98"
+from .durum import _D as _DURUM_RENK  # noqa: E402  (tokens.json; UX-K)
+
+KIRMIZI, YESIL, GRI = _DURUM_RENK["hata"], _DURUM_RENK["basari"], _DURUM_RENK["bos"]
 
 # UX-E (Y5/O8): bu sekmeye özgü yeni metinler (gui/metinler.py başka görevin dosyası; aynı N_ → _ kalıbı)
 G_DUR_SERIDI = N_("Deskhand durduruldu — görev başlatmak için önce üstteki «Devam et» düğmesine basın.")
@@ -377,7 +379,7 @@ class GorevSekmesi(QWidget):
         # DUR açıkken boşta "Hazır… Başlat'a basın" şeritle çelişir: gizlenir (neden + ne yapmalı şeritte)
         self.l_durum.setVisible(not (self.dur and not self.calisiyor))
         pal = self.l_durum.palette()
-        renk = QColor("#e8a317") if self.calisiyor and self.bekleyen else self.palette().color(QPalette.ColorRole.WindowText)
+        renk = QColor(_DURUM_RENK["uyari"]) if self.calisiyor and self.bekleyen else self.palette().color(QPalette.ColorRole.WindowText)
         pal.setColor(QPalette.ColorRole.WindowText, renk)
         self.l_durum.setPalette(pal)
 
