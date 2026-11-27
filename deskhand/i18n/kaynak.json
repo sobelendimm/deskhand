@@ -5390,6 +5390,9 @@
  "pencereyi taşı/boyutlandır/küçült/büyüt/geri yükle": [
   "cli.py:224"
  ],
+ "pip/pipx ile yükseltme derlenmiş yardımcıları siler: yükseltmeden sonra komutu yeniden çalıştırın": [
+  "doktor.py:634"
+ ],
  "pipewire, wireplumber, pipewire-pulse ve libpulse araçlarını kur": [
   "doktor.py:505"
  ],

@@ -142,6 +142,30 @@ def test_doctor_yardimci_komutu():
     kontrol("kaynak ağacında koşan test: _kaynak_kurulumu() doğru (install.sh depo kökünde)", doktor._kaynak_kurulumu())
 
 
+def test_modul_onerisi_kurulum_turu():
+    """Eksik Python modülü: sanal ortamda (pip/pipx) dağıtım paketi değil, bağımlılıkları geri getiren komut."""
+    import shlex
+    d = {"ad": "mcp", "tur": "modul", "ok": False, "not": saglik.MODULLER["mcp"]}
+    asil = doktor._kaynak_kurulumu, doktor._pipx_venv, sys.prefix
+    try:
+        doktor._kaynak_kurulumu = lambda: True
+        kontrol("modül önerisi (git klonu): dağıtım paketi", doktor._modul_onerisi(d, "paketi kur: python-mcp")
+                == "paketi kur: python-mcp")
+        doktor._kaynak_kurulumu = lambda: False
+        sys.prefix = os.path.join(tempfile.gettempdir(), "pipx", "venvs", "deskhand")
+        doktor._pipx_venv = lambda: True
+        o = doktor._modul_onerisi(d, "paketi kur: python-mcp")
+        kontrol("modül önerisi (pipx): pipx reinstall deskhand", o == "pipx reinstall deskhand", o)
+        doktor._pipx_venv = lambda: False
+        o = doktor._modul_onerisi(d, "paketi kur: python-mcp")
+        kontrol("modül önerisi (pip venv): python -m pip install deskhand",
+                o == shlex.join([sys.executable, "-m", "pip", "install", "deskhand"]), o)
+        o = doktor._modul_onerisi({**d, "tur": "arac"}, "paketi kur: openbox")
+        kontrol("araç önerisi venv'de de dağıtım paketi", o == "paketi kur: openbox", o)
+    finally:
+        doktor._kaynak_kurulumu, doktor._pipx_venv, sys.prefix = asil
+
+
 def test_libei_surum_siniri():
     """deskhand-eis ei_ping ister: eski libei (ör. Ubuntu 24.04) derlemeyi kırmamalı, Makefile atlar, doctor söyler."""
     en_az = doktor.libei_en_az()
@@ -151,12 +175,24 @@ def test_libei_surum_siniri():
         yollar.eis_bin = lambda: None
         doktor._komut_ciktisi = lambda *a, **k: "1.2.1" if a[:2] == ("pkg-config", "--modversion") else ""
         s = doktor.satir_yardimcilar()
-        kontrol("doctor: libei eski → eis önerisinde sürüm + libei paket adları",
-                doktor.libei_eski() == ("1.2.1", en_az) and f"libei 1.2.1 < {en_az}" in s["oneri"]
-                and "Debian/Ubuntu: libei-dev" in s["oneri"] and "Fedora: libei-devel" in s["oneri"], str(s))
+        kontrol("doctor: libei eski → ayrıntıda sürüm + libei paket adları (öneride değil)",
+                doktor.libei_eski() == ("1.2.1", en_az) and f"libei 1.2.1 < {en_az}" in s["ayrinti"]
+                and "Debian/Ubuntu: libei-dev" in s["ayrinti"] and "Fedora: libei-devel" in s["ayrinti"]
+                and "libei 1.2.1" not in s["oneri"], str(s))
+        asil_kaynak = doktor._kaynak_kurulumu
+        doktor._kaynak_kurulumu = lambda: False  # pipx: öneri komuttur
+        try:
+            s = doktor.satir_yardimcilar()
+        finally:
+            doktor._kaynak_kurulumu = asil_kaynak
+        r = subprocess.run(["bash", "-n", "-c", s["oneri"]], capture_output=True, text=True)
+        kontrol("doctor (pipx, libei eski): öneri yalnız komut, `bash -n` temiz",
+                r.returncode == 0 and s["oneri"].startswith("make -C ") and "libei" in s["ayrinti"],
+                f"{s['oneri']!r} {r.stderr}")
+        kontrol("doctor (pipx): ayrıntı yükseltmeden sonra yeniden derlemeyi söyler", "pip/pipx" in s["ayrinti"], s["ayrinti"])
         doktor._komut_ciktisi = lambda *a, **k: "99.0" if a[:2] == ("pkg-config", "--modversion") else ""
         kontrol("doctor: libei yeni → libei notu yok", doktor.libei_eski() is None
-                and "libei" not in doktor.satir_yardimcilar()["oneri"].split("(make")[0])
+                and "libei 99" not in doktor.satir_yardimcilar()["ayrinti"])
     finally:
         doktor._komut_ciktisi, yollar.eis_bin = asil
     if not all(shutil.which(t) for t in ("make", "pkg-config")) or subprocess.run(
@@ -206,6 +242,7 @@ test_wheel_veri_dosyalari()
 test_tus_basligi_ifdef()
 test_doctor_paket_adi()
 test_doctor_yardimci_komutu()
+test_modul_onerisi_kurulum_turu()
 test_libei_surum_siniri()
 print(f"\n{gecen}/{toplam} paket testi geçti")
 sys.exit(0 if gecen == toplam else 1)

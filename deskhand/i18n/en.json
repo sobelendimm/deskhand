@@ -2206,5 +2206,6 @@
  "Uygula'ya basınca bırakılacak": "Will stop being used when you press Apply",
  "Uygula'ya basınca kullanılacak": "Will be used when you press Apply",
  "Yeni parola": "New password",
- "Yok · bu kullanıcıda KDE Cüzdanı oluşturulmamış": "None · no KDE Wallet has been created for this user"
+ "Yok · bu kullanıcıda KDE Cüzdanı oluşturulmamış": "None · no KDE Wallet has been created for this user",
+ "pip/pipx ile yükseltme derlenmiş yardımcıları siler: yükseltmeden sonra komutu yeniden çalıştırın": "upgrading with pip/pipx removes the built helpers: run the command again after an upgrade"
 }

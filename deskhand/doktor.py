@@ -58,8 +58,8 @@ def bagimlilik_satirlari() -> list[dict]:
         if d["ok"]:
             sonuc.append(_satir(ad, "tamam", ayrinti, zorunlu=zorunlu))
             continue
-        oneri = (_("AUR paketini kur: {paket}") if aur else _("paketi kur: {paket}")).format(paket=paket) \
-            + _dagitim_eki(paket) if paket else _("./install.sh eksikleri listeler")
+        oneri = _modul_onerisi(d, (_("AUR paketini kur: {paket}") if aur else _("paketi kur: {paket}")).format(paket=paket) \
+            + _dagitim_eki(paket) if paket else _("./install.sh eksikleri listeler"))
         sonuc.append(_satir(ad, "eksik" if zorunlu else "uyari",
                             (_("eksik") if zorunlu else _("eksik (isteğe bağlı)")) + f": {ayrinti}", oneri, zorunlu))
     return sonuc
@@ -303,8 +303,8 @@ def satir_yardimcilar():
                        "planı kullanılamaz, Xvfb kullanılacak"))
     if not eksik:
         return _satir(_("C yardımcıları"), "tamam", _("derli (etkinlik, ekran görüntüsü, girdi/EIS)"))
-    return _satir(_("C yardımcıları"), "uyari", _("derli değil: {liste}").format(liste="; ".join(eksik)),
-                  _yardimci_onerisi(_("./install.sh derler (make -C deskhand/yardimci; kitaplıklar kurulunca yeniden çalıştır)")))
+    return _yardimci_satiri(_satir(_("C yardımcıları"), "uyari", _("derli değil: {liste}").format(liste="; ".join(eksik)),
+                  _("./install.sh derler (make -C deskhand/yardimci; kitaplıklar kurulunca yeniden çalıştır)")))
 
 
 def satir_erisim():
@@ -623,13 +623,35 @@ def libei_eski() -> tuple[str, str] | None:
     return None
 
 
-def _yardimci_onerisi(kaynak_onerisi: str) -> str:
-    """C yardımcısı derli değilken öneri. pip/pipx C derlemez: kaynaklar paketle gelir (yardimci/*.c + Makefile) ve
-    yollar.*_bin() aynı dizinde arar → kaynak ağacı dışında `make -C <paket>/yardimci`. deskhand-eis eksik ve libei
-    eskiyse nedeni + paket adı eklenir (Makefile bu durumda hedefi atlar)."""
+def _yardimci_satiri(satir: dict) -> dict:
+    """C yardımcıları derli değilken satırı kurulum türüne göre tamamlar. pip/pipx C derlemez: kaynaklar paketle gelir
+    (yardimci/*.c + Makefile), yollar.*_bin() aynı dizinde arar → kaynak ağacı dışında öneri YALNIZ çalıştırılabilir
+    `make -C <paket>/yardimci` komutudur (kopyalanıp yapıştırılabilir); açıklamalar ayrıntıya eklenir: yükseltme
+    derlenmiş yardımcıları siler, deskhand-eis eksik ve libei eskiyse nedeni + paket adı (Makefile hedefi atlar)."""
     import shlex
-    oneri = kaynak_onerisi if _kaynak_kurulumu() else shlex.join(["make", "-C", os.path.join(yollar.PAKET_DIZIN, "yardimci")])
+    if not _kaynak_kurulumu():
+        satir["oneri"] = shlex.join(["make", "-C", os.path.join(yollar.PAKET_DIZIN, "yardimci")])
+        satir["ayrinti"] += " — " + _("pip/pipx ile yükseltme derlenmiş yardımcıları siler: yükseltmeden sonra komutu "
+                                      "yeniden çalıştırın")
     eski = None if _calistirilabilir(yollar.eis_bin()) else libei_eski()
     if eski:
-        oneri += f" · libei {eski[0]} < {eski[1]} (ei_ping): libei{_dagitim_eki('libei')}"
-    return oneri
+        satir["ayrinti"] += f" — libei {eski[0]} < {eski[1]} (ei_ping): libei{_dagitim_eki('libei')}"
+    return satir
+
+
+def _pipx_venv() -> bool:
+    """pipx kurulumu mu: pipx her uygulamayı <PIPX_HOME>/venvs/<ad> sanal ortamına kurar."""
+    import sys
+    return sys.prefix != sys.base_prefix and os.path.basename(os.path.dirname(sys.prefix)) == "venvs"
+
+
+def _modul_onerisi(d: dict, dagitim_onerisi: str) -> str:
+    """Eksik Python modülü: git klonunda (install.sh) ya da sistem Python'unda dağıtım paketi; sanal ortamda (pip/pipx
+    kurulumu) modül deskhand'in pip bağımlılığıdır, sistem paketi venv'e görünmez → bağımlılıkları geri getiren komut."""
+    import shlex
+    import sys
+    if d.get("tur") != "modul" or _kaynak_kurulumu() or sys.prefix == sys.base_prefix:
+        return dagitim_onerisi
+    if _pipx_venv():
+        return shlex.join(["pipx", "reinstall", os.path.basename(sys.prefix)])
+    return shlex.join([sys.executable, "-m", "pip", "install", "deskhand"])
