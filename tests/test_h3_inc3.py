@@ -1061,17 +1061,30 @@ def sahte_execv(yol_, argv__):
 
 import deskhand.gui.__main__ as gui_main  # noqa: E402
 
-eski_execv, eski_yal, eski_main = cli.os.execv, cli._yalitik_mi, gui_main.main
+eski_execv, eski_yal, eski_main, eski_ks = cli.os.execv, cli._yalitik_mi, gui_main.main, cli._KOMUT_SATIRI
 cli.os.execv, cli._yalitik_mi, gui_main.main = sahte_execv, (lambda: False), (lambda argv=None: 0)
 try:
+    cli._KOMUT_SATIRI = True  # main() with the process's own argv
     try:
         cli.k_panel(type("A", (), {"arg": ["--tepsi"]})())
     except (_Exec, SystemExit):
         pass
+    kontrol("R9 (1): `deskhand panel` yalıtımsız yorumlayıcıda kendini -I ile yeniden başlatır",
+            cagrilan and cagrilan[0][1] == cli.panel_argv_yalitik(["--tepsi"]), str(cagrilan))
+    cagrilan.clear()
+    try:
+        cli.main(["panel", "--tepsi"])  # an in-process call: never replaces the calling process
+    except (_Exec, SystemExit):
+        pass
+    kontrol("R9 (1): süreç içi cli.main(['panel', …]) çağrısı execv yapmaz", cagrilan == [], str(cagrilan))
 finally:
     cli.os.execv, cli._yalitik_mi, gui_main.main = eski_execv, eski_yal, eski_main
-kontrol("R9 (1): `deskhand panel` yalıtımsız yorumlayıcıda kendini -I ile yeniden başlatır",
-        cagrilan and cagrilan[0][1] == cli.panel_argv_yalitik(["--tepsi"]), str(cagrilan))
+    cli._KOMUT_SATIRI = eski_ks
+kontrol("R9 (1): bin/deskhand ve kurulum sarmalayıcısı -I ile koşar; görev MCP'si -I ile başlar",
+        open(os.path.join(_yalitim.KOK, "bin", "deskhand"), encoding="utf-8").readline().rstrip() ==
+        "#!/usr/bin/python3 -I" and
+        "#!$PY -I\n" in open(os.path.join(_yalitim.KOK, "install.sh"), encoding="utf-8").read() and
+        (lambda k: k[0] != sys.executable or k[1] == "-I")(__import__("deskhand.gorev", fromlist=["x"]).deskhand_komutu()))
 
 # R9 O1: legitimate Latin text is not marked; look-alikes stay marked
 for desen, isaretli_ in (("Café", 0), ("Société Générale", 0), ("Straße", 0), ("Firefox — Banka", 0),
@@ -1200,6 +1213,13 @@ D3_DLG = ("import os, sys; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path
 r = subprocess.run([sys.executable, "-c", D3_DLG, _yalitim.KOK], capture_output=True, text=True, timeout=60)
 kontrol("R9 D3: bilinmeyen DUR etiketi düz metin (HTML yorumlanmaz), ASCII dışı kaçışlı",
         "DUZ True True True" in r.stdout, (r.stdout + r.stderr)[-500:])
+from deskhand.gui.durum import Durum as _Durum  # noqa: E402
+
+ip_ = _Durum(ad="dur", dur_kaynak="<b>Devam_edildi</b>&а" + "x" * 100).ipucu().splitlines()[0]
+kontrol("R9 D3: tepsi ipucunda bilinmeyen etiket kaçışlı (< > & ve ASCII dışı yok, ≤64 karakter)",
+        not any(c in ip_ for c in "<>&а") and "\\u{003C}b\\u{003E}Devam_edildi" in ip_ and "x" * 50 not in ip_, ip_)
+ip_ = _Durum(ad="dur", dur_kaynak="kullanici").ipucu().splitlines()[0]
+kontrol("R9 D3: bilinen etiket tepside çevirisiyle", "kullanici)" not in ip_, ip_)
 
 # Y7 / Y8 / Y9: the display
 for desen, ad_ in (("KeePass\u2169\u216d", "Roma rakamı Ⅹ Ⅽ"), ("Online Banking \U0001d7d0", "matematik rakamı 𝟐"),

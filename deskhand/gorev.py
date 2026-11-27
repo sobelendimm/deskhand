@@ -127,7 +127,7 @@ def deskhand_komutu() -> list[str]:
             return [a, "mcp", "--desktop", "background"]
     kok = os.path.dirname(yollar.PAKET_DIZIN)
     kod = f"import sys; sys.path.insert(0, {kok!r}); from deskhand.cli import main; main()"
-    return [sys.executable, "-c", kod, "mcp", "--desktop", "background"]
+    return [sys.executable, "-I", "-c", kod, "mcp", "--desktop", "background"]  # -I: no user site-packages (INC6)
 
 
 def mcp_ortami() -> dict[str, str]:

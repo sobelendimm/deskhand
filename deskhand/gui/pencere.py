@@ -22,7 +22,7 @@ from . import ayar as A
 from . import metinler as T
 from .dil import Metinler, dil_secenekleri, gunluk_eylemi
 from . import saglik as S
-from .durum import RENK, Durum
+from .durum import RENK, Durum, etiket_kacis
 from .gorev import GorevSekmesi
 from .gunluk_okur import KUYRUK, onay_gecmisi
 from .kisayol import VARSAYILAN_TUS, cakismalar
@@ -31,14 +31,6 @@ from .tepsi import durum_pixmap
 
 # the panel's own closed-fail DUR source (guvenlik.DUR_KAPALI_BASARISIZ; review INC5 O4/O5)
 _DUR_KAYNAK_PANEL = {"panel-kapali-basarisiz": N_("panel durdurdu: cüzdandaki DUR kaydı okunamıyor")}
-
-
-
-def _etiket_kacis(k: str) -> str:
-    """An unknown DUR source label (written by any same-uid process): printable ASCII only, the rest as \\u{XXXX},
-    at most 64 characters (review INC6 D3)."""
-    return "".join(c if 0x20 <= ord(c) < 0x7F else f"\\u{{{ord(c):04X}}}" for c in str(k)[:64])
-
 
 ONIZLEME_MS = 500  # ~2 fps (Devral açıkken: girdi geri bildirimi)
 IZLEME_MS = 1000  # yalnız izlerken 1 fps (her karede yasak pencere denetimi: pencere listesi okunur)
@@ -1534,7 +1526,7 @@ class DurumSeridi(QFrame):
         if d.ad == "dur" and d.dur_kaynak:
             k = d.dur_kaynak
             ad = T.DUR_KAYNAK.get(k) or _DUR_KAYNAK_PANEL.get(k)
-            metin += f" — {_(ad) if ad else _etiket_kacis(k)}"
+            metin += f" — {_(ad) if ad else etiket_kacis(k)}"
         self.l_durum.setText(metin)
         alt = [_(T.SANAL_ACIK).format(ekran=d.sanal_ekran) if d.sanal_acik else _(T.SANAL_KAPALI)]
         if d.devral:

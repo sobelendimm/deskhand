@@ -346,7 +346,7 @@
   "eylem.py:1341"
  ],
  "(--arka) oturum kopyasına bu sitenin yerel deposunu da al; tekrarlanabilir": [
-  "cli.py:551"
+  "cli.py:555"
  ],
  "(adsız)": [
   "web.py:635"
@@ -424,7 +424,7 @@
   "gorsel.py:299"
  ],
  "--desktop-name bir ad ister": [
-  "cli.py:632"
+  "cli.py:636"
  ],
  "--eylem ile değiştirici tuş (--mod) birlikte kullanılamaz": [
   "erisim.py:1178"
@@ -445,7 +445,7 @@
   "uygulama.py:794"
  ],
  "--komut yıkıcı bir kalıba uyuyorsa: kullanıcı AÇIKÇA onayladı": [
-  "cli.py:549"
+  "cli.py:553"
  ],
  "--sira 1..{en_cok}": [
   "eylem.py:1344"
@@ -474,7 +474,7 @@
   "masaustu.py:1424"
  ],
  "3 okuma yöntemi birlikte: renkli düğmeler de görünür": [
-  "cli.py:518"
+  "cli.py:522"
  ],
  ": soket yolu {uzunluk} bayt, AF_UNIX sınırı {sinir}; DESKHAND_RUNTIME_DIR'i daha kısa bir dizine ayarla": [
   "gui/__main__.py:45"
@@ -790,7 +790,7 @@
   "arka_ortak.py:118"
  ],
  "DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı geri yükler (imzalı kayıt yoksa girişleri yeniden sorar); o zamana kadar Deskhand durdu (Dur 10).": [
-  "gui/pencere.py:860"
+  "gui/pencere.py:852"
  ],
  "DUR": [
   "gui/dil.py:78",
@@ -870,12 +870,12 @@
   "cli.py:315"
  ],
  "DURDURULDU ({kod}): {mesaj}": [
-  "cli.py:714",
-  "cli.py:733",
+  "cli.py:720",
+  "cli.py:739",
   "masaustu.py:1475"
  ],
  "DURDURULDU: {mesaj}": [
-  "cli.py:776"
+  "cli.py:782"
  ],
  "Deskhand araçları yüklenemedi (durum: {durum})": [
   "gorev.py:277"
@@ -1298,7 +1298,7 @@
   "doktor.py:248"
  ],
  "KOMUT": [
-  "cli.py:434"
+  "cli.py:438"
  ],
  "KWin / Plasma sürümü": [
   "doktor.py:90",
@@ -1516,7 +1516,7 @@
   "gui/metinler.py:244"
  ],
  "N kez tıkla": [
-  "cli.py:481"
+  "cli.py:485"
  ],
  "Ne yapılmasını istediğinizi yazın.": [
   "gorev.py:424"
@@ -1933,7 +1933,7 @@
   "gorev.py:612"
  ],
  "adlı görünmez masaüstü (ortam: DESKHAND_MASAUSTU)": [
-  "cli.py:440"
+  "cli.py:444"
  ],
  "adlı görünmez masaüstü yalnız KWin türünde açılabilir ({neden})": [
   "masaustu.py:801"
@@ -2092,7 +2092,7 @@
   "oturum/cli.py:138"
  ],
  "açılacak http/https adresi (tarayıcılar; --url ile aynı)": [
-  "cli.py:546"
+  "cli.py:550"
  ],
  "açıldı ({sn} sn)": [
   "uygulama.py:869"
@@ -2146,7 +2146,7 @@
   "uygulama.py:850"
  ],
  "başlık değişti (otomatik tam başlık kilidi): sayfa başlığı değişen akışlarda -b ile esnek desen ver ya da --no-title-lock kullan": [
-  "cli.py:774"
+  "cli.py:780"
  ],
  "başlık değişti: {baslik} (beklenen /{desen}/)": [
   "arka_uc/kde.py:568",
@@ -2154,8 +2154,8 @@
   "arka_uc/sanal.py:1228"
  ],
  "başlık kilidi (regex)": [
-  "cli.py:423",
-  "cli.py:431"
+  "cli.py:427",
+  "cli.py:435"
  ],
  "başlık uymadı: {baslik} (beklenen /{desen}/); girdi gönderilmedi": [
   "guvenlik.py:1258"
@@ -2310,7 +2310,7 @@
   "web.py:745"
  ],
  "bitince önceki pencereyi geri getirme": [
-  "cli.py:428"
+  "cli.py:432"
  ],
  "bolge %x0,y0,x1,y1 olmalı: {tanim}": [
   "akis.py:116"
@@ -2339,7 +2339,7 @@
   "arka_ortak.py:1278"
  ],
  "bu MCP oturumunu adlı görünmez masaüstüne sabitle (yoksa kendiliğinden seçilir)": [
-  "cli.py:587"
+  "cli.py:591"
  ],
  "bu arka uç panoyu desteklemiyor": [
   "arka_uc/__init__.py:162",
@@ -2387,7 +2387,7 @@
   "web.py:776"
  ],
  "bulunamazsa sayfayı aşağı kaydırıp ara (en çok N kez, varsayılan 10)": [
-  "cli.py:524"
+  "cli.py:528"
  ],
  "bulundu: '{metin}' ({x},{y}) güven {guven}{benzerlik}, {sn} sn": [
   "eylem.py:1398"
@@ -2577,7 +2577,7 @@
   "ses.py:197"
  ],
  "dosya seçici diyaloğu": [
-  "cli.py:555"
+  "cli.py:559"
  ],
  "dosya seçici diyaloğunda dosyayı doğrulayarak seç (yol geri okunur)": [
   "cli.py:202"
@@ -2595,7 +2595,7 @@
   "uygulama.py:257"
  ],
  "dosyadaki süreyi geçersiz kıl": [
-  "cli.py:558"
+  "cli.py:562"
  ],
  "dotool başlatılamadı: {hata}": [
   "girdi_merkezi.py:262"
@@ -2622,10 +2622,10 @@
   "mcp_sunucu.py:155"
  ],
  "dx,dy: metnin merkezinden kaydırarak tıkla (ör. etiketin sağındaki kutu)": [
-  "cli.py:522"
+  "cli.py:526"
  ],
  "düğmeyi SN basılı tut (oyunda kazma)": [
-  "cli.py:480"
+  "cli.py:484"
  ],
  "e-Devlet ve devlet siteleri": [
   "gui/metinler.py:180"
@@ -2644,7 +2644,7 @@
  ],
  "ekran görüntüsü": [
   "arka_uc/kde_goruntu.py:90",
-  "cli.py:604"
+  "cli.py:608"
  ],
  "ekran görüntüsü (spectacle)": [
   "arka_uc/kde.py:285",
@@ -2830,13 +2830,13 @@
   "arka_uc/sanal.py:844"
  ],
  "etkileşimsiz ögeler dahil hepsi": [
-  "cli.py:564"
+  "cli.py:568"
  ],
  "etkin pencere başlığı uymadı: {baslik} (beklenen /{desen}/)": [
   "guvenlik.py:1239"
  ],
  "etkin pencere belirlenemedi: kimlik ver (windows ile bul)": [
-  "cli.py:607"
+  "cli.py:611"
  ],
  "etkin pencere belirlenemedi; girdi gönderilmedi": [
   "guvenlik.py:1236"
@@ -2877,7 +2877,7 @@
   "gui/saglik.py:14"
  ],
  "fare/odak yerine ögenin AT-SPI eylemini çalıştır (EYLEM verilmezse birincil: click/press/activate/toggle)": [
-  "cli.py:574"
+  "cli.py:578"
  ],
  "fare: pencere ({x},{y}) = ekran ({ex},{ey})": [
   "eylem.py:1008"
@@ -3139,7 +3139,7 @@
   "gorev_kipi.py:281"
  ],
  "görev özeti (bildirimde gösterilir)": [
-  "cli.py:589"
+  "cli.py:593"
  ],
  "göreve özel izinli alan adları": [
   "oturum/cli.py:76"
@@ -3151,7 +3151,7 @@
   "cli.py:192"
  ],
  "görünmeyenler dahil hepsi (sayfalama yok)": [
-  "cli.py:567"
+  "cli.py:571"
  ],
  "görünmez arka plan masaüstü: start | stop | status": [
   "cli.py:221"
@@ -3160,8 +3160,8 @@
   "masaustu.py:1414"
  ],
  "görünmez ikinci masaüstünde (sanal arka uç)": [
-  "cli.py:436",
-  "cli.py:441"
+  "cli.py:440",
+  "cli.py:445"
  ],
  "görünmez masaüstü başlatıldı": [
   "mcp_sunucu.py:2339",
@@ -3201,17 +3201,17 @@
   "gorsel.py:282"
  ],
  "görüntüyü bu genişliğe küçült (yapay zekâ bağlamı için)": [
-  "cli.py:474"
+  "cli.py:478"
  ],
  "gözcü hatası: {hata}": [
   "arka_uc/kwin.py:809",
   "arka_uc/sanal.py:1235"
  ],
  "gözetimsiz kip: onay gerektiren eylem diyalog açılmadan reddedilir (10)": [
-  "cli.py:449"
+  "cli.py:453"
  ],
  "gözetimsiz kip: onay gerektiren eylem diyalog açılmadan reddedilir (10); ortam: DESKHAND_GOZETIMSIZ=1": [
-  "cli.py:447"
+  "cli.py:451"
  ],
  "gözetimsiz kip: red": [
   "gui/metinler.py:106"
@@ -3229,11 +3229,11 @@
   "oturum/denetle.py:352"
  ],
  "günlüğe metni yazma": [
-  "cli.py:506",
-  "cli.py:579"
+  "cli.py:510",
+  "cli.py:583"
  ],
  "gürültü süzgeci kapalı": [
-  "cli.py:517"
+  "cli.py:521"
  ],
  "güvenli araç bulunamadı: {ad} (yalnız /usr/bin ve /bin; dosya ve üst dizinleri root'a ait, başkası yazamaz olmalı)": [
   "arka_ortak.py:446"
@@ -3245,10 +3245,10 @@
   "eylem.py:786"
  ],
  "hassas sayfada Enter: kullanıcı AÇIKÇA onayladı": [
-  "cli.py:554"
+  "cli.py:558"
  ],
  "hata": [
-  "cli.py:399",
+  "cli.py:403",
   "gui/metinler.py:106"
  ],
  "hayır": [
@@ -3294,7 +3294,7 @@
   "akis.py:260"
  ],
  "ikinci argüman yön olmalı (down|up|left|right); nokta için: scroll KİMLİK X Y [yön] ya da --point X,Y; adım için: scroll KİMLİK down {adim}": [
-  "cli.py:700"
+  "cli.py:704"
  ],
  "imlecin altında başka pencere var: {baslik}; tıklanmadı": [
   "guvenlik.py:1282"
@@ -3502,7 +3502,7 @@
   "oturum/firefox.py:505"
  ],
  "kimlikle verilen girdi komutunda otomatik tam başlık kilidini kapat": [
-  "cli.py:426"
+  "cli.py:430"
  ],
  "kind=color için color gerekli": [
   "mcp_sunucu.py:1881"
@@ -3602,10 +3602,10 @@
   "onay.py:60"
  ],
  "kullanıcı bu hassas tıklamayı AÇIKÇA onayladı": [
-  "cli.py:479",
-  "cli.py:525",
-  "cli.py:534",
-  "cli.py:572"
+  "cli.py:483",
+  "cli.py:529",
+  "cli.py:538",
+  "cli.py:576"
  ],
  "kullanıcı bu sınama için zaten Bitti dedi; yeniden sorulmadı: sayfa ilerlemiyorsa kullanıcıya söyle": [
   "mcp_sunucu.py:2935"
@@ -3638,8 +3638,8 @@
   "mcp_sunucu.py:2126"
  ],
  "kullanıcı oyunda/film izlerken bile ekranında çalış (YALNIZ kullanıcı açıkça izin verdiyse)": [
-  "cli.py:443",
-  "cli.py:445"
+  "cli.py:447",
+  "cli.py:449"
  ],
  "kullanıcı oyunda/film izliyor: ekranına dokunma, desktop=background kullan ya da sonra dene": [
   "mcp_sunucu.py:145"
@@ -3831,7 +3831,7 @@
   "mcp_sunucu.py:2417"
  ],
  "move: X Y (ekran pikseli); resize: GENİŞLİK YÜKSEKLİK": [
-  "cli.py:504"
+  "cli.py:508"
  ],
  "mv kök/ev dizinini taşır": [
   "guvenlik.py:781"
@@ -4147,8 +4147,8 @@
   "arka_uc/kde.py:930"
  ],
  "pencere sınıfı kilidi (regex), ör. krunner": [
-  "cli.py:424",
-  "cli.py:432"
+  "cli.py:428",
+  "cli.py:436"
  ],
  "pencere sınıfı uymadı: {sinif} (beklenen /{desen}/); girdi gönderilmedi": [
   "guvenlik.py:1217"
@@ -4194,7 +4194,7 @@
   "arka_uc/kde.py:903"
  ],
  "pencere/erişilebilirlik listesi": [
-  "cli.py:755"
+  "cli.py:761"
  ],
  "pencere/masaüstü görüntüsü al (--out, --width)": [
   "cli.py:186"
@@ -4407,7 +4407,7 @@
   "ucbirim.py:363"
  ],
  "sayfa numarası (her sayfada 60 öge)": [
-  "cli.py:568"
+  "cli.py:572"
  ],
  "sayfa okunamadı (CAPTCHA olmayabilir) ve odak sayfa içinde ya da bilinmiyor: Enter/Boşluk ve Tab sonrası girdi gönderilmedi. Önce hedef yazı alanına tıkla, sonra yaz (odak yazı alanındaysa izin verilir); adres için goto; ya da tarayıcıyı erişilebilirlik açıkken yeniden başlat (`ac --arka`)": [
   "dogrulama_sinamasi.py:1089"
@@ -4444,7 +4444,7 @@
   "dosya_sec.py:119"
  ],
  "seçilecek dosyanın tam yolu": [
-  "cli.py:556"
+  "cli.py:560"
  ],
  "shot_id başka masaüstüne ait: aynı desktop değeriyle yeni screenshot al": [
   "mcp_sunucu.py:860"
@@ -4579,7 +4579,7 @@
   "doktor.py:91"
  ],
  "sürümü yaz ve çık": [
-  "cli.py:433"
+  "cli.py:437"
  ],
  "sınama kendiliğinden geçti; kullanıcı çağrılmadı: observe çağırıp sayfayı yeniden oku": [
   "mcp_sunucu.py:2976"
@@ -4603,7 +4603,7 @@
   "cli.py:212"
  ],
  "tarayıcıyı bu http/https adresiyle aç": [
-  "cli.py:547"
+  "cli.py:551"
  ],
  "taşıma": [
   "arka_uc/__init__.py:140",
@@ -4679,7 +4679,7 @@
   "doktor.py:447"
  ],
  "tık sırasında basılı tutulacak tuşlar: ctrl, shift, alt, meta (ör. ctrl+shift)": [
-  "cli.py:467"
+  "cli.py:471"
  ],
  "tıklama": [
   "erisim.py:1193",
@@ -4711,7 +4711,7 @@
   "uygulama.py:811"
  ],
  "uygulama adı yerine bu komutu başlat": [
-  "cli.py:548"
+  "cli.py:552"
  ],
  "uygulama arka planda açılamaz (kullanıcının ekranında açık ya da yalnız ön plan)": [
   "mcp_sunucu.py:146"
@@ -4796,19 +4796,19 @@
   "mcp_sunucu.py:2268"
  ],
  "x,y (varsayılan: pencere ortası)": [
-  "cli.py:513"
+  "cli.py:517"
  ],
  "x,y son fotoğrafın pikseli (bölge/ölçek eşlenir)": [
-  "cli.py:478"
+  "cli.py:482"
  ],
  "xargs rm: listedeki her dosyayı siler": [
   "guvenlik.py:803"
  ],
  "yalnız bu rol (ör. 'push button', 'check box')": [
-  "cli.py:563"
+  "cli.py:567"
  ],
  "yalnız bu rol (ör. button, link, entry, 'check box', düğme, bağlantı)": [
-  "cli.py:566"
+  "cli.py:570"
  ],
  "yalnız http ya da https adresi ('{sema}:' değil)": [
   "uygulama.py:341"
@@ -5397,17 +5397,17 @@
   "oturum/cli.py:79"
  ],
  "çıktı dosyası (konumsal [png] ile aynı)": [
-  "cli.py:472"
+  "cli.py:476"
  ],
  "çıktı yolu iki kez verildi (konumsal ve --out)": [
-  "cli.py:759"
+  "cli.py:765"
  ],
  "ödeme sayfasında Enter/Tab/boşluk içeren yazı: kullanıcı AÇIKÇA onayladı": [
-  "cli.py:508",
-  "cli.py:581"
+  "cli.py:512",
+  "cli.py:585"
  ],
  "ödeme sayfasında Enter/boşluk: kullanıcı AÇIKÇA onayladı": [
-  "cli.py:499"
+  "cli.py:503"
  ],
  "öge artık yok ya da değişti (arayüz güncellendi): yeniden ara": [
   "erisim.py:526"
@@ -5464,7 +5464,7 @@
   "doktor.py:80"
  ],
  "ön plan panosunu okumak için: kullanıcı AÇIKÇA onayladı": [
-  "cli.py:495"
+  "cli.py:499"
  ],
  "ön planda kabuk değil: {adlar} (vim/REPL olabilir; yine de satır çalıştırılır)": [
   "ucbirim.py:329"

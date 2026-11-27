@@ -321,6 +321,9 @@ def k_durum(a):
         surum=__version__, arka_uc=hedef_ad(), hedef=os.environ.get("DESKHAND_HEDEF", "on"), dur=dur))
 
 
+_KOMUT_SATIRI = False  # main() was called with the process's own argv (not an in-process call with a list)
+
+
 def _yalitik_mi() -> bool:
     return bool(sys.flags.isolated)
 
@@ -335,9 +338,10 @@ def panel_argv_yalitik(arg: list[str]) -> list[str]:
 
 def k_panel(a):
     """İzleme paneli + tepsi (PyQt6). --tepsi: yalnız tepsiyle başla. The panel always runs in an isolated interpreter
-    (panel_argv_yalitik): started otherwise, it re-executes itself once with -I."""
+    (panel_argv_yalitik): started from a command line without -I, it re-executes itself once with -I. An in-process
+    call (main(argv) with a list: tests, embedding) never replaces the calling process."""
     argv = panel_argv_yalitik(list(a.arg))
-    if not _yalitik_mi() and sys.executable and os.path.isfile(argv[2]):
+    if _KOMUT_SATIRI and not _yalitik_mi() and sys.executable and os.path.isfile(argv[2]):
         sys.stdout.flush()
         sys.stderr.flush()
         os.execv(sys.executable, argv)
@@ -704,6 +708,8 @@ def _kaydir_bicimi(s) -> None:
 
 
 def main(argv=None):
+    global _KOMUT_SATIRI
+    _KOMUT_SATIRI = argv is None
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
         print(komut_listesi())

@@ -19,6 +19,14 @@ CALISMA_PENCERESI = 4.0  # son girdi satırı bu kadar yeniyse "çalışıyor"
 RENK = {"bos": "#8a8f98", "ekran": "#e8590c", "arka": "#1c7ed6", "dur": "#e03131", "rozet": "#fab005"}
 
 
+def etiket_kacis(k: str, html: bool = False) -> str:
+    """An unknown DUR source label (written by any same-uid process): printable ASCII only, the rest as \\u{XXXX},
+    at most 64 characters (review INC6 D3). html=True (a tooltip that may be drawn as rich text): < > & as well."""
+    def kac(c):
+        return 0x20 <= ord(c) < 0x7F and not (html and c in "<>&")
+    return "".join(c if kac(c) else f"\\u{{{ord(c):04X}}}" for c in str(k)[:64])
+
+
 @dataclass(frozen=True)
 class Durum:
     ad: str = "bos"                 # bos | ekran | arka | dur
@@ -40,7 +48,10 @@ class Durum:
     def ipucu(self) -> str:
         satirlar = [f"{T.UYGULAMA} — {self.metin}"]
         if self.ad == "dur" and self.dur_kaynak:
-            satirlar[0] += f" ({_(T.DUR_KAYNAK.get(self.dur_kaynak, self.dur_kaynak))})"
+            ad = T.DUR_KAYNAK.get(self.dur_kaynak)
+            # an unknown label comes from the DUR file (any same-uid process): escaped, never markup (review INC6 D3;
+            # the tray tooltip is drawn as rich text by Plasma)
+            satirlar[0] += f" ({_(ad) if ad else etiket_kacis(self.dur_kaynak, html=True)})"
         if self.bekleyen:
             satirlar.append(_(T.ONAY_BEKLIYOR).format(n=self.bekleyen))
         satirlar.append(_(T.SANAL_ACIK).format(ekran=self.sanal_ekran) if self.sanal_acik else _(T.SANAL_KAPALI))
