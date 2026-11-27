@@ -316,6 +316,21 @@ derler ve şunları kurar:
 Sistem geneline hiçbir şey kurulmaz. Güncelleme: `git pull && ./install.sh`. Kaldırma:
 `./uninstall.sh` (ayarlar, kayıtlı simgeler ve akışlar kalır) ya da `./uninstall.sh --purge`.
 
+### pipx ile
+
+```bash
+pipx install deskhand
+deskhand doctor    # eksik sistem araçlarını Arch / Debian / Fedora paket adıyla listeler
+```
+
+pipx yalnız Python tarafını kurar. Sistem araçları dağıtımınızdan gelir (kdotool, dotool,
+İngilizce/Türkçe verili tesseract, Xvfb, openbox, bubblewrap). Küçük C yardımcılarını derlemek
+için C derleyicisi, make, pkg-config ve wayland-client, libsystemd, libei (>= 1.3.901),
+xkbcommon geliştirme dosyalarını kurun, sonra `deskhand doctor`'ın yazdığı `make -C …`
+komutunu çalıştırın (`pipx upgrade`'den sonra yeniden). libei yoksa arka plan masaüstü Xvfb
+ile açılır. Menü girdisi ve oturum açılışı yalnız `./install.sh` ile gelir; pipx'te onaylar
+için paneli `deskhand panel --tepsi` ile kendiniz başlatın.
+
 ## Hızlı başlangıç
 
 ```bash

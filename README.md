@@ -319,6 +319,21 @@ command. It then builds the helpers and installs:
 Nothing is installed system-wide. Update: `git pull && ./install.sh`. Uninstall:
 `./uninstall.sh` (keeps settings, saved icons and flows) or `./uninstall.sh --purge`.
 
+### With pipx
+
+```bash
+pipx install deskhand
+deskhand doctor    # lists missing system tools with Arch / Debian / Fedora package names
+```
+
+pipx installs the Python side only. System tools come from your distribution (kdotool,
+dotool, tesseract with English/Turkish data, Xvfb, openbox, bubblewrap). To build the small C
+helpers, install a C compiler, make, pkg-config and the wayland-client, libsystemd, libei
+(>= 1.3.901) and xkbcommon development files, then run the `make -C …` command that
+`deskhand doctor` prints (run it again after `pipx upgrade`). Without libei the background
+desktop uses Xvfb. The menu entry and autostart come only from `./install.sh`; with pipx,
+start the panel yourself with `deskhand panel --tepsi`, because approvals need it.
+
 ## Quick start
 
 ```bash
