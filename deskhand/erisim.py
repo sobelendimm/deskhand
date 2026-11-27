@@ -541,8 +541,9 @@ def _hizli_kimlik(o):
     return list(k) if k else None
 
 
-def _ayrinti(Atspi, o, rol, ss, S):
-    """observe ayrıntısı: durum belirteçleri, eylem adları (etkileşimli rollerde), değer (parola alanı ASLA)."""
+def _ayrinti(Atspi, o, rol, ss, S, eylem_hepsi=False):
+    """observe ayrıntısı: durum belirteçleri, eylem adları (etkileşimli rollerde; eylem_hepsi: her rolde — hassas düğme
+    bağlamında alanı saran kabın tıklanır olup olmadığı), değer (parola alanı ASLA)."""
     durumlar = [ad for at, ad in GOZLEM_DURUMLARI if getattr(S, at, None) is not None and ss.contains(getattr(S, at))
                 and (ad != "readonly" or rol in DEGERLI_ROLLER or rol == "password text")]  # etiket hep salt okunur
     if (getattr(S, "EXPANDABLE", None) is not None and ss.contains(S.EXPANDABLE) and "expanded" not in durumlar):
@@ -551,7 +552,7 @@ def _ayrinti(Atspi, o, rol, ss, S):
             and not ss.contains(S.EDITABLE):
         durumlar.append("readonly")
     e = {"durumlar": durumlar}
-    if rol in ETKILESIMLI:
+    if rol in ETKILESIMLI or eylem_hepsi:
         try:
             e["eylemler"] = eylem_listesi(o)[1]
         except Exception:  # noqa: BLE001
@@ -625,11 +626,14 @@ def xwayland_orani(fe_w, fe_h, W, H, olcek=1) -> int:
     return olcek if abs(fe_w / W - olcek) < 0.35 and abs(fe_h / H - olcek) < 0.35 else 1
 
 
-def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayrinti=False, olcek=1):
+def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayrinti=False, olcek=1,
+          eylem_hepsi=False):
     """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi, çerçeveden çocuk-sıra yolu. Wayland'de
     ekran koordinatı yok → çerçeveye göre (WINDOW) konum + pencere dekorasyonu payı (pencere boyutu − AT-SPI boyutu).
     kimlik_ver: her ögeye `kimlik` = [veri yolu adı, nesne yolu] (MCP ref doğrulaması); ayrinti: + durumlar, eylemler,
-    değer (observe). Parola alanının (`password text`) değeri hiçbir koşulda okunmaz.
+    değer (observe); eylem_hepsi (güvenlik taraması): eylemler her rolde ve süzgeç merkez değil pencereyle kesişim. Parola alanının (`password text`) değeri hiçbir koşulda okunmaz.
+    → {"ogeler", "sure", "kesik"}: kesik = liste EKSİK olabilir (süre / öge sınırı doldu, çocuk sınırı kesti, bir düğüm
+    ya da çocuğu ya da görünen ögenin kutusu okunamadı) — yokluğa dayanan karar (hassas düğme bağlamı) güvenemez.
     etkin = SENSITIVE: GTK4 (zenity, Nautilus…) ENABLED durumunu HİÇ bildirmez (ölçüldü: tüm düğmeler 'devre dışı'
     görünüp tıklama reddediliyordu); Qt/GTK3 devre dışı ögede SENSITIVE'i de kaldırır."""
     X, Y, W, H = geo
@@ -643,7 +647,7 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
     oy = max(0, round(H - fh - ox)) if H > fh else 0
     S = Atspi.StateType
     t0 = time.monotonic()
-    sonuc, yigin, sayi = [], [(cerceve, 0, [])], 0
+    sonuc, yigin, sayi, kesik = [], [(cerceve, 0, [])], 0, False
     while yigin and sayi < en_cok and time.monotonic() - t0 < sure:
         o, d, yol = yigin.pop()
         sayi += 1
@@ -652,8 +656,11 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
             if d > 0 and not ss.contains(S.SHOWING):
                 continue  # görünmeyen dal (kapalı menü, gizli sekme)
             rol, ad = o.get_role_name(), (o.get_name() or "").strip()
-            n = min(o.get_child_count(), cocuk_siniri)
+            n = o.get_child_count()
+            if n > cocuk_siniri:
+                n, kesik = cocuk_siniri, True
         except Exception:
+            kesik = True  # düğüm (ve alt dalı) okunamadı
             continue
         try:
             e = o.get_extents(WIN)
@@ -663,7 +670,7 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
                 kutu_ = (round((e.x - fe.x) / r) + ox, round((e.y - fe.y) / r) + oy, round(e.width / r),
                          round(e.height / r))
         except Exception:
-            kutu_ = None
+            kutu_, kesik = None, True
         if d > 0 and kutu_ and kutu_[2] > 0 and kutu_[3] > 0:
             oge = {"rol": rol, "ad": ad, "x": kutu_[0], "y": kutu_[1], "w": kutu_[2], "h": kutu_[3],
                    "cx": kutu_[0] + kutu_[2] / 2, "cy": kutu_[1] + kutu_[3] / 2,
@@ -671,7 +678,7 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
             if kimlik_ver or ayrinti:
                 oge["kimlik"] = _hizli_kimlik(o)
             if ayrinti:
-                oge.update(_ayrinti(Atspi, o, rol, ss, S))
+                oge.update(_ayrinti(Atspi, o, rol, ss, S, eylem_hepsi))
             sonuc.append(oge)
         for i in range(n - 1, -1, -1):
             try:
@@ -680,7 +687,15 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
                 c = None
             if c is not None:
                 yigin.append((c, d + 1, yol + [i]))
-    return {"ogeler": [o for o in sonuc if 0 <= o["cx"] < W and 0 <= o["cy"] < H], "sure": time.monotonic() - t0}
+            else:
+                kesik = True
+    kesik = kesik or bool(yigin)  # süre ya da öge sınırı doldu: taranmamış dal kaldı
+    if eylem_hepsi:  # güvenlik (yokluğa dayanan karar): pencereyle KESİŞEN her öge; merkezi dışarıdaki öge de alanı
+        # örtebilir (SONKAPI-B B1: cx=-145 düğme textarea'yı örtüyordu, listede yoktu, kesik False)
+        gorunen = [o for o in sonuc if o["x"] < W and o["x"] + o["w"] > 0 and o["y"] < H and o["y"] + o["h"] > 0]
+    else:
+        gorunen = [o for o in sonuc if 0 <= o["cx"] < W and 0 <= o["cy"] < H]
+    return {"ogeler": gorunen, "sure": time.monotonic() - t0, "kesik": kesik}
 
 
 def _yoldan_bul(Atspi, cerceve, yol, rol, ad):
@@ -849,7 +864,8 @@ def _atspi_is(istek):
         return cerceve.get_role_name()
     if islem == "tara":
         r = _tara(Atspi, cerceve, istek["geo"], istek["en_cok"], istek["sure"], istek["cocuk_siniri"],
-                  bool(istek.get("kimlik_ver")), bool(istek.get("ayrinti")), int(istek.get("olcek") or 1))
+                  bool(istek.get("kimlik_ver")), bool(istek.get("ayrinti")), int(istek.get("olcek") or 1),
+                  bool(istek.get("eylem_hepsi")))
         r["cerceve_kimlik"] = _nesne_kimligi(cerceve)
         return r
     oge = _yoldan_bul(Atspi, cerceve, istek["yol"], istek["rol"], istek["ad"])
@@ -1255,13 +1271,25 @@ def _pencere_istegi(k, islem, **ek):
 def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400, kimlik_ver=False, ayrinti=False):
     """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi (+ `yol`; kimlik_ver: `kimlik`;
     ayrinti: + durumlar/eylemler/değer). Erişilebilirlik kapalıysa kendiliğinden açılır (kullanıcıdan komut
-    beklenmez). → (ögeler, süre)."""
+    beklenmez). → (ögeler, süre). Listeleme/arama içindir (observe, ada göre bul); bir şeyin YOKLUĞUNA dayanan güvenlik
+    kararı erisim_ogeleri_kesik ile kesilme bayrağını almalı."""
+    ogeler, sure_, _kesik = erisim_ogeleri_kesik(k, en_cok, sure, cocuk_siniri, kimlik_ver, ayrinti)
+    return ogeler, sure_
+
+
+def erisim_ogeleri_kesik(k, en_cok=4000, sure=8.0, cocuk_siniri=400, kimlik_ver=False, ayrinti=False,
+                         eylem_hepsi=False):
+    """erisim_ogeleri + kesilme bayrağı → (ögeler, süre, kesik). kesik: liste eksik olabilir (_tara: süre/öge/çocuk
+    sınırı, okunamayan dal/kutu); bayrağı bildirmeyen yanıt da kesik sayılır (kapalı-başarısız). eylem_hepsi: eylem
+    adları her rolde (ayrinti ile)."""
     yeni = erisim_ac_garanti()
     ek = {}
     if kimlik_ver:
         ek["kimlik_ver"] = True
     if ayrinti:
         ek["ayrinti"] = True
+    if eylem_hepsi:
+        ek["eylem_hepsi"] = True
     au = sec()
     olcek = au.masaustu_olcegi() if hasattr(au, "masaustu_olcegi") else 1
     if olcek != 1:
@@ -1275,11 +1303,57 @@ def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400, kimlik_ver=False,
             if r.get("cerceve_kimlik"):
                 for o in r["ogeler"]:
                     o["cerceve"] = r["cerceve_kimlik"]
-            return r["ogeler"], r["sure"]
+            return r["ogeler"], r["sure"], r.get("kesik", True) is not False
         except Dur as e:
             if getattr(e, "tur", None) != "agacta_yok" or time.monotonic() >= bitis:
                 raise
             time.sleep(0.4)
+
+
+DUZENLEME_SURE = 3.0  # sn: hassas düğme bağlamı için ağaç taramasının üst sınırı (yalnız noktadaki yazı hassassa)
+
+
+def duzenleme_alanlari(k):
+    """Hassas düğme bağlamı (eylem.hassas_nokta → guvenlik.duzenleme_icerigini_ayikla): penceredeki düzenlenebilir
+    alanlar, öbür etkileşimli ögeler, etkileşimsiz ögeler ve alanı saran zararsız kaplar, PENCERE pikseli kutularıyla
+    → (alanlar, digerleri, dugmeler, kaplar). Tarayıcıda sayfa ağacı (web.duzenleme_alanlari), değilse uygulamanın
+    ağacı: alan = rol entry/text, durumda salt okunur YOK (_ayrinti: EDITABLE durumu olmayan entry/text salt okunur
+    sayılır), adı hassas değil ve kendi tıklama eylemi yok (guvenlik.alan_kanitli_mi); alan girdisi (x, y, w, h, değer)
+    — değer _ayrinti'nin süzülmüş/kısaltılmış değeri (yoksa None: o alanda kanıt yok). Alanı kapsayan etkileşimsiz öge
+    yalnız guvenlik.duzenleme_kabi_mi ise kap (eylemleri her rolde okunur). Masaüstü kipi, ağaç okunamadı ya da KESİK
+    (süre/öge/çocuk sınırı, okunamayan dal), pencere ağaçta yok… → None (çağıran hiçbir satırı ayıklamaz: eski
+    davranış, güvenli taraf)."""
+    if not k or k == EKRAN:
+        return None
+    try:
+        from .dogrulama_sinamasi import tarayici_mi
+        if tarayici_mi(k):
+            from . import web
+            return web.duzenleme_alanlari(k)
+        ogeler, _sure, kesik = erisim_ogeleri_kesik(k, sure=DUZENLEME_SURE, ayrinti=True, eylem_hepsi=True)
+    except Exception:  # noqa: BLE001 - okunamadı: ayıklama yok
+        return None
+    if kesik:
+        return None  # eksik liste: alana bindirilmiş düğme okunmamış olabilir (INCELEME-HASSAS O1)
+
+    def kutu_(o):
+        return (o["x"], o["y"], o["w"], o["h"])
+
+    alan_ogeleri = [o for o in ogeler if o["rol"] in ("entry", "text") and "durumlar" in o
+                    and "readonly" not in o["durumlar"] and guvenlik.alan_kanitli_mi(o.get("ad"), o.get("eylemler"))]
+    alan_kutulari = [kutu_(o) for o in alan_ogeleri]
+    alanlar, digerleri, dugmeler, kaplar = [], [], [], []
+    for o in ogeler:
+        kutu = kutu_(o)
+        if any(o is a for a in alan_ogeleri):
+            alanlar.append((*kutu, o.get("deger")))
+        elif o["rol"] in ETKILESIMLI:
+            dugmeler.append(kutu)  # salt okunur / kanıtsız alan dahil
+        elif guvenlik.duzenleme_kabi_mi(kutu, o.get("eylemler"), alan_kutulari):
+            kaplar.append(kutu)
+        else:
+            digerleri.append(kutu)
+    return alanlar, digerleri, dugmeler, kaplar
 
 
 def _oge_istegi(k, o, islem, **ek):

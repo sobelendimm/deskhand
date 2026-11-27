@@ -741,10 +741,35 @@ def insan_dogrulama_klavye(k, dizi=None):
         raise dogrulama_sinamasi.dur(r)
 
 
+def duzenleme_icerigi_suz(k, yakin):
+    """Noktadaki OCR satırlarından (ocr.NoktaYazisi) bir düzenlenebilir alanın (textarea/entry) İÇERİĞİ olduğu erişilebilirlik
+    ağacıyla KANITLANANLARI ayıkla: alandaki "…Buy/Pay buttons…" yazısı tıklanan düğme değildir (gerçek olay: Glama
+    açıklama alanına tık → ödeme onayı). Ağaç yalnız süzgecin baktığı kalıba (hassas/para/yapıştırma) uyan kutulu bir satır varsa okunur (tık gecikmesi
+    yok); masaüstü kipi / ağaç okunamadı / kanıt yok → yakin aynen (eski davranış). Ödeme sayfası kuralı başlığa bakar,
+    bundan etkilenmez; hedefin kendi adı ve aranan metin (ek_metinler) buraya hiç gelmez."""
+    yakin = list(yakin)
+    if not k or k == EKRAN or not any(getattr(t, "kutu", None) and guvenlik._hassas_terimler(t) for t in yakin):
+        return yakin
+    from . import erisim
+    try:
+        r = erisim.duzenleme_alanlari(k)
+    except Exception:  # noqa: BLE001 - ağaç yok: eski davranış
+        r = None
+    if not r:
+        return yakin
+    kalan, ayiklanan = guvenlik.duzenleme_icerigini_ayikla(yakin, *r)
+    if ayiklanan:
+        from .gunluk import gunluk
+        gunluk(f"hassas düğme bağlamı | [{_au().baslik(k)}] | düzenleme alanı içeriği hedef sayılmadı: "
+               f"{len(ayiklanan)} satır")  # içerik günlüğe yazılmaz (kullanıcının yazısı olabilir)
+    return kalan
+
+
 def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=(), ek_basliklar=()):
     """Tıklanacak nokta ve oradaki yazı belli olduktan SONRA tek onay (bir eylem = bir onay): ödeme sayfası ve/veya
     hassas düğme. Onay isteği noktadaki yazıyı + hassas düğme metnini + çevresinin küçük görüntüsünü taşır.
-    ek_basliklar: pencere başlığına ek denetlenen sayfa başlıkları (web belge başlığı)."""
+    ek_basliklar: pencere başlığına ek denetlenen sayfa başlıkları (web belge başlığı). yakin (noktadaki OCR yazısı)
+    düzenleme alanı içeriğinden ayıklanır (duzenleme_icerigi_suz); ek_metinler (hedefin adı / aranan metin) asla."""
     guvenlik.seviye_denetle(k, "fare")  # erişim seviyesi: onay diyaloğundan ÖNCE
     insan_dogrulama_nokta(k, x, y, [*ek_metinler, *yakin])  # CAPTCHA: tıklanan NOKTA sınama kutusundaysa 18 (çözülmez)
     if k == EKRAN:  # masaüstü kipi: pencere imleç konunca bilinir (tikla_ic / sürükleme insan_dogrulama_ekran çağırır)
@@ -753,12 +778,13 @@ def hassas_nokta(g, k, onayli, ne, x, y, yakin, ek_metinler=(), ek_basliklar=())
     if k != EKRAN and guvenlik.sistem_istemi_engel(k, onayli, ne):  # polkit/KWallet/parola sorucusu: onay
         _onayli_etiket(g)
     metinler = [*ek_metinler, *yakin]
+    hedef_metinler = [*ek_metinler, *duzenleme_icerigi_suz(k, yakin)]  # düğme bağlamı: alan içeriği hariç
     once = getattr(guvenlik._EYLEM, "onaylandi", False)
     panelden = not guvenlik.onayli_gecerli_kati(onayli)
-    if hassas_sayfa_engel(k, onayli, ne, yakin=metinler, nokta=(x, y), ek_basliklar=ek_basliklar):  # True = hassas sayfa VE onaylandı
+    if hassas_sayfa_engel(k, onayli, ne, yakin=hedef_metinler, nokta=(x, y), ek_basliklar=ek_basliklar):  # True = hassas sayfa VE onaylandı
         _onayli_etiket(g)
         onayli = True
-    if hassas_engel(onayli, *metinler, hedef=_au().baslik(k), k=k, nokta=(x, y)):
+    if hassas_engel(onayli, *hedef_metinler, hedef=_au().baslik(k), k=k, nokta=(x, y)):
         _onayli_etiket(g)
     if panelden and not once and getattr(guvenlik._EYLEM, "onaylandi", False):
         # panelden onay verildi: tıklamadan hemen önce noktadaki yazı yeniden okunup onaylananla karşılaştırılır

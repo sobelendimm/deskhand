@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
+from collections.abc import Container
 
 from .arka_uc import EKRAN, sec
 from .hata import ARAC_EKSIK, BELIRSIZ, BULUNAMADI, Dur
@@ -328,16 +329,30 @@ def _rol_kumesi(roller) -> set[str] | None:
 _CERCEVE_EK = frozenset({"label", "static", "heading", "paragraph", "image", "text"})  # iframe içi metin ögeleri (cerceve_metni)
 
 
-def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str] | None, gorunur: bool,
-          en_cok_dugum: int = 30000, cerceve_metni: bool = False):
+class _TumRoller:
+    """_yuru roller=: belge içindeki HER rol istenir (hassas düğme bağlamı: listede olmayan rol — canvas, landmark… —
+    alana bindirilmiş tıklanır örtü olabilir)."""
+
+    def __contains__(self, _rol) -> bool:
+        return True
+
+
+_TUM_ROLLER = _TumRoller()
+
+
+def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: Container[str] | None, gorunur: bool,
+          en_cok_dugum: int = 30000, cerceve_metni: bool = False, durum: dict | None = None):
     """Çerçeveden başlayıp etkin (SHOWING) belge(ler)in ögelerini topla → (ham ögeler, belgeler, düğüm sayısı).
     Seviye seviye iki boru hattı turu: (1) rol + ad + durum, (2) gerekenlere alt ögeler + kutu (+ belge adresi).
     Tarayıcı arayüzünde yalnız görünen dallardan belgeye inilir (arka plan sekmelerinin belgeleri atlanır); belge
     içinde gorunur=True ise görünmeyen (SHOWING olmayan) dallara inilmez. Görüş alanı: en yakın çerçeve/belge kutusu
-    (iframe'de üst alanla kesişimi) — kaydırma alanı dışındaki öge gorunur=False olur."""
+    (iframe'de üst alanla kesişimi) — kaydırma alanı dışındaki öge gorunur=False olur. Ögenin `_kutu`'su negatif
+    konumda None'dır; `_hkutu` = okunan ham kutu (pozitif boyutluysa, konumdan bağımsız).
+    durum (sözlük) verilirse liste EKSİK olabildiğinde durum["kesik"] = True: düğüm sınırı doldu, düğümün rolü / belge
+    içinde çocukları ya da istenen ögenin kutusu okunamadı, belge içinde başka veri yolundaki çocuk atlandı."""
     istenen = roller if roller is not None else ETKILESIMLI
     seviye = [(cerceve, (), 0, None, "")]  # (yol, belge sırası anahtarı, belge derinliği, görüş alanı, belge adresi)
-    ogeler, belgeler, sayi = [], [], 0
+    ogeler, belgeler, sayi, kesik = [], [], 0, False
     while seviye and sayi < en_cok_dugum:
         sayi += len(seviye)
         m = []
@@ -349,6 +364,7 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
             rol = _deg(r[3 * i], "") or ""
             d = _durumlar(r[3 * i + 2])
             if not rol or "defunct" in d:
+                kesik = kesik or ("defunct" not in d)  # rolü okunamayan (yok olmamış) düğüm: alt dalı bilinmiyor
                 continue
             belge = rol in _BELGE
             if belge and "showing" not in d and not (derin and not gorunur):
@@ -358,7 +374,10 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
                 ister = False
             else:
                 ister = rol in istenen or (cerceve_metni and derin > 1 and rol in _CERCEVE_EK)
-                inilir = (rol not in _YAPRAK and not (rol == "combo box" and "expanded" not in d)
+                # yaprak / kapalı combo budaması yalnız olağan taramada: hassas bağlam taramasında (_TUM_ROLLER)
+                # yaprağın position:absolute çocuğu ebeveyninin dışına taşıp alanı örtebilir (SONKAPI-B B2, Firefox 161)
+                inilir = ((roller is _TUM_ROLLER or (rol not in _YAPRAK and not (rol == "combo box"
+                                                                                 and "expanded" not in d)))
                           and (belge or not gorunur or "showing" in d))
             kutu_ister = ister or belge or rol == "internal frame"
             isler.append((y, anahtar, derin, alan, rol, (_ozd(r[3 * i + 1], "") or "").strip(), d, inilir, ister,
@@ -372,13 +391,19 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
         r2 = yol.toplu(ikinci)
         j, yeni = 0, []
         for (y, anahtar, derin, alan, rol, ad, d, inilir, ister, kutu_ister, belge, badres) in isler:
-            cocuk = kutu = None
+            cocuk = kutu = hkutu = None
             if inilir:
                 cocuk, j = _deg(r2[j]), j + 1
+                if cocuk is None and (derin or belge):
+                    kesik = True  # belge içinde çocuklar okunamadı: alt dal listede yok
             if kutu_ister:
                 e, j = _deg(r2[j]), j + 1
-                if e and len(e) == 4 and e[2] > 0 and e[3] > 0 and e[0] > -1 and e[1] > -1:
-                    kutu = (e[0] + koken[0], e[1] + koken[1], e[2], e[3])
+                if not (e and len(e) == 4):
+                    kesik = kesik or ister  # istenen ögenin kutusu okunamadı
+                elif e[2] > 0 and e[3] > 0:
+                    hkutu = (e[0] + koken[0], e[1] + koken[1], e[2], e[3])
+                    if e[0] > -1 and e[1] > -1:
+                        kutu = hkutu
             alt_alan, alt_derin = alan, derin
             if belge:
                 oz, j = (_deg(r2[j], {}) or {}), j + 1
@@ -389,12 +414,16 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
             if kutu and (belge or rol == "internal frame"):
                 alt_alan = _kesisim(alan, kutu)
             if ister:
-                ogeler.append({"_yol": y, "_anahtar": anahtar, "_alan": alan, "_d": d, "_kutu": kutu,
+                ogeler.append({"_yol": y, "_anahtar": anahtar, "_alan": alan, "_d": d, "_kutu": kutu, "_hkutu": hkutu,
                                "_derin": derin, "_adres": badres, "rol": rol, "ad": ad})
             for n, (b_, cy) in enumerate(cocuk or ()):
                 if b_ == bus:
                     yeni.append((cy, anahtar + (n,), alt_derin, alt_alan, badres))
+                elif alt_derin:
+                    kesik = True  # belge içinde başka veri yolundaki çocuk: okunmadı
         seviye = yeni
+    if durum is not None:
+        durum["kesik"] = kesik or bool(seviye)  # seviye kaldıysa düğüm sınırı doldu
     return ogeler, belgeler, sayi
 
 
@@ -637,6 +666,127 @@ def sayfa_bilgisi(k) -> dict:
     """Etkin sekmenin belgesi: baslik, adres, yukleniyor, pencere (başlığı), belge (iframe dahil belge sayısı);
     başlık ödeme/sipariş sayfasıysa hassas_sayfa: True."""
     return oku(k, roller=["__yok__"], en_cok=0, ayrinti=False)["sayfa"]
+
+
+_EYLEM = "org.a11y.atspi.Action"
+_EN_COK_EYLEM = 32  # bundan çok eylem bildiren öge "bilinmiyor" sayılır
+
+
+def _eylemleri_oku(yol, bus, yollar) -> dict:
+    """Ögelerin eylem adları {nesne yolu: [ad…]}: Action arayüzü yoksa [] (kanıtlı eylemsiz); arayüz/sayı/ad
+    okunamadıysa None (bilinmiyor → çağıran tıklanır sayar)."""
+    yollar = list(dict.fromkeys(yollar))
+    if not yollar:
+        return {}
+    sonuc: dict = {}
+    sayilacak = []
+    for y, a in zip(yollar, yol.toplu([_m(bus, y, ERISIM, "GetInterfaces") for y in yollar]), strict=True):
+        arayuzler = _deg(a)
+        if arayuzler is None:
+            sonuc[y] = None
+        elif _EYLEM not in arayuzler:
+            sonuc[y] = []
+        else:
+            sayilacak.append(y)
+    if not sayilacak:
+        return sonuc
+    istek, sahip = [], []
+    for y, n_ in zip(sayilacak, yol.toplu([_ozellik(bus, y, "NActions", _EYLEM) for y in sayilacak]), strict=True):
+        n = _ozd(n_)
+        if not isinstance(n, int) or n < 0 or n > _EN_COK_EYLEM:
+            sonuc[y] = None
+            continue
+        sonuc[y] = []
+        for i in range(n):
+            istek.append(_m(bus, y, _EYLEM, "GetName", "i", (i,)))
+            sahip.append(y)
+    for y, g in zip(sahip, yol.toplu(istek) if istek else [], strict=True):
+        ad = _deg(g)
+        if sonuc[y] is not None:
+            if isinstance(ad, str):
+                sonuc[y].append(ad)
+            else:
+                sonuc[y] = None
+    return sonuc
+
+
+def duzenleme_alanlari(k):
+    """Hassas düğme denetimi (eylem.hassas_nokta → guvenlik.duzenleme_icerigini_ayikla) için tarayıcı sayfasının ögeleri,
+    PENCERE pikseli kutularıyla: (alanlar, digerleri, dugmeler, kaplar). Belge içindeki HER rol, görünmeyen dallar dahil
+    okunur (listede olmayan rol ya da gizli kaptaki örtü de satıra değebilir); kutu = ham kutu (negatif konum dahil).
+    alanlar = (x, y, w, h, değer): rol entry (textarea dahil), durum editable, read_only değil, görünür, adı hassas değil
+    ve kendi tıklama eylemi yok (guvenlik.alan_kanitli_mi; INCELEME-HASSAS D1); kutu görüş alanına kırpılır; değer alanın
+    metni (Text.GetText; gizli alan adında — parola/OTP/PIN… — okunmaz, None). dugmeler = öbür etkileşimli ögeler (kanıtsız
+    alan dahil); kaplar = alanı kapsayan ve guvenlik.duzenleme_kabi_mi olan ögeler (tıklanmadığı kanıtlı: kendi ya da
+    atasının tıklaması yok); digerleri = geri kalan (alanı saran tıklanır öge dahil; INCELEME-HASSAS O2).
+    None (çağıran hiçbir satırı ayıklamaz: güvenli taraf): öge konumu doğrulanamadı, okunan sayfa bu pencereye ait
+    kanıtlanamadı, ağaç KESİK (düğüm sınırı, okunamayan dal/kutu; INCELEME-HASSAS O1), okuma hatası."""
+    from .erisim import DUZENLEME_SURE
+    # toplam süre sınırı (tarayıcı dışı yoldaki DUZENLEME_SURE karşılığı): dev sayfada tık saniyelerce beklemez; aşılırsa
+    # _toplu Dur verir → None (kapalı-başarısız; SONKAPI-B B3)
+    with tarama_siniri(DUZENLEME_SURE):
+        return _duzenleme_alanlari(k)
+
+
+def _duzenleme_alanlari(k):
+    from . import guvenlik
+    from .erisim import _GIZLI_ALAN
+    from .ocr import katla
+    try:
+        au, yol, bus, cerceve, koord, koken, konum = _baglam(k)
+    except Dur:
+        return None
+    try:
+        if konum is None:  # koordinatlar doğrulanamadı: tık yolundaki gibi fail-closed
+            return None
+        durum: dict = {}
+        ham, belgeler, _sayi = _yuru(yol, bus, cerceve, koord, koken, _TUM_ROLLER, False, durum=durum)
+        if durum.get("kesik"):
+            return None  # eksik liste: alana bindirilmiş düğme okunmamış olabilir
+        ust = min(belgeler, key=lambda b: b["derinlik"]) if belgeler else None
+        if ust is None:
+            return None
+        _belge_pencereye_ait(ust, au.baslik(k))
+        aday = []  # (öge, görüş alanına kırpılmış kutu)
+        for o in ham:
+            kutu, d = o["_kutu"], o["_d"]
+            if (o["rol"] == "entry" and kutu and "editable" in d and "read_only" not in d and "showing" in d
+                    and "visible" in d):
+                gorus = tuple(_kesisim(o["_alan"], tuple(kutu)) if o["_alan"] else kutu)
+                if gorus[2] > 0 and gorus[3] > 0:
+                    aday.append((o, gorus))
+        aday_kutu = [g for _o, g in aday]
+        kap_aday = [o for o in ham if o["rol"] not in ETKILESIMLI and o.get("_hkutu")
+                    and guvenlik.alani_kapsar_mi(o["_hkutu"], aday_kutu)]
+        okunur = [o for o, _g in aday if not _GIZLI_ALAN.search(katla(o["ad"] or ""))]
+        metin = yol.toplu([_m(bus, o["_yol"], "org.a11y.atspi.Text", "GetText", "ii", (0, -1)) for o in okunur]) \
+            if okunur else []
+        degerler = {id(o): v for o, v in zip(okunur, (_deg(m_) for m_ in metin), strict=True)}
+        eylemler = _eylemleri_oku(yol, bus, [o["_yol"] for o, _g in aday] + [o["_yol"] for o in kap_aday])
+    except Dur:
+        return None
+    finally:
+        yol.kapat()
+    alanlar, digerleri, dugmeler, kaplar = [], [], [], []
+    alan_idleri = set()
+    for o, gorus in aday:
+        if guvenlik.alan_kanitli_mi(o["ad"], eylemler.get(o["_yol"])):
+            deger = degerler.get(id(o))
+            alanlar.append((*gorus, deger if isinstance(deger, str) else None))
+            alan_idleri.add(id(o))
+    kanitli = [a[:4] for a in alanlar]
+    for o in ham:
+        kutu = o.get("_hkutu")
+        if id(o) in alan_idleri or not kutu:
+            continue
+        kutu = tuple(kutu)
+        if o["rol"] in ETKILESIMLI:
+            dugmeler.append(kutu)
+        elif guvenlik.duzenleme_kabi_mi(kutu, eylemler.get(o["_yol"]), kanitli):
+            kaplar.append(kutu)
+        else:
+            digerleri.append(kutu)
+    return alanlar, digerleri, dugmeler, kaplar
 
 
 def oge_ve_sayfa(k, ad, rol=None, sira=None, gorunur=True, yol_ver=False):
