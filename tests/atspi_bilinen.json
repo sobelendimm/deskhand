@@ -1,0 +1,18 @@
+{
+ "aciklama": "Bugünkü AT-SPI ihlalleri (G1, 27 Kas). UX görevleri listeyi boşaltır; yeni ihlal test_atspi_kural'da KALDI. Biçim: 'kural|rol|ad|ata zinciri' → adet.",
+ "ihlaller": {
+  "ADSIZ_DUGME|button||frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Genel kısayol/filler:Genel kısayol/text:": 1,
+  "ADSIZ_GIRIS|text||frame:Deskhand/filler:/filler:/layered pane:/filler:": 2,
+  "ADSIZ_GIRIS|text||frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Genel kısayol/filler:Genel kısayol": 1,
+  "ADSIZ_GIRIS|text||frame:Deskhand/filler:/filler:/layered pane:/filler:/split pane:/filler:": 1,
+  "HEDEF_KUCUK|button||frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Genel kısayol/filler:Genel kısayol/text:": 1,
+  "HEDEF_KUCUK|check box|Giriş yaptığım hesaplar görünmez masaüstünde de açık olsun (banka ve ödeme siteleri hariç)|frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Hesap oturumları": 1,
+  "HEDEF_KUCUK|check box|Google hesabım (Gmail, Drive, Dokümanlar) görünmez masaüstünde oturum açık kullanılabilir|frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Hesap oturumları": 1,
+  "HEDEF_KUCUK|check box|Klavye kısayoluyla DUR (KDE genel kısayolu)|frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Genel kısayol": 1,
+  "HEDEF_KUCUK|check box|Microsoft hesabım (Outlook/Hotmail, OneDrive, Office) görünmez masaüstünde oturum açık kullanılabilir|frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Hesap oturumları": 1,
+  "HEDEF_KUCUK|check box|Otomatik kaydır|frame:Deskhand/filler:/filler:/layered pane:/filler:": 1,
+  "HEDEF_KUCUK|check box|Tam ekranda da sor|frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Meşgulken davranış": 1,
+  "HEDEF_KUCUK|check box|e-Devlet ve devlet siteleri (turkiye.gov.tr, gib.gov.tr, sgk.gov.tr…) görünmez masaüstünde oturum açık kullanılabilir|frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Hesap oturumları": 1,
+  "ODAK_YOK|button||frame:Deskhand/filler:/filler:/layered pane:/filler:/filler:/filler:/panel:Genel kısayol/filler:Genel kısayol/text:": 1
+ }
+}
