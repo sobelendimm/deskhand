@@ -82,14 +82,15 @@ def ff_yeniden_acik() -> bool:
     return (os.environ.get(ORTAM_FF) or "").strip().lower() not in ("kapali", "kapalı", "0", "off", "no", "hayir")
 
 
-def bellek_uyarisi(durum: dict | None) -> str | None:
-    """oran ≥ UYARI_ORAN → uyarı metni (ne olacağını söyler), değilse None."""
+def bellek_uyarisi(durum: dict | None, firefox_var: bool = True) -> str | None:
+    """oran ≥ UYARI_ORAN → uyarı metni (ne olacağını söyler), değilse None. firefox_var: yeniden başlatılabilecek
+    (kayıtlı, kopyalı) Firefox var mı."""
     if not durum or durum.get("oran", 0) < UYARI_ORAN:
         return None
     mb = 1 << 20
     metin = _("görünmez masaüstü bellek sınırının %{yuzde} kadarını kullanıyor ({cur} / {max} MB)").format(
         yuzde=round(durum["oran"] * 100), cur=durum["current"] // mb, max=durum["max"] // mb)
-    if ff_yeniden_acik():
+    if ff_yeniden_acik() and firefox_var:
         return metin + "; " + _("boşta kalınca Firefox oturumu geri yüklenerek yeniden başlatılır (sekmeler geri "
                                 "gelir, pencere kimlikleri değişir)")
     return metin + "; " + _("gereksiz sekme ve pencereleri kapatın")
@@ -159,7 +160,7 @@ def uyari_metni(ad: str | None = None, d: dict | None = None) -> str | None:
     if not d:
         return None
     parcalar = []
-    u = bellek_uyarisi(bellek_durumu(d.get("cgroup")))
+    u = bellek_uyarisi(bellek_durumu(d.get("cgroup")), bool(_kayitlar(d.get("calisma") or "")))
     if u:
         parcalar.append(u)
     olay = _durum_oku(ad).get("son_yeniden_olay")
@@ -189,6 +190,8 @@ def _kayit_yolu(calisma: str) -> str:
 
 
 def _kayitlar(calisma: str) -> list[dict]:
+    if not calisma:
+        return []
     try:
         with open(_kayit_yolu(calisma)) as f:
             v = json.load(f)

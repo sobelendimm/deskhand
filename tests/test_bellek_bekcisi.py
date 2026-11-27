@@ -86,6 +86,12 @@ sifirla()
 cg_yaz(0.85)
 SON["t"] = T  # şimdi kullanılıyor (boşta değil)
 r = bb.uyari_ekle({"status": "ok"})
+kontrol("kayıtlı Firefox yokken uyarı yeniden başlatma vaat etmez", "Firefox" not in (r.get("memory_warning") or "Firefox"), r)
+kayit = [{"argv": ["firefox", "--profile", "/k/a", "--no-remote"], "env": {}, "kopya": "/k/a", "ev": [], "pid": 5}]
+with open(os.path.join(CALISMA, bb.KAYIT_DOSYA), "w") as f:
+    json.dump(kayit, f)
+bb._ONBELLEK.clear()
+r = bb.uyari_ekle({"status": "ok"})
 kontrol("oran 0,85 → memory_warning dolu", "85" in (r.get("memory_warning") or "") and "Firefox" in r["memory_warning"],
         r)
 kontrol("oran 0,85 → masaüstü açık kalır (görev ortasında bakım yok, kapatma yok)",
@@ -94,9 +100,6 @@ kontrol("uyarı yalnız sözlüğe eklenir; hata sonucu (CallToolResult vb.) dok
         bb.uyari_ekle("metin") == "metin" and bb.uyari_ekle({"memory_warning": "x"}) == {"memory_warning": "x"})
 
 # ---------------------------------------------------------------- Firefox yeniden başlatma
-kayit = [{"argv": ["firefox", "--profile", "/k/a", "--no-remote"], "env": {}, "kopya": "/k/a", "ev": [], "pid": 5}]
-with open(os.path.join(CALISMA, bb.KAYIT_DOSYA), "w") as f:
-    json.dump(kayit, f)
 sifirla()
 cg_yaz(0.86)
 SON["t"] = T - 200
