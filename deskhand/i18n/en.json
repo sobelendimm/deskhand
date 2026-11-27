@@ -2224,5 +2224,8 @@
  "Kaydedilemedi.": "Couldn't save.",
  "Kasaya geçilemedi.": "Couldn't switch to the vault.",
  "Bu seçim kaydedilemedi; kart bir sonraki açılışta yeniden görünebilir.": "This choice couldn't be saved; the card may show up again next time.",
- "Parolaları kasaya taşımak için önce cüzdanı açın: Ayarlar › Gizli bilgiler.": "To move the passwords to the vault, unlock the wallet first: Settings › Secrets."
+ "Parolaları kasaya taşımak için önce cüzdanı açın: Ayarlar › Gizli bilgiler.": "To move the passwords to the vault, unlock the wallet first: Settings › Secrets.",
+ "Ajanın önerdiği site (doğrulayın)": "Site suggested by the agent (check it)",
+ "Bu siteyi kullan": "Use this site",
+ "Bu istek için parola bir siteye ya da uygulamaya bağlanmalı: önerilen siteyi doğrulayıp işaretleyin ya da siteyi kendiniz yazın.": "For this request the password must be bound to a site or an app: check the suggested site and tick it, or type the site yourself."
 }
