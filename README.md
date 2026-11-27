@@ -12,7 +12,7 @@ mouse, and one click on **STOP** halts everything. When you are busy, the work m
 hidden desktop that can reuse some of your logged-in sessions, so your film or game is never
 interrupted.
 
-It is a safety layer for well-meaning agents, not a sandbox (see [Threat model](#threat-model)).
+It is a safety layer for well-meaning agents, not a sandbox (see [Security model](#security-model)).
 
 <p align="center">
   <img src="docs/img/activity.png" width="62%" alt="Panel, Activity tab: every click and keystroke with its window and desktop; a title-lock stop and an approval are highlighted">
@@ -23,8 +23,7 @@ It is a safety layer for well-meaning agents, not a sandbox (see [Threat model](
   <img src="docs/img/tray.png" width="34%" alt="Tray icon states: idle, on your screen, in the background, STOP, approval waiting">
 </p>
 
-<sub>Screenshots are rendered from sample data. The panel's language is Turkish for now;
-an English UI is planned.</sub>
+<sub>Screenshots are rendered from sample data.</sub>
 
 ## Features
 
@@ -57,21 +56,39 @@ permission mode says:
 
 ### Background desktop
 
-`deskhand desktop start` starts an invisible desktop: Xvfb + openbox, 1920×1080 by
-default, separate from your session.
+`deskhand desktop start` starts an invisible desktop, separate from your session, 1920×1080
+by default. It is an isolated, GPU-accelerated **KWin** session (`kwin_wayland`) when its
+helpers are built; otherwise it falls back to **Xvfb + openbox** (X11 apps only, no GPU).
+Every app there runs inside `bubblewrap`. You can run several desktops at once
+(`--desktop-name NAME`, up to 3 by default): each Claude/MCP session gets its own and cannot
+reach another session's desktop.
+
+**For product images and sharp screenshots use `deskhand desktop start --scale 2`** (MCP:
+`manage_desktop(action="start", scale=2)`; KWin type only). Apps keep the same layout and the same
+coordinates but are drawn with twice the pixels: `deskhand screenshot --out product.png` saves the full
+resolution (for example 3840×2160 on a 1920×1080 desktop), `--width 1280` scales it down. Firefox and
+Chromium render at 2× too. `deskhand desktop status` shows the scale; to change it, stop the desktop and
+start it again.
 
 - **Nothing reaches you.** No input goes to your screen (the background backend can only
-  talk to its own X display). Apps there get a private D-Bus, so their notifications are
+  talk to its own display). Apps there get a private D-Bus, so their notifications are
   captured to a log instead of popping up, and their audio goes to a silent sink.
-  Wayland variables are removed so an app cannot escape to your screen.
+  Wayland variables are removed from the Xvfb fallback so an app cannot escape to your screen.
+  Inside the sandbox an app sees an empty home folder: only theme and appearance settings, XDG
+  folder names, file associations and Flatpak installs of your real home are visible, read-only.
 - **Light.** Low CPU/IO priority and a memory cap (systemd scope, 6 GB by default).
-  Starting it takes about 0.2 s; an empty desktop uses about 30 MiB.
+  Starting it takes about 0.2 s; an empty desktop uses about 30 MiB. An idle desktop closes
+  itself after 30 minutes (`bosta_kapat_dk` in `ayarlar.toml`, `0` = off).
 - **Per-app session policy.** Some apps can open there already logged in:
   - **Firefox:** a consistent, **one-way snapshot copy** of your profile (cookies, logins,
     site storage for the task's sites). Nothing is ever written back. Sync identity is left out;
     cookies **and saved passwords** of banking/payment/government sites (including Turkish banks and
     e-Devlet) and central login pages (Google, Microsoft) are not copied, so Google/YouTube are not signed
     in there. Camera, microphone, location and notification permissions are removed from the copy.
+    If you want, panel → Settings → **Account sessions** lets a Microsoft, Google or e-Devlet session
+    into the copy (off by default; it can only be turned on from the panel; bank and payment sites never
+    open with any setting; not applied in task mode). While it is on, the background browser can reach that
+    account's mail and files.
   - **Flatpak apps that do not use the keyring** (for example Discord, Spotify): snapshot copy.
   - **Apps that need the keyring** (Chromium family, VS Code) and apps that write to real
     files (Obsidian vaults) run **only on your screen**.
@@ -84,8 +101,12 @@ default, separate from your session.
   - Unknown apps start normally only when they are **certainly not running** for you (otherwise their
     single-instance lock could open the window on your screen); if that cannot be known, the agent
     waits. Policy file: `~/.config/deskhand/oturum.toml`.
-- **Watch and take over.** The panel shows a live preview. *Take over* sends your mouse and
-  keyboard into the background desktop while the agent waits.
+  - **Persistent background sessions (opt-in).** For a site where you log in only on the background
+    desktop, the panel can keep its session between copies: encrypted (AES-256-GCM) with a key in
+    your KDE Wallet, fail-closed, never for banking/payment/government sites, and removable with
+    `deskhand sessions forget <domain>`. Details: [docs/SESSIONS.md §3.8](docs/SESSIONS.md).
+- **Watch and take over.** The panel shows a live preview of any running background desktop.
+  *Take over* sends your mouse and keyboard into the background desktop while the agent waits.
 
 ### Busy detection: "Background / My screen / Later"
 
@@ -109,20 +130,32 @@ ambiguous match stops instead of guessing. Also available: the accessibility tre
 click by button name), saved icon templates, colour areas, and screen-recognition *flows*
 for repetitive tasks.
 
-### MCP server (12 tools)
+### What's new since 0.5.4
 
-`deskhand mcp` is a stdio MCP server: `get_status`, `choose_desktop`, `manage_desktop`,
-`screenshot`, `read_text`, `find`, `click`, `type_text`, `press_key`, `scroll`, `open_app`,
-`run_flow`. Screenshots are scaled to 1280 px on the long edge. Coordinates are checked
-against a `shot_id`, so a click on a stale screenshot is refused. There is no "approved" flag
-on the MCP surface: sensitive actions always go through the panel.
+See [CHANGELOG.md](CHANGELOG.md) for the details.
+
+- **Observe and batch:** `observe` lists a window's elements with numbered refs; `click`/`type_text`/`scroll`/`drag` work on those refs and are refused, with nothing sent, if the screen changed. `batch` runs up to 20 steps, `wait_for` waits for a condition.
+- **Web elements:** the buttons/links/fields of a browser page are read from the accessibility tree; no remote-control port is opened on the browser.
+- **Invisible desktop:** an isolated, GPU-accelerated KWin session (inside `bubblewrap`); Xvfb fallback when it is not available.
+- **Approval scope "card payments only":** can only be turned on from the panel (Settings → Approval questions); only money buttons and typing card data ask. The default is "all".
+- **Persistent background sessions, account sessions, several desktops, `--scale 2`, file upload, `doctor`:** see the sections above and below.
+
+### MCP server (20 tools)
+
+`deskhand mcp` is a stdio MCP server with 20 tools: `get_status`, `choose_desktop`, `manage_desktop`,
+`observe`, `screenshot`, `read_text`, `listen`, `find`, `click`, `type_text`, `clipboard`, `press_key`,
+`scroll`, `drag`, `open_app`, `manage_window`, `run_flow`, `batch`, `wait_for`, `request_human`.
+Screenshots are scaled to 1280 px on the long edge. Coordinates are checked against a `shot_id`, so a
+click on a stale screenshot is refused. There is no "approved" flag on the MCP surface: sensitive
+actions always go through the panel.
 
 ### Monitoring panel and tray
 
-Activity (live log, filter), background desktop (preview, stop, take over), approvals
-(pending + history), settings (busy behaviour, forbidden windows, STOP shortcut), saved icons
-and a health check of all dependencies. The tray icon shows idle / on your screen / in the
-background / STOP, with a badge when an approval is waiting.
+Activity (live log, filter), background desktops (picker, live view, stop, take over), task
+(give the panel's own agent a job on the invisible desktop), approvals (pending + history),
+settings (busy behaviour, forbidden windows, STOP shortcut, approval scope, account sessions),
+saved icons and a health check of all dependencies. The tray icon shows idle / on your screen /
+in the background / STOP, with a badge when an approval is waiting.
 
 ## How it compares
 
@@ -135,6 +168,10 @@ There are good projects in this space; pick what fits you.
 - [ahmetadakli/kde-desktop-mcp](https://github.com/ahmetadakli/kde-desktop-mcp) has the
   closest safety model on KDE: app allow-list with levels, confirmation list, password-field
   protection, user-takeover pause, stop shortcut. It works through the accessibility tree.
+- [isac322/kwin-mcp](https://github.com/isac322/kwin-mcp) is for KDE Plasma 6 Wayland: it sends
+  input through KWin's EIS interface and opens an isolated `kwin_wayland --virtual` for each
+  session; it has accessibility-tree, clipboard and touch-gesture tools. It has no approval or
+  human-priority layer.
 - [agent-sh/computer-use-linux](https://github.com/agent-sh/computer-use-linux) (GNOME-first,
   many backends), [Samthesurf/kwin-mcp](https://github.com/Samthesurf/kwin-mcp) (KDE Wayland),
   [alex-oleshkevich/wayland-mcp](https://github.com/alex-oleshkevich/wayland-mcp)
@@ -150,15 +187,18 @@ What Deskhand puts together, which we have not seen combined elsewhere:
 4. **Click by visible text with Turkish OCR**, also where there is no accessibility tree.
 5. **A Plasma panel**: tray, STOP, live preview, take over, human-only approvals.
 
-It is also smaller in scope: KDE Plasma only, one background desktop, no GPU there.
+It is also smaller in scope: KDE Plasma only, and no GPU on the Xvfb fallback.
 
 ## Requirements
 
-- **KDE Plasma 6 on Wayland** for the foreground (your own screen). The background desktop
-  is an X server (Xvfb), so it runs apps that still support **X11** (most do).
+- **KDE Plasma 6 on Wayland** for the foreground (your own screen). The background desktop is an
+  isolated, GPU-accelerated **KWin** session (`kwin_wayland`) when the helpers are built; if they
+  are not, or KWin is unavailable, it starts with **Xvfb** and runs only apps that support **X11**.
 - Python **3.11+**
 - Foreground: `kdotool`, `dotool`, `spectacle`, access to `/dev/uinput`
 - Both: `tesseract` with Turkish and English data
+- Background (**required**): `bubblewrap` (`bwrap`): every app on the background desktop is
+  isolated with it; without it no app opens in the background
 - Background: `Xvfb`, `openbox`, `python-xlib`; recommended `xdotool`, `pactl` (silent audio
   sink; without it background apps get no audio at all), `systemd-run` (memory cap)
 - Python modules: PyQt6, python-xlib, numpy, scipy, pillow, jeepney, mcp ≥ 2.3
@@ -168,14 +208,17 @@ It is also smaller in scope: KDE Plasma only, one background desktop, no GPU the
   torchvision, OpenCV, scikit-image, shapely, pyclipper, and EasyOCR in a small venv with its
   models (~100 MB). Without a GPU nothing extra is needed. `install.sh` checks all of it and prints
   the commands
-- To build the screenshot helper (KWin's screenshot interface, about 8 ms a shot): the same
-  tools and `libsystemd` (part of systemd). `install.sh` builds it and registers its desktop entry
+- `make -C deskhand/yardimci` builds three helpers: `deskhand-etkinlik`, `deskhand-goruntu`
+  (KWin's screenshot interface, about 8 ms a shot) and `deskhand-eis` (input for the KWin background
+  desktop). The last one needs the `libei`, `libxkbcommon` and `libsystemd` development packages;
+  without it the background desktop starts with Xvfb. `install.sh` builds them and registers the
+  desktop input; `deskhand doctor` and the panel's Health tab show which one is missing
 
 Arch / CachyOS:
 
 ```bash
 sudo pacman -S --needed spectacle tesseract tesseract-data-tur tesseract-data-eng \
-    xorg-server-xvfb openbox xdotool libpulse python-pyqt6 python-xlib python-numpy \
+    xorg-server-xvfb openbox xdotool libpulse bubblewrap libei libxkbcommon python-pyqt6 python-xlib python-numpy \
     python-scipy python-pillow python-jeepney python-mcp base-devel wayland
 paru -S kdotool-bin dotool        # AUR (or yay, or by hand)
 
@@ -211,7 +254,7 @@ cd ~/.local/src/deskhand
 ```
 
 The installer **does not install packages**. It lists what is missing and prints the
-command. It then builds the activity helper and installs:
+command. It then builds the helpers and installs:
 
 - the `deskhand` command in `~/.local/bin` (points at this folder; if you move the folder,
   run `./install.sh` again),
@@ -227,39 +270,45 @@ Nothing is installed system-wide. Update: `git pull && ./install.sh`. Uninstall:
 ```bash
 deskhand panel                          # monitoring panel + tray
 deskhand busy                           # are you busy? (read-only)
-deskhand windows firefox                # find windows: id | title | geometry
+deskhand windows [firefox]              # find windows: id | title | geometry (no pattern: all)
+deskhand screenshot --out screen.png --width 800   # no id: active window (--background: the whole invisible desktop)
 deskhand read firefox                   # read the window's text with coordinates (OCR)
 deskhand -b "Example" click-text firefox "Sign in"     # click visible text, title locked
 deskhand --background open firefox --site github.com   # signed-in Firefox on the invisible desktop
+deskhand --background open firefox https://example.com # starts the desktop if it is off; http/https only
+deskhand goto <window> https://example.com             # go to an address in a browser (ctrl+l → address → Return)
 deskhand stop                           # STOP: no input from now on
 deskhand resume                         # lift a STOP set from the CLI
 ```
 
-Cheat sheet (`deskhand help` shows everything):
+Cheat sheet (`deskhand --help` lists the subcommands as a table, `deskhand help` shows the full syntax; the Turkish names work too, in parentheses):
 
 | Command | Meaning |
 |---|---|
-| `windows <pattern>` | find windows |
-| `screenshot <window>` | screenshot (window, or `ekran` = whole screen) |
-| `read <window> [pattern]` | read text + coordinates (OCR) |
-| `click-text <window> <text>` | click on visible text |
-| `click <window> <x> <y>` | click at window coordinates |
-| `type <window> <text>` | type text (`--secret`: not written to the log) |
-| `key <window> <keys>` | key or shortcut, e.g. `ctrl+s` |
-| `scroll <window> [down\|up]` | scroll |
-| `wait <window> <text>` | wait until text appears (`--gone`: disappears) |
-| `open <app>` / `open --command "CMD"` | start an app and wait for its new window |
-| `tree` / `click-element` | accessibility tree / click an element by name |
-| `desktop start\|stop\|status` | the background desktop |
-| `sessions status\|policy\|clear` | which apps open signed in on the background desktop |
-| `busy` · `decide "<task>"` | busy check · decide where to work |
-| `stop` · `resume` · `status` | STOP on · off · show |
+| `windows` (`bul`) `[pattern]` | find windows (no pattern: all windows; a forbidden window's title is not shown) |
+| `screenshot` (`foto`) `[window] [--out FILE] [--width N]` | screenshot; no id: the whole invisible desktop with `--background`, else the active window (exit 17 if the real screen is locked); `--width`: scaled-down image |
+| `read` (`metin`) `<window> [pattern]` | read text + coordinates (OCR) |
+| `click-text` (`metne-tikla`) `<window> <text>` | click on visible text |
+| `click` (`tikla`) `<window> <x> <y>` | click at window coordinates |
+| `type` (`yaz`) `<window> <text>` | type text (`--secret`: not written to the log) |
+| `key` (`tus`) `<window> <keys>` | key or shortcut, e.g. `ctrl+s` |
+| `scroll` (`kaydir`) `<window> [down\|up]` | scroll |
+| `wait` (`bekle`) `<window> <text>` | wait until text appears (`--gone`: disappears) |
+| `open` (`ac`) `<app> [url]` / `open --command "CMD"` | start an app and wait for its new window; `--url`/positional address is http/https only (also for session-copied browsers); `--background` starts the desktop if it is off |
+| `goto` (`git`) `<window> <url>` | go to an address in a browser window through the existing `key`/`type` checks (title lock, sensitive-page approval, human-verification gate); http/https only |
+| `choose-file` (`dosya-sec`) `<dialog> <path>` | pick a file in a file chooser, verified (see [Uploading files](#uploading-files-file-chooser)) |
+| `tree` (`agac`) / `click-element` (`ogeye-tikla`) | accessibility tree / click an element by name |
+| `desktop` (`masaustu`) `start\|stop\|status\|list` | the background desktop(s) |
+| `sessions` (`oturum`) `status\|policy\|clear\|check\|forget` | which apps open signed in on the background desktop; `check <site>`: is that site's session alive there (prints no values; exit 0 = yes, 1 = login needed); `forget`: delete stored persistent sessions |
+| `busy` (`mesgul`) · `decide` (`karar`) `"<task>"` | busy check · decide where to work |
+| `stop` · `resume` · `status` (`dur` · `devam` · `durum`) | STOP on · off · show |
+| `doctor` (`doktor`) | health check of every dependency, helper and running MCP server |
 | `panel [--tepsi]` · `mcp` | panel (tray only) · MCP server |
 
 Common options: `-b/--title PATTERN` title lock, `-s/--class PATTERN` class lock, `--background`
-run on the invisible desktop, `--on-my-screen` work on your screen even during a game or movie
-(only when you said so). The original Turkish command names (`bul`, `metin`, `metne-tikla`, …) and the
-`ekran` command keep working as aliases.
+run on the invisible desktop, `--desktop-name NAME` pick one of several invisible desktops (it also means
+`--background`), `--on-my-screen` work on your screen even during a game or movie (only when you said so).
+The Turkish option names (`--baslik`, `--arka`, `--ekranimda`…) and the old `ekran` command keep working.
 
 ## Use with Claude Code (MCP)
 
@@ -292,6 +341,8 @@ Example `~/.claude/settings.json`:
 }
 ```
 
+The example lists a few tools only; list the other tools of the server (`observe`, `batch`, `drag`,
+`clipboard`, …) the same way, or they follow your client's default.
 Permission prompts are a second layer; Deskhand's own checks run in every permission mode.
 The server needs `WAYLAND_DISPLAY`, `DBUS_SESSION_BUS_ADDRESS` and `XDG_RUNTIME_DIR` for the
 foreground; if your client starts it with an empty environment, pass them with `--env`.
@@ -314,6 +365,27 @@ esac
 deskhand $WHERE open --command "okular ~/invoice.pdf"
 ```
 
+The global options (`--desktop-name NAME`, `--background`) go **before** the command, and they also come first
+when you use `--`: `deskhand --desktop-name w1 --background tree <id>`. zsh does not split a variable that holds
+spaces (`$WHERE="--a --b"`); use the environment instead: `export DESKHAND_HEDEF=arka DESKHAND_MASAUSTU=w1`, then plain
+`deskhand tree <id>`. The hints in error messages give complete commands in this form, ready to run as they are.
+
+### Uploading files (file chooser)
+
+A "Choose file" button on a page opens the GTK file chooser. Do not type the path by hand (ctrl+l → path → Enter):
+if the location entry does not open, the typed path goes to the list's type-ahead search and Enter can pick the
+wrong file. Use this instead:
+
+```bash
+deskhand --background windows                       # find the dialog's id ("File Upload - …")
+deskhand --background choose-file <dialog> ~/Downloads/document.pdf   # Turkish: dosya-sec
+```
+
+`choose-file` checks through AT-SPI that the location entry has focus, reads the typed path back (it does not press
+Enter unless it matches exactly; it stops with 8), and waits for the dialog to close. Apps on the invisible desktop
+see only the XDG folders (Downloads, Documents, Desktop…): copy a file from `/tmp` or another home folder to, for
+example, `~/Downloads` first.
+
 Rules for agents: stop on exit codes 10, 12, 13, 15, 16 and 18 and tell the user; read before you click
 and verify after; pass `--approved` only when the user has approved that exact step in the
 chat. Without it, Deskhand asks the user in the panel.
@@ -323,9 +395,9 @@ chat. Without it, Deskhand asks the user in the panel.
 | Path | Contents |
 |---|---|
 | `~/.config/deskhand/yasak-pencereler.txt` | forbidden windows (regex per line, title or class) |
-| `~/.config/deskhand/ayarlar.toml` | busy behaviour (`[karar]`: ask / background / wait, timeout, ask over fullscreen) |
+| `~/.config/deskhand/ayarlar.toml` | busy behaviour (`[karar]`: ask / background / wait, timeout, ask over fullscreen), idle desktop close, persistent sessions (`[oturum] kalici`) |
 | `~/.config/deskhand/oturum.toml` | per-app session policy for the background desktop (merged over the defaults) |
-| `~/.local/share/deskhand/` | saved icons (`simgeler/`), flows (`akislar/`) |
+| `~/.local/share/deskhand/` | saved icons (`simgeler/`), flows (`akislar/`), encrypted persistent sessions (`oturum-kalici/`) |
 | `~/.local/state/deskhand/` | input log (7 days), captured background notifications (0700) |
 | `~/.cache/deskhand/` | screenshots, OCR cache (5 days, 0700) |
 | `$XDG_RUNTIME_DIR/deskhand/` | STOP switch, approval requests, background desktop state, session copies (tmpfs, 0700) |
@@ -368,30 +440,50 @@ Over MCP the same codes appear as `[code] name: detail` errors.
 
 ## Known limitations
 
-- **No GPU in the background desktop.** Xvfb draws in software: WebGL, games and video
-  decoding are slow there.
-- **Wayland-only apps cannot run in the background** (it is X11).
+- **A lone web button** can be missing from the full `read` listing; searching for its text
+  (`read <window> "<text>"`, `click-text`) uses extra readings and finds it.
+- **No GPU on the Xvfb fallback.** If the KWin background desktop is not available, Xvfb draws in
+  software: WebGL, games and video decoding are slow there.
+- **Wayland-only apps cannot run on the Xvfb fallback** (it is X11).
+- **Without `bubblewrap` no app opens in the background.**
 - **Keyring apps are foreground-only.** Chromium-family browsers, VS Code and anything that
   keeps its secrets in KWallet/Secret Service do not open logged in on the background desktop.
-- **One background desktop** at a time.
-- **Xvfb has no auth cookie yet.** It listens only on a local socket, but another local user
-  could connect to it. An `-auth` cookie is planned.
+- **Up to 3 background desktops** at a time (`[masaustu] azami`, 1..6).
 - **OCR can misread.** Ambiguous matches stop rather than guess, and clicks can be verified,
-  but small or low-contrast text may be read wrong or not found. A lone web button can be missing
-  from the full `read` listing; searching for its text (`read <window> "<text>"`, `click-text`) uses
-  extra readings and finds it.
+  but small or low-contrast text may be read wrong or not found.
 - **Approvals need the panel running.** If it is closed, every sensitive action is denied.
 - **Foreground needs Plasma 6 on Wayland** (kdotool + KWin scripting).
+- More detailed and current limits (card-number capture, panel-marker forgery, no sandbox, overlapping
+  elements, …): "Known limitations" in [`CHANGELOG.md`](CHANGELOG.md).
 - The activity log is written in Turkish (the panel shows it translated); messages, help and the panel follow
   your system language (Turkish or English), or the choice in Settings.
 
-### Threat model
+## Security model
 
-Deskhand protects you from an agent's **mistakes** and from **prompt injection** (a web page
-or document telling the agent to buy something or delete an account): the agent has no tool
-or command that approves its own request or lifts your STOP. It is **not a sandbox**: an
-agent that can run arbitrary shell commands as your user could edit files, kill the panel or
-drive the desktop without Deskhand. Keep shell access behind your client's permission prompts.
+Deskhand protects you from an agent's **mistakes** and from a **confused or deceived agent**:
+prompt injection (a web page or document telling the agent to buy something or delete an account),
+wrong targets, runaway loops. The agent has no tool or command that approves its own request
+or lifts your STOP. That is what the approval dialog, STOP, the forbidden-window list and the
+busy checks are for.
+
+It is **not a sandbox**, and it does not defend against code that already runs as you:
+
+- **A malicious process under the same user account can act like the panel.** The panel is recognised by
+  its process identity (socket peer, start time, executable, command line, working directory). That
+  is a check against a misbehaving agent, not against another program running as the same user,
+  which can imitate the panel, answer approvals, or edit your files directly. This is a known design
+  limit; a same-user process can also drive the desktop without Deskhand.
+- **The settings that only the panel may loosen are in the same class.** The approval scope "card
+  payments only", account sessions and persistent sessions are accepted only with the panel's own
+  marker file, so an agent that writes the settings file by hand gains nothing. A process that can
+  forge the settings file and the marker together while the panel is closed is outside what this
+  protects.
+- **An agent that can run arbitrary shell commands as your user** can edit files, kill the panel or drive
+  the desktop without Deskhand. Keep shell access behind your client's permission prompts.
+- Apps on the background desktop run inside `bubblewrap` (read-only root, empty home, masked secret
+  paths). That limits what those apps see; it is not a promise about what a hostile app can do.
+
+See [SECURITY.md](SECURITY.md) for how to report a problem.
 
 ## Development
 

@@ -14,7 +14,7 @@ yapılmış bazı oturumlarınızı kullanabilen gizli bir masaüstüne taşın�
 oyununuz bölünmez.
 
 İyi niyetli ajanlar için bir güvenlik katmanıdır, kum havuzu (sandbox) değildir
-(bkz. [Tehdit modeli](#tehdit-modeli)).
+(bkz. [Güvenlik modeli](#güvenlik-modeli)).
 
 <p align="center">
   <img src="docs/img/activity.png" width="62%" alt="Panel, Etkinlik sekmesi: her tıklama ve tuş, penceresi ve masaüstüyle; başlık kilidi durdurması ve bir onay vurgulu">
@@ -58,8 +58,11 @@ Ajan ya da izin kipi ne derse desin, iki masaüstünde de aracın kendisi uygula
 
 ### Arka plan masaüstü
 
-`deskhand desktop start` görünmez bir masaüstü açar: Xvfb + openbox, varsayılan
-1920×1080, sizin oturumunuzdan ayrı.
+`deskhand desktop start` görünmez bir masaüstü açar: sizin oturumunuzdan ayrı, varsayılan 1920×1080.
+Yardımcılar derlenmişse yalıtık, ekran kartı hızlandırmalı bir **KWin** oturumudur (`kwin_wayland`);
+değilse **Xvfb + openbox** yedeğine düşer (yalnız X11 uygulamaları, GPU yok). Oradaki her uygulama
+`bubblewrap` içinde çalışır. Aynı anda birden çok masaüstü açılabilir (`--desktop-name AD`, varsayılan en
+çok 3): her Claude/MCP oturumu kendi masaüstünü alır ve başka oturumun masaüstüne erişemez.
 
 **Ürün görseli / keskin ekran görüntüsü için `deskhand desktop start --scale 2`** (MCP:
 `manage_desktop(action="start", scale=2)`; yalnız KWin türü). Uygulamalar aynı yerleşimde ve aynı
@@ -68,12 +71,15 @@ tam çözünürlüğü (ör. 1920×1080 masaüstünde 3840×2160) kaydeder, `--w
 Chromium da 2× çizer. `deskhand desktop status` ölçeği gösterir; ölçeği değiştirmek için masaüstünü
 kapatıp yeniden açın.
 
-- **Size hiçbir şey ulaşmaz.** Ekranınıza girdi gitmez (arka plan arka ucu yalnız kendi X
+- **Size hiçbir şey ulaşmaz.** Ekranınıza girdi gitmez (arka plan arka ucu yalnız kendi
   ekranıyla konuşabilir). Oradaki uygulamaların D-Bus'ı ayrıdır: bildirimleri ekranınıza
-  düşmez, günlüğe yakalanır; sesleri sessiz bir çıkışa gider. Wayland değişkenleri
-  silinir, böylece bir uygulama ekranınıza kaçamaz.
+  düşmez, günlüğe yakalanır; sesleri sessiz bir çıkışa gider. Wayland değişkenleri Xvfb yedeğinde
+  silinir, böylece bir uygulama ekranınıza kaçamaz. Kum havuzunun içinde uygulama boş bir ev
+  dizini görür: gerçek evinizden yalnız tema ve görünüm ayarları, XDG klasör adları, dosya
+  ilişkilendirmeleri ve Flatpak kurulumları salt okunur görünür.
 - **Hafif.** Düşük işlemci/disk önceliği ve bellek sınırı (systemd kapsamı, varsayılan
-  6 GB). Açılışı yaklaşık 0,2 sn sürer; boş masaüstü ~30 MiB kullanır.
+  6 GB). Açılışı yaklaşık 0,2 sn sürer; boş masaüstü ~30 MiB kullanır. Boştaki masaüstü 30 dakika
+  sonra kendiliğinden kapanır (`ayarlar.toml` içinde `bosta_kapat_dk`, `0` = kapalı).
 - **Uygulama başına oturum politikası.** Bazı uygulamalar orada girişli açılabilir:
   - **Firefox:** profilinizin tutarlı, **tek yönlü anlık kopyası** (çerezler, girişler,
     görev sitelerinin deposu). Kopyadan asıl profile hiçbir şey geri yazılmaz. Sync kimliği alınmaz;
@@ -97,8 +103,12 @@ kapatıp yeniden açın.
   - Bilinmeyen uygulama yalnız sizde **kesinlikle açık değilse** normal açılır (açıksa tek örnek kilidi
     pencereyi sizin ekranınıza devredebilir); bilinemiyorsa ajan bekler. Politika dosyası:
     `~/.config/deskhand/oturum.toml`.
-- **İzleyin, devralın.** Panelde canlı önizleme var. *Devral* farenizi ve klavyenizi arka
-  plan masaüstüne yönlendirir, bu sırada ajan bekler.
+  - **Kalıcı arka plan oturumları (isteğe bağlı).** Yalnız arka plan masaüstünde giriş yaptığınız bir
+    site için panel oturumu kopyalar arasında saklayabilir: KDE Cüzdanı'ndaki anahtarla şifreli
+    (AES-256-GCM), hata durumunda kapalı (fail-closed), banka/ödeme/devlet siteleri için asla ve
+    `deskhand sessions forget <alan adı>` ile silinebilir. Ayrıntı: [docs/SESSIONS.md §3.8](docs/SESSIONS.md).
+- **İzleyin, devralın.** Panelde çalışan her arka plan masaüstünün canlı önizlemesi var. *Devral*
+  farenizi ve klavyenizi arka plan masaüstüne yönlendirir, bu sırada ajan bekler.
 
 ### Meşgul algısı: "Arka planda / Ekranımda / Sonra"
 
@@ -122,7 +132,7 @@ eşleşir (ş/s, ı/i…); birden çok eşleşme varsa tahmin etmez, durur. Ayr�
 ağacı (AT-SPI, düğmeye adıyla tıklama), kayıtlı simgeler, renk alanları ve tekrarlı işler
 için ekran tanıma *akışları*.
 
-### 0.6.0'ın yeni yetenekleri
+### 0.5.4'ten beri yenilikler
 
 Ayrıntılar için bkz. [CHANGELOG.tr.md](CHANGELOG.tr.md).
 
@@ -130,21 +140,24 @@ Ayrıntılar için bkz. [CHANGELOG.tr.md](CHANGELOG.tr.md).
 - **Web ögeleri:** tarayıcı sayfasının düğme/bağlantı/alanları erişilebilirlik ağacından okunur; tarayıcıya uzaktan denetim kapısı açılmaz.
 - **Görünmez masaüstü:** yalıtık, ekran kartı hızlandırmalı KWin oturumu (`bubblewrap` içinde); olmazsa Xvfb yedeği.
 - **Onay kapsamı "Yalnız kartla ödeme":** yalnız panelden (Ayarlar → Onay soruları) açılır; yalnız para düğmeleri ve kart bilgisi yazma onay sorar. Varsayılan "hepsi"dir.
+- **Kalıcı arka plan oturumları, hesap oturumları, çoklu masaüstü, `--scale 2`, dosya yükleme, `doctor`:** yukarıdaki ve aşağıdaki bölümlere bakın.
 
-### MCP sunucusu (15 araç)
+### MCP sunucusu (20 araç)
 
-`deskhand mcp` stdio MCP sunucusudur: `get_status`, `choose_desktop`, `manage_desktop`,
-`screenshot`, `read_text`, `find`, `click`, `type_text`, `press_key`, `scroll`, `drag`, `clipboard`, `open_app`,
-`manage_window`, `run_flow`. Ekran görüntüleri uzun kenarı 1280 piksele küçültülür. Koordinatlar bir
-`shot_id`'ye bağlıdır; bayat görüntüye göre tıklama reddedilir. MCP yüzeyinde "onaylandı"
-bayrağı yoktur: hassas eylemler her zaman panelden geçer.
+`deskhand mcp` 20 araçlı bir stdio MCP sunucusudur: `get_status`, `choose_desktop`, `manage_desktop`,
+`observe`, `screenshot`, `read_text`, `listen`, `find`, `click`, `type_text`, `clipboard`, `press_key`,
+`scroll`, `drag`, `open_app`, `manage_window`, `run_flow`, `batch`, `wait_for`, `request_human`.
+Ekran görüntüleri uzun kenarı 1280 piksele küçültülür. Koordinatlar bir `shot_id`'ye bağlıdır; bayat
+görüntüye göre tıklama reddedilir. MCP yüzeyinde "onaylandı" bayrağı yoktur: hassas eylemler her zaman
+panelden geçer.
 
 ### İzleme paneli ve tepsi
 
-Etkinlik (canlı günlük, süzgeç), arka plan ekranı (önizleme, durdurma, devralma), onaylar
-(bekleyenler + geçmiş), ayarlar (meşgulken davranış, yasak pencereler, DUR kısayolu),
-kayıtlı simgeler ve tüm bağımlılıkların sağlık denetimi. Tepsi simgesi boşta / ekranınızda /
-arka planda / DUR durumunu gösterir; onay bekliyorsa rozet çıkar.
+Etkinlik (canlı günlük, süzgeç), arka plan masaüstleri (seçici, canlı izleme, durdurma, devralma), görev
+(panelin kendi ajanına görünmez masaüstünde iş verin), onaylar (bekleyenler + geçmiş), ayarlar (meşgulken
+davranış, yasak pencereler, DUR kısayolu, onay kapsamı, hesap oturumları), kayıtlı simgeler ve tüm
+bağımlılıkların sağlık denetimi. Tepsi simgesi boşta / ekranınızda / arka planda / DUR durumunu gösterir;
+onay bekliyorsa rozet çıkar.
 
 ## Benzerleriyle karşılaştırma
 
@@ -176,7 +189,7 @@ Deskhand'in bir araya getirdikleri (başka yerde bir arada görmediklerimiz):
 4. **Türkçe OCR ile görünen yazıya tıklama**, erişilebilirlik ağacı olmayan yerde de.
 5. **Plasma paneli**: tepsi, DUR, canlı önizleme, devralma, yalnız insanın verebildiği onaylar.
 
-Kapsamı da daha dar: yalnız KDE Plasma, tek arka plan masaüstü, orada GPU yok.
+Kapsamı da daha dar: yalnız KDE Plasma ve Xvfb yedeğinde GPU yok.
 
 ## Gereksinimler
 
@@ -285,14 +298,17 @@ Komutlar (`deskhand --help` alt komutları tablo olarak, `deskhand help` ayrınt
 | `open` (`ac`) `<uygulama> [adres]` / `open --command "KOMUT"` | uygulamayı aç, yeni penceresini bekle; `--url`/konumsal adres yalnız http/https (oturum kopyalı tarayıcı dahil); `--background` masaüstü kapalıysa kendiliğinden başlatır |
 | `goto` (`git`) `<pencere> <adres>` | tarayıcı penceresinde adrese git: mevcut `key`/`type` denetimleriyle (başlık kilidi, hassas sayfa onayı, insan doğrulaması kapısı); yalnız http/https |
 | `tree` (`agac`) / `click-element` (`ogeye-tikla`) | erişilebilirlik ağacı / ögeye adıyla tıkla |
-| `desktop` (`masaustu`) `start\|stop\|status` | arka plan masaüstü |
-| `sessions` (`oturum`) `status\|policy\|clear` | arka planda hangi uygulama girişli açılır |
+| `choose-file` (`dosya-sec`) `<diyalog> <yol>` | dosya seçicide dosyayı doğrulayarak seç ([Dosya yükleme](#dosya-yükleme-dosya-seçici)) |
+| `desktop` (`masaustu`) `start\|stop\|status\|list` | arka plan masaüstleri |
+| `sessions` (`oturum`) `status\|policy\|clear\|check\|forget` | arka planda hangi uygulama girişli açılır; `check <site>`: o sitenin oturumu orada canlı mı (değer yazmaz; çıkış 0 = var, 1 = giriş gerekir); `forget`: saklanan kalıcı oturumları sil |
 | `busy` (`mesgul`) · `decide` (`karar`) `"<iş>"` | meşgul mü · nerede çalışılsın |
 | `stop` · `resume` · `status` (`dur` · `devam` · `durum`) | DUR aç · kaldır · göster |
+| `doctor` (`doktor`) | her bağımlılığın, yardımcının ve çalışan MCP sunucusunun sağlık denetimi |
 | `panel [--tepsi]` · `mcp` | panel (yalnız tepsi) · MCP sunucusu |
 
 Sık seçenekler: `-b/--title DESEN` başlık kilidi, `-s/--class DESEN` sınıf kilidi, `--background`
-görünmez masaüstünde çalış, `--on-my-screen` oyun ya da film sırasında bile ekranınızda çalış (yalnız siz
+görünmez masaüstünde çalış, `--desktop-name AD` birden çok görünmez masaüstünden birini seç (kendiliğinden
+`--background` demektir), `--on-my-screen` oyun ya da film sırasında bile ekranınızda çalış (yalnız siz
 söylediyseniz). Türkçe seçenek adları (`--baslik`, `--arka`, `--ekranimda`…) ve eski `ekran` komutu da çalışır.
 
 ## Claude Code ile (MCP)
@@ -326,6 +342,8 @@ claude mcp get deskhand        # oturum içinde: /mcp
 }
 ```
 
+Örnek yalnız birkaç aracı sıralar; sunucunun öbür araçlarını (`observe`, `batch`, `drag`, `clipboard`, …) da
+aynı biçimde listeleyin, yoksa istemcinizin varsayılanına uyarlar.
 İzin istemleri ikinci katmandır; Deskhand'in kendi denetimleri her izin kipinde çalışır.
 Ön plan için sunucunun `WAYLAND_DISPLAY`, `DBUS_SESSION_BUS_ADDRESS` ve `XDG_RUNTIME_DIR`
 değişkenlerine ihtiyacı var; istemciniz onu boş bir ortamla başlatıyorsa `--env` ile verin.
@@ -377,9 +395,9 @@ açıkça onayladıysa verin. Verilmezse Deskhand kullanıcıya panelden sorar.
 | Yol | İçerik |
 |---|---|
 | `~/.config/deskhand/yasak-pencereler.txt` | yasak pencereler (satır başına regex; başlık ya da sınıf) |
-| `~/.config/deskhand/ayarlar.toml` | meşgulken davranış (`[karar]`: sor / arka / bekle, süre, tam ekranda da sor) |
+| `~/.config/deskhand/ayarlar.toml` | meşgulken davranış (`[karar]`: sor / arka / bekle, süre, tam ekranda da sor), boştaki masaüstünü kapatma, kalıcı oturumlar (`[oturum] kalici`) |
 | `~/.config/deskhand/oturum.toml` | arka plan için uygulama başına oturum politikası (varsayılanların üstüne birleşir) |
-| `~/.local/share/deskhand/` | kayıtlı simgeler (`simgeler/`), akışlar (`akislar/`) |
+| `~/.local/share/deskhand/` | kayıtlı simgeler (`simgeler/`), akışlar (`akislar/`), şifreli kalıcı oturumlar (`oturum-kalici/`) |
 | `~/.local/state/deskhand/` | girdi günlüğü (7 gün), yakalanan arka plan bildirimleri (0700) |
 | `~/.cache/deskhand/` | ekran görüntüleri, OCR önbelleği (5 gün, 0700) |
 | `$XDG_RUNTIME_DIR/deskhand/` | DUR anahtarı, onay istekleri, arka plan masaüstü durumu, oturum kopyaları (tmpfs, 0700) |
@@ -431,7 +449,7 @@ MCP'de aynı kodlar `[kod] ad: ayrıntı` biçiminde hata olarak döner.
 - **Şifre deposu isteyen uygulamalar yalnız ön planda.** Chromium ailesi tarayıcılar,
   VS Code ve sırlarını KWallet/Secret Service'te tutan her şey arka plan masaüstünde girişli
   açılmaz.
-- Aynı anda **tek arka plan masaüstü**.
+- Aynı anda **en çok 3 arka plan masaüstü** (`[masaustu] azami`, 1..6).
 - **OCR yanlış okuyabilir.** Belirsiz eşleşmede tahmin etmez, durur; tıklamalar
   doğrulanabilir. Yine de küçük ya da düşük kontrastlı yazı yanlış okunabilir ya da
   bulunamayabilir.
@@ -442,14 +460,32 @@ MCP'de aynı kodlar `[kod] ad: ayrıntı` biçiminde hata olarak döner.
 - Etkinlik günlüğü Türkçe yazılır (panel çevirerek gösterir); mesajlar, yardım ve panel sistem dilinizi (Türkçe ya da
   İngilizce) ya da Ayarlar'daki seçimi izler.
 
-### Tehdit modeli
+## Güvenlik modeli
 
-Deskhand sizi ajanın **hatalarından** ve **istem enjeksiyonundan** (ajana bir şey satın
-almasını ya da hesap silmesini söyleyen bir web sayfası ya da belge) korur: ajanın kendi
-isteğini onaylayan ya da sizin DUR'unuzu kaldıran hiçbir aracı veya komutu yoktur.
-**Kum havuzu değildir**: sizin kullanıcınızla istediği kabuk komutunu çalıştırabilen bir ajan
-dosyaları değiştirebilir, paneli kapatabilir ya da masaüstünü Deskhand olmadan sürebilir.
-Kabuk erişimini istemcinizin izin istemlerinin arkasında tutun.
+Deskhand sizi ajanın **hatalarından** ve **kandırılmış ya da şaşırmış bir ajandan** korur: istem
+enjeksiyonu (ajana bir şey satın almasını ya da hesap silmesini söyleyen bir web sayfası ya da belge),
+yanlış hedef, kontrolden çıkmış döngü. Ajanın kendi isteğini onaylayan ya da sizin DUR'unuzu kaldıran hiçbir
+aracı veya komutu yoktur. Onay diyaloğu, DUR, yasak pencere listesi ve meşgul denetimleri bunun içindir.
+
+**Kum havuzu değildir** ve zaten sizin adınıza çalışan koda karşı koruma sağlamaz:
+
+- **Aynı kullanıcı hesabında çalışan kötü amaçlı bir süreç panel gibi davranabilir.** Panel, süreç kimliğiyle
+  tanınır (soket karşı ucu, başlangıç zamanı, çalıştırılabilir dosya, komut satırı, çalışma dizini). Bu,
+  yanlış davranan bir ajana karşı bir denetimdir; aynı kullanıcıyla çalışan başka bir programa karşı değil:
+  o program paneli taklit edebilir, onayları yanıtlayabilir ya da dosyalarınızı doğrudan değiştirebilir. Bu
+  bilinen bir tasarım sınırıdır; aynı kullanıcıdaki bir süreç masaüstünü Deskhand olmadan da sürebilir.
+- **Yalnız panelin gevşetebildiği ayarlar aynı sınıftadır.** "Yalnız kartla ödeme" onay kapsamı, hesap
+  oturumları ve kalıcı oturumlar yalnız panelin kendi işaret dosyasıyla birlikte kabul edilir; yani ayar
+  dosyasını elle yazan bir ajan bir şey kazanmaz. Panel kapalıyken ayar dosyasını ve işareti birlikte
+  sahteleyebilen bir süreç bu korumanın dışındadır.
+- **Sizin kullanıcınızla istediği kabuk komutunu çalıştırabilen bir ajan** dosyaları değiştirebilir, paneli
+  kapatabilir ya da masaüstünü Deskhand olmadan sürebilir. Kabuk erişimini istemcinizin izin istemlerinin
+  arkasında tutun.
+- Arka plan masaüstündeki uygulamalar `bubblewrap` içinde çalışır (salt okunur kök, boş ev dizini, örtülü sır
+  yolları). Bu, o uygulamaların ne gördüğünü sınırlar; düşmanca bir uygulamanın neler yapabileceği konusunda
+  söz değildir.
+
+Sorun bildirmek için bkz. [SECURITY.md](SECURITY.md).
 
 ## Geliştirme
 
