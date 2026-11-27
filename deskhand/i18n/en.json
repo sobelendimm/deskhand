@@ -507,7 +507,7 @@
  "girdi merkezinde başka bir komutun girdisi sürüyor; {sn} sn beklendi, girdi gönderilmedi": "another command's input is still active on the input hub; waited {sn} s, no input sent",
  "gizli yazı panoda kalmış olabilir: pano temizlenemedi ({hata})": "the secret text may still be on the clipboard: the clipboard could not be cleared ({hata})",
  "gizli yazı panodan silindi (pano boş)": "the secret text was removed from the clipboard (clipboard empty)",
- "gizli yazının {konum}. karakteri '{duzen}' düzeninde yok (uzunluk {uzunluk}); gizli yazıda karakter değiştirilmez; hiçbir şey yazılmadı": "character {konum} of the secret text is not in the '{duzen}' layout (length {uzunluk}); characters of secret text are never substituted; nothing was typed",
+ "gizli metin pano kullanılmadan yazılamıyor: desteklenmeyen karakter ({konum}. karakter '{duzen}' düzeninde yok, uzunluk {uzunluk}); gizli yazıda karakter değiştirilmez, pano kullanılmaz; hiçbir şey yazılmadı": "secret text cannot be typed without the clipboard: unsupported character (character {konum} is not in the '{duzen}' layout, length {uzunluk}); secret text is never altered and the clipboard is never used; nothing was typed",
  "goto bir tarayıcı penceresi ister (tüm ekran değil)": "goto needs a browser window (not the whole screen)",
  "goto yalnız tarayıcı pencerelerinde çalışır (bu pencere bir tarayıcı değil)": "goto only works in browser windows (this window is not a browser)",
  "görev kipi: ham komut açılmaz; uygulama adıyla aç": "task mode: raw commands are not launched; open by application name",

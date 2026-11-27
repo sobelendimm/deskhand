@@ -390,11 +390,31 @@ kontrol("yasak pencere (deskhand paneli): yapıştırma yolu da girdi göndermez
 # --- gizli yazı günlüğe yazılmaz
 au = SahtePano()
 SIR = "cok-gizli-parola-Xq9😀"
-yaz(au, SIR, gizli=True)
+g0 = gunluk_metni()
+try:
+    with arka_uc.hedef_sabit("kde"):
+        arka_uc._ORNEKLER["kde"] = au
+        eylem.k_yaz(ns(metin=SIR, gizli=True))
+    m_ = ""
+except Dur as e:
+    m_ = e.mesaj
+kontrol("gizli + yazılamayan karakter: ileti 'pano kullanılmadan yazılamıyor: desteklenmeyen karakter', metin yok",
+        "pano kullanılmadan yazılamıyor: desteklenmeyen karakter" in m_ and "parola" not in m_ and "😀" not in m_, m_)
+au = SahtePano()
+kod_ = yaz(au, SIR, gizli=True)
+kontrol("gizli + düzende olmayan karakter (emoji) → PANO YOK: yazmadan Dur 1, hiçbir satır/pano yazımı yok",
+        kod_ == 1 and au.hedef == "" and not au.satirlar and not any(o[0] == "pano_yaz" for o in au.olaylar)
+        and au.pano == "eski pano", f"{kod_} {au.satirlar[:3]} {au.olaylar[:3]}")
+au = SahtePano()
+SIR_UZUN = "cok-gizli-parola-Xq9 " * 15  # 315 karakter: eşik (200) üstü ama yazılabilir
+kod_ = yaz(au, SIR_UZUN, gizli=True)
+kontrol("gizli + 200+ karakter → pano HİÇ kullanılmaz, harf harf (EIS) birebir; eski pano yerinde",
+        kod_ == 0 and au.hedef == SIR_UZUN and not any(o[0] == "pano_yaz" for o in au.olaylar)
+        and "key ctrl+v" not in au.satirlar and au.pano == "eski pano", f"{kod_} {au.olaylar[:3]}")
 yaz(au, "gorunur-metin-Zk3 😀")
-g = gunluk_metni()
-kontrol("gizli yazı: metin ve parça uzunlukları günlükte YOK, 'yapistir ***' var", SIR not in g and "cok-gizli" not in g
-        and "yapistir ***" in g and "yapistir ***(" not in g)
+g = gunluk_metni()[len(g0):]
+kontrol("gizli yazı: metin günlükte YOK, 'type ***' var, gizli için 'yapistir' satırı yok", SIR not in g
+        and "cok-gizli" not in g and "type ***" in g and "yapistir ***" not in g)
 kontrol("gizli olmayan yazı günlüğe yazılır (kırpılmış)", "gorunur-metin-Zk3" in g)
 yaz(au, "x😀" + "u" * 5000)
 kontrol("günlük: uzun yapıştırma 200 karakterde kırpılır", "u" * 300 not in gunluk_metni())
@@ -960,11 +980,24 @@ kontrol("yapıştır (sanal): pano BOŞKEN → yapıştırıldı, sonra pano yin
 # eski pano metin DEĞİL (hedef listesi TARGETS ama metin yok): geri yüklenemez → UYARI, pano temizlenir
 au.pano_yaz("eski içerik ğüşİ 😀")
 temizle_kutu()
-r, ms = api_yaz("gizli parola 😀" * 30, gizli=True)
-gl = gunluk_metni()
-kontrol("yapıştır (sanal): gizli yazı günlüğe yazılmadı ('yapistir ***')", "gizli parola" not in gl and "yapistir ***" in gl)
-bekle(lambda: kutu_metni() == "gizli parola 😀" * 30, 3)
-kontrol("yapıştır (sanal): gizli yazı yine de hedefe birebir gitti", kutu_metni() == "gizli parola 😀" * 30)
+GIZLI_EMOJI = "gizli parola 😀" * 3
+g0 = gunluk_metni()
+api_yaz(GIZLI_EMOJI, gizli=True)  # Xvfb XTEST emojiyi doğrudan yazabiliyor (yazilabilir_mi): pano GEREKMEZ
+bekle(lambda: kutu_metni() == GIZLI_EMOJI, 4)
+gl = gunluk_metni()[len(g0):]
+kontrol("sanal: gizli + emoji (düzende yazılabilir) → klavyeyle birebir, pano hiç değişmedi, günlükte 'yapistir' yok",
+        kutu_metni() == GIZLI_EMOJI and au.pano_oku() == "eski içerik ğüşİ 😀" and "yapistir" not in gl
+        and "gizli parola" not in gl, repr(kutu_metni())[:120])
+temizle_kutu()
+GIZLI_UZUN = "gizli parola " * 18  # 234 karakter: eşik üstü, harf harf
+g0 = gunluk_metni()
+r, ms = api_yaz(GIZLI_UZUN, gizli=True)
+gl = gunluk_metni()[len(g0):]
+kontrol("sanal: gizli 200+ karakter günlüğe yazılmadı ('type ***', yapıştırma yok)", "gizli parola" not in gl
+        and "type ***" in gl and "yapistir" not in gl, gl[-300:])
+bekle(lambda: kutu_metni() == GIZLI_UZUN, 6)
+kontrol("sanal: gizli 200+ karakter harf harf hedefe birebir gitti, pano hiç değişmedi",
+        kutu_metni() == GIZLI_UZUN and au.pano_oku() == "eski içerik ğüşİ 😀", repr(kutu_metni())[:120])
 
 # --- hata/kesinti (gerçek sanal): DUR yapıştırmalar arasında → eski pano geri
 temizle_kutu()

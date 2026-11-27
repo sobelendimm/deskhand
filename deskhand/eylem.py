@@ -70,9 +70,10 @@ def yazima_hazirla(metin, gizli=False):
         if c in "\n\t" or " " <= c <= "~" or yazilabilir_mi(c):
             sonuc.append(c)
             continue
-        if gizli:
-            raise Dur(1, _("gizli yazının {konum}. karakteri '{duzen}' düzeninde yok (uzunluk {uzunluk}); gizli yazıda "
-                           "karakter değiştirilmez; hiçbir şey yazılmadı").format(
+        if gizli:  # gizli yazı panoya hiç girmez (yaz_ic): yapıştırma yedeği de yok
+            raise Dur(1, _("gizli metin pano kullanılmadan yazılamıyor: desteklenmeyen karakter ({konum}. karakter "
+                           "'{duzen}' düzeninde yok, uzunluk {uzunluk}); gizli yazıda karakter değiştirilmez, pano "
+                           "kullanılmaz; hiçbir şey yazılmadı").format(
                 konum=i + 1, duzen=klavye_duzeni()[0], uzunluk=len(metin)))
         y = YEDEK.get(c)
         if y is None:
@@ -439,6 +440,8 @@ def _gizli_pano_temizle(au, son_pano, uyari):
 def yaz_ic(g, k, desen, metin, onayli=False):
     metin = metin.replace("\r\n", "\n").replace("\r", "\n")
     denetim_karakteri_denetle(metin)  # iki arka uç + yapıştırma yolu: hiçbir şey gönderilmeden
+    if g.gizli:  # gizli yazı PANOYA HİÇ GİRMEZ (Klipper geçmişi/diğer uygulamalar): uzun olsa da harf harf; yazılamayan
+        metin = yazima_hazirla(metin, gizli=True)  # karakter varsa onaydan ve gönderimden ÖNCE Dur 1
     guvenlik.seviye_denetle(k, "klavye")  # uygulama erişim seviyesi: onay diyaloğundan ÖNCE (boşuna sormasın)
     onay = False
     if yazi_onay_ister_mi(metin) and _yazi_hassas(g, k, onayli, metin):  # yazmadan ÖNCE (bir eylem = bir onay)
@@ -456,7 +459,7 @@ def yaz_ic(g, k, desen, metin, onayli=False):
         _au().one_getir(k)  # onay diyaloğu odağı almış olabilir
     tamam = False
     try:
-        if yapistirarak_mi(metin):
+        if not g.gizli and yapistirarak_mi(metin):
             if _yapistirarak_yaz(g, k, desen, metin, onayli):
                 tamam = True
                 return
@@ -944,7 +947,8 @@ def k_yaz(a):
     ham = a.metin.replace("\r\n", "\n").replace("\r", "\n")
     denetim_karakteri_denetle(ham)
     # yapıştırılacak yazıda klavye düzeninde olmayan karakter (emoji…) sorun değil: yazima_hazirla yalnız harf harf yazılacaksa
-    metin = ham if yapistirarak_mi(ham) else yazima_hazirla(ham, gizli=getattr(a, "gizli", False))
+    gizli = getattr(a, "gizli", False)  # gizli yazı yapıştırılmaz: yazılamayan karakterde onay sorulmadan Dur 1
+    metin = ham if (yapistirarak_mi(ham) and not gizli) else yazima_hazirla(ham, gizli=gizli)
     if a.kimlik == EKRAN:  # masaüstü kipi: yazı o an etkin pencereye gider → ona kilitlen (değişirse durur)
         a.kimlik = _au().aktif()
         if not a.kimlik:

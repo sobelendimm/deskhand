@@ -2024,7 +2024,7 @@ def click(
 def type_text(
     text: Annotated[str, Field(max_length=20000, description="Text to type (Turkish letters OK; \\n = Enter, \\t = Tab; "
                                                              "emoji and long text are pasted via the clipboard, "
-                                                             "which is restored)")],
+                                                             "which is restored; never with secret=true)")],
     window: Annotated[str | None, Field(description="Target window (title pattern or id); optional with ref")] = None,
     ref: Annotated[str | None, Field(description="Field ref from observe: it is clicked first (focus), then "
                                                  "typed into")] = None,
@@ -2035,7 +2035,8 @@ def type_text(
                                                        "times (default: the only writable one, if exactly one)")] = None,
     submit: Annotated[bool, Field(description="Press Enter afterwards")] = False,
     clear_first: Annotated[bool, Field(description="Select all (ctrl+a) first so the text replaces it")] = False,
-    secret: Annotated[bool, Field(description="Keep the text out of the log and the result")] = False,
+    secret: Annotated[bool, Field(description="Keep the text out of the log and the result; typed key by key, "
+                                                  "never via the clipboard")] = False,
     verify: Annotated[bool, Field(description="Measure the effect (after, effect)")] = True,
     desktop: Masaustu = "auto",
 ) -> dict[str, Any]:

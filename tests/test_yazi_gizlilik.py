@@ -5,7 +5,7 @@
 2. Gizli yazı: karakter DEĞİŞTİRİLMEZ (Café → Cafe yok), ileti karakter değil konum/uzunluk verir.
 3. Dizi/akış: gizli adım satırı stdout'a, günlüğe ve Dur iletisine yazılmaz.
 4. dotool uyarıları (impossible character…): merkez günlüğüne ve gizli gönderimin iletisine karakter taşınmaz.
-5. Gizli yapıştırma: eski pano geri yüklenemezse (çok büyük) pano temizlenir.
+5. Gizli yazı panoya hiç girmez (uzun gizli yazı da harf harf).
 
 Çalıştır:  python3 tests/test_yazi_gizlilik.py"""
 import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; deskhand'den ÖNCE)
@@ -211,20 +211,19 @@ gk.gizli = False
 kontrol("kde.Girdi gizli değil: uyarı aynen (tanılama)",
         gk._uyari_suz(["impossible character for layout: ş"]) == ["impossible character for layout: ş"])
 
-# ================================================================ 5. gizli yapıştırma + büyük pano
+# ================================================================ 5. gizli yazı panoya HİÇ girmez (ABM-F2 EK-1)
 au = BuyukPano()
 gizli_metin = "S" * 250 + "-çok-gizli"
 kod, mesaj, cikti = calistir(au, eylem.k_yaz, ns(metin=gizli_metin, gizli=True))
-kontrol("gizli + büyük (geri yüklenemeyen) pano → yazıldı ve SONRA pano boş", kod == 0 and au.hedef == gizli_metin
-        and au.pano is None, f"{kod} {mesaj} pano={str(au.pano)[:20]!r}")
-kontrol("gizli + büyük pano: uyarı panonun temizlendiğini söyler, metni taşımaz",
-        "çok-gizli" not in cikti and "pano" in cikti, cikti)
+kontrol("gizli + 200+ karakter → harf harf yazıldı, pano HİÇ yazılmadı/okunmadı (geri yükleme de yok)",
+        kod == 0 and au.hedef == gizli_metin and not au.olaylar, f"{kod} {mesaj} {au.olaylar[:3]}")
+kontrol("gizli + 200+ karakter: çıktıda metin yok", "çok-gizli" not in cikti, cikti)
 au = BuyukPano()
 kod, mesaj, cikti = calistir(au, eylem.k_yaz, ns(metin="A" * 250))
-kontrol("gizli DEĞİL + büyük pano: davranış aynı (pano temizlenmez)", kod == 0 and au.pano == "A" * 250)
+kontrol("gizli DEĞİL + 200+ karakter: yapıştırma yolu aynı", kod == 0 and au.pano == "A" * 250)
 au = SahteAU()
 kod, mesaj, cikti = calistir(au, eylem.k_yaz, ns(metin="B" * 250, gizli=True))
-kontrol("gizli + normal pano: eski pano geri yüklendi (temizlenmedi)", kod == 0 and au.pano == "eski pano")
+kontrol("gizli + normal pano: pano dokunulmadan yerinde", kod == 0 and au.pano == "eski pano" and not au.olaylar)
 
 print(f"\n{GECEN}/{TOPLAM} yazı gizlilik testi geçti")
 raise SystemExit(0 if GECEN == TOPLAM else 1)
