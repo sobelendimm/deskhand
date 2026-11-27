@@ -73,7 +73,7 @@ kapatıp yeniden açın.
   düşmez, günlüğe yakalanır; sesleri sessiz bir çıkışa gider. Wayland değişkenleri
   silinir, böylece bir uygulama ekranınıza kaçamaz.
 - **Hafif.** Düşük işlemci/disk önceliği ve bellek sınırı (systemd kapsamı, varsayılan
-  4 GB). Açılışı yaklaşık 0,2 sn sürer; boş masaüstü ~30 MiB kullanır.
+  6 GB). Açılışı yaklaşık 0,2 sn sürer; boş masaüstü ~30 MiB kullanır.
 - **Uygulama başına oturum politikası.** Bazı uygulamalar orada girişli açılabilir:
   - **Firefox:** profilinizin tutarlı, **tek yönlü anlık kopyası** (çerezler, girişler,
     görev sitelerinin deposu). Kopyadan asıl profile hiçbir şey geri yazılmaz. Sync kimliği alınmaz;
@@ -387,7 +387,7 @@ açıkça onayladıysa verin. Verilmezse Deskhand kullanıcıya panelden sorar.
 Her klasör `DESKHAND_CONFIG_DIR`, `DESKHAND_STATE_DIR`, `DESKHAND_CACHE_DIR`,
 `DESKHAND_DATA_DIR`, `DESKHAND_RUNTIME_DIR` ile taşınabilir. Diğer değişkenler:
 `DESKHAND_HEDEF=on|arka|oto` (varsayılan masaüstü), `DESKHAND_SANAL_BOYUT=1920x1080`
-(arka plan boyutu), `DESKHAND_SANAL_BELLEK=4G` (bellek sınırı, `0` = kapalı).
+(arka plan boyutu), `DESKHAND_SANAL_BELLEK=6G` (bellek sınırı, `0` = kapalı).
 `DESKHAND_GERCEK_EKRAN=kapali` o süreçte gerçek ekranınızı en alt katmanda kilitler (girdi, pencere
 eylemleri, uygulama açma, pano yazma, bildirim, ekran görüntüsü 17 koduyla reddedilir; `salt-okuma`
 ekran görüntüsü ve pano okumaya izin verir): test/ölçüm betiklerinde ayarlayın, unutulan bir arka

@@ -523,7 +523,7 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
     soketleri, başka X soketleri görünmez), `/run/user/<UID>` (Wayland, D-Bus, pipewire/pulse, kwallet, gnupg, ssh,
     xauth, at-spi, portal, systemd soketleri) ve (başka yerdeyse) Deskhand'in RUNTIME_DIR'i (girdi.sock, sanal.json,
     diğer oturumlar).
-  - **Ev dizini BOŞ tmpfs + BEYAZ LİSTE** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` = min(2 GiB, kafes belleği/4), kafes varsayılanı 4G → 1 GiB; ad alanındaki `/tmp` de aynı sınırla): gerçek
+  - **Ev dizini BOŞ tmpfs + BEYAZ LİSTE** (`arka_ortak.ev_baglari`, `EV_BEYAZ_LISTE`; 0700, `--size` = min(2 GiB, kafes belleği/4), kafes varsayılanı 6G → 1,5 GiB; ad alanındaki `/tmp` de aynı sınırla): gerçek
     ev dizininden YALNIZ masaüstü/araç takımı görünümü SALT OKUNUR görünür — `~/.config/kdeglobals`, `kdedefaults/`,
     `kcminputrc`, `kcmfonts`, `Trolltech.conf`, `plasma-localerc`, `breezerc`, `Kvantum`, `qt5ct`/`qt6ct`, `gtk-3.0`,
     `gtk-4.0`, `gtkrc`, `gtkrc-2.0`, `~/.gtkrc-2.0`, `xsettingsd`, `fontconfig`, `~/.local/share/fonts`, `~/.fonts`,

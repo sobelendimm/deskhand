@@ -18,7 +18,7 @@ from .hata import ARAC_EKSIK, Dur
 from .i18n import _
 
 SINK = "deskhand-sessiz"
-VARSAYILAN_BELLEK = "4G"
+VARSAYILAN_BELLEK = "6G"  # 27 Kas: 4G ile 17–24 sa oturumlarda 20 OOM (Z6 ölçümü)
 VARSAYILAN_TAKAS = "0"  # kafes takasa taşmasın (DESKHAND_SANAL_TAKAS): sınırda kafes içinde OOM, sistem yavaşlamaz
 # Özel veri yolunda etkinleştirilebilecek servisler (gerisi kapalı: kwalletd, kded, kdeconnect, plasma
 # bildirimleri… ikinci örnekleri kullanıcının dosyalarını/oturumunu bozabilir).
@@ -675,7 +675,7 @@ def bellek_bayt(metin: str | None) -> int | None:
 
 
 def ev_boyut(bellek: str | None = None) -> int:
-    """Ev tmpfs'i ve /tmp için boyut: min(2 GiB, kafes belleği / 4) (kafes varsayılanı 4G → 1 GiB). Kafes kapalı ya da
+    """Ev tmpfs'i ve /tmp için boyut: min(2 GiB, kafes belleği / 4) (kafes varsayılanı 6G → 1,5 GiB). Kafes kapalı ya da
     çözülemezse üst sınır. bellek verilmezse DESKHAND_SANAL_BELLEK / varsayılan."""
     b = bellek_bayt(bellek if bellek is not None else _bellek_siniri())
     return min(EV_BOYUT_AZAMI, b // 4) if b else EV_BOYUT_AZAMI

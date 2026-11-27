@@ -203,7 +203,7 @@ else:
     kontrol("masaüstü: openbox çalışıyor", d.get("openbox"), str(d.get("uyarilar")))
 kontrol("masaüstü: bellek kafesi (scope) içinde", d.get("kafes") and d["cgroup"].endswith(d["kafes"]))
 r = subprocess.run(["systemctl", "--user", "show", d["kafes"], "-p", "MemoryMax"], capture_output=True, text=True)
-kontrol("masaüstü: kafes MemoryMax = 4G", r.stdout.strip() == f"MemoryMax={4 * 1024 ** 3}", r.stdout)
+kontrol("masaüstü: kafes MemoryMax = 6G", r.stdout.strip() == f"MemoryMax={6 * 1024 ** 3}", r.stdout)
 r = subprocess.run(["systemctl", "--user", "show", d["kafes"], "-p", "MemorySwapMax"], capture_output=True, text=True)
 kontrol("masaüstü: kafes MemorySwapMax = 0 (takasa taşmaz)", r.stdout.strip() == "MemorySwapMax=0", r.stdout)
 kontrol("masaüstü: ses bekçisi YOK (ses sunucusuna erişim olmadığından gerekmez)", "ses_bekcisi" not in d["pid"])

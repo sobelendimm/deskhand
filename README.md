@@ -64,7 +64,7 @@ default, separate from your session.
   talk to its own X display). Apps there get a private D-Bus, so their notifications are
   captured to a log instead of popping up, and their audio goes to a silent sink.
   Wayland variables are removed so an app cannot escape to your screen.
-- **Light.** Low CPU/IO priority and a memory cap (systemd scope, 4 GB by default).
+- **Light.** Low CPU/IO priority and a memory cap (systemd scope, 6 GB by default).
   Starting it takes about 0.2 s; an empty desktop uses about 30 MiB.
 - **Per-app session policy.** Some apps can open there already logged in:
   - **Firefox:** a consistent, **one-way snapshot copy** of your profile (cookies, logins,
@@ -333,7 +333,7 @@ chat. Without it, Deskhand asks the user in the panel.
 Every directory can be moved with `DESKHAND_CONFIG_DIR`, `DESKHAND_STATE_DIR`,
 `DESKHAND_CACHE_DIR`, `DESKHAND_DATA_DIR`, `DESKHAND_RUNTIME_DIR`. Other variables:
 `DESKHAND_HEDEF=on|arka|oto` (default desktop), `DESKHAND_SANAL_BOYUT=1920x1080` (background
-size), `DESKHAND_SANAL_BELLEK=4G` (memory cap, `0` = off). `DESKHAND_GERCEK_EKRAN=kapali` locks your
+size), `DESKHAND_SANAL_BELLEK=6G` (memory cap, `0` = off). `DESKHAND_GERCEK_EKRAN=kapali` locks your
 real screen for that process at the lowest layer (input, window actions, app launch, clipboard write,
 notifications, screenshots all fail with exit code 17; `salt-okuma` still allows reading
 screenshots and the clipboard): set it in test and measurement scripts so a forgotten background
