@@ -49,11 +49,15 @@ jobs:
       # python3-gi / gir1.2-atspi-2.0 are packages of the SYSTEM Python (/usr/bin/python3, 3.12 on 24.04):
       # actions/setup-python would install a different interpreter where `import gi` fails. All steps
       # therefore use the system Python through a venv that sees the system site-packages.
+      # python3-jeepney / python3-xlib: Deskhand's helper scripts (notification catcher, clipboard owner) run under
+      # /usr/bin/python3 -I whenever the running interpreter is not root-owned (the venv below), so they need the
+      # distribution modules, as on a user's machine.
       - name: System packages
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             python3 python3-venv python3-pip python3-gi gir1.2-atspi-2.0 python3-lz4 \
+            python3-jeepney python3-xlib \
             tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng \
             xvfb openbox xdotool x11-utils \
             gcc make pkg-config libsystemd-dev libwayland-dev wayland-protocols libxkbcommon-dev \
@@ -79,7 +83,7 @@ jobs:
           .venv/bin/python -m pip install .
           # test-only Python tools: pytest (test_ux_birlestir), build + setuptools>=77 for `python -m build
           # --no-isolation` (test_paket; Ubuntu's system setuptools is older than pyproject's requirement)
-          .venv/bin/python -m pip install pytest build "setuptools>=77"
+          .venv/bin/python -m pip install pytest build "setuptools>=77" "packaging>=24.2"
           .venv/bin/python -c "import gi; gi.require_version('Atspi', '2.0'); from gi.repository import Atspi; print('gi ok')"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
