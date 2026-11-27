@@ -1737,5 +1737,6 @@
  "Panelin imzalı kaydı okunamıyor ({neden}); şu listeler doğrulanamadı:\n{satirlar}": "The panel's signed record cannot be read ({neden}); these lists could not be verified:\n{satirlar}",
  "panelin imzalı kaydı yok": "the panel has no signed record",
  "{ayar}: dosyada «{yeni}»": "{ayar}: in the file \"{yeni}\"",
- "İsteyenin yazdığı isteğin karması onay kanalından gelmedi; Evet uygulanmadı. İstek yeniden sorulur.": "The hash of the request as the requester wrote it did not arrive on the approval channel; the Yes was not applied. The request will be asked again."
+ "İsteyenin yazdığı isteğin karması onay kanalından gelmedi; Evet uygulanmadı. İstek yeniden sorulur.": "The hash of the request as the requester wrote it did not arrive on the approval channel; the Yes was not applied. The request will be asked again.",
+ "kalıcı depo kilitli (başka bir Deskhand süreci tutuyor ya da depo dizini kullanılamıyor); hiçbir kayıt silinmedi, biraz sonra yeniden deneyin.": "persistent store is locked (another Deskhand process holds it, or the store directory is not usable); no record was deleted, try again shortly."
 }

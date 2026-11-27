@@ -607,7 +607,7 @@
  ],
  "AÇIK": [
   "masaustu.py:1405",
-  "oturum/cli.py:103"
+  "oturum/cli.py:108"
  ],
  "AÇIK ({yol})": [
   "cli.py:319"
@@ -1558,7 +1558,7 @@
   "doktor.py:416"
  ],
  "Oturum köprüsü": [
-  "oturum/cli.py:56"
+  "oturum/cli.py:61"
  ],
  "Oturumla girilebilecek siteler:": [
   "gui/metinler.py:289"
@@ -1648,10 +1648,10 @@
   "liste_koruma.py:230"
  ],
  "Secret Service yok ya da varsayılan cüzdan yok (KDE Cüzdanı)": [
-  "oturum/kalici.py:128"
+  "oturum/kalici.py:133"
  ],
  "Secret Service'e bağlanılamadı (oturum veri yolu yok)": [
-  "oturum/kalici.py:123"
+  "oturum/kalici.py:128"
  ],
  "Ses dinleniyor": [
   "gui/metinler.py:284"
@@ -1958,17 +1958,17 @@
   "mcp_sunucu.py:2447"
  ],
  "anahtar okunamadı (Secret Service hatası)": [
-  "oturum/kalici.py:140",
-  "oturum/kalici.py:168",
-  "oturum/kalici.py:201"
+  "oturum/kalici.py:145",
+  "oturum/kalici.py:173",
+  "oturum/kalici.py:206"
  ],
  "anahtar yok (henüz kayıt yapılmadı)": [
-  "oturum/kalici.py:135",
-  "oturum/kalici.py:1096"
+  "oturum/kalici.py:140",
+  "oturum/kalici.py:1102"
  ],
  "anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)": [
   "liste_koruma.py:187",
-  "oturum/kalici.py:114"
+  "oturum/kalici.py:119"
  ],
  "arayüz (python-pyqt6)": [
   "gui/saglik.py:22"
@@ -2043,7 +2043,7 @@
   "oturum/kopya.py:359"
  ],
  "açıklama: {aciklama}": [
-  "oturum/cli.py:133"
+  "oturum/cli.py:138"
  ],
  "açılacak http/https adresi (tarayıcılar; --url ile aynı)": [
   "cli.py:528"
@@ -2362,7 +2362,7 @@
   "gorsel.py:287"
  ],
  "bütün kayıtları sil": [
-  "oturum/cli.py:88"
+  "oturum/cli.py:93"
  ],
  "büyütme": [
   "arka_uc/__init__.py:152",
@@ -2385,8 +2385,8 @@
  "cüzdan kilitli": [
   "liste_koruma.py:169",
   "liste_koruma.py:193",
-  "oturum/kalici.py:130",
-  "oturum/kalici.py:147"
+  "oturum/kalici.py:135",
+  "oturum/kalici.py:152"
  ],
  "dbus-daemon bellek kafesinde değil: {cgroup}": [
   "kwin_oturum.py:962"
@@ -2879,8 +2879,8 @@
   "kwin_oturum.py:162"
  ],
  "geçersiz alan adı: {alan}": [
-  "oturum/cli.py:144",
-  "oturum/cli.py:157"
+  "oturum/cli.py:149",
+  "oturum/cli.py:166"
  ],
  "geçersiz arka plan pencere kimliği: {kimlik}": [
   "arka_uc/kwin.py:157"
@@ -3017,7 +3017,7 @@
   "uygulama.py:573"
  ],
  "giriş çerezinin adı (fnmatch; tekrarlanabilir). Yoksa ad deseniyle tahmin edilir": [
-  "oturum/cli.py:83"
+  "oturum/cli.py:88"
  ],
  "giriş çerezlerinin süresi geçmiş (giriş gerekir)": [
   "oturum/denetle.py:384"
@@ -3096,7 +3096,7 @@
   "cli.py:571"
  ],
  "göreve özel izinli alan adları": [
-  "oturum/cli.py:71"
+  "oturum/cli.py:76"
  ],
  "göründü: '{metin}' ({sn} sn)": [
   "ocr.py:614"
@@ -3307,17 +3307,20 @@
  "kalıcı": [
   "oturum/denetle.py:360"
  ],
+ "kalıcı depo kilitli (başka bir Deskhand süreci tutuyor ya da depo dizini kullanılamıyor); hiçbir kayıt silinmedi, biraz sonra yeniden deneyin.": [
+  "oturum/cli.py:27"
+ ],
  "kalıcı depo: {alan} için kayıt yok": [
-  "oturum/cli.py:161"
+  "oturum/cli.py:174"
  ],
  "kalıcı depo: {alan} kaydı silindi": [
-  "oturum/cli.py:160"
+  "oturum/cli.py:173"
  ],
  "kalıcı depo: {durum}": [
   "oturum/denetle.py:396"
  ],
  "kalıcı depo: {sayi} site kaydı silindi": [
-  "oturum/cli.py:153"
+  "oturum/cli.py:159"
  ],
  "kalıcı klavye eşlemesi yapılamadı: {hata}": [
   "masaustu.py:1055"
@@ -3326,7 +3329,7 @@
   "gui/saglik.py:25"
  ],
  "kalıcı oturum deposundan bir sitenin kaydını sil ([oturum] kalici)": [
-  "oturum/cli.py:86"
+  "oturum/cli.py:91"
  ],
  "kalıcı oturum siteleri": [
   "liste_koruma.py:90"
@@ -3345,7 +3348,7 @@
   "doktor.py:173",
   "masaustu.py:1380",
   "masaustu.py:1405",
-  "oturum/cli.py:103"
+  "oturum/cli.py:108"
  ],
  "kapalı ([oturum] kalici boş)": [
   "doktor.py:228"
@@ -3375,10 +3378,10 @@
   "mcp_sunucu.py:1489"
  ],
  "karar: {karar}": [
-  "oturum/cli.py:131"
+  "oturum/cli.py:136"
  ],
  "kararı + kopyayı üret (başlatmaz)": [
-  "oturum/cli.py:69"
+  "oturum/cli.py:74"
  ],
  "kare alınırken yasak bir pencere değişti (artık yasak sayılmıyor): görüntü gönderilmedi (güvenli taraf); tekrar dene": [
   "api.py:318"
@@ -3502,7 +3505,7 @@
   "oturum/denetle.py:368"
  ],
  "kopya: {yol}": [
-  "oturum/cli.py:135"
+  "oturum/cli.py:140"
  ],
  "kopyada YOK": [
   "oturum/denetle.py:363"
@@ -3655,7 +3658,7 @@
   "doktor.py:433"
  ],
  "kurulu": [
-  "oturum/cli.py:102"
+  "oturum/cli.py:107"
  ],
  "kurulu (EasyOCR ekran kartında; tesseract tabanı korunur)": [
   "doktor.py:460"
@@ -4202,7 +4205,7 @@
   "uygulama.py:393"
  ],
  "python-secretstorage kurulu değil": [
-  "oturum/kalici.py:119"
+  "oturum/kalici.py:124"
  ],
  "red": [
   "mcp_sunucu.py:819",
@@ -4440,11 +4443,11 @@
   "guvenlik.py:942"
  ],
  "site alan adı ya da adresi (example.com)": [
-  "oturum/cli.py:81",
-  "oturum/cli.py:87"
+  "oturum/cli.py:86",
+  "oturum/cli.py:92"
  ],
  "site oturumu Firefox profilinde ve kopyada var mı (salt okuma; 0 = var, 1 = yok/eski)": [
-  "oturum/cli.py:80"
+  "oturum/cli.py:85"
  ],
  "site: {alan}": [
   "oturum/denetle.py:357"
@@ -4615,7 +4618,7 @@
   "mcp_sunucu.py:2990"
  ],
  "tüm oturum kopyalarını sil": [
-  "oturum/cli.py:78"
+  "oturum/cli.py:83"
  ],
  "tümleşik GPU ({dugum}) ile açılamadı ({hata}); varsayılan GPU kullanılıyor": [
   "kwin_oturum.py:870"
@@ -4672,7 +4675,7 @@
   "guvenlik.py:1559"
  ],
  "uygulama durumları": [
-  "oturum/cli.py:65"
+  "oturum/cli.py:70"
  ],
  "uygulama erişilebilirlik açılmadan önce başladıysa yeniden başlat": [
   "erisim.py:243"
@@ -4852,7 +4855,7 @@
   "masaustu.py:1384",
   "masaustu.py:1391",
   "mcp_sunucu.py:1464",
-  "oturum/cli.py:102"
+  "oturum/cli.py:107"
  ],
  "yok (sonraki `deskhand open firefox` profildeki oturumu alır)": [
   "oturum/denetle.py:354"
@@ -5127,7 +5130,7 @@
   "doktor.py:419"
  ],
  "{sayi} kopya silindi": [
-  "oturum/cli.py:166"
+  "oturum/cli.py:179"
  ],
  "{sayi} süreç SIGKILL ile kapatıldı": [
   "kwin_oturum.py:1074",
@@ -5198,7 +5201,7 @@
   "oturum/chromium.py:96"
  ],
  "{uygulama} {kurulu} {acik} kapalıyken={kapali_iken} açıkken={acik_iken} keyring={keyring} kopya={kopya}": [
-  "oturum/cli.py:104"
+  "oturum/cli.py:109"
  ],
  "{uygulama}: Flatpak Electron eşlemesi yok": [
   "oturum/chromium.py:77"
@@ -5333,7 +5336,7 @@
   "uygulama.py:294"
  ],
  "çözülmüş politika": [
-  "oturum/cli.py:74"
+  "oturum/cli.py:79"
  ],
  "çıktı dosyası (konumsal [png] ile aynı)": [
   "cli.py:454"

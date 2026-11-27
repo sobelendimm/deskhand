@@ -17,10 +17,15 @@ import argparse
 import json
 import os
 
-from ..i18n import _, h_
+from ..hata import ZAMAN_ASIMI
+from ..i18n import N_, _, h_
 from ..komutlar import OTURUM
 from . import Hazirlik, hazirla, sil_hepsi
 from . import chromium, kopya, politika, tespit
+
+KOD_KILIT = ZAMAN_ASIMI  # forget: the store lock was not obtained, nothing forgotten (review INC3 B7; not "no record")
+MESAJ_KILIT = N_("kalıcı depo kilitli (başka bir Deskhand süreci tutuyor ya da depo dizini kullanılamıyor); hiçbir "
+                 "kayıt silinmedi, biraz sonra yeniden deneyin.")
 
 
 def _durum_satiri(ad: str, yap: dict) -> dict:
@@ -150,13 +155,21 @@ def main(argv=None) -> int:
     if a.komut == "unut":
         from . import denetle, kalici
         if a.hepsi:
-            print(_("kalıcı depo: {sayi} site kaydı silindi").format(sayi=kalici.unut_hepsi()))
+            try:
+                print(_("kalıcı depo: {sayi} site kaydı silindi").format(sayi=kalici.unut_hepsi()))
+            except kalici.KilitAlinamadi:
+                print(_(MESAJ_KILIT))
+                return KOD_KILIT
             return 0
         alan = denetle.alan_normu(a.alan or "")
         if not alan:
             print(_("geçersiz alan adı: {alan}").format(alan=a.alan or ""))
             return 2
-        silindi = kalici.unut(alan)
+        try:
+            silindi = kalici.unut(alan)
+        except kalici.KilitAlinamadi:
+            print(_(MESAJ_KILIT))
+            return KOD_KILIT
         print(_("kalıcı depo: {alan} kaydı silindi").format(alan=alan) if silindi else
               _("kalıcı depo: {alan} için kayıt yok").format(alan=alan))
         return 0

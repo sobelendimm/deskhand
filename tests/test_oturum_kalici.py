@@ -593,6 +593,43 @@ def main():
         kod_g, cikti_g = cli_kos(["forget", "x"])
         dene("6f'': geçersiz alan → 2", lambda: kod_g == 2 and "geçersiz alan" in cikti_g, cikti_g)
 
+        # ---- INC3 B7: forget cannot take the store lock → a distinct error, not "no record"
+        import fcntl
+
+        from deskhand.oturum import cli
+        k = yeni_kopya()
+        cerez_yaz(os.path.join(k, "cookies.sqlite"), [("www.dukkan.test", "sec_session_id", "KILIT", _ms(7200))])
+        kapat(k)
+        eski_sure = kalici._KILIT_SURE
+        kalici._KILIT_SURE = 0.2
+        kilit_fd = os.open(os.path.join(depo_dizini(), kalici._KILIT_AD), os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(kilit_fd, fcntl.LOCK_EX)  # another process holds the store lock
+            kod_k, cikti_k = cli_kos(["forget", "dukkan.test"])
+            kod_kh, cikti_kh = cli_kos(["forget", "--all"])
+            try:
+                kalici.unut("dukkan.test")
+                hata_turu = None
+            except Exception as e:  # noqa: BLE001
+                hata_turu = type(e).__name__
+        finally:
+            fcntl.flock(kilit_fd, fcntl.LOCK_UN)
+            os.close(kilit_fd)
+            kalici._KILIT_SURE = eski_sure
+        dene("B7: kilit alınamazsa unut ayrı hata türü verir (False değil)", lambda: hata_turu == "KilitAlinamadi",
+             str(hata_turu))
+        dene("B7: CLI forget kilit yok → ayrı çıkış kodu ve ileti, kayıt duruyor",
+             lambda: kod_k == cli.KOD_KILIT and kod_k not in (0, 2) and "kilit" in cikti_k
+             and "kayıt yok" not in cikti_k and os.path.isfile(kayit_yolu("dukkan.test")), f"{kod_k} {cikti_k}")
+        dene("B7: CLI forget --all kilit yok → aynı ayrı kod", lambda: kod_kh == cli.KOD_KILIT and "kilit" in cikti_kh,
+             f"{kod_kh} {cikti_kh}")
+        kod_s, cikti_s = cli_kos(["forget", "dukkan.test"])
+        dene("B7: kilit bırakılınca forget kaydı siler", lambda: kod_s == 0 and
+             not os.path.exists(kayit_yolu("dukkan.test")), cikti_s)
+        kod_y, cikti_y = cli_kos(["forget", "dukkan.test"])
+        dene("B7: kayıt yok → 0 ve 'kayıt yok' (kilit hatasından ayrı)", lambda: kod_y == 0 and "kayıt yok" in cikti_y,
+             cikti_y)
+
         # ---- the settings
         dene("4a: [oturum] kalici normalleşir (adres, büyük harf, tekrar)",
              lambda: ayarlar.dogrula("oturum", "kalici", "Shopier.com, https://www.x.test/a, shopier.com")
