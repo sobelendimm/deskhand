@@ -342,9 +342,14 @@ async def senaryo():
                 not r.is_error and sonra.get("changed") is True and len(sonra.get("changed_region", [])) == 4 and
                 0 < sonra.get("changed_ratio", 0) <= 1, metin(r)[:400])
         reg = sonra.get("changed_region") or [0, 0, 0, 0]
-        kontrol("fark: bölge değişen sayaç etiketi satırını (x 100-250, y 40-70) kapsar ve pencere içinde",
-                reg[0] <= 110 and reg[1] <= 45 and reg[0] + reg[2] >= 220 and reg[1] + reg[3] >= 65 and
-                reg[0] >= 0 and reg[1] >= 0 and reg[0] + reg[2] <= 760 and reg[1] + reg[3] <= 640, str(reg))
+        kontrol("fark: bölge pencere içinde", reg[0] >= 0 and reg[1] >= 0 and reg[0] + reg[2] <= 760 and
+                reg[1] + reg[3] <= 640, str(reg))
+        _ortam_farki = _yalitim.yazi_ortami_farki()  # değişen rakamların konumu yazı tipinin glif ölçüsüne bağlı
+        if _ortam_farki:
+            _yalitim.atla("fark: bölge değişen sayaç etiketi satırını (x 100-250, y 40-70) kapsar", _ortam_farki)
+        else:
+            kontrol("fark: bölge değişen sayaç etiketi satırını (x 100-250, y 40-70) kapsar",
+                    reg[0] <= 110 and reg[1] <= 45 and reg[0] + reg[2] >= 220 and reg[1] + reg[3] >= 65, str(reg))
         kontrol("fark: küçük bölge (≤ %25) → oran küçük", sonra.get("changed_ratio", 1) <= 0.25, str(sonra))
         yeni = sonra.get("new_text")
         kontrol("fark: küçük bölgede new_text (≤ 8 satır) 'degisti' okundu",

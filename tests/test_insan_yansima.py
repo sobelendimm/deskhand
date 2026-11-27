@@ -264,44 +264,48 @@ def yaz(metin, **kw):
     return yazilan, hata
 
 
-print("3) benzetici: gerçek kde.Girdi + eylem._harf_harf_yaz")
-for i in range(10):
-    yazilan, hata = yaz("Satın alımdan vazgeçtim.")
-    if hata or yazilan != "Satın alımdan vazgeçtim.":
-        break
-kontrol("'Satın alımdan vazgeçtim.' 10 kez, insan yok, yazı hemen başlıyor → hep TAM (0.8.0: 12/24'te kesilirdi)",
-        hata is None and yazilan == "Satın alımdan vazgeçtim.", f"{i}. tur: {yazilan!r} {hata}")
-UZUN = "Şu iade talebini, ürünü hiç açmadığım için gönderiyorum; lütfen ödemeyi Çarşamba'ya kadar iade edin."
-yazilan, hata = yaz(UZUN)
-kontrol(f"uzun Türkçe cümle ({len(UZUN)} karakter) tam yazıldı", hata is None and yazilan == UZUN, f"{yazilan!r} {hata}")
-yazilan, hata = yaz("Satın alımdan vazgeçtim.", gecikme=0.2, yavas_parca=(3, 0.12))
-kontrol("gecikmeli yansıma (200 ms) + yavaş kelime sınırı → kesilmez", hata is None and
-        yazilan == "Satın alımdan vazgeçtim.", f"{yazilan!r} {hata}")
+_neden = _yalitim.arac_eksigi("kdotool") or _yalitim.kilit_eksigi()
+if _neden:
+    _yalitim.atla('3) benzetici: gerçek kde.Girdi (pencere başlığı kdotool ile, girdi kapısı oturum kilidiyle)', _neden)
+else:
+    print("3) benzetici: gerçek kde.Girdi + eylem._harf_harf_yaz")
+    for i in range(10):
+        yazilan, hata = yaz("Satın alımdan vazgeçtim.")
+        if hata or yazilan != "Satın alımdan vazgeçtim.":
+            break
+    kontrol("'Satın alımdan vazgeçtim.' 10 kez, insan yok, yazı hemen başlıyor → hep TAM (0.8.0: 12/24'te kesilirdi)",
+            hata is None and yazilan == "Satın alımdan vazgeçtim.", f"{i}. tur: {yazilan!r} {hata}")
+    UZUN = "Şu iade talebini, ürünü hiç açmadığım için gönderiyorum; lütfen ödemeyi Çarşamba'ya kadar iade edin."
+    yazilan, hata = yaz(UZUN)
+    kontrol(f"uzun Türkçe cümle ({len(UZUN)} karakter) tam yazıldı", hata is None and yazilan == UZUN, f"{yazilan!r} {hata}")
+    yazilan, hata = yaz("Satın alımdan vazgeçtim.", gecikme=0.2, yavas_parca=(3, 0.12))
+    kontrol("gecikmeli yansıma (200 ms) + yavaş kelime sınırı → kesilmez", hata is None and
+            yazilan == "Satın alımdan vazgeçtim.", f"{yazilan!r} {hata}")
 
 
-def insan_tek_tus(sim):  # yavaş kelime sınırının ortasında (bizim girdimiz yokken) insan bir tuşa basar
-    # gerçek tuş: bas + 80 ms sonra bırak (iki 'aktif'). 0.9.0: anlık TEK kısa olay penceremizden hemen sonra
-    # gelirse kendi girdimizin gecikmeli yansımasından ayrılamaz → yansıma sayılır
-    t = time.monotonic() + 0.35
-    sim.insan_girdisi(t)
-    sim.insan_girdisi(t + 0.08)
+    def insan_tek_tus(sim):  # yavaş kelime sınırının ortasında (bizim girdimiz yokken) insan bir tuşa basar
+        # gerçek tuş: bas + 80 ms sonra bırak (iki 'aktif'). 0.9.0: anlık TEK kısa olay penceremizden hemen sonra
+        # gelirse kendi girdimizin gecikmeli yansımasından ayrılamaz → yansıma sayılır
+        t = time.monotonic() + 0.35
+        sim.insan_girdisi(t)
+        sim.insan_girdisi(t + 0.08)
 
 
-yazilan, hata = yaz("Satın alımdan vazgeçtim.", yavas_parca=(3, 0.5), insan_plani=insan_tek_tus)
-kontrol("GERÇEK insan tuşu (bizim girdimiz bitmişken) → 12 ile KESİLİR", hata is not None and hata.kod == 12 and
-        "12/24" in hata.mesaj, f"{yazilan!r} {hata}")
+    yazilan, hata = yaz("Satın alımdan vazgeçtim.", yavas_parca=(3, 0.5), insan_plani=insan_tek_tus)
+    kontrol("GERÇEK insan tuşu (bizim girdimiz bitmişken) → 12 ile KESİLİR", hata is not None and hata.kod == 12 and
+            "12/24" in hata.mesaj, f"{yazilan!r} {hata}")
 
 
-def insan_surekli(sim):  # insan kelime sınırında yazmayı sürdürüyor (30 ms'de bir, 1,2 sn)
-    t0 = time.monotonic() + 0.01
-    for i in range(40):
-        sim.insan_girdisi(t0 + i * 0.03)
+    def insan_surekli(sim):  # insan kelime sınırında yazmayı sürdürüyor (30 ms'de bir, 1,2 sn)
+        t0 = time.monotonic() + 0.01
+        for i in range(40):
+            sim.insan_girdisi(t0 + i * 0.03)
 
 
-t0 = time.monotonic()
-yazilan, hata = yaz("Satın alımdan vazgeçtim.", yavas_parca=(2, 0.5), insan_plani=insan_surekli)
-kontrol("GERÇEK insan sürekli yazıyor (bosta hiç gelmiyor) → yerleşmeden sonra 12 ile KESİLİR",
-        hata is not None and hata.kod == 12 and "6/24" in hata.mesaj, f"{yazilan!r} {hata}")
+    t0 = time.monotonic()
+    yazilan, hata = yaz("Satın alımdan vazgeçtim.", yavas_parca=(2, 0.5), insan_plani=insan_surekli)
+    kontrol("GERÇEK insan sürekli yazıyor (bosta hiç gelmiyor) → yerleşmeden sonra 12 ile KESİLİR",
+            hata is not None and hata.kod == 12 and "6/24" in hata.mesaj, f"{yazilan!r} {hata}")
 
 print(f"\n{GECEN}/{TOPLAM} insan-yansıma testi geçti")
 sys.exit(0 if GECEN == TOPLAM else 1)

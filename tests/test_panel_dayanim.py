@@ -120,9 +120,16 @@ def kos(kod):
 
 
 # Önce kanıt: yakalayıcı olmadan PyQt6 slottaki istisnada süreci SIGABRT ile öldürür (bulgunun kendisi)
-r = kos(KANCASIZ)
-kontrol("yakalayıcısız: slottaki OSError(28) → SIGABRT (bulgu yeniden üretildi)", r.returncode in (-6, 134) and
-        "YASIYOR" not in r.stdout, f"rc={r.returncode}")
+# PyQt6 qFatal'ı yalnız sys.excepthook varsayılansa çağırır; dağıtımın sitecustomize'ı (ör. Ubuntu apport) kendi
+# kancasını kurduysa yakalayıcısız süreç de yaşar → bulgu o yorumlayıcıda yeniden üretilemez
+r_kanca = kos("import sys; print(sys.excepthook is sys.__excepthook__, getattr(sys.excepthook, '__module__', ''))")
+if not r_kanca.stdout.startswith("True"):
+    _yalitim.atla("yakalayıcısız: slottaki OSError(28) → SIGABRT (bulgu yeniden üretildi)",
+                  f"yorumlayıcıda varsayılan olmayan sys.excepthook kurulu: {r_kanca.stdout.strip()}")
+else:
+    r = kos(KANCASIZ)
+    kontrol("yakalayıcısız: slottaki OSError(28) → SIGABRT (bulgu yeniden üretildi)", r.returncode in (-6, 134) and
+            "YASIYOR" not in r.stdout, f"rc={r.returncode}")
 
 r = kos(PANEL)
 c = r.stdout

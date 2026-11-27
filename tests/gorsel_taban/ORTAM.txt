@@ -1,0 +1,1 @@
+qt=6.12.1 yazi=Noto Sans/Regular sabit=Noto Sans Mono/Regular

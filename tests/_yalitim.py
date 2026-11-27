@@ -187,3 +187,76 @@ def tuzak_cagrilari():
             return [s.rstrip("\n") for s in f if s.strip()]
     except OSError:
         return []
+
+
+# ---------------------------------------------------------------- ÖNKOŞUL YOKLAMALARI (CI / KDE'siz ortam)
+# Gerçek KDE Plasma oturumu isteyen bölümler, önkoşul GERÇEKTEN yoksa (ortam yoklanır; "CI mi" değişkenine bakılmaz)
+# "ATLANDI  <ne> (<neden>)" yazıp atlanır; bölüm sayılmaz, takım çıkış kodu değişmez. Her yoklama → None (önkoşul var)
+# ya da insan okunur neden.
+
+def atla(ne: str, neden: str) -> None:
+    print(f"ATLANDI  {ne} ({neden})", flush=True)
+
+
+def arac_eksigi(*adlar: str) -> str | None:
+    """PATH'te olmayan araçlar → "x, y yok" | None."""
+    eksik = [a for a in adlar if not shutil.which(a)]
+    return (", ".join(eksik) + " yok") if eksik else None
+
+
+def wayland_eksigi() -> str | None:
+    """Wayland bileşimcisi (WAYLAND_DISPLAY soketi) yoksa neden."""
+    ad = os.environ.get("WAYLAND_DISPLAY")
+    if not ad:
+        return "WAYLAND_DISPLAY yok (Wayland oturumu değil)"
+    yol = ad if os.path.isabs(ad) else os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", ad)
+    return None if os.path.exists(yol) else f"Wayland soketi yok: {yol}"
+
+
+def kilit_eksigi() -> str | None:
+    """Ön plan girdisi kapısı oturum kilidini okur (ScreenSaver / logind); okunamıyor ya da kilitliyse neden."""
+    from deskhand.arka_uc import kde
+    d = kde.oturum_kilidi_oku()
+    if d is None:
+        return "oturum kilidi durumu okunamıyor: ScreenSaver servisi / logind oturumu yok"
+    return "oturum kilitli" if d else None
+
+
+def masaustu_girdisi_eksigi(*kimlikler: str) -> str | None:
+    """XDG uygulama dizinlerinde <kimlik>.desktop dosyası olmayanlar → neden | None."""
+    veri = [os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
+            *(os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")]
+    eksik = [k for k in kimlikler
+             if not any(os.path.exists(os.path.join(d, "applications", k + ".desktop")) for d in veri if d)]
+    return (", ".join(k + ".desktop" for k in eksik) + " kurulu değil") if eksik else None
+
+
+# Görsel referanslar (tests/gorsel_taban/*.png, tests/tasarim_bilinen.json) piksel/ölçü düzeyinde yazı tipine bağlı:
+# çekildikleri ortamın yazı tipi parmak izi REFERANS_ORTAM'da. Bu makinede Qt başka yazı tipi çözüyorsa birebir kıyas
+# anlamsızdır (aynı kod, başka glif ölçüleri).
+REFERANS_ORTAM = os.path.join(KOK, "tests", "gorsel_taban", "ORTAM.txt")
+_YAZI_KOD = ("import sys\nfrom PyQt6.QtCore import QT_VERSION_STR\nfrom PyQt6.QtGui import QFontDatabase, QFontInfo\n"
+             "from PyQt6.QtWidgets import QApplication\napp = QApplication(sys.argv[:1])\n"
+             "f = QFontInfo(app.font())\nm = QFontInfo(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))\n"
+             "print(f'qt={QT_VERSION_STR} yazi={f.family()}/{f.styleName()} sabit={m.family()}/{m.styleName()}')\n")
+
+
+def yazi_ortami() -> str:
+    """Sabit görsel ortamda (offscreen, C.UTF-8, boş HOME) Qt'nin çözdüğü yazı tipleri + Qt sürümü (tek satır)."""
+    import subprocess
+    ev = tempfile.mkdtemp(prefix="yazi-ortami-", dir=GECICI)
+    e = {"PATH": "/usr/bin:/bin", "HOME": ev, "LANG": "C.UTF-8", "XDG_CONFIG_HOME": ev, "XDG_CACHE_HOME": ev,
+         "XDG_DATA_HOME": ev, "XDG_RUNTIME_DIR": ev, "QT_QPA_PLATFORM": "offscreen", "QT_NO_GLIB": "1"}
+    r = subprocess.run([sys.executable, "-I", "-c", _YAZI_KOD], env=e, capture_output=True, text=True, timeout=60)
+    return r.stdout.strip() or f"okunamadı: {r.stderr.strip()[-200:]}"
+
+
+def yazi_ortami_farki() -> str | None:
+    """Bu makinenin yazı tipi ortamı görsel referanslarınkinden farklıysa neden; aynıysa (ya da kayıt yoksa) None."""
+    try:
+        with open(REFERANS_ORTAM, encoding="utf-8") as f:
+            ref = f.read().strip()
+    except OSError:
+        return None
+    simdi = yazi_ortami()
+    return None if simdi == ref else f"yazı tipi ortamı referanstan farklı: burada '{simdi}', referans '{ref}'"

@@ -357,10 +357,18 @@ def sahte_kde_girdi():
     return g
 
 
+class _Atla(Exception):
+    pass
+
+
 koruma = {"neden": None}
 gercek_koruma = mesgul.ekran_korumasi
 mesgul.ekran_korumasi = lambda *a, **k: koruma["neden"]
+_kilit_neden = _yalitim.kilit_eksigi()  # her ön plan gonder'i GERÇEK oturum kilidini okur (kapalı-başarısız)
 try:
+    if _kilit_neden:
+        _yalitim.atla("6. kde: ekran koruması + karar bildirimi", _kilit_neden)
+        raise _Atla
     g = sahte_kde_girdi()
     g.gonder("{w}", None, "key a")
     koruma["neden"] = "tam ekranda (test)"
@@ -441,6 +449,8 @@ try:
         os.environ["DESKHAND_GERCEK_EKRAN"] = kilit0
     kontrol("karar: sor() sırasında karar-bekliyor var, sonra yok",
             gozlem == [True] and not os.path.exists(mesgul.karar_bekliyor_yolu()), f"{gozlem} {sonuc}")
+except _Atla:
+    pass
 finally:
     mesgul.ekran_korumasi = gercek_koruma
 

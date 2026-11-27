@@ -157,8 +157,11 @@ kontrol("a11y_bagi: kimlik yok (eski masaüstü) + dizin yok → uygulamadan ÖN
         ao.a11y_bagi(d4b, None) == (d4b, True) and (os.lstat(d4b).st_mode & 0o777) == 0o700)
 kontrol("a11y_bagi: kimlik yok (eski masaüstü) + dizin ZATEN var (0700, kendi yarattığı) → Dur(14), yeniden açın",
         dur14(ao.a11y_bagi, d4b, None) == 14)
+# aynı yol, yeni dizin (uygulama ya da başkası yeniden yaratmış). Yeni dizin eskisi SİLİNMEDEN yaratılır: ext4 gibi
+# dosya sistemleri boşalan inode numarasını hemen yeniden verir (rmdir + mkdir → aynı (st_dev, st_ino)).
+os.mkdir(d4 + ".yeni", 0o700)
 os.rmdir(d4)
-os.mkdir(d4, 0o700)  # aynı yol, yeni dizin (uygulama ya da başkası yeniden yaratmış)
+os.rename(d4 + ".yeni", d4)
 kontrol("a11y_bagi: aynı yolda başka dizin (kimlik değişti) → Dur(14)", dur14(ao.a11y_bagi, d4, kim) == 14)
 kontrol("a11y_soket_denetle: dizin kimliği değişmişse → Dur(14)", (lambda: (
     soket_ac(d4, "bus_0"), dur14(ao.a11y_soket_denetle, f"unix:path={d4}/bus_0", d4, "", kim))[1] == 14)())

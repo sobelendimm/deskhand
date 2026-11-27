@@ -199,8 +199,14 @@ try:
     J = json.loads(p.stdout)
 except ValueError:
     J = {}
-kontrol("CLI --json: bugünkü panel yalnız bilinen ihlal (çıkış 0)", p.returncode == 0 and J.get("yeni") == [],
-        f"rc={p.returncode} yeni={len(J.get('yeni', []) or [])} {p.stderr[-400:]}")
+_ortam_farki = _yalitim.yazi_ortami_farki()  # bilinen ihlaller referans yazı tipi ortamında ölçüldü
+if _ortam_farki:
+    _yalitim.atla("CLI --json: bugünkü panel yalnız bilinen ihlal (çıkış 0)",
+                  f"{_ortam_farki}; burada {len(J.get('yeni', []) or [])} yeni ihlal")
+else:
+    kontrol("CLI --json: bugünkü panel yalnız bilinen ihlal (çıkış 0)", p.returncode == 0 and J.get("yeni") == [],
+            f"rc={p.returncode} yeni={len(J.get('yeni', []) or [])} {str((J.get('yeni') or [])[:3])[:400]} "
+            f"{p.stderr[-400:]}")
 kontrol("CLI: panel sekmeleri ve diyaloglar denetlendi", J.get("ekran", 0) >= 9, str(J.get("ekran")))
 kontrol("CLI: denetim süresi ≤ 2 sn", 0 < J.get("sure_ms", 1e9) <= 2000, str(J.get("sure_ms")))
 bos = os.path.join(ev, "bos.json")
@@ -213,6 +219,11 @@ kontrol("CLI: boş bilinen listesiyle yeni ihlal → çıkış 1", p2.returncode
 
 # ---------------------------------------------------------------- pano
 cikti = os.path.join(ev, "pano.png")
+_neden = _yalitim.arac_eksigi("magick")  # pano montajı ImageMagick 7 (`magick`) ile
+if _neden:
+    _yalitim.atla("--pano (PNG, boyut, ekran sayısı, süre)", _neden)
+    print(f"\n{gecen}/{toplam} geçti")
+    sys.exit(0 if gecen == toplam else 1)
 p3 = subprocess.run([sys.executable, ARAC, "--json", "--pano", cikti], env=ortam, capture_output=True, text=True,
                     timeout=60, cwd=ev)
 try:
