@@ -1730,5 +1730,9 @@
  "{ayar}: panelin kaydı «{eski}», dosyada «{yeni}»": "{ayar}: the panel's record «{eski}», in the file «{yeni}»",
  "İstek onaylanmadı ({neden}).": "The request was not approved ({neden}).",
  "Deskhand ayar dosyasının ({dosya}) önceki onaylı değeri doğrulanamadı (cüzdan kilitli/yok); güvenli tarafta hiçbir girdi gönderilmez; Deskhand paneli açın.": "The previously approved value of the Deskhand settings file ({dosya}) could not be verified (wallet locked/missing); to stay safe no input is sent; open the Deskhand panel.",
- "Önceki onaylı ayarlar doğrulanamadı (cüzdan kilitli/yok); dosyadaki değer kullanılıyor.": "The previously approved settings could not be verified (wallet locked/missing); the value in the file is used."
+ "Önceki onaylı ayarlar doğrulanamadı (cüzdan kilitli/yok); dosyadaki değer kullanılıyor.": "The previously approved settings could not be verified (wallet locked/missing); the value in the file is used.",
+ "bellek için Firefox {saat} saatinde yeniden başlatıldı ({once} → {sonra} MB, {sekme} sekme geri yüklendi); pencere kimlikleri değişti, yeniden gözlem yapın": "Firefox was restarted at {saat} to free memory ({once} → {sonra} MB, {sekme} tabs restored); window ids changed, observe again",
+ "boşta kalınca Firefox oturumu geri yüklenerek yeniden başlatılır (sekmeler geri gelir, pencere kimlikleri değişir)": "when idle, Firefox is restarted with its session restored (tabs come back, window ids change)",
+ "gereksiz sekme ve pencereleri kapatın": "close tabs and windows you no longer need",
+ "görünmez masaüstü bellek sınırının %{yuzde} kadarını kullanıyor ({cur} / {max} MB)": "the invisible desktop is using {yuzde}% of its memory limit ({cur} / {max} MB)"
 }

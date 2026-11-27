@@ -266,6 +266,13 @@ except OSError:
     kafes_bellek = None
 olcum["boş oturum RSS (KWin + dbus, MiB)"] = round((rss_k + rss_d) / 1024)
 olcum["boş oturum kafes belleği (MiB, sayfa önbelleği dahil)"] = round(kafes_bellek / 1024) if kafes_bellek else "?"
+if not os.environ.get("DESKHAND_SANAL_BELLEK"):  # ABM-KARAR (a): varsayılan 8G; memory.high konmaz (d)
+    from deskhand import bellek_bekcisi
+    _bd = bellek_bekcisi.bellek_durumu(D["cgroup"])
+    with open(f"/sys/fs/cgroup{D['cgroup']}/memory.high") as f:
+        _yuksek = f.read().strip()
+    kontrol("ABM-F1: kafes MemoryMax 8G, memory.high yok; bellek_durumu okur",
+            _bd and _bd["max"] == 8 << 30 and _yuksek == "max" and 0 < _bd["oran"] < 0.5, f"{_bd} high={_yuksek}")
 
 # ---------------------------------------------------------------- 3) Wayland Qt penceresi + girdi
 print("\n3) Wayland penceresi + girdi")

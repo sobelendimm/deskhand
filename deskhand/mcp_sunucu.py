@@ -50,7 +50,7 @@ from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 
 from . import (__version__, api, desen as desen_denetimi, dinleme, dogrulama_sinamasi, dongu, fark, gonderim,
                gozlem, guvenlik, hata, masaustu, onay_hedef)
-from . import gorev_kipi, masalar
+from . import bellek_bekcisi, gorev_kipi, masalar
 from .arka_uc import EKRAN
 from .i18n import N_, _
 
@@ -323,6 +323,7 @@ def arac(sema, iptalli: bool = False, **kayit):
                 return hata_sonucu(e)
             except Exception as e:  # noqa: BLE001 - sözleşme: beklenmeyen hata da sent/next ile döner
                 return beklenmeyen_hata(fn.__name__, e)
+            r = bellek_bekcisi.uyari_ekle(r)  # ABM-F1: kafes ≥%80 / Firefox yeniden başlatıldı → memory_warning
             if sema is None:
                 if isinstance(r, CallToolResult):
                     return CallToolResult(content=r.content, is_error=r.is_error)
