@@ -23,7 +23,7 @@ import shutil
 from PyQt6.QtCore import QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QPainter, QPalette
 from PyQt6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
-                             QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QVBoxLayout, QWidget)
+                             QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout, QWidget)
 
 from ...i18n import N_, _
 from .. import metinler as T
@@ -79,6 +79,14 @@ E_BASLIK = N_("Parola ekle")
 E_AD = N_("Ad")
 E_PAROLA = N_("Parola")
 E_TEKRAR = N_("Parola (tekrar)")
+E_SITE = N_("Yalnız bu site (isteğe bağlı)")
+E_SITE_IPUCU = N_("ör. ornekbanka.com.tr; alt alan adları dahil")
+E_UYGULAMA = N_("Yalnız bu uygulama (isteğe bağlı)")
+E_UYGULAMA_IPUCU = N_("pencere sınıfı, ör. firefox")
+L_BAGLI = N_("{ad} · yalnız {hedef}")
+D_OTO_SONRAKI = N_("Kuruldu · sonraki girişte denenecek")
+D_OTO_ERKEN = N_("Kuruldu · bu oturumda cüzdan Deskhand'den önce başlatıldı ve kilitli; sonraki girişte yeniden "
+                 "denenecek")
 E_AD_GECERSIZ = N_("Ad yalnız harf, rakam, nokta, tire ve alt çizgi içerebilir (en çok 64 karakter).")
 E_UYUSMUYOR = N_("İki parola aynı değil.")
 E_BOS = N_("Parola boş olamaz.")
@@ -134,8 +142,16 @@ class ArkaUc:
     def listele(self) -> list[str]:
         return sorted(self.depo().listele())
 
-    def yaz(self, ad: str, veri: bytes) -> None:
-        self.depo().yaz(ad, veri)
+    def yaz(self, ad: str, veri: bytes, uygulama: str | None = None, site: str | None = None) -> None:
+        """anahtar_deposu.sir_yaz: the binding (site / window class) is sealed INSIDE the value (never Depo.yaz)."""
+        self._depo().sir_yaz(ad, veri, uygulama, site)
+
+    def hedef(self, ad: str) -> dict:
+        """{"uygulama", "site"} the secret is bound to ({}: none / unreadable). Never the value."""
+        try:
+            return dict(self._depo().sir_hedefi_oku(ad))
+        except Exception:  # noqa: BLE001 - display only
+            return {}
 
     def sil(self, ad: str) -> None:
         self.depo().sil(ad)
@@ -277,9 +293,17 @@ class EkleDiyalog(QDialog):
         for e in (self.e_ad, self.e_p1, self.e_p2):
             e.setMinimumHeight(_HEDEF)
         self.e_ad.setAccessibleName(_(E_AD))
+        self.e_site, self.e_uyg = QLineEdit(), QLineEdit()
+        for e, ad, ipucu in ((self.e_site, E_SITE, E_SITE_IPUCU), (self.e_uyg, E_UYGULAMA, E_UYGULAMA_IPUCU)):
+            e.setMaxLength(128)
+            e.setMinimumHeight(_HEDEF)
+            e.setAccessibleName(_(ad))
+            e.setPlaceholderText(_(ipucu))
         form.addRow(_(E_AD), self.e_ad)
         form.addRow(_(E_PAROLA), self.e_p1)
         form.addRow(_(E_TEKRAR), self.e_p2)
+        form.addRow(_(E_SITE), self.e_site)
+        form.addRow(_(E_UYGULAMA), self.e_uyg)
         lay.addLayout(form)
         self.l_hata = QLabel("")
         self.l_hata.setWordWrap(True)
@@ -316,6 +340,12 @@ class EkleDiyalog(QDialog):
     def parola(self) -> str:
         return self.e_p1.text()
 
+    def site(self) -> str | None:
+        return self.e_site.text().strip() or None
+
+    def uygulama(self) -> str | None:
+        return self.e_uyg.text().strip() or None
+
     def temizle(self) -> None:
         for e in (self.e_p1, self.e_p2):
             e.clear()
@@ -335,6 +365,7 @@ class GizliBilgiler(QGroupBox):
         self._cuzdan: dict = {}
         self._liste: list[str] = []
         self._okundu = False
+        self._secim_bozuk = False  # anahtar_deposu: sealed selection ≠ setting (SecimsizDepo) → the user re-selects
         self._yukleniyor = 0
         mt(self.setTitle, G_BASLIK)
         lay = QVBoxLayout(self)
@@ -439,6 +470,7 @@ class GizliBilgiler(QGroupBox):
             self._liste = self.au.listele() if self._depo.get("hazir") else []
         except Exception:  # noqa: BLE001
             self._liste = []
+        self._secim_bozuk = self._depo.get("tur") == "dogrulanamadi"
         tur = self._depo.get("tur") if self._depo.get("tur") in (KASA, CUZDAN) else None
         oto = bool(self._cuzdan.get("kurulu")) if self._cuzdan.get("kurulu") is not None else None
         self._kayitli = (tur, oto)
@@ -448,9 +480,9 @@ class GizliBilgiler(QGroupBox):
 
     # ------------------------------------------------------------ değer (Ayarlar kayıt modeli)
     def anlik(self) -> tuple:
-        if not self._okundu or self._kayitli[0] is None:
+        if not self._okundu or (self._kayitli[0] is None and not self._secim_bozuk):
             return self._kayitli
-        tur = KASA if self.s_kasa.anahtar.isChecked() else CUZDAN
+        tur = KASA if self.s_kasa.anahtar.isChecked() else CUZDAN if self.s_cuzdan.anahtar.isChecked() else None
         oto = self.s_oto.anahtar.isChecked() if self._kayitli[1] is not None else None
         return (tur, oto)
 
@@ -490,7 +522,7 @@ class GizliBilgiler(QGroupBox):
         self.degisti.emit()
 
     def _etkin(self) -> None:
-        depo_var = self._kayitli[0] is not None
+        depo_var = self._kayitli[0] is not None or self._secim_bozuk
         for a in (self.s_kasa.anahtar, self.s_cuzdan.anahtar):
             a.setEnabled(depo_var)
         self.s_oto.anahtar.setEnabled(self._kayitli[1] is not None)
@@ -516,7 +548,7 @@ class GizliBilgiler(QGroupBox):
                 self.s_kasa.rozet.ayarla("basari", _(D_HAZIR_TPM) if d.get("tpm") else _(D_HAZIR))
             else:
                 self.s_kasa.rozet.ayarla("hata", _(D_KULLANILAMIYOR).format(neden=neden))
-        elif secili is None:
+        elif secili not in (KASA, CUZDAN):  # no back end, or the selection is not verified (SecimsizDepo)
             self.s_kasa.rozet.ayarla("hata", _(D_KULLANILAMIYOR).format(neden=neden))
         else:
             self.s_kasa.rozet.ayarla("soluk", _(D_KULLANILMIYOR))
@@ -540,10 +572,14 @@ class GizliBilgiler(QGroupBox):
         elif self.s_oto.anahtar.isChecked() and not kurulu:
             self.s_oto.rozet.ayarla("uyari", _(D_OTO_BEKLIYOR))
         elif kurulu:
-            if c.get("neden"):
-                self.s_oto.rozet.ayarla("uyari", _(D_OTO_ACIK) + " · " + str(c.get("neden")))
-            else:
+            # cuzdan_ac.durum(): acik True = open now; False = the wallet runs locked (ksecretd was started before the
+            # login unit, or the saved key did not open it); None = not running yet (the unit acts at the next login)
+            if acik is True:
                 self.s_oto.rozet.ayarla("basari", _(D_OTO_ACIK))
+            elif acik is False:
+                self.s_oto.rozet.ayarla("uyari", _(D_OTO_ERKEN))
+            else:
+                self.s_oto.rozet.ayarla("uyari", _(D_OTO_SONRAKI))
         else:
             self.s_oto.rozet.ayarla("soluk", _(D_OTO_KAPALI))
         istek = self.s_cuzdan.anahtar.isChecked() or self.s_oto.anahtar.isChecked()
@@ -551,7 +587,12 @@ class GizliBilgiler(QGroupBox):
 
     def _liste_yaz(self) -> None:
         self.liste.clear()
-        self.liste.addItems(self._liste)
+        for ad in self._liste:  # the name and its binding (site / window class); NEVER the value
+            h = self.au.hedef(ad) if hasattr(self.au, "hedef") else {}
+            hedef = " · ".join(v for v in (h.get("site"), h.get("uygulama")) if v)
+            it = QListWidgetItem(_(L_BAGLI).format(ad=ad, hedef=hedef) if hedef else ad)
+            it.setData(Qt.ItemDataRole.UserRole, ad)
+            self.liste.addItem(it)
         self.liste.setVisible(bool(self._liste))
         self.l_bos.setVisible(not self._liste)
         self._etkin()
@@ -597,7 +638,7 @@ class GizliBilgiler(QGroupBox):
         try:
             if hedef[0] is not None and hedef[0] != tur0:
                 adlar = {KASA: _(G_KASA), CUZDAN: _(G_CUZDAN)}
-                if self.onay_sor(_(S_DEPO_BASLIK), _(S_DEPO).format(yeni=adlar[hedef[0]], eski=adlar[tur0])):
+                if self.onay_sor(_(S_DEPO_BASLIK), _(S_DEPO).format(yeni=adlar[hedef[0]], eski=adlar.get(tur0, _(D_BILINMIYOR)))):
                     self.au.depo_degistir(hedef[0])
                 else:
                     red = True
@@ -637,7 +678,7 @@ class GizliBilgiler(QGroupBox):
             return False
         try:
             ad = d.ad()
-            self.au.yaz(ad, d.parola().encode("utf-8"))
+            self.au.yaz(ad, d.parola().encode("utf-8"), d.uygulama(), d.site())
         except Exception as e:  # noqa: BLE001
             self.ileti(_(H_KAYIT) + " " + T.hata_ozeti(e))
             return False
@@ -651,7 +692,7 @@ class GizliBilgiler(QGroupBox):
         it = self.liste.currentItem()
         if it is None:
             return False
-        ad = it.text()
+        ad = it.data(Qt.ItemDataRole.UserRole) or it.text()
         if not self.onay_sor(_(S_SIL_BASLIK), _(S_SIL).format(ad=ad)):
             return False
         try:

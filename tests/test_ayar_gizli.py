@@ -21,7 +21,7 @@ import _yalitim  # noqa: E402,F401  (DESKHAND_* geçici klasörler; deskhand'den
 
 os.environ["DESKHAND_DIL"] = "tr"
 
-from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QWidget  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QLineEdit, QWidget  # noqa: E402
 
 from deskhand import liste_koruma  # noqa: E402
 from deskhand.gui.sekmeler import ayarlar as S  # noqa: E402
@@ -89,11 +89,20 @@ class SahteDepoMod:
     def __init__(self):
         self.tur, self.hazir, self.neden, self.tpm = "kasa", True, None, True
         self.ogeler = {"github": b"x", "eposta": b"y"}
+        self.hedefler: dict = {}
         self.cagri: list = []
         self.hata = None
 
     def secili_depo(self):
         return SahteDepo(self)
+
+    def sir_yaz(self, ad, veri, uygulama=None, site=None):  # anahtar_deposu.sir_yaz (binding inside the value)
+        self.cagri.append(("sir_yaz", ad, uygulama, site))
+        self.ogeler[ad] = veri
+        self.hedefler[ad] = {k: v for k, v in (("uygulama", uygulama), ("site", site)) if v}
+
+    def sir_hedefi_oku(self, ad):
+        return dict(self.hedefler.get(ad, {}))
 
     def depo_degistir(self, yeni):
         self.cagri.append(("depo_degistir", yeni))
@@ -207,6 +216,19 @@ kontrol("arka uç yok: 'Kullanılamıyor: bu sürümde yok', anahtarlar kapalı,
         _(G.D_ARKA_UC_YOK) in yok.gizli.s_kasa.rozet.metin() and not yok.gizli.s_kasa.anahtar.isEnabled()
         and not yok.gizli.s_oto.anahtar.isEnabled() and not yok.kaydedilmemis_var())
 
+# mühürlü seçim ≠ ayar (anahtar_deposu.SecimsizDepo): neden görünür, kullanıcı depoyu yeniden seçebilir
+d4 = SahteDepoMod()
+d4.tur, d4.hazir, d4.neden = "dogrulanamadi", False, "seçim uyuşmuyor"
+s4, _d, _c = kur(depo=d4, sor=[True])
+s4.gizli.yukle()
+kontrol("seçim doğrulanamadı: 'Kullanılamıyor: <neden>', depo anahtarları ETKİN (yeniden seçim)",
+        "seçim uyuşmuyor" in s4.gizli.s_kasa.rozet.metin() and s4.gizli.s_kasa.anahtar.isEnabled()
+        and not s4.gizli.s_kasa.anahtar.isChecked() and not s4.kaydedilmemis_var())
+s4.gizli.s_kasa.anahtar.click()
+s4.uygula()
+kontrol("seçim doğrulanamadı: kasa seçip Evet → depo_degistir('kasa')", ("depo_degistir", "kasa") in d4.cagri,
+        str(d4.cagri))
+
 # =========================================================================== 4) depo değişimi: Hayır → geri döner
 s, d, c = kur(sor=[False])
 s.gizli.yukle()
@@ -274,9 +296,19 @@ s.gizli.s_oto.anahtar.click()
 s.gizli.e_oto.setText(CUZDAN_PAROLA)
 s.uygula()
 kontrol("Evet: cuzdan_otomatik_kur(parola) çağrıldı (parola aynen)", c.cagri == ["kur"] and c.parola == CUZDAN_PAROLA)
-kontrol("Evet: alan temizlendi, rozet 'Açık · …' (başarı), kaydedildi",
-        s.gizli.e_oto.text() == "" and s.gizli.s_oto.rozet.metin() == _(G.D_OTO_ACIK)
-        and s.gizli.s_oto.rozet.tur() == "basari" and not s.kaydedilmemis_var())
+kontrol("Evet: alan temizlendi; cüzdan bu oturumda kilitli → dürüst rozet 'sonraki girişte yeniden denenecek' (uyarı)",
+        s.gizli.e_oto.text() == "" and s.gizli.s_oto.rozet.metin() == _(G.D_OTO_ERKEN)
+        and s.gizli.s_oto.rozet.tur() == "uyari" and not s.kaydedilmemis_var())
+c.acik = None
+s.gizli.yukle()
+kontrol("girişte aç kurulu, cüzdan henüz çalışmıyor → 'Kuruldu · sonraki girişte denenecek'",
+        s.gizli.s_oto.rozet.metin() == _(G.D_OTO_SONRAKI))
+c.acik = True
+s.gizli.yukle()
+kontrol("girişte aç kurulu + cüzdan açık → 'Açık · …' (başarı)",
+        s.gizli.s_oto.rozet.metin() == _(G.D_OTO_ACIK) and s.gizli.s_oto.rozet.tur() == "basari")
+c.acik = False
+s.gizli.yukle()
 s.gizli.s_oto.anahtar.click()
 s.uygula()
 kontrol("kapatma (sıkılaştırma): soru sormadan kaldir()", c.cagri == ["kur", "kaldir"] and len(s.gizli.sorular) == 1,
@@ -297,12 +329,20 @@ dlg.e_p2.setText(GIZLI_DEGER + "x")
 kontrol("Ekle: iki parola farklı → hata", dlg.hata() == _(G.E_UYUSMUYOR))
 dlg.e_p2.setText(GIZLI_DEGER)
 kontrol("Ekle: geçerli giriş", dlg.hata() == "")
+dlg.e_site.setText("ornekbanka.com.tr")
 s.gizli.ekle_diyalogu = lambda: dlg
-kontrol("Ekle: yaz(ad, bayt) çağrılır, liste tazelenir", s.gizli.parola_ekle() and d.ogeler.get("banka")
-        == GIZLI_DEGER.encode() and "banka" in [s.gizli.liste.item(i).text() for i in range(s.gizli.liste.count())])
+adlar_ = lambda: [s.gizli.liste.item(i).data(G.Qt.ItemDataRole.UserRole) for i in range(s.gizli.liste.count())]  # noqa: E731
+kontrol("Ekle: sir_yaz(ad, bayt, uygulama, site) çağrılır (Depo.yaz DEĞİL), liste tazelenir",
+        s.gizli.parola_ekle() and d.ogeler.get("banka") == GIZLI_DEGER.encode() and "banka" in adlar_()
+        and ("sir_yaz", "banka", None, "ornekbanka.com.tr") in d.cagri
+        and not any(isinstance(x, tuple) and x[0] == "yaz" for x in d.cagri), str(d.cagri))
+metin_ = [s.gizli.liste.item(i).text() for i in range(s.gizli.liste.count())]
+kontrol("Liste: bağlı site adla birlikte görünür, değer görünmez",
+        _(G.L_BAGLI).format(ad="banka", hedef="ornekbanka.com.tr") in metin_ and "github" in metin_
+        and not any(GIZLI_DEGER in m for m in metin_), str(metin_))
 kontrol("Ekle: diyaloğun parola alanları temizlendi", dlg.e_p1.text() == "" and dlg.e_p2.text() == "")
 s.gizli.liste.setCurrentRow(0)
-ad0 = s.gizli.liste.currentItem().text()
+ad0 = s.gizli.liste.currentItem().data(G.Qt.ItemDataRole.UserRole)
 kontrol("Sil: Hayır → silinmez", not s.gizli.secili_sil() and ad0 in d.ogeler)
 kontrol("Sil: Evet → silinir", s.gizli.secili_sil() and ad0 not in d.ogeler)
 
@@ -313,7 +353,8 @@ kontrol("parola değeri ekranda yok (etiket/ipucu/erişilebilir ad)",
 kontrol("parola değeri günlükte yok", GIZLI_DEGER not in gunluk.getvalue()
         and CUZDAN_PAROLA not in gunluk.getvalue())
 kontrol("liste öğeleri yalnız ad (değer gösterilmez)",
-        all(QLabel is not None and s.gizli.liste.item(i).text() in d.ogeler for i in range(s.gizli.liste.count())))
+        all(s.gizli.liste.item(i).data(G.Qt.ItemDataRole.UserRole) in d.ogeler and
+            GIZLI_DEGER not in s.gizli.liste.item(i).text() for i in range(s.gizli.liste.count())))
 
 # =========================================================================== 9) dil: tazele → İngilizce
 from deskhand import i18n  # noqa: E402

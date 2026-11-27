@@ -587,7 +587,7 @@
   "gui/sekmeler/gizli.py:79"
  ],
  "Ad yalnız harf, rakam, nokta, tire ve alt çizgi içerebilir (en çok 64 karakter).": [
-  "gui/sekmeler/gizli.py:82"
+  "gui/sekmeler/gizli.py:90"
  ],
  "Adım dizisi çalıştırılıyor": [
   "gui/metinler.py:310"
@@ -862,7 +862,7 @@
   "surum.py:39"
  ],
  "Bu adla kayıtlı bir parola zaten var.": [
-  "gui/sekmeler/gizli.py:85"
+  "gui/sekmeler/gizli.py:93"
  ],
  "Bu bir ödeme işlemi olabilir; para çekilebilir.": [
   "guvenlik.py:1522"
@@ -1933,6 +1933,12 @@
  "Kullanılmıyor": [
   "gui/sekmeler/gizli.py:54"
  ],
+ "Kuruldu · bu oturumda cüzdan Deskhand'den önce başlatıldı ve kilitli; sonraki girişte yeniden denenecek": [
+  "gui/sekmeler/gizli.py:88"
+ ],
+ "Kuruldu · sonraki girişte denenecek": [
+  "gui/sekmeler/gizli.py:87"
+ ],
  "Kurulum komutunu panoya kopyalar: {komut}": [
   "gui/metinler.py:415"
  ],
@@ -2158,7 +2164,7 @@
   "guvenlik.py:2528"
  ],
  "Parola boş olamaz.": [
-  "gui/sekmeler/gizli.py:84"
+  "gui/sekmeler/gizli.py:92"
  ],
  "Parola deposu değişsin mi?": [
   "gui/sekmeler/gizli.py:68"
@@ -2516,8 +2522,14 @@
  "Yalnız DUR": [
   "gui/metinler.py:61"
  ],
+ "Yalnız bu site (isteğe bağlı)": [
+  "gui/sekmeler/gizli.py:82"
+ ],
  "Yalnız bu sitelerin çerezleri (girişleri) görev tarayıcısına kopyalanır; boşsa tarayıcı hiçbir oturum olmadan açılır. Kayıtlı parolalar HİÇ kopyalanmaz. Bu sitelerde ajan sizin adınıza işlem yapabilir (ayar değiştirme, gönderi, silme); güvenilmeyen sayfa içeriği ajanı kandırabilir.": [
   "gui/metinler.py:315"
+ ],
+ "Yalnız bu uygulama (isteğe bağlı)": [
+  "gui/sekmeler/gizli.py:84"
  ],
  "Yalnız fare": [
   "gui/metinler.py:152"
@@ -5129,6 +5141,9 @@
  "pencere sınıfı uymadı: {sinif} (beklenen /{desen}/)": [
   "guvenlik.py:1287"
  ],
+ "pencere sınıfı, ör. firefox": [
+  "gui/sekmeler/gizli.py:85"
+ ],
  "pencere taşıma": [
   "arka_uc/kde.py:930"
  ],
@@ -6061,6 +6076,9 @@
  "{ad} süzüldü ({cerez} çerez; izin kapalı: panel → Ayarlar → Hesap oturumları)": [
   "oturum/firefox.py:503"
  ],
+ "{ad} · yalnız {hedef}": [
+  "gui/sekmeler/gizli.py:86"
+ ],
  "{ad} · {g}×{y}": [
   "gui/metinler.py:245"
  ],
@@ -6669,6 +6687,9 @@
  "öncelik bekçisi hazır olmadı ({yanit})": [
   "arka_ortak.py:1234"
  ],
+ "ör. ornekbanka.com.tr; alt alan adları dahil": [
+  "gui/sekmeler/gizli.py:83"
+ ],
  "özel D-Bus (dbus-daemon) açılmadı": [
   "masaustu.py:1178"
  ],
@@ -6732,7 +6753,7 @@
   "cli.py:45"
  ],
  "İki parola aynı değil.": [
-  "gui/sekmeler/gizli.py:83"
+  "gui/sekmeler/gizli.py:91"
  ],
  "İmzasız çalışma kabul edildi (anahtarlık yok); panelin koyduğu DUR kaldırıldı.": [
   "gui/panel.py:297"

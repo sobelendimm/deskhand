@@ -2150,5 +2150,12 @@
  "Uygula'ya basınca açılacak": "Turns on when you press Apply",
  "bu sürümde yok": "not in this version",
  "Önerilen. Parolalar bu bilgisayara kilitli bir dosyada durur; girişte cüzdan sorusu çıkmaz.": "Recommended. Passwords stay in a file locked to this computer; no wallet prompt at login.",
- "İki parola aynı değil.": "The two passwords do not match."
+ "İki parola aynı değil.": "The two passwords do not match.",
+ "Kuruldu · bu oturumda cüzdan Deskhand'den önce başlatıldı ve kilitli; sonraki girişte yeniden denenecek": "Set up · in this session the wallet was started before Deskhand and is locked; it will be tried again at the next login",
+ "Kuruldu · sonraki girişte denenecek": "Set up · will be tried at the next login",
+ "Yalnız bu site (isteğe bağlı)": "Only this site (optional)",
+ "Yalnız bu uygulama (isteğe bağlı)": "Only this application (optional)",
+ "pencere sınıfı, ör. firefox": "window class, e.g. firefox",
+ "{ad} · yalnız {hedef}": "{ad} · only {hedef}",
+ "ör. ornekbanka.com.tr; alt alan adları dahil": "e.g. examplebank.com; subdomains included"
 }
