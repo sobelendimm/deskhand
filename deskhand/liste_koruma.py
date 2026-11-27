@@ -182,6 +182,23 @@ class _PanelKasasi:
         except DepoHatasi as e:
             raise AnahtarYok(e.neden) from None
 
+    NESIL_AD = "panel-nesil"
+
+    def nesil_oku(self) -> int | None:
+        """The newest generation the panel ever wrote, from a SEPARATE sealed item (an anchor for new processes:
+        rolling back only "panel-isaret" is caught across restarts). None: never written. An anchor that exists but
+        cannot be read raises (the caller fails closed: a corrupted anchor must not switch the check off)."""
+        from .anahtar_deposu import secili_depo
+        if self._kapali() and _test_kumu():
+            return None
+        v = secili_depo().oku(self.NESIL_AD)
+        return None if v is None else int(v.decode("ascii"))
+
+    def nesil_yaz(self, nesil: int) -> None:
+        from .anahtar_deposu import secili_depo
+        if not self._kapali():
+            secili_depo().yaz(self.NESIL_AD, str(int(nesil)).encode("ascii"))
+
     def servis_yok_kesin(self) -> bool:
         """True ONLY when the selected store is definitely absent (cuzdan: no python-secretstorage, or the session bus
         answers that org.freedesktop.secrets is neither running nor activatable; kasa: no systemd-creds). A locked
@@ -279,7 +296,18 @@ def _durum(olustur: bool = False, bozugu_yenile: bool = False) -> dict | None:
         _DURUM_YOK_KESIN = not ham  # the key ring answered: there is no item at all
         global _EN_YUKSEK_NESIL
         d = _durum_coz(ham) if ham else None
-        geri = d is not None and d["nesil"] is not None and d["nesil"] < _EN_YUKSEK_NESIL
+        capa_bozuk = False
+        capa_oku = getattr(_kasa_nesnesi(), "nesil_oku", None)
+        if d is not None and capa_oku is not None:
+            try:
+                capa = capa_oku()
+                if capa is not None:
+                    _EN_YUKSEK_NESIL = max(_EN_YUKSEK_NESIL, int(capa))
+            except Exception:  # noqa: BLE001 - an anchor that exists but cannot be read: closed-fail
+                capa_bozuk = True
+        # older generation, or an item without generations once generations were seen (review R2 finding 3)
+        geri = d is not None and (capa_bozuk or (d["nesil"] is None and _EN_YUKSEK_NESIL > 0) or
+                                  (d["nesil"] is not None and d["nesil"] < _EN_YUKSEK_NESIL))
         if geri:  # an OLDER sealed copy was put back (rollback; anahtar_deposu threat model): like a corrupt item
             d = None
         elif d is not None and d["nesil"] is not None:
@@ -319,6 +347,10 @@ def _durum_kaydet(d: dict) -> bool:
             return False
         _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN = d, time.monotonic(), None
         _EN_YUKSEK_NESIL = d["nesil"]
+        try:  # the anchor AFTER the item: a crash in between leaves anchor <= item (never a false rollback)
+            getattr(_kasa_nesnesi(), "nesil_yaz", lambda n: None)(d["nesil"])
+        except Exception:  # noqa: BLE001 - weaker anchor for the next process only; the item itself is written
+            pass
         return True
 
 

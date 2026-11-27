@@ -864,7 +864,8 @@ Panel._dur_kaydet(p11, False)
 # N1: a corrupt / incomplete signed item is closed-fail and is NOT re-made by an automatic path
 lk.panel_dur_sakla(False)
 for ad_, bozuk in (("bozuk", b"{not json"),
-                   ("dur alanı eksik", json.dumps({"surum": 1, "anahtar": "ab" * 32, "sayac": {}, "son": {}}).encode())):
+                   ("dur alanı eksik", json.dumps({"surum": 1, "anahtar": "ab" * 32, "sayac": {}, "son": {},
+                                                    "nesil": 10 ** 9}).encode())):
     KASA.veri = bozuk
     KASA.kilitli = False
     lk._anahtar_unut()

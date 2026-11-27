@@ -351,19 +351,40 @@ def k_panel(a):
 
 def sir_degeri(ad: str) -> str:
     """The user's named secret from the selected key store (anahtar_deposu). Never printed, never logged."""
-    from .anahtar_deposu import DepoHatasi, kullanici_adi_mi, secili_depo
+    return _sir_ve_hedef(ad)[0]
+
+
+def _sir_ve_hedef(ad: str) -> tuple[str, dict]:
+    """(value, binding) of the user's named secret; the binding is sealed inside the value (anahtar_deposu.sir_coz)."""
+    from .anahtar_deposu import DepoHatasi, kullanici_adi_mi, sir_oku
     if not kullanici_adi_mi(ad):
         raise Dur(1, _("geçersiz gizli bilgi adı: {ad}").format(ad=ad if isinstance(ad, str) else "?"))
     try:
-        v = secili_depo().oku(ad)
+        s = sir_oku(ad)
     except DepoHatasi as e:
         raise Dur(10, _("gizli bilgi okunamadı ({ad}): {neden}").format(ad=ad, neden=e.neden)) from None
-    if v is None:
+    if s is None:
         raise Dur(1, _("kayıtlı gizli bilgi yok: {ad} (deskhand secret set {ad})").format(ad=ad))
     try:
-        return v.decode("utf-8")
+        return s[0].decode("utf-8"), s[1]
     except UnicodeDecodeError:
         raise Dur(1, _("gizli bilgi metin değil: {ad}").format(ad=ad)) from None
+
+
+def _guncel_konak(k) -> str:
+    """The host of the page the browser window `k` shows NOW, read from the accessibility tree at this moment (the
+    document's own URL, not the page title and not a cached scan). '' = not a browser / not readable."""
+    from urllib.parse import urlsplit
+    from . import web
+    try:
+        if not web.tarayici_mi(k):
+            return ""
+        web.hazirla(k)
+        with web.tarama_siniri(5.0):
+            s = web.oku(k, roller=["password text"], gorunur=True, en_cok=1, ad_siniri=0, ayrinti=False)
+        return (urlsplit(str(s["sayfa"].get("adres") or "")).hostname or "").lower().rstrip(".")
+    except Exception:  # noqa: BLE001 - unknown (Dur included): the caller fails closed where it matters
+        return ""
 
 
 def _pencere_bilgisi(k) -> tuple[str, str]:
@@ -376,28 +397,15 @@ def _pencere_bilgisi(k) -> tuple[str, str]:
         return "", ""
 
 
-def _sir_hedef_denetle(ad: str, k, sinif: str) -> None:
-    """The secret's binding (anahtar_deposu.sir_hedefi_oku): window class must be equal; site: the page address last
-    read from the window's accessibility tree (dogrulama_sinamasi.son_adres) must be the site or a subdomain of it.
-    Unknown → refused (closed-fail)."""
-    from .anahtar_deposu import DepoHatasi, sir_hedefi_oku
-    try:
-        h = sir_hedefi_oku(ad)
-    except DepoHatasi as e:
-        raise Dur(10, _("gizli bilgi hedefi okunamadı ({ad}): {neden}").format(ad=ad, neden=e.neden)) from None
+def _sir_hedef_denetle(ad: str, h: dict, sinif: str, konak: str) -> None:
+    """The secret's binding: window class (from the window manager) must be equal; site: the host read NOW from the
+    window's accessibility tree (_guncel_konak) must be the site or a subdomain of it. Unknown → refused."""
     if h.get("uygulama") and h["uygulama"] != sinif:
         raise Dur(10, _("kayıtlı parola ({ad}) yalnız {uygulama} penceresine yazılır (hedef: {sinif})").format(
             ad=ad, uygulama=h["uygulama"], sinif=sinif or "?"))
-    if h.get("site"):
-        from urllib.parse import urlsplit
-        from . import dogrulama_sinamasi
-        try:
-            konak = (urlsplit(dogrulama_sinamasi.son_adres(k) or "").hostname or "").lower().rstrip(".")
-        except ValueError:
-            konak = ""
-        if not konak or not (konak == h["site"] or konak.endswith("." + h["site"])):
-            raise Dur(10, _("kayıtlı parola ({ad}) yalnız {site} sitesine yazılır; sayfa adresi {konak} (önce sayfayı "
-                            "gözlemleyin)").format(ad=ad, site=h["site"], konak=konak or "?"))
+    if h.get("site") and not (konak and (konak == h["site"] or konak.endswith("." + h["site"]))):
+        raise Dur(10, _("kayıtlı parola ({ad}) yalnız {site} sitesine yazılır; sayfa adresi {konak}").format(
+            ad=ad, site=h["site"], konak=konak or "?"))
 
 
 def k_yaz_sir(a):
@@ -416,18 +424,27 @@ def k_yaz_sir(a):
     if eylem._parola_alani_mi(a.kimlik) is not True:
         raise Dur(10, _("--secret-ref yalnız parola alanına yazılır: odaklı alan parola alanı değil ya da alan türü "
                         "belirlenemedi (erişilebilirlik: deskhand a11y on)"))
-    deger = sir_degeri(ad)  # exists + readable before anything is asked
-    baslik, sinif = _pencere_bilgisi(a.kimlik)
-    _sir_hedef_denetle(ad, a.kimlik, sinif)
+    deger, hedef = _sir_ve_hedef(ad)  # exists + readable before anything is asked
+    _baslik, sinif = _pencere_bilgisi(a.kimlik)
+    konak = _guncel_konak(a.kimlik)  # read NOW (review R2 finding 1: no cached address)
+    _sir_hedef_denetle(ad, hedef, sinif, konak)
     # ALWAYS the user's approval in the panel, whatever the approval scope and --onayli say (a stored password may
-    # leave the machine only with the user's Yes; the dialog names the secret and the target, never the value)
+    # leave the machine only with the user's Yes). The dialog shows the VERIFIED target (window class from the window
+    # manager + host from the accessibility tree), never the page title and never the value.
+    hedef_metni = f"{sinif or '?'} · {konak}" if konak else (sinif or "?")
     izin, neden = guvenlik._panelden_onay(
-        _("Kayıtlı parolayı yaz"), baslik,
-        _("Ajan kayıtlı \"{ad}\" parolasını bu pencerenin parola alanına yazmak istiyor: {baslik} ({sinif}).").format(
-            ad=ad, baslik=baslik or "?", sinif=sinif or "?"), konu="parola")
+        _("Kayıtlı parolayı yaz"), hedef_metni,
+        _("Ajan kayıtlı \"{ad}\" parolasını şu hedefin parola alanına yazmak istiyor: {hedef}.").format(
+            ad=ad, hedef=hedef_metni), konu="parola")
     if not izin:
         raise Dur(10, _("HASSAS: kayıtlı parola ({ad}) yalnız kullanıcının panel onayıyla yazılır ({neden})").format(
             ad=ad, neden=neden), tur="hassas")
+    # the target again right before typing: the page or the focused field may have changed while the user decided
+    if eylem._parola_alani_mi(a.kimlik) is not True or _pencere_bilgisi(a.kimlik)[1] != sinif or \
+            _guncel_konak(a.kimlik) != konak:
+        raise Dur(10, _("kayıtlı parola ({ad}) yazılmadı: onaydan sonra hedef değişti (sayfa, uygulama ya da odaklı "
+                        "alan)").format(ad=ad))
+    _sir_hedef_denetle(ad, hedef, sinif, konak)
     a.metin, a.gizli = deger + (getattr(a, "sir_ek", "") or ""), True
     try:
         return k_yaz(a)
@@ -466,8 +483,7 @@ def k_sir(argv: list[str]) -> int:
             print(_("geçersiz ya da ayrılmış ad: {ad}").format(ad=a.ad), file=sys.stderr)
             return 1
         if a.islem == "rm":
-            ad_.sir_hedefi_yaz(a.ad)  # the binding goes with the secret
-            if depo.sil(a.ad):
+            if depo.sil(a.ad):  # the binding is inside the value: it goes with it
                 print(_("silindi: {ad}").format(ad=a.ad))
                 return 0
             print(_("kayıtlı değil: {ad}").format(ad=a.ad), file=sys.stderr)
@@ -488,11 +504,10 @@ def k_sir(argv: list[str]) -> int:
             print(_("boş değer kaydedilmez"), file=sys.stderr)
             return 1
         try:
-            ad_.sir_hedefi_yaz(a.ad, a.uygulama, a.site)  # validates before the value is stored
+            ad_.sir_yaz(a.ad, veri, a.uygulama, a.site)  # the binding is sealed inside the value
         except ValueError as e:
             print(str(e), file=sys.stderr)
             return 1
-        depo.yaz(a.ad, veri)
         print(_("kaydedildi: {ad} ({depo})").format(ad=a.ad, depo=_(ad_.TUR_ADLARI.get(depo.tur, depo.tur))))
         return 0
     except ad_.DepoHatasi as e:

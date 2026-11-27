@@ -31,9 +31,11 @@ agent shell isolated from the user's credentials). Deleting the kasa items AND e
 the next panel start a first start (the default lists); removing only some of them is closed-fail.
 ROLLBACK (security review 27 Kas, finding 2): a file-writing process can copy a sealed item and put the OLDER copy back
 later (with the wallet this needed D-Bus). The panel's state carries a generation (liste_koruma `nesil`, +1 per write);
-a process that has seen a newer generation treats an older one as rolled back (closed-fail: the user's DUR stays on,
-no approved value). This covers every rollback while the panel / MCP process runs; a rollback done while NO Deskhand
-process runs (kill the panel, put back the old item AND the old marks, start again) is NOT detected: user space has no
+a process that has seen a newer generation treats an older one (or one without a generation) as rolled back
+(closed-fail: the user's DUR stays on, no approved value); the newest generation is also kept in a SEPARATE sealed
+item "panel-nesil" (written after the state; unreadable → closed-fail), so a new process catches a rollback of the
+state item alone. Putting back the old state item AND the old anchor AND the old marks while NO Deskhand process
+runs is NOT detected: user space has no
 anchor a same-user process cannot rewind (TPM NV counters need the tss group + tpm2-tools; this user has neither).
 Who needs that guarantee keeps the KDE Wallet store. Selection (finding 3): the selection is sealed in the kasa
 (`depo-secimi`); `[anahtar] depo` that disagrees → closed-fail (SecimsizDepo); depo_degistir removes the panel state
@@ -66,7 +68,7 @@ IC_ADLAR = {
     "kalici-oturum": ("Deskhand session store", "application/octet-stream"),
     "kde-cuzdan": ("Deskhand KDE Wallet unlock", "application/octet-stream"),
     "depo-secimi": ("Deskhand key store selection", "text/plain"),
-    "sir-hedefleri": ("Deskhand secret targets", "application/json"),
+    "panel-nesil": ("Deskhand panel settings generation", "text/plain"),
 }
 KASA_SABIT = ("kde-cuzdan", "depo-secimi")  # always in the kasa, never moved by depo_degistir
 SECIM_AD = "depo-secimi"
@@ -655,7 +657,7 @@ def depo_degistir(yeni_tur: str, tasima: bool = True) -> dict:
                 pass
         _ayar_yaz(yeni_tur)
         if eski is not None and yeni_tur != eski_tur and tasima:
-            for ad in ("panel-isaret", "kalici-oturum"):
+            for ad in ("panel-isaret", "panel-nesil", "kalici-oturum"):
                 try:
                     eski.sil(ad)
                 except DepoHatasi:
@@ -672,45 +674,74 @@ def depo_degistir(yeni_tur: str, tasima: bool = True) -> dict:
 
 # ---------------------------------------------------------------- where a named secret may be typed
 
-HEDEF_AD = "sir-hedefleri"
+# The binding lives INSIDE the secret's own sealed value (security review R2 finding 2: a separate binding item could
+# be deleted to drop the binding): ZARF + JSON header line + "\n" + value. A value without the envelope (written
+# directly through Depo.yaz, e.g. by an older panel) has no binding; it is still typed only with the user's panel
+# approval (cli.k_yaz_sir). A malformed envelope is closed-fail.
+_ZARF = b"DHSIR1\n"
 _SITE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+")
 
 
-def _hedefler(depo: Depo) -> dict:
-    import json
-    ham = depo.oku(HEDEF_AD)
-    if not ham:
-        return {}
-    try:
-        d = json.loads(ham.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
-        raise DepoHatasi(_("gizli bilgi hedefleri okunamadı (bozuk)")) from None
-    return d if isinstance(d, dict) else {}
-
-
-def sir_hedefi_oku(ad: str) -> dict:
-    """{"uygulama": window class | None, "site": domain | None} the user bound the secret `ad` to ({}: no binding).
-    Kept sealed in the selected store (item "sir-hedefleri"): a file-writing process cannot change it."""
-    h = _hedefler(secili_depo()).get(_ad_denetle(ad))
-    if not isinstance(h, dict):
-        return {}
-    return {k: v for k, v in h.items() if k in ("uygulama", "site") and isinstance(v, str) and v}
-
-
-def sir_hedefi_yaz(ad: str, uygulama: str | None = None, site: str | None = None) -> None:
-    """Bind the secret `ad` to a window class and/or a site (domain; subdomains included). Both None: no binding."""
-    import json
-    _ad_denetle(ad)
+def _hedef_dogrula(uygulama: str | None, site: str | None) -> dict:
     uygulama = (uygulama or "").strip().lower() or None
     site = (site or "").strip().lower().rstrip(".") or None
     if uygulama is not None and not re.fullmatch(r"[a-z0-9._-]{1,128}", uygulama):
         raise ValueError(_("geçersiz uygulama sınıfı: {deger}").format(deger=uygulama))
     if site is not None and not _SITE.fullmatch(site):
         raise ValueError(_("geçersiz site: {deger}").format(deger=site))
-    depo = secili_depo()
-    d = _hedefler(depo)
-    if uygulama or site:
-        d[ad] = {k: v for k, v in (("uygulama", uygulama), ("site", site)) if v}
-    else:
-        d.pop(ad, None)
-    depo.yaz(HEDEF_AD, json.dumps(d, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+    return {k: v for k, v in (("uygulama", uygulama), ("site", site)) if v}
+
+
+def sir_paketle(deger: bytes, uygulama: str | None = None, site: str | None = None) -> bytes:
+    import json
+    hedef = _hedef_dogrula(uygulama, site)
+    return _ZARF + json.dumps({"hedef": hedef}, ensure_ascii=False, sort_keys=True).encode("utf-8") + b"\n" + \
+        bytes(deger)
+
+
+def sir_coz(ham: bytes) -> tuple[bytes, dict]:
+    """(value, binding) of a stored secret. No envelope: (raw, {}). A malformed envelope → DepoHatasi."""
+    import json
+    if not ham.startswith(_ZARF):
+        return ham, {}
+    bas, ayrac, deger = ham[len(_ZARF):].partition(b"\n")
+    try:
+        h = json.loads(bas.decode("utf-8")).get("hedef") if ayrac else None
+        if not isinstance(h, dict):
+            raise ValueError
+        hedef = _hedef_dogrula(h.get("uygulama"), h.get("site"))
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        raise DepoHatasi(_("gizli bilgi kaydı bozuk")) from None
+    return deger, hedef
+
+
+def sir_yaz(ad: str, deger: bytes, uygulama: str | None = None, site: str | None = None) -> None:
+    """Store the user's secret `ad` with its binding (window class and/or site, subdomains included; None: unbound).
+    Settings and `deskhand secret set` use this."""
+    if not kullanici_adi_mi(ad):
+        raise ValueError(_("geçersiz ya da ayrılmış ad: {ad}").format(ad=ad))
+    if not deger:
+        raise ValueError(_("boş değer kaydedilmez"))
+    secili_depo().yaz(ad, sir_paketle(deger, uygulama, site))
+
+
+def sir_oku(ad: str) -> tuple[bytes, dict] | None:
+    """(value, binding) of the user's secret `ad`, or None (no such secret)."""
+    if not kullanici_adi_mi(ad):
+        raise ValueError(_("geçersiz ya da ayrılmış ad: {ad}").format(ad=ad))
+    ham = secili_depo().oku(ad)
+    return None if ham is None else sir_coz(ham)
+
+
+def sir_hedefi_oku(ad: str) -> dict:
+    """{"uygulama": ..., "site": ...} the secret `ad` is bound to ({}: unbound or no such secret)."""
+    s = sir_oku(ad)
+    return {} if s is None else s[1]
+
+
+def sir_hedefi_yaz(ad: str, uygulama: str | None = None, site: str | None = None) -> None:
+    """Change the binding of an existing secret (the value is re-sealed with it). No such secret → DepoHatasi."""
+    s = sir_oku(ad)
+    if s is None:
+        raise DepoHatasi(_("kayıtlı gizli bilgi yok: {ad}").format(ad=ad))
+    secili_depo().yaz(ad, sir_paketle(s[0], uygulama, site))
