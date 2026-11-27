@@ -1798,5 +1798,7 @@
  "Anahtarlık (Secret Service) bulunamadı; panel burada daha önce çalıştığı için kullanıcının DUR kaydı doğrulanamıyor. Güvenli tarafta DUR açık; yalnız siz Devam ile kaldırabilirsiniz.": "No key ring (Secret Service) found; the panel has run here before, so the user's STOP record cannot be verified. On the safe side STOP is on; only you can lift it with Resume.",
  "Cüzdandaki panel kaydında DUR alanı yok (eski sürüm kaydı; bir kez Devam'a basın). Güvenli tarafta DUR açık; anahtar ve onaylar korunur.": "The panel's wallet record has no STOP field (a record of an older version; press Resume once). On the safe side STOP is on; the key and the approvals are kept.",
  "DUR dosyası okunamıyor (kaynağı bilinmiyor); yalnız kullanıcı Deskhand panelinden kaldırabilir": "The STOP file cannot be read (its source is unknown); only the user can lift it, from the Deskhand panel",
- "İmzasız çalışma kabul edildi (anahtarlık yok); panelin koyduğu DUR kaldırıldı.": "Running unsigned was accepted (no key ring); the STOP set by the panel was lifted."
+ "İmzasız çalışma kabul edildi (anahtarlık yok); panelin koyduğu DUR kaldırıldı.": "Running unsigned was accepted (no key ring); the STOP set by the panel was lifted.",
+ "adres doğrulanamadı: {adres} yazıldı ama sayfanın adresi {sayfa} (başka sunucu ya da gezinme olmadı)": "address not verified: {adres} was typed but the page address is {sayfa} (another host, or no navigation happened)",
+ "adres yalnız pencere başlığından doğrulandı (sayfa adresi okunamadı)": "address verified from the window title only (the page address could not be read)"
 }

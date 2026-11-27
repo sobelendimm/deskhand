@@ -338,6 +338,7 @@ def web_adresi_denetle(adres) -> str:
     else:
         try:
             u = urlsplit(a)
+            _port = u.port  # geçersiz port (host:abc, :99999) → ValueError
             sema = u.scheme.lower()
             if sema not in URL_SEMALARI:
                 neden = (_("yalnız http ya da https adresi ('{sema}:' değil)").format(sema=sema) if sema
@@ -914,12 +915,15 @@ ADRES_DOGRULA_SN = 8.0
 @dataclasses.dataclass
 class IkinciPencere:
     """ayni_surecte_ac sonucu: Ctrl+N sonrası DOĞRULANAN tek pencere. Çağıran yalnız bu kimliği raporlar (yeni pencere
-    yeniden aranmaz). adres_dogrulandi: None = adres verilmedi; True = sayfa adresi/başlığı hedefe döndü; False =
-    adres yazıldı ama gezinme doğrulanamadı (başarı DENMEZ)."""
+    yeniden aranmaz). adres_dogrulandi: None = adres verilmedi; True = sayfa adresi (ya da adres hiç okunamadıysa
+    başlığı) hedefe döndü; False = adres yazıldı ama gezinme doğrulanamadı (başarı DENMEZ). adres_kaynagi: "belge"
+    (AT-SPI belge adresi) | "baslik" (yedek: adres okunamadı) | None; sayfa_adresi: son okunan AT-SPI belge adresi."""
     kimlik: str
     tur: str
     adres: str | None = None
     adres_dogrulandi: bool | None = None
+    adres_kaynagi: str | None = None
+    sayfa_adresi: str | None = None
 
 
 def _ctrl_n_hedefi(au, d: dict, ata: int, tur: str, once: list[str]) -> str | None:
@@ -947,37 +951,62 @@ def _adres_norm(s: str) -> tuple[str, str]:
     s = str(s or "").strip()
     try:
         p = urlsplit(s if "://" in s or s.startswith(("about:", "file:")) else "https://" + s)
+        port = p.port  # geçersiz port (host:abc, :99999) → ValueError
     except ValueError:
         return "", s.lower()
     host = (p.hostname or "").lower().removeprefix("www.")
-    return host, f"{p.scheme.lower()}://{host}{(':' + str(p.port)) if p.port else ''}{p.path.rstrip('/')}" + \
+    return host, f"{p.scheme.lower()}://{host}{(':' + str(port)) if port else ''}{p.path.rstrip('/')}" + \
         (f"?{p.query}" if p.query else "")
 
 
-def _adres_dogrula(au, w: str, adres: str, tek_mi=None) -> bool:
-    """Return'den sonra yeni pencerenin etkin sekmesi hedefe döndü mü: sayfa adresi (AT-SPI belge adresi) aynı adres ya
-    da aynı sunucu (yönlendirme), ya da pencere başlığı hedef adresi içeriyor. ADRES_DOGRULA_SN içinde olmazsa False.
-    tek_mi(): AT-SPI okuması yalnız pencerenin başlığı tarayıcıda tekse güvenilir (yoksa öbür pencere okunabilir)."""
+def _adres_ayristir(adres: str) -> None:
+    """Ctrl+N yolunda yazılacak adres HİÇBİR girdiden önce ayrıştırılır: ayrıştırılamıyor ya da port geçersizse
+    (host:abc, :99999) Dur 10 (web_adresi_denetle ile aynı ileti)."""
+    from urllib.parse import urlsplit
+    s = str(adres or "").strip()
+    try:
+        _port = urlsplit(s if "://" in s or s.startswith(("about:", "file:")) else "https://" + s).port
+    except ValueError:
+        raise Dur(10, _("adres reddedildi {adres}: {neden}").format(adres=repr(s)[:200], neden=_("geçersiz URL"))) \
+            from None
+
+
+def _baslikta_sunucu(b: str, sunucu: str) -> bool:
+    """Başlıkta sunucu adı SINIRLI geçiyor mu (a.com, Visa.com içinde değil; önünde/arkasında harf, rakam, '.', '-' yok)."""
+    return bool(sunucu) and re.search(r"(?<![\w.-])(www\.)?" + re.escape(sunucu) + r"(?![\w-]|\.\w)", b.lower()) is not None
+
+
+def _adres_dogrula(au, w: str, adres: str, tek_mi=None) -> tuple[bool, str | None, str | None]:
+    """Return'den sonra yeni pencerenin etkin sekmesi hedefe döndü mü → (doğrulandı, kaynak, son sayfa adresi).
+    AT-SPI belge adresi (Firefox DocURL, Chromium URI) okunduysa YALNIZ ona bakılır: aynı adres ya da aynı sunucu
+    (yönlendirme) → (True, "belge"); başka sunucuda kalırsa başlık ne derse desin doğrulanmaz. Başlık YALNIZ
+    ADRES_DOGRULA_SN boyunca belge adresi hiç okunamadıysa yedektir: tam adres ya da sınırlı sunucu adı → (True,
+    "baslik"). tek_mi(): AT-SPI okuması yalnız pencerenin başlığı tarayıcıda tekse güvenilir (yoksa öbür pencere okunabilir)."""
     from . import web
     h_sunucu, h_tam = _adres_norm(adres)
     bitis = time.monotonic() + ADRES_DOGRULA_SN
+    sayfa = None
     while True:
         try:
             s = (web.sayfa_bilgisi(w) or {}) if tek_mi is None or tek_mi() else {}
-            s_sunucu, s_tam = _adres_norm(s.get("adres") or "")
-            if s.get("adres") and (s_tam == h_tam or (h_sunucu and s_sunucu == h_sunucu)):
-                return True
-        except Exception:  # noqa: BLE001 - erişilebilirlik okunamadı: başlığa bak, sonra yeniden dene
-            pass
-        try:
-            b = au.baslik(w) or ""
-            if str(adres) in b or (h_sunucu and h_sunucu in b.lower()):
-                return True
-        except Dur:
+            if s.get("adres"):
+                sayfa = str(s["adres"])
+                s_sunucu, s_tam = _adres_norm(sayfa)
+                if s_tam == h_tam or (h_sunucu and s_sunucu == h_sunucu):
+                    return True, "belge", sayfa
+        except Exception:  # noqa: BLE001 - erişilebilirlik okunamadı: yeniden dene (başlık yalnız sonda, yedek)
             pass
         if time.monotonic() >= bitis:
-            return False
+            break
         time.sleep(0.3)
+    if sayfa is None:
+        try:
+            b = au.baslik(w) or ""
+            if str(adres) in b or _baslikta_sunucu(b, h_sunucu):
+                return True, "baslik", None
+        except Dur:
+            pass
+    return False, None, sayfa
 
 
 ODAK_BEKLE_SN = 2.5
@@ -1067,8 +1096,15 @@ def ayni_surecte_ac(au, komut, kopya) -> IkinciPencere | None:
             if not hedef:
                 continue
             if len(belgeler) > 1:
+                oturum.temizle(kopya)
                 raise Dur(1, _("aynı süreçteki yeni pencerede tek adres açılır ({sayi} verildi); her adres için ayrı "
                                "open çağır").format(sayi=len(belgeler)))
+            try:  # adres ayrıştırması Ctrl+N'den (ilk girdiden) ÖNCE: geçersizse hiçbir girdi yok, kopya silinir
+                for adres in belgeler:
+                    _adres_ayristir(adres)
+            except Dur:
+                oturum.temizle(kopya)
+                raise
             kayit = next((g for g in _kayit_bilgisi(d, tur) if int(g.get("pid") or 0) == ata), {})
             api.tus(hedef, "ctrl+n")
             bitis = time.monotonic() + YENI_PENCERE_BEKLE_SN
@@ -1112,7 +1148,8 @@ def ayni_surecte_ac(au, komut, kopya) -> IkinciPencere | None:
                         rol=(odak or {}).get("rol") or _("bilinmiyor")), w, ata)
                 api.yaz(w, adres)
                 api.tus(w, "Return")
-                sonuc.adres, sonuc.adres_dogrulandi = adres, _adres_dogrula(
+                sonuc.adres = adres
+                sonuc.adres_dogrulandi, sonuc.adres_kaynagi, sonuc.sayfa_adresi = _adres_dogrula(
                     au, w, adres, lambda a_=ata, w_=w: _baslik_tek_mi(au, d, a_, w_))
             oturum.temizle(kopya)
             gunluk(f"ac | 2. pencere aynı süreçte (Ctrl+N) | {tur} | {os.path.basename(eski)} | {w}"
@@ -1149,8 +1186,18 @@ def ikinci_pencere_bekle(au, ip: IkinciPencere, uyar, sure: float) -> tuple[str,
 def ikinci_pencere_iletisi(ip: IkinciPencere) -> str:
     """Adres doğrulanamadıysa dürüst ileti ("" değilse başarı denmez)."""
     if ip.adres_dogrulandi is False:
+        if ip.sayfa_adresi:
+            return _("adres doğrulanamadı: {adres} yazıldı ama sayfanın adresi {sayfa} (başka sunucu ya da gezinme "
+                     "olmadı)").format(adres=ip.adres, sayfa=ip.sayfa_adresi)
         return _("adres doğrulanamadı: {adres} yazıldı ama pencerenin sayfa adresi/başlığı hedefe dönmedi").format(
             adres=ip.adres)
+    return ""
+
+
+def ikinci_pencere_notu(ip: IkinciPencere) -> str:
+    """Adres yalnız pencere BAŞLIĞINDAN doğrulandıysa (AT-SPI belge adresi okunamadı) açık not; yoksa ""."""
+    if ip.adres_dogrulandi and ip.adres_kaynagi == "baslik":
+        return _("adres yalnız pencere başlığından doğrulandı (sayfa adresi okunamadı)")
     return ""
 
 
@@ -1298,12 +1345,14 @@ def k_ac(a):
     def uyar(b, s):
         return (not a.baslik or re.search(a.baslik, b, re.I)) and (not a.sinif or re.search(a.sinif, s, re.I))
     if isinstance(ip, IkinciPencere):  # aynı süreçte 2. pencere: YALNIZ doğrulanan pencere (yeniden aranmaz)
-        bs = ikinci_pencere_bekle(au, ip, uyar, max(0.0, a.sure - (time.monotonic() - t0)))
+        bs = ikinci_pencere_bekle(au, ip, uyar, a.sure)  # bütçe doğrulanan pencereden başlar (api.uygulama_ac ile aynı)
         if bs is None:
             raise Dur(7, _("{sn} sn içinde uygun pencere açılmadı").format(sn=f"{a.sure:.0f}")
                       + "; " + _("aynı süreçte açılan pencere: {pencere}").format(pencere=ip.kimlik))
         if ip.adres_dogrulandi is False:
             raise Dur(7, ikinci_pencere_iletisi(ip) + f" ({ip.kimlik} | {bs[0]} | {bs[1]})")
+        if ikinci_pencere_notu(ip):
+            print(ikinci_pencere_notu(ip), file=sys.stderr)
         print(f"{ip.kimlik} | {bs[0]} | {bs[1]} | "
               + _("açıldı ({sn} sn)").format(sn=f"{time.monotonic() - t0:.1f}"))
         return

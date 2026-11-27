@@ -649,9 +649,11 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     if isinstance(ip, IkinciPencere):
         # ABM-F3: aynı süreçte 2. pencere: YALNIZ ayni_surecte_ac'in doğruladığı pencere raporlanır; yeni pencere
         # yeniden ARANMAZ (doğrulamadan sonra açılan sahte "firefox" penceresi ajana verilemez)
-        from .uygulama import ikinci_pencere_bekle, ikinci_pencere_iletisi
-        bs = ikinci_pencere_bekle(au, ip, lambda b, s: not baslik or re.search(baslik, b, re.I),
-                                  max(0.0, sure - (time.monotonic() - t0)))
+        from .uygulama import ikinci_pencere_bekle, ikinci_pencere_iletisi, ikinci_pencere_notu
+        # süre bütçesi DOĞRULANAN pencereden (ayni_surecte_ac dönüşü) başlar: kilit/Ctrl+N/adres doğrulaması bütçeyi
+        # yemiş olsa da açılmış ve doğrulanmış pencere başlık süzgeci geç eşleşti diye timeout almaz (yeniden deneme
+        # ek pencere açardı)
+        bs = ikinci_pencere_bekle(au, ip, lambda b, s: not baslik or re.search(baslik, b, re.I), sure)
         if bs is None:
             return {"status": "timeout", "window": None, "seconds": round(time.monotonic() - t0, 1),
                     "message": _("{sn} sn içinde yeni pencere görünmedi").format(sn=f"{sure:.0f}")
@@ -660,6 +662,10 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
         r = {"status": "opened", "window": {"id": ip.kimlik, "title": "(yasak pencere)" if y else bs[0],
                                             "class": bs[1], "forbidden": bool(y)},
              "seconds": round(time.monotonic() - t0, 1), "same_process": True}
+        if ip.adres_kaynagi:  # adres neyle doğrulandı: AT-SPI belge adresi ya da (adres okunamadı) yalnız başlık
+            r["address_source"] = {"belge": "document", "baslik": "title"}.get(ip.adres_kaynagi, ip.adres_kaynagi)
+            if ikinci_pencere_notu(ip):
+                r["message"] = ikinci_pencere_notu(ip)
         if ip.adres_dogrulandi is False:
             r["status"], r["message"] = "address_unverified", ikinci_pencere_iletisi(ip)
         return r
