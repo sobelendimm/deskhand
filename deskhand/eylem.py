@@ -14,7 +14,7 @@ import unicodedata
 
 from . import yollar
 from .arka_uc import EKRAN, ArkaUc, sec
-from .gorsel import bolge_coz, korumali_goruntu, pencere_goruntusu, renk_alanlari, simge_bul_ic
+from .gorsel import bolge_coz, korumali_goruntu, renk_alanlari, simge_bul_ic
 from .gunluk import gunluk
 from . import dogrulama_sinamasi, guvenlik, ucbirim
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, hedef_pencere_denetle,
@@ -1388,6 +1388,8 @@ def k_metne_tikla(a):
         hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), m["cx"] + dx, m["cy"] + dy, yakin,
                      ek_metinler=[a.metin, m["satir"], *([] if a.kay else [m["t"]])])
         if a.kimlik == EKRAN:  # pencere kilidi yok: ekran bu arada değişmiş olabilir → taze görüntüde DOĞRULA
+            # ham kare: yalnız bool (dogrula); tıklama yasak pencereye imlec_alti_denetle ile gitmez (SINIF-MASKE izinli)
+            from .gorsel import pencere_goruntusu
             im2, _geo2, kok2 = pencere_goruntusu(EKRAN, (round(m["cx"]) - 260, round(m["cy"]) - 40, 520, 80))
             if not dogrula(im2, kok2, a.metin, m["cx"], m["cy"]):
                 raise Dur(6, _("'{metin}' artık ({x},{y}) noktasında değil (ekran değişti); tıklanmadı").format(

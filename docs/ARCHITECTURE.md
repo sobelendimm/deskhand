@@ -819,6 +819,23 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 - **Web değer maskesi** (§9): `web._ayrinti_ekle` giriş değerini `erisim._deger_temizle` ile süzer; Firefox ilk sorguda
   boş nitelik verebildiği için bir kez daha sorulur. `web.tarayici_mi` sınıfı `. - _` ve boşlukla parçalar.
 - **CLI okuma komutları** `gorsel.korumali_goruntu` → `api.goruntu_al` (yasak hedef 10, diğer yasaklar siyah).
+- **Maskeli görüntü yolu kuralı (0.9.1, SINIF-MASKE)**: pikseli ya da ondan türeyen metni (OCR, renk alanı koordinatı,
+  `noktadaki yazı`, eşleşme listesi, Dur iletisi) süreç DIŞINA (ajana, MCP sonucuna) giden her kare
+  `gorsel.korumali_goruntu` / `api.goruntu_al` yolundan alınır. Bu yol yasak pencere listesini karenin ÖNÜNDE ve
+  ARKASINDA okur (`maske_kare.iki_okumali_kare`). İki konumun birleşimi karartılır; kareden sonra yasaklanan pencerenin
+  kareden önceki konumu da birleşime girer (`Geometriler.tum`). Kare sırasında kapanan ya da yasaktan çıkan pencere ve
+  okunamayan liste `Dur(8, tur=maske-yarisi|maske-okunamadi)` verir; kare gönderilmez. `korumali_goruntu` bu durumda
+  kısa beklemeyle en çok 3 kare dener (toplam ≤ 2 sn), uzun akış ve `bekle` tek yarışta düşmez. Ham kare
+  (`gorsel.pencere_goruntusu`, `_pencere_goruntusu`, arka uç `.goruntu`) yalnız pikseli süreçten çıkmayan iç işlerde
+  kullanılır. Bunlar: onay hedefi parmak izi (`onay_hedef._goruntu`), insan onay panelinin görüntüsü
+  (`guvenlik.hedef_goruntusu`), uçbirim Enter kapısının satır okuması (`ucbirim._ocr_satirlar`; ajana giden Dur iletisi
+  OCR'dan türeyen sözcük taşımaz, ayrıntı yalnız panelde), masaüstü kipinde tıklama öncesi yeniden denetim
+  (`eylem.k_metne_tikla`, yalnız bool; kabul edilen 1 bitlik sınır) ve panel önizlemesi. İzin listesi, gerekçesi ve
+  her işlevdeki başvuru sayısı `tests/test_guv_sinif_maske.py` (`IZINLI`) içinde tutulur. Ad hangi biçimde geçerse
+  geçsin test kırmızı verir: ad, öznitelik, içe aktarma takma adı, dizge sabiti ya da getattr/vars/`__dict__`
+  (yeni çağıran ve izinli işleve eklenen yeni kare dahil). Bilinen sınırlar: bu kapı bir tetik teli, kum havuzu
+  değildir (çalışma anında kurulan ad görülmez); iki okuma arasında SÜRÜKLENEN yasak pencerenin ara konumu
+  karartılmaz; iki liste okumasının maliyeti ölçülmedi.
 - **CLI otomatik başlık kilidi**: `cli.otomatik_baslik_kilidi` (kimlikle verilen yaz/tus/tikla/dizi/kaydir, `-b` yok →
   `^…$`; `--no-title-lock`).
 - **MCP sonuç sözleşmesi** (§10): `arac` ve `okuma_araci` sarmalayıcıları beklenmeyen istisnayı da `hata_sonucu`'na

@@ -213,7 +213,7 @@
   "eylem.py:1375"
  ],
  "# '{renk}': {sayi} alan (en az {en_az} piksel)": [
-  "gorsel.py:297"
+  "gorsel.py:318"
  ],
  "# Bu desenlere (regex, büyük/küçük harf duyarsız) uyan pencere BAŞLIĞI ya da SINIFINA hiçbir girdi\n# (tıklama/tuş/yazı/kaydırma) gönderilmez ve uygulama başlatılmaz. Okuma serbesttir. Varsayılan: boş.\n# Örnekler (başındaki # işaretini kaldırarak açın):\n# KeePassXC\n# ^Online Banking\n": [
   "guvenlik.py:29"
@@ -234,7 +234,7 @@
   "eylem.py:563"
  ],
  "# simge '{ad}': {sayi} eşleşme ({sn} sn)": [
-  "gorsel.py:284"
+  "gorsel.py:305"
  ],
  "# {adim} kez kaydırıldı ({sn} sn)": [
   "eylem.py:1370"
@@ -325,7 +325,7 @@
   "web.py:739"
  ],
  "'{metin}' artık ({x},{y}) noktasında değil (ekran değişti); tıklanmadı": [
-  "eylem.py:1393"
+  "eylem.py:1395"
  ],
  "'{metin}' artık yok": [
   "akis.py:199"
@@ -362,7 +362,7 @@
   "cli.py:199"
  ],
  "(gömülü uçbirim)": [
-  "ucbirim.py:373"
+  "ucbirim.py:375"
  ],
  "(görünmüyor)": [
   "web.py:629"
@@ -371,7 +371,7 @@
   "guvenlik.py:1349"
  ],
  "(satır okunamadı)": [
-  "ucbirim.py:364"
+  "ucbirim.py:366"
  ],
  "(sayfa adresi değişti: sınamanın kalkması çözüm sayılmadı)": [
   "mcp_sunucu.py:2979"
@@ -397,7 +397,7 @@
   "web.py:633"
  ],
  ", benzerlik {benzerlik}": [
-  "eylem.py:1395"
+  "eylem.py:1397"
  ],
  ", doğrulandı": [
   "erisim.py:1573"
@@ -409,13 +409,13 @@
   "mesgul.py:677"
  ],
  ", {sayi} yakın aday (eşik altı)": [
-  "gorsel.py:285"
+  "gorsel.py:306"
  ],
  "--bolge x,y,genişlik,yükseklik olmalı: {deger}": [
   "gorsel.py:25"
  ],
  "--bolge x,y,genişlik,yükseklik zorunlu (simgenin çevresi; foto --izgara ile bul)": [
-  "gorsel.py:273"
+  "gorsel.py:294"
  ],
  "--desktop-name bir ad ister": [
   "cli.py:612"
@@ -1662,16 +1662,16 @@
   "gui/metinler.py:152"
  ],
  "UÇBİRİM ENTER KAPISI ({baslik}): uçbirimde komut çalıştırmak (Enter) her zaman kullanıcının onayını ister ({onay_neden}){uyari}; kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "ucbirim.py:379"
+  "ucbirim.py:388"
  ],
  "UÇBİRİM KOMUTU ({neden} ← {baslik}): yıkıcı olabilecek komutu uçbirime yazmak kullanıcının onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
   "guvenlik.py:1538"
  ],
  "Uçbirimde komut çalıştır: {satir}": [
-  "ucbirim.py:376"
+  "ucbirim.py:378"
  ],
  "Uçbirimde komut çalıştırılacak (Enter).": [
-  "ucbirim.py:366"
+  "ucbirim.py:368"
  ],
  "Uçbirime komut yaz: {komut}": [
   "guvenlik.py:1535"
@@ -1734,8 +1734,8 @@
   "erisim.py:329"
  ],
  "YIKICI OLABİLİR: {neden}": [
-  "ucbirim.py:368",
-  "ucbirim.py:382"
+  "ucbirim.py:370",
+  "ucbirim.py:391"
  ],
  "YOK": [
   "masaustu.py:1378"
@@ -2216,8 +2216,8 @@
  ],
  "bulunamadı": [
   "erisim.py:1067",
-  "gorsel.py:291",
-  "gorsel.py:301",
+  "gorsel.py:312",
+  "gorsel.py:322",
   "mcp_sunucu.py:141",
   "ocr.py:593",
   "web.py:775"
@@ -2226,7 +2226,7 @@
   "cli.py:504"
  ],
  "bulundu: '{metin}' ({x},{y}) güven {guven}{benzerlik}, {sn} sn": [
-  "eylem.py:1396"
+  "eylem.py:1398"
  ],
  "bulundu: simge '{ad}' ({x},{y}) benzerlik {benzerlik}": [
   "eylem.py:1323"
@@ -2241,7 +2241,7 @@
   "arka_ortak.py:1042"
  ],
  "bölge kökü +{x}+{y}": [
-  "gorsel.py:261"
+  "gorsel.py:282"
  ],
  "büyütme": [
   "arka_uc/__init__.py:152",
@@ -2250,7 +2250,7 @@
   "eylem.py:1198"
  ],
  "cetvel payı sol {sol}, üst {ust}": [
-  "gorsel.py:265"
+  "gorsel.py:286"
  ],
  "chmod 700 {yol} (sahibi siz değilseniz dizini silin)": [
   "doktor.py:283"
@@ -2517,6 +2517,9 @@
  ],
  "ekranda '{metin}'": [
   "akis.py:195"
+ ],
+ "ekrandan okunan satır (ayrıntı yalnız onay panelinde)": [
+  "ucbirim.py:387"
  ],
  "eksik": [
   "doktor.py:64"
@@ -3003,13 +3006,13 @@
   "gui/saglik.py:24"
  ],
  "görüntü alınırken pencere değişti → {baslik}": [
-  "gorsel.py:80"
+  "gorsel.py:101"
  ],
  "görüntü işleme (python-numpy)": [
   "gui/saglik.py:23"
  ],
  "görüntü yazılamadı ({yol}): {hata}": [
-  "gorsel.py:256"
+  "gorsel.py:277"
  ],
  "görüntüyü bu genişliğe küçült (yapay zekâ bağlamı için)": [
   "cli.py:454"
@@ -4146,10 +4149,10 @@
   "arka_uc/sanal.py:330"
  ],
  "satır: {satir}": [
-  "ucbirim.py:366"
+  "ucbirim.py:368"
  ],
  "satırda geçmiş açılımı/geçmiş komutu var (!!, !n, ^a^b, fc, r, history -s): çalışacak komut görünmez": [
-  "ucbirim.py:361"
+  "ucbirim.py:363"
  ],
  "sayfa numarası (her sayfada 60 öge)": [
   "cli.py:548"
@@ -4210,19 +4213,19 @@
   "eylem.py:1309"
  ],
  "simge adı yalnız harf/rakam/._- içermeli: {ad}": [
-  "gorsel.py:142"
+  "gorsel.py:163"
  ],
  "simge düz renk (ayırt edici değil); daha belirgin bir bölge kaydet": [
-  "gorsel.py:164"
+  "gorsel.py:185"
  ],
  "simge eşleme (python-scipy)": [
   "gui/saglik.py:23"
  ],
  "simge kaydedildi: {ad} ({genislik}x{yukseklik}) → {yol}": [
-  "gorsel.py:277"
+  "gorsel.py:298"
  ],
  "simge yok: {ad} (önce: ekran simge-kaydet <kimlik> {ad} --bolge x,y,g,y)": [
-  "gorsel.py:193"
+  "gorsel.py:214"
  ],
  "simge/renk arama: {pencere}": [
   "mcp_sunucu.py:1836"
@@ -4487,7 +4490,7 @@
  ],
  "uçbirim: {sinif}": [
   "guvenlik.py:1532",
-  "ucbirim.py:372"
+  "ucbirim.py:374"
  ],
  "value gerekli (stable dışındaki koşullar)": [
   "mcp_sunucu.py:2657"
@@ -4764,7 +4767,7 @@
   "ayarlar.py:139"
  ],
  "{ayrinti}; tikla --foto eşler": [
-  "gorsel.py:267"
+  "gorsel.py:288"
  ],
  "{dk} dk": [
   "oturum/denetle.py:299"
@@ -5151,7 +5154,7 @@
   "arka_uc/kwin.py:125"
  ],
  "ölçek {olcek}": [
-  "gorsel.py:263"
+  "gorsel.py:284"
  ],
  "ölçek {olcek} uygulanamadı: {hata}": [
   "kwin_oturum.py:706"

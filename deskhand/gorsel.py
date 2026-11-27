@@ -52,10 +52,31 @@ def korumali_goruntu(k, bolge=None, kararli=False, tam=False):
     """CLI okuma komutları için pencere_goruntusu: yasak pencere listesine uyar (api.goruntu_al) — hedef yasaksa
     Dur(10) (hiçbir şey okunmaz/kaydedilmez), görüntüye düşen diğer yasak pencereler siyah kutuyla örtülür.
     0.9.0 öncesi `foto`, `metin`, `bekle`, `simge-bul`, `simge-kaydet`, `renk-bul` yasak pencereyi okuyabiliyordu
-    (MCP yolu zaten api.goruntu_al kullanıyordu). → (görüntü, geo, kök)."""
+    (MCP yolu zaten api.goruntu_al kullanıyordu). → (görüntü, geo, kök).
+    Görüntüsü ya da OCR metni ajana giden HER yol bundan geçer (akış, metne/renge tıklama, noktadaki yazı, bekle;
+    tests/test_guv_sinif_maske.py ham kareyi gerekçeli izin listesinde tutar).
+    Maske yarışı / okunamayan liste (Dur tur maske-yarisi | maske-okunamadi): kısa beklemeyle en çok MASKE_DENEME
+    kez yeniden denenir (toplam MASKE_SURE sn), uzun akış/bekle tek yarışta düşmesin; hâlâ öyleyse aynı tur'lu Dur
+    (kare gönderilmez)."""
     from . import api
-    im, geo, kok, _maskeler = api.goruntu_al(k, bolge, tam=tam, kararli=kararli)
-    return im, geo, kok
+    bitis = time.monotonic() + MASKE_SURE
+    for deneme in range(MASKE_DENEME):
+        try:
+            im, geo, kok, _maskeler = api.goruntu_al(k, bolge, tam=tam, kararli=kararli)
+            return im, geo, kok
+        except Dur as e:
+            bekle = MASKE_BEKLE * (deneme + 1)
+            if getattr(e, "tur", None) not in MASKE_YARISI or deneme + 1 >= MASKE_DENEME or \
+                    time.monotonic() + bekle > bitis:
+                raise
+            time.sleep(bekle)
+    raise AssertionError("ulaşılamaz")  # döngü ya döner ya fırlatır
+
+
+MASKE_YARISI = ("maske-yarisi", "maske-okunamadi")  # api.goruntu_al: kare gönderilmedi, yeniden denenebilir
+MASKE_DENEME = 3      # korumali_goruntu: en çok bu kadar kare
+MASKE_BEKLE = 0.05    # n. yeniden denemeden önce n × bu kadar sn
+MASKE_SURE = 2.0      # yeniden denemeler bu süreyi aşmaz
 
 
 def piksel_olcegi(im) -> float:

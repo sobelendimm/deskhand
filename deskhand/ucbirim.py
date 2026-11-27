@@ -357,7 +357,9 @@ def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True, olabilir=False,
     elif ek:
         aday.append(ek)
     uyari = next((r for r in (guvenlik.riskli_komut(a) for a in aday) if r), None)
+    genel_uyari = False  # uyarı metni okunan satırdan sözcük taşımıyor (ajana olduğu gibi gidebilir)
     if uyari is None and any(_GECMIS_ACILIMI.search(a) for a in aday):
+        genel_uyari = True
         uyari = _("satırda geçmiş açılımı/geçmiş komutu var (!!, !n, ^a^b, fc, r, history -s): çalışacak komut görünmez")
     satir = next((a for a in aday if guvenlik.riskli_komut(a)), None) or \
         (aday[0] if okunan else (aday[-1] if aday else ""))
@@ -376,11 +378,18 @@ def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True, olabilir=False,
     izin, onay_neden = guvenlik._panelden_onay(_("Uçbirimde komut çalıştır: {satir}").format(satir=goster), b,
                                                "\n".join(ayrinti), goruntu)
     if not izin:
+        # Ajana dönen iletiye EKRANDAN OKUNAN (OCR) satırdan türeyen neden konmaz: ham uçbirim kırpımına binen yasak
+        # pencerenin sözcükleri (dosya/komut adı) taşınabilir (SINIF-MASKE). Ayrıntı yalnız insan panelinde. Ajanın
+        # kendi bildiği metinden (yazdığı tampon + ek) çıkan neden olduğu gibi kalır.
+        bilinen = ([tampon.get("metin", "") + ek] if not tampon.get("kirli") else []) + ([ek] if ek else [])
+        uyari_ajan = next((r for r in (guvenlik.riskli_komut(a) for a in bilinen) if r), None)
+        if uyari and not uyari_ajan:
+            uyari_ajan = uyari if genel_uyari else _("ekrandan okunan satır (ayrıntı yalnız onay panelinde)")
         raise Dur(10, _("UÇBİRİM ENTER KAPISI ({baslik}): uçbirimde komut çalıştırmak (Enter) her zaman kullanıcının "
                         "onayını ister ({onay_neden}){uyari}; kullanıcı sohbette açıkça onayladıysa --onayli ile "
                         "tekrarla").format(baslik=repr(b), onay_neden=onay_neden,
-                                           uyari=("; " + _("YIKICI OLABİLİR: {neden}").format(neden=uyari))
-                                           if uyari else ""), tur="hassas")
+                                           uyari=("; " + _("YIKICI OLABİLİR: {neden}").format(neden=uyari_ajan))
+                                           if uyari_ajan else ""), tur="hassas")
     return True
 
 
