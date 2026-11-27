@@ -3,10 +3,11 @@ pre-commit:
     kontrol:
       run: tools/kontrol.sh {staged_files}
     iz:
-      # personal-trace scan; private words live outside the repo (a missing file only warns)
-      run: python3 tools/iz_tara.py --ek "$HOME/.config/deskhand/iz-desenleri.txt" {staged_files}
+      # personal-trace scan; private words live outside the repo. --ek-zorunlu: a missing/empty file blocks the
+      # commit (fail closed). CI has no private file and calls iz_tara.py without it.
+      run: python3 tools/iz_tara.py --ek-zorunlu --ek "$HOME/.config/deskhand/iz-desenleri.txt" {staged_files}
 
 commit-msg:
   commands:
     iz-ileti:
-      run: python3 tools/iz_tara.py --ek "$HOME/.config/deskhand/iz-desenleri.txt" --ileti "$(cat {1})"
+      run: python3 tools/iz_tara.py --ek-zorunlu --ek "$HOME/.config/deskhand/iz-desenleri.txt" --ileti "$(cat {1})"

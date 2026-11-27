@@ -1,5 +1,5 @@
 """Denetim 12c kaçış sondası: arka plan uygulamasının bwrap ad alanı İÇİNDE çalışır (tests/test_denetim12c.py başlatır).
-Denetimin docs/denetim/12c/ic_kacis.py + ic_aygit.py betiklerinin birleşimi; sonuç JSON olarak stdout'a (ad alanında
+İç denetimin ic_kacis.py + ic_aygit.py betiklerinin birleşimi; sonuç JSON olarak stdout'a (ad alanında
 /tmp boş tmpfs: dosyaya yazılan rapor ana makineye ulaşmazdı).
 
 Kullanıcının gerçek oturumuna BAĞLANMAZ, girdi göndermez: aygıtlar yalnız os.access + /dev/uinput aç-kapat (aygıt

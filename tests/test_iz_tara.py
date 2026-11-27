@@ -17,7 +17,7 @@ ARAC = os.path.join(KOK, "tools", "iz_tara.py")
 gecen = toplam = 0
 
 
-def kontrol(ad, kosul, ek=""):
+def kontrol(ad: str, kosul: object, ek: object = "") -> None:
     global gecen, toplam
     toplam += 1
     gecen += bool(kosul)
@@ -93,6 +93,54 @@ with open(y, "wb") as f:
     f.write(b"\x00\x01" + (EV + "gercekad/").encode())
 rc, out, _ = tara(y)
 kontrol("2g: ikili dosya atlanır", rc == 0, out)
+
+print("4) other spellings of a home path (review ORTA-1)")
+AD = "gercekad"
+for ad, metin in [
+    ("4a: büyük harf /HOME/<ad>/", "/HOME/" + AD + "/x"),
+    ("4b: URL kodlu /home%2F<ad>", "/home%2F" + AD + "%2Fx"),
+    ("4c: tam URL kodlu %2Fhome%2F<ad>", "p=%2F" + "home%2F" + AD),
+    ("4d: Windows C:\\Users\\<ad>", "C:" + "\\Users\\" + AD + "\\x"),
+    ("4e: kaçışlı Windows C:\\\\Users\\\\<ad>", "'C:" + "\\\\Users\\\\" + AD + "'"),
+    ("4f: macOS /Users/<ad>", "/Users/" + AD + "/x"),
+    ("4g: göreli ../home/<ad>", "../home/" + AD + "/x"),
+]:
+    rc, out, _ = tara(dosya("ev.txt", metin + "\n"))
+    kontrol(ad, rc == 1 and "home-path" in out, (metin, rc, out))
+serbest = ["/HOME/" + "User/a", "C:" + "\\Users\\" + "user\\a", "/Users/" + "kisi/a", "%2F" + "home%2F" + "u%2Fa",
+           "../home/" + "x/a", "root" + EV + "system", "https://api.github.com/users/" + "someone"]
+rc, out, _ = tara(dosya("ev2.txt", "\n".join(serbest) + "\n"))
+kontrol("4h: izin listesi her yazımda geçerli; /users/ URL yolu bulgu değil", rc == 0, out)
+
+print("5) --ek-zorunlu (review ORTA-2: fail closed)")
+temiz = dosya("temiz.txt", "clean\n")
+rc, out, err = tara("--ek-zorunlu", "--ek", os.path.join(DIZIN, "yok.txt"), temiz)
+kontrol("5a: --ek-zorunlu + yok dosya → çıkış 2", rc == 2 and "yok.txt" in err, (rc, out, err))
+rc, out, err = tara("--ek-zorunlu", temiz)
+kontrol("5b: --ek-zorunlu ama --ek yok → çıkış 2", rc == 2, (rc, out, err))
+bos = dosya("bos-desen.txt", "# only a comment\n\n")
+rc, out, err = tara("--ek-zorunlu", "--ek", bos, temiz)
+kontrol("5c: --ek-zorunlu + desensiz dosya → çıkış 2", rc == 2, (rc, out, err))
+rc, out, err = tara("--ek-zorunlu", "--ek", ek, temiz)
+kontrol("5d: --ek-zorunlu + dolu dosya + temiz girdi → 0", rc == 0, (rc, out, err))
+rc, out, err = tara("--ek-zorunlu", "--ek", ek, y := dosya("c2.txt", UYDURMA + "\n"))
+kontrol("5e: --ek-zorunlu bulguda yine 1", rc == 1 and "extra-pattern" in out, (rc, out, err))
+
+print("6) narrower exemptions and other spellings (review DÜŞÜK)")
+rc, out, _ = tara("--ileti", "ok\n\n# " + OTURUM + "\n")
+kontrol("6a: '#' satırı da taranır (git -m ile '#' satırı commit'e girer)", rc == 1 and "session-trailer" in out, out)
+for ad, metin in [
+    ("6b: example.com alt alanı serbest değil", "ali" + "@gmail.com.example.com"),
+    ("6c: .test önüne gizlenmiş adres serbest değil", "ali" + "@gmail.com.test"),
+    ("6d: user@<uid>.service dışındaki .service serbest değil", "ali" + "@evil.service"),
+    ("6e: çok etiketli .xpi serbest değil", "ali" + "@gmail.com.xpi"),
+    ("6f: kısa oturum kimliği (session_01…) bulgu", "id " + "session_" + "01AbCdEf"),
+    ("6g: tiresiz Claude Session iz satırı bulgu", "Claude " + "Session: x"),
+]:
+    rc, out, _ = tara(dosya("dar.txt", metin + "\n"))
+    kontrol(ad, rc == 1, (metin, rc, out))
+rc, out, _ = tara(dosya("git.txt", "git clone git" + "@github.com:u/r.git; session_identifier; user" + "@1000.service\n"))
+kontrol("6h: git@github.com, session_identifier, user@1000.service bulgu değil", rc == 0, out)
 
 print("3) repository")
 rc, out, err = tara(ARAC, os.path.abspath(__file__))

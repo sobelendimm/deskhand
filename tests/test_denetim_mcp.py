@@ -1,4 +1,4 @@
-"""Bağımsız güvenlik denetiminin MCP bulguları (docs/denetim/denetim_sanal.py 1a/1b/1c, 4a/4b) — REGRESYON testi:
+"""Bağımsız güvenlik denetiminin MCP bulguları (iç denetim betiği denetim_sanal.py 1a/1b/1c, 4a/4b) — REGRESYON testi:
 her saldırı artık BAŞARISIZ olmalı; meşru kullanım çalışmalı. Kullanıcının gerçek ekranına/panosuna girdi yok
 (yalnız görünmez masaüstü, Xvfb); gerçek uygulama başlatılmaz (sistemdeki .desktop girdileri yalnız OKUNUR);
 gerçek ~/.config yazılmaz (_yalitim).
