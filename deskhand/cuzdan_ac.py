@@ -23,6 +23,11 @@ Rules (review focus 4): ONE attempt, no retry loop, one log line on failure.
 API (Settings, P2): cuzdan_otomatik_kur(parola) · cuzdan_ac() -> int (0 open/already open, 1 not opened) · kaldir() ·
 durum() -> {"kurulu": bool, "acik": bool | None, "neden": str | None}.  CLI: `deskhand wallet open|status|remove`
 (setup only from the panel: the password is never an argument).
+
+Last result (A1, the panel's wallet card): every return of cuzdan_ac() writes STATE_DIR/cuzdan-son.json =
+{"zaman": ISO time, "sonuc": one of SON_SONUCLAR} (atomic, 0600; never the key or the password), so a wrong stored
+password shows up in the panel after the next login ("anahtar_acmadi"). son_sonuc() reads it; cuzdan_otomatik_kur()
+(once the new key is sealed) and kaldir() delete it.
 """
 from __future__ import annotations
 
@@ -43,6 +48,11 @@ TUZ_BOYU = 56
 BIRIM = "deskhand-cuzdan-ac.service"
 SERVIS = "org.freedesktop.secrets"
 _BEKLE_SN = 10.0
+# cuzdan_ac()'s last result (STATE_DIR/cuzdan-son.json): opened now · already open · locked Secret Service started
+# before the unit · no sealed key · the stored key did not open the wallet · anything else (no bus, kasa, ksecretd)
+SON_SONUCLAR = ("acildi", "zaten_acik", "erken_kilitli", "anahtar_yok", "anahtar_acmadi", "hata")
+SON_DOSYA = "cuzdan-son.json"
+_SON_AZAMI = 4096
 
 
 class CuzdanHatasi(Exception):
@@ -191,12 +201,97 @@ def _birim_kur() -> None:
         raise CuzdanHatasi(_("kullanıcı birimi etkinleştirilemedi ({birim})").format(birim=BIRIM))
 
 
+# ---------------------------------------------------------------- last result (STATE_DIR/cuzdan-son.json)
+
+def atomik_yaz(yol: str, veri: bytes) -> None:
+    """Write `veri` to `yol` atomically, 0600: a new temporary file in the same directory (O_EXCL|O_NOFOLLOW: never an
+    existing file or a symbolic link) renamed over `yol` (a symbolic link at `yol` is replaced, not followed). The
+    directory is created 0700 when missing. OSError on failure (the temporary file is removed)."""
+    import secrets
+    dizin = os.path.dirname(yol)
+    os.makedirs(dizin, mode=0o700, exist_ok=True)
+    gecici = os.path.join(dizin, f".{os.path.basename(yol)}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+    fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        try:
+            os.fchmod(fd, 0o600)
+            yazilan = 0
+            while yazilan < len(veri):
+                yazilan += os.write(fd, veri[yazilan:])
+        finally:
+            os.close(fd)
+        os.replace(gecici, yol)
+    except BaseException:
+        try:
+            os.unlink(gecici)
+        except OSError:
+            pass
+        raise
+
+
+def son_sonuc_yolu() -> str:
+    from . import yollar
+    return os.path.join(yollar.state_dir(), SON_DOSYA)
+
+
+def _son_yaz(sonuc: str) -> None:
+    """Record cuzdan_ac()'s result: only the time and one word of SON_SONUCLAR (never a key, a password or a reason
+    text). A failure is one log line; it never changes the unit's result."""
+    import datetime
+    import json
+    if sonuc not in SON_SONUCLAR:
+        sonuc = "hata"
+    try:
+        zaman = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+        atomik_yaz(son_sonuc_yolu(), json.dumps({"zaman": zaman, "sonuc": sonuc}).encode("ascii"))
+    except Exception as e:  # noqa: BLE001 - the login unit must not fail because the state file is not writable
+        _gunluk(f"cüzdan: son sonuç yazılamadı ({type(e).__name__})")
+
+
+def _son_sil() -> None:
+    try:
+        os.unlink(son_sonuc_yolu())
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        _gunluk(f"cüzdan: son sonuç silinemedi ({type(e).__name__})")
+
+
+def son_sonuc() -> dict | None:
+    """The login unit's last result {"zaman": str, "sonuc": one of SON_SONUCLAR}; None when there is none or the file
+    is not a valid record (missing, a symbolic link, not a regular file, larger than 4 KiB, bad JSON, unknown word)."""
+    import json
+    import stat as _stat
+    try:
+        fd = os.open(son_sonuc_yolu(), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return None
+    try:
+        if not _stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        ham = os.read(fd, _SON_AZAMI + 1)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+    if len(ham) > _SON_AZAMI:
+        return None
+    try:
+        d = json.loads(ham.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if not isinstance(d, dict) or not isinstance(d.get("zaman"), str) or d.get("sonuc") not in SON_SONUCLAR:
+        return None
+    return {"zaman": d["zaman"], "sonuc": d["sonuc"]}
+
+
 # ---------------------------------------------------------------- API
 
 def cuzdan_otomatik_kur(parola: str) -> None:
     """Settings: seal the wallet KEY derived from `parola` (never the password itself) in the kasa and enable the login
     unit. The password cannot be checked here without opening the wallet (no API); a wrong one shows up at the next
-    login as "not opened" (durum / doctor)."""
+    login as "not opened" (durum / doctor / son_sonuc "anahtar_acmadi"). Once the new key is sealed the previous last
+    result is deleted (it was about the old key)."""
     from .anahtar_deposu import DepoHatasi
     if not isinstance(parola, str) or not parola:
         raise CuzdanHatasi(_("boş parola kaydedilmez"))
@@ -204,6 +299,7 @@ def cuzdan_otomatik_kur(parola: str) -> None:
         _kasa().yaz(AD, karma(parola, _tuz()))
     except DepoHatasi as e:
         raise CuzdanHatasi(e.neden) from None
+    _son_sil()
     _birim_kur()
     _gunluk("cüzdan: girişte otomatik açma kuruldu")
 
@@ -221,6 +317,7 @@ def kaldir() -> None:
         _kasa().sil(AD)
     except DepoHatasi:
         pass
+    _son_sil()
     _gunluk("cüzdan: girişte otomatik açma kaldırıldı")
 
 
@@ -326,42 +423,59 @@ def _baslat(anahtar: bytes) -> None:
 
 def cuzdan_ac() -> int:
     """Login unit / `deskhand wallet open`: ONE attempt. → 0 the wallet is open (now or already), 1 not opened (one
-    log line with the reason; never a retry)."""
+    log line with the reason; never a retry). Every return (an unexpected exception too: "hata") records the result
+    in STATE_DIR/cuzdan-son.json (son_sonuc)."""
+    sonuc = "hata"
+    try:
+        kod, sonuc = _cuzdan_ac()
+        return kod
+    finally:
+        _son_yaz(sonuc)
+
+
+def _cuzdan_ac() -> tuple[int, str]:
+    """cuzdan_ac()'s single attempt → (exit code, one word of SON_SONUCLAR)."""
     from .anahtar_deposu import DepoHatasi
     var = servis_var()
     if var is None:
         _gunluk("cüzdan: açılmadı: oturum veri yolu sorgulanamadı")
-        return 1
+        return 1, "hata"
     if var:
         k = kilitli()
         if k is False:
-            return 0
+            return 0, "zaten_acik"
+        if k is None:
+            _gunluk("cüzdan: açılmadı: Secret Service'in kilit durumu okunamadı (yeniden başlatılmaz)")
+            return 1, "hata"
         _gunluk("cüzdan: açılmadı: Secret Service bu birimden önce başlatılmış ve kilitli (yeniden başlatılmaz)")
-        return 1
+        return 1, "erken_kilitli"
     try:
         anahtar = _kasa().oku(AD)
     except DepoHatasi as e:
         _gunluk(f"cüzdan: açılmadı: {e.neden}")
-        return 1
+        return 1, "hata"
     if anahtar is None or len(anahtar) != KARMA_BOYU:
         _gunluk("cüzdan: açılmadı: kayıtlı anahtar yok (Ayarlar → Girişte KDE Cüzdanı'nı aç)")
-        return 1
+        return 1, "anahtar_yok"
     try:
         _baslat(anahtar)
     except (OSError, CuzdanHatasi) as e:
         _gunluk(f"cüzdan: açılmadı: {getattr(e, 'neden', None) or type(e).__name__}")
-        return 1
+        return 1, "hata"
     son = time.monotonic() + _BEKLE_SN
     while time.monotonic() < son:  # bounded wait for ksecretd to take the bus name (one attempt, no restart)
         k = kilitli()
         if k is False:
             _gunluk("cüzdan: girişte açıldı")
-            return 0
+            return 0, "acildi"
         if k is True:
-            break
+            _gunluk("cüzdan: açılmadı: kayıtlı anahtar cüzdanı açmadı (parola değişmiş olabilir; Ayarlar'dan yeniden "
+                    "girin)")
+            return 1, "anahtar_acmadi"
         time.sleep(0.2)
-    _gunluk("cüzdan: açılmadı: kayıtlı anahtar cüzdanı açmadı (parola değişmiş olabilir; Ayarlar'dan yeniden girin)")
-    return 1
+    # ksecretd never answered: not proof of a wrong key (the panel card stays hidden for "hata")
+    _gunluk("cüzdan: açılmadı: ksecretd süre içinde yanıt vermedi")
+    return 1, "hata"
 
 
 # ---------------------------------------------------------------- Settings buttons (ONLY the panel calls these)
