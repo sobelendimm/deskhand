@@ -1883,28 +1883,103 @@ def _kesisir(a, b) -> bool:
     return min(a[0] + a[2], b[0] + b[2]) > max(a[0], b[0]) and min(a[1] + a[3], b[1] + b[3]) > max(a[1], b[1])
 
 
-def duzenleme_icerigini_ayikla(yakin, alanlar, digerleri=(), dugmeler=()):
+def _eylem_adi(a) -> str:
+    return re.sub(r"[^a-z]", "", str(a or "").lower())
+
+
+# Tıklama SAYILMAYAN eylemler: odak, bağlam menüsü, kaydırma ve ÜST ögenin tıklaması ("click ancestor": Firefox/Chromium
+# tıklama dinleyicisi bir ATADA olan her ögeye bunu verir — React gibi kökte toplanan dinleyicilerde her öge taşır)
+_ZARARSIZ_EYLEM = re.compile(r"^(?:setfocus|focus|grabfocus|showmenu|scroll\w*)$|ancestor")
+_ALAN_EYLEMI = frozenset({"activate"})  # metin alanının olağan eylemi (Firefox/Chromium textarea, GTK entry)
+
+
+def tiklanir_mi(eylemler, alan=False) -> bool:
+    """Ögenin KENDİ tıklama eylemi var mı? eylemler None (okunamadı / bilinmiyor) → True (kanıt yok = tıklanır say);
+    adı boş eylem → True. alan=True: metin alanının olağan "activate" eylemi tıklama sayılmaz."""
+    if eylemler is None:
+        return True
+    for a in eylemler:
+        n = _eylem_adi(a)
+        if n and (_ZARARSIZ_EYLEM.search(n) or (alan and n in _ALAN_EYLEMI)):
+            continue
+        return True
+    return False
+
+
+def alan_kanitli_mi(ad, eylemler) -> bool:
+    """Düzenlenebilir alan (rol/durum sağlayıcıda denetlendi) hassas düğme bağlamında ALAN sayılabilir mi: erişilebilir
+    adı hassas/para kalıbına uymuyor (role=textbox + aria-label="Pay now" → sayfa rolü/durumu belirler;
+    INCELEME-HASSAS D1) VE kendi tıklama eylemi yok (contenteditable + onclick); eylemler okunamadıysa alan değil."""
+    ad = ad or ""
+    return not (hassas_mi(ad) or para_mi(ad) or tiklanir_mi(eylemler, alan=True))
+
+
+def duzenleme_kabi_mi(kutu, eylemler, alanlar, gorusler=()) -> bool:
+    """Etkileşimsiz öge bir düzenlenebilir alanın zararsız KABI mı (alana değen satırı geçersiz kılmaz): kutusu bir alanı
+    tamamen kapsıyor VE ya tıklanmadığı kanıtlı (eylemleri okundu, kendi tıklaması yok) ya da kendi görüş alanının
+    (belge/çerçeve görünür kutusu, gorusler) TAMAMINI kapsıyor — sayfa düzeyi dinleyici (React kökü, body onclick) her
+    tıklamayı alır, ağaçtan ayırt edilemez; alanı saran/örten tıklanır öge (onclick'li div, şeffaf örtü) kap SAYILMAZ
+    (INCELEME-HASSAS O2)."""
+    if not alani_kapsar_mi(kutu, alanlar):
+        return False
+    return not tiklanir_mi(eylemler) or any(g and _kapsar(kutu, g) for g in gorusler)
+
+
+def alani_kapsar_mi(kutu, alanlar) -> bool:
+    """(x, y, w, h) kutusu alanlardan birini (ilk dört öge: kutu) tamamen kapsıyor mu?"""
+    return any(_kapsar(kutu, a) for a in alanlar)
+
+
+def _hassas_terimler(metin) -> set:
+    """Satırdaki hassas düğme / para / yapıştırma kalıbı eşleşmeleri (katlanmış metin parçaları; 📋 olduğu gibi)."""
+    s = str(metin or "")
+    k = katla(s)
+    terimler = {m.group(0) for kalip in (HASSAS, PARA_DUGMESI) for m in kalip.finditer(k)}
+    terimler.update(m.group(0) for m in _YAPISTIR_METIN.finditer(katla(s.replace("&", ""))))
+    if "\U0001f4cb" in s:
+        terimler.add("\U0001f4cb")
+    return terimler
+
+
+def _degerde_mi(terimler, deger: str) -> bool:
+    """Satırın her hassas terimi alanın değerinde (katlanmış, kelime sınırlı) geçiyor mu? Değer satırları birleştirilir:
+    ekrandaki satır, alanın yumuşak kaydırılmış yazısının bir parçasıdır."""
+    k = katla(deger.replace("&", ""))
+    return all((t in deger) if t == "\U0001f4cb" else re.search(r"(?<!\w)" + re.escape(t) + r"(?!\w)", k) is not None
+               for t in terimler)
+
+
+def duzenleme_icerigini_ayikla(yakin, alanlar, digerleri=(), dugmeler=(), kaplar=()):
     """Hassas düğme bağlamı: tıklanan noktanın OCR komşu satırlarından (ocr.NoktaYazisi, kutu = x, y, x2, y2 pencere
     pikseli) bir DÜZENLENEBİLİR ALANIN İÇERİĞİ olduğu KANITLANANLARI ayıkla (textarea'daki "Buy/Pay buttons…" yazısı
     düğme değildir). Kutular (x, y, w, h) pencere pikseli, erişilebilirlik ağacından:
-      alanlar   — düzenlenebilir alanlar (entry/text, editable, salt okunur değil);
-      dugmeler  — etkileşimli ögeler (düğme, bağlantı, menü ögesi…; düzenlenebilir alanlar hariç);
-      digerleri — etkileşimsiz ögeler (metin, başlık, bölüm…).
-    Kanıt: satır kutusu bir alanın içinde VE satıra hiçbir düğme değmiyor (alana bindirilmiş ya da alanı örten "Pay"
-    düğmesi → satır kalır) VE alanı kapsamayan hiçbir etkileşimsiz öge satıra değmiyor (alanı kapsayan kaplar: belge,
-    form, bölüm sayılmaz). Kutusuz yazı (düz str: hedefin kendi adı, ajanın aradığı metin, eski çağıranlar) HİÇBİR ZAMAN
-    ayıklanmaz. → (kalan, ayıklanan)."""
+      alanlar   — kanıtlı düzenlenebilir alanlar (x, y, w, h, değer): değer alanın metni (okunamadı → None / yok);
+      dugmeler  — etkileşimli ögeler (düğme, bağlantı, salt okunur ya da kanıtsız alan…);
+      digerleri — etkileşimsiz ögeler (metin, bölüm, tıklanır ya da eylemi bilinmeyen kap…);
+      kaplar    — alanı kapsayan, tıklanmadığı kanıtlı (ya da sayfa düzeyi) kaplar (duzenleme_kabi_mi).
+    Kanıt: satır kutusu bir alanın içinde VE satıra hiçbir düğme ya da etkileşimsiz öge değmiyor (alanı saran/örten
+    tıklanır öge dahil) VE satıra değen her kap o alanı kapsıyor VE satırdaki her hassas/para/yapıştırma eşleşmesi alanın
+    DEĞERİNDE de var (alana boyanmış/bindirilmiş "Pay" yazısı içerik değildir; değer bilinmiyorsa kanıt yok).
+    Kutusuz yazı (düz str: hedefin kendi adı, ajanın aradığı metin, eski çağıranlar) HİÇBİR ZAMAN ayıklanmaz.
+    → (kalan, ayıklanan)."""
     kalan, ayiklanan = [], []
     for t in yakin:
         k = getattr(t, "kutu", None)
         satir = (k[0], k[1], k[2] - k[0], k[3] - k[1]) if k and len(k) == 4 else None
         icerik = False
-        if satir is not None and satir[2] > 0 and satir[3] > 0 and not any(_kesisir(d, satir) for d in dugmeler):
+        if (satir is not None and satir[2] > 0 and satir[3] > 0
+                and not any(_kesisir(d, satir) for d in (*dugmeler, *digerleri))):
+            terim = _hassas_terimler(t)
             for a in alanlar:
                 if not _kapsar(a, satir):
                     continue
-                if any(not _kapsar(o, a) and _kesisir(o, satir) for o in digerleri):
+                if any(_kesisir(o, satir) and not _kapsar(o, a) for o in kaplar):
                     continue  # alanın içinde/üstünde başka bir öge satıra değiyor: içerik olduğu kanıtlanamadı
+                deger = a[4] if len(a) > 4 else None
+                if not isinstance(deger, str):
+                    continue  # alanın değeri bilinmiyor: satırın alanın yazısı olduğu kanıtlanamadı
+                if not _degerde_mi(terim, deger):
+                    continue  # satırdaki hassas sözcük alanın değerinde yok: alanın üstüne/altına boyanmış yazı
                 icerik = True
                 break
         (ayiklanan if icerik else kalan).append(t)

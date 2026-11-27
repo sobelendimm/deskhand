@@ -95,7 +95,12 @@ TA2 = satir("uy/Pay buttons aîııııi“rııaymen't pzı-ıges wait for the 
 TA3 = satir("uy/Pay buttons and payment pages wait for the user's appı", 310, 344, 860, 362)
 SAVE_Y = satir("Save", 320, 412, 360, 428)
 
-AGAC: dict = {"deger": ([TEXTAREA], [], [SAVE])}
+# alanın değeri (Text): ekrandaki satırlar bu yazının yumuşak kaydırılmış parçaları
+DEGER = ("Deskhand lets agents click visible text, type, press keys, scroll, drag, open apps, and read the screen. "
+         "Buy/Pay buttons and payment pages wait for the user's approval.")
+TEXTAREA_D = (*TEXTAREA, DEGER)
+SAYFA = (0, 0, 1200, 900)  # alanı kapsayan, tıklanmadığı kanıtlı kap (belge)
+AGAC: dict = {"deger": ([TEXTAREA_D], [], [SAVE])}
 CAGRI = [0]
 
 
@@ -128,7 +133,7 @@ with arka_uc.hedef_sabit("kde"):
     for mod in ("hepsi", "kart"):
         assert kapsam(mod)
         # (olay) textarea'nın İÇİNE tık: noktadaki yazılar alanın içeriği → hassas düğme DEĞİL
-        AGAC["deger"] = ([TEXTAREA], [(0, 0, 1200, 900)], [SAVE])
+        AGAC["deger"] = ([TEXTAREA_D], [], [SAVE], [SAYFA])
         kod, n, m = sorar("{g}", 580, 331, [TA1, TA2, TA3])
         kontrol(f"[{mod}] (olay) textarea içine tık, içerikte 'Buy/Pay' → onay sorulmaz", kod == 0 and n == 0,
                 f"{kod} {n} {m}")
@@ -143,18 +148,18 @@ with arka_uc.hedef_sabit("kde"):
         kod, n, m = sorar("{g}", 990, 420, [pay], ek_metinler=["Pay now"])
         kontrol(f"[{mod}] (b) öge adı 'Pay now' (ek metin, kutusuz) → onay ister", kod == 10 and n == 1, f"{kod} {n}")
         # (b2) textarea kutusunun İÇİNE bindirilmiş Pay düğmesi: satır başka bir ögeyle kesişiyor → içerik sayılmaz
-        AGAC["deger"] = ([TEXTAREA], [], [SAVE, PAY_ICERDE])
+        AGAC["deger"] = ([TEXTAREA_D], [], [SAVE, PAY_ICERDE], [SAYFA])
         pay_ic = satir("Pay", 820, 368, 860, 384)
         kod, n, m = sorar("{g}", 840, 375, [pay_ic])
         kontrol(f"[{mod}] (b2) textarea'ya bindirilmiş 'Pay' düğmesi → onay ister", kod == 10 and n == 1, f"{kod} {n}")
         # (b3) hedefin kendi adı/aranan metni (ek_metinler) ayıklanmaz: textarea satırında 'pay' olsa da
-        AGAC["deger"] = ([TEXTAREA], [(0, 0, 1200, 900)], [SAVE])
+        AGAC["deger"] = ([TEXTAREA_D], [], [SAVE], [SAYFA])
         kod, n, m = sorar("{g}", 580, 353, [TA3], ek_metinler=[str(TA3)])
         kontrol(f"[{mod}] (b3) hedef metni (ek_metinler) 'Pay…' → onay ister", kod == 10 and n == 1, f"{kod} {n}")
 
     # (c) ödeme SAYFASINDA Save → hassas sayfa (başlık); textarea ayıklaması sayfa algısını değiştirmez
     assert kapsam("hepsi")
-    AGAC["deger"] = ([TEXTAREA], [(0, 0, 1200, 900)], [SAVE])
+    AGAC["deger"] = ([TEXTAREA_D], [], [SAVE], [SAYFA])
     kod, n, m = sorar("{o}", 340, 420, [SAVE_Y, TA3])
     kontrol("(c) ödeme sayfasında (Checkout) Save → onay ister (red → 10)", kod == 10 and n == 1, f"{kod} {n}")
     kod, n, m = sorar("{o}", 580, 331, [TA1, TA2, TA3])
@@ -170,7 +175,7 @@ with arka_uc.hedef_sabit("kde"):
     kod, n, m = sorar("{g}", 580, 331, [TA1, TA2, TA3])
     kontrol("(d2) ağaçta düzenlenebilir alan yok → onay ister", kod == 10 and n == 1, f"{kod} {n}")
     # (d3) kutusuz düz yazı (eski çağıran) → ayıklanmaz → hassas
-    AGAC["deger"] = ([TEXTAREA], [(0, 0, 1200, 900)], [SAVE])
+    AGAC["deger"] = ([TEXTAREA_D], [], [SAVE], [SAYFA])
     kod, n, m = sorar("{g}", 580, 331, [str(TA2), str(TA3)])
     kontrol("(d3) kutusuz noktadaki yazı → onay ister (kanıt yok)", kod == 10 and n == 1, f"{kod} {n}")
     # (d4) satır alanın DIŞINA taşıyor (aynı satırda alan + yanında düğme) → ayıklanmaz
@@ -190,19 +195,19 @@ with arka_uc.hedef_sabit("kde"):
 
 # ---------------------------------------------------------------- saf karar işlevi
 ay = guvenlik.duzenleme_icerigini_ayikla
-kalan, cikan = ay([SAVE_Y, TA3], [TEXTAREA], [], [SAVE])
+kalan, cikan = ay([SAVE_Y, TA3], [TEXTAREA_D], [], [SAVE])
 kontrol("ayıkla: textarea satırı çıkar, Save kalır", kalan == [SAVE_Y] and cikan == [TA3], f"{kalan} {cikan}")
-kalan, cikan = ay([TA3], [TEXTAREA], [(0, 0, 1200, 900), TEXTAREA], [])  # kapsayıcı belge + aynı boyda sarmalayıcı
-kontrol("ayıkla: alanı kapsayan etkileşimsiz kap kesişim sayılmaz", cikan == [TA3], f"{kalan} {cikan}")
-kalan, cikan = ay([TA3], [TEXTAREA], [(850, 340, 40, 30)], [])
+kalan, cikan = ay([TA3], [TEXTAREA_D], [], [], [SAYFA, TEXTAREA])  # kanıtlı kaplar: belge + aynı boyda sarmalayıcı
+kontrol("ayıkla: alanı kapsayan kanıtlı kap kesişim sayılmaz", cikan == [TA3], f"{kalan} {cikan}")
+kalan, cikan = ay([TA3], [TEXTAREA_D], [(850, 340, 40, 30)], [])
 kontrol("ayıkla: alanın içindeki etkileşimsiz öge satırla kesişiyor → kalır", kalan == [TA3] and not cikan)
-kalan, cikan = ay([TA3], [TEXTAREA], [], [TEXTAREA])
+kalan, cikan = ay([TA3], [TEXTAREA_D], [], [TEXTAREA])
 kontrol("ayıkla: alanı birebir örten düğme (tık düğmeye gider) → kalır", kalan == [TA3] and not cikan)
-kalan, cikan = ay([TA3], [TEXTAREA], [], [(0, 0, 1200, 900)])
+kalan, cikan = ay([TA3], [TEXTAREA_D], [], [(0, 0, 1200, 900)])
 kontrol("ayıkla: alanı kapsayan düğme/bağlantı → kalır", kalan == [TA3] and not cikan)
-kalan, cikan = ay(["Pay"], [TEXTAREA], [], [])
+kalan, cikan = ay(["Pay"], [TEXTAREA_D], [], [])
 kontrol("ayıkla: kutusuz yazı hep kalır", kalan == ["Pay"] and not cikan)
-kalan, cikan = ay([satir("Pay", 310, 344, 310, 362)], [TEXTAREA], [], [])
+kalan, cikan = ay([satir("Pay", 310, 344, 310, 362)], [TEXTAREA_D], [], [])
 kontrol("ayıkla: sıfır alanlı kutu ayıklanmaz", len(kalan) == 1 and not cikan)
 
 # ---------------------------------------------------------------- nokta_metni kutu taşır
@@ -224,21 +229,23 @@ from deskhand import dogrulama_sinamasi  # noqa: E402
 _t = dogrulama_sinamasi.tarayici_mi
 try:
     dogrulama_sinamasi.tarayici_mi = lambda k: False
-    erisim.erisim_ogeleri = lambda k, **kw: ([
-        {"rol": "text", "ad": "", "x": 10, "y": 10, "w": 100, "h": 50, "durumlar": []},
+    _eo = erisim.erisim_ogeleri_kesik
+    erisim.erisim_ogeleri_kesik = lambda k, **kw: ([
+        {"rol": "text", "ad": "", "x": 10, "y": 10, "w": 100, "h": 50, "durumlar": [], "eylemler": []},
         {"rol": "text", "ad": "", "x": 10, "y": 70, "w": 100, "h": 50, "durumlar": ["readonly"]},
         {"rol": "push button", "ad": "Save", "x": 10, "y": 130, "w": 40, "h": 20, "durumlar": []},
-    ], 0.1)
+    ], 0.1, False)
     r = erisim.duzenleme_alanlari("{g}")
     kontrol("erisim: düzenlenebilir text alan; salt okunur alan ve düğme 'dugmeler'",
-            r is not None and r[0] == [(10, 10, 100, 50)] and r[2] == [(10, 70, 100, 50), (10, 130, 40, 20)], str(r))
-    erisim.erisim_ogeleri = lambda k, **kw: ([{"rol": "text", "ad": "", "x": 10, "y": 10, "w": 100, "h": 50}], 0.1)
+            r is not None and r[0] == [(10, 10, 100, 50, None)] and r[2] == [(10, 70, 100, 50), (10, 130, 40, 20)], str(r))
+    erisim.erisim_ogeleri_kesik = lambda k, **kw: ([{"rol": "text", "ad": "", "x": 10, "y": 10, "w": 100, "h": 50}],
+                                                   0.1, False)
     r = erisim.duzenleme_alanlari("{g}")
     kontrol("erisim: durum bilgisi yoksa alan sayılmaz (olumlu kanıt şart)", r is not None and r[0] == [], str(r))
 
     def _patlar(k, **kw):
         raise Dur(6, "ağaçta yok")
-    erisim.erisim_ogeleri = _patlar
+    erisim.erisim_ogeleri_kesik = _patlar
     kontrol("erisim: ağaç okunamadı → None", erisim.duzenleme_alanlari("{g}") is None)
 
     dogrulama_sinamasi.tarayici_mi = lambda k: True
@@ -247,16 +254,24 @@ try:
     kontrol("erisim: masaüstü kipi → None", erisim.duzenleme_alanlari(EKRAN) is None)
 finally:
     dogrulama_sinamasi.tarayici_mi = _t
+    erisim.erisim_ogeleri_kesik = _eo
 
 web.duzenleme_alanlari = GERCEK_WEB_ALANLAR
 
 
 class _Yol:
+    """Sahte veri yolu: hiçbir ögenin Action arayüzü yok (eylemsiz), alan metni boş."""
+
     def kapat(self): pass
+
+    def toplu(self, mesajlar, **kw):
+        from jeepney.low_level import HeaderFields
+        return [(["org.a11y.atspi.Accessible"],) if m.header.fields.get(HeaderFields.member) == "GetInterfaces"
+                else ("",) for m in mesajlar]
 
 
 def _ham(rol, d, kutu, alan=None):
-    return {"rol": rol, "ad": "", "_d": set(d), "_kutu": kutu, "_alan": alan, "_derin": 1, "_yol": "/x",
+    return {"rol": rol, "ad": "", "_d": set(d), "_kutu": kutu, "_hkutu": kutu, "_alan": alan, "_derin": 1, "_yol": "/x",
             "_anahtar": (0,), "_adres": ""}
 
 
@@ -264,16 +279,17 @@ HAM = [_ham("entry", {"editable", "showing", "visible", "multi_line"}, (300, 200
        _ham("entry", {"read_only", "showing", "visible"}, (300, 450, 600, 30), (0, 0, 1200, 900)),
        _ham("button", {"showing", "visible"}, (300, 405, 80, 30), (0, 0, 1200, 900)),
        _ham("entry", {"editable", "showing", "visible"}, (300, 850, 600, 100), (0, 0, 1200, 880)),
-       _ham("entry", {"editable"}, (300, 600, 600, 100), (0, 0, 1200, 880)),  # görünmeyen alan: hiçbir listede
+       _ham("entry", {"editable"}, (300, 600, 600, 100), (0, 0, 1200, 880)),  # görünmeyen alan: alan değil
        _ham("static", {"showing", "visible"}, (820, 360, 50, 20), (0, 0, 1200, 900))]  # alana bindirilmiş yazı
 KONUM = {"v": "kuresel_cerceve"}
-web._baglam = lambda k, islem="tara": (au, _Yol(), "bus", "/c", 0, (0, 0), KONUM["v"])
+web._baglam = lambda k, islem="tara": (au, _Yol(), ":1.5", "/c", 0, (0, 0), KONUM["v"])
 web._yuru = lambda *a, **k: (HAM, [{"ad": "Profile | deskhand mcp | Glama", "adres": "", "durum": set(),
                                     "derinlik": 1, "kutu": (0, 0, 1200, 900)}], 10)
 r = web.duzenleme_alanlari("{g}")
-kontrol("web: düzenlenebilir entry alan (görüş alanına kırpılır); salt okunur entry ve düğme 'dugmeler'",
-        r is not None and r[0] == [(300, 200, 600, 200), (300, 850, 600, 30)]
-        and r[2] == [(300, 450, 600, 30), (300, 405, 80, 30)] and r[1] == [(820, 360, 50, 20)], str(r))
+kontrol("web: düzenlenebilir entry alan (görüş alanına kırpılır, değeriyle); salt okunur / görünmeyen entry ve düğme "
+        "'dugmeler'", r is not None and r[0] == [(300, 200, 600, 200, ""), (300, 850, 600, 30, "")]
+        and r[2] == [(300, 450, 600, 30), (300, 405, 80, 30), (300, 600, 600, 100)] and r[1] == [(820, 360, 50, 20)],
+        str(r))
 KONUM["v"] = None
 kontrol("web: öge konumu doğrulanamadı → None", web.duzenleme_alanlari("{g}") is None)
 KONUM["v"] = "kuresel_cerceve"
