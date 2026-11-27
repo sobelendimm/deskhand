@@ -374,7 +374,10 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: Containe
                 ister = False
             else:
                 ister = rol in istenen or (cerceve_metni and derin > 1 and rol in _CERCEVE_EK)
-                inilir = (rol not in _YAPRAK and not (rol == "combo box" and "expanded" not in d)
+                # yaprak / kapalı combo budaması yalnız olağan taramada: hassas bağlam taramasında (_TUM_ROLLER)
+                # yaprağın position:absolute çocuğu ebeveyninin dışına taşıp alanı örtebilir (SONKAPI-B B2, Firefox 161)
+                inilir = ((roller is _TUM_ROLLER or (rol not in _YAPRAK and not (rol == "combo box"
+                                                                                 and "expanded" not in d)))
                           and (belge or not gorunur or "showing" in d))
             kutu_ister = ister or belge or rol == "internal frame"
             isler.append((y, anahtar, derin, alan, rol, (_ozd(r[3 * i + 1], "") or "").strip(), d, inilir, ister,
@@ -718,6 +721,14 @@ def duzenleme_alanlari(k):
     atasının tıklaması yok); digerleri = geri kalan (alanı saran tıklanır öge dahil; INCELEME-HASSAS O2).
     None (çağıran hiçbir satırı ayıklamaz: güvenli taraf): öge konumu doğrulanamadı, okunan sayfa bu pencereye ait
     kanıtlanamadı, ağaç KESİK (düğüm sınırı, okunamayan dal/kutu; INCELEME-HASSAS O1), okuma hatası."""
+    from .erisim import DUZENLEME_SURE
+    # toplam süre sınırı (tarayıcı dışı yoldaki DUZENLEME_SURE karşılığı): dev sayfada tık saniyelerce beklemez; aşılırsa
+    # _toplu Dur verir → None (kapalı-başarısız; SONKAPI-B B3)
+    with tarama_siniri(DUZENLEME_SURE):
+        return _duzenleme_alanlari(k)
+
+
+def _duzenleme_alanlari(k):
     from . import guvenlik
     from .erisim import _GIZLI_ALAN
     from .ocr import katla

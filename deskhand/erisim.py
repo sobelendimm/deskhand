@@ -631,7 +631,7 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
     """Penceredeki GÖRÜNEN ögeler: rol, ad, pencere koordinatlı kutu, etkin mi, çerçeveden çocuk-sıra yolu. Wayland'de
     ekran koordinatı yok → çerçeveye göre (WINDOW) konum + pencere dekorasyonu payı (pencere boyutu − AT-SPI boyutu).
     kimlik_ver: her ögeye `kimlik` = [veri yolu adı, nesne yolu] (MCP ref doğrulaması); ayrinti: + durumlar, eylemler,
-    değer (observe); eylem_hepsi: eylemler her rolde. Parola alanının (`password text`) değeri hiçbir koşulda okunmaz.
+    değer (observe); eylem_hepsi (güvenlik taraması): eylemler her rolde ve süzgeç merkez değil pencereyle kesişim. Parola alanının (`password text`) değeri hiçbir koşulda okunmaz.
     → {"ogeler", "sure", "kesik"}: kesik = liste EKSİK olabilir (süre / öge sınırı doldu, çocuk sınırı kesti, bir düğüm
     ya da çocuğu ya da görünen ögenin kutusu okunamadı) — yokluğa dayanan karar (hassas düğme bağlamı) güvenemez.
     etkin = SENSITIVE: GTK4 (zenity, Nautilus…) ENABLED durumunu HİÇ bildirmez (ölçüldü: tüm düğmeler 'devre dışı'
@@ -690,8 +690,12 @@ def _tara(Atspi, cerceve, geo, en_cok, sure, cocuk_siniri, kimlik_ver=False, ayr
             else:
                 kesik = True
     kesik = kesik or bool(yigin)  # süre ya da öge sınırı doldu: taranmamış dal kaldı
-    return {"ogeler": [o for o in sonuc if 0 <= o["cx"] < W and 0 <= o["cy"] < H], "sure": time.monotonic() - t0,
-            "kesik": kesik}
+    if eylem_hepsi:  # güvenlik (yokluğa dayanan karar): pencereyle KESİŞEN her öge; merkezi dışarıdaki öge de alanı
+        # örtebilir (SONKAPI-B B1: cx=-145 düğme textarea'yı örtüyordu, listede yoktu, kesik False)
+        gorunen = [o for o in sonuc if o["x"] < W and o["x"] + o["w"] > 0 and o["y"] < H and o["y"] + o["h"] > 0]
+    else:
+        gorunen = [o for o in sonuc if 0 <= o["cx"] < W and 0 <= o["cy"] < H]
+    return {"ogeler": gorunen, "sure": time.monotonic() - t0, "kesik": kesik}
 
 
 def _yoldan_bul(Atspi, cerceve, yol, rol, ad):
