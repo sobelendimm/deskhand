@@ -11,7 +11,6 @@ import re
 import time
 from dataclasses import dataclass
 
-from .. import yollar
 from ..i18n import _
 from . import metinler as T
 
@@ -35,7 +34,7 @@ class Durum:
     sanal_acik: bool = False
     sanal_ekran: str = ""
     devral: bool = False
-    son_eylem: str = ""
+    son_eylem: str = ""             # son girdinin İNSAN METNİ (insan_metni; ham satır değil)
 
     @property
     def renk(self) -> str:
@@ -53,13 +52,13 @@ class Durum:
             # the tray tooltip is drawn as rich text by Plasma)
             satirlar[0] += f" ({_(ad) if ad else etiket_kacis(self.dur_kaynak, html=True)})"
         if self.bekleyen:
-            satirlar.append(_(T.ONAY_BEKLIYOR).format(n=self.bekleyen))
+            from .insan_metni import onay_bekliyor
+            satirlar.append(onay_bekliyor(self.bekleyen))
         satirlar.append(_(T.SANAL_ACIK).format(ekran=self.sanal_ekran) if self.sanal_acik else _(T.SANAL_KAPALI))
         if self.devral:
             satirlar.append(_(T.DEVRAL_ACIK))
         if self.son_eylem and self.ad in ("ekran", "arka"):
-            from .dil import _komut_adlari
-            satirlar.append(_komut_adlari(self.son_eylem)[:120])
+            satirlar.append(self.son_eylem[:120])
         return "\n".join(satirlar)
 
 
@@ -73,7 +72,8 @@ def durum_turet(dur_kaynak: str | None, son_satir: dict | None, son_yazim: float
     elif son_satir and son_yazim is not None and simdi - son_yazim <= CALISMA_PENCERESI \
             and son_satir.get("tur") == "girdi":
         ad = "arka" if son_satir.get("arka") == "arka" else "ekran"
-        son_eylem = son_satir.get("eylem", "")
+        from .insan_metni import insan_metni
+        son_eylem = insan_metni(son_satir)  # insan dili (Y3): ham "bas w: bırak keyup w" başlıkta görünmez
     return Durum(ad=ad, dur_kaynak=dur_kaynak, bekleyen=int(bekleyen), sanal_acik=sanal is not None,
                  sanal_ekran=str((sanal or {}).get("ekran") or ""), devral=bool(devral), son_eylem=son_eylem)
 
@@ -214,14 +214,14 @@ _GIZLI_IZ = re.compile(r"\*\*\*|(?:^|[\s;:])(?:type|keydown|keyup)\s")
 
 
 def guvenli_eylem(e: dict) -> str:
-    """Bir girdi kaydının GÖSTERİLEBİLİR özeti: yalnız komut etiketi (ör. "tikla (617,761) sol", "ogeye-tikla
-    'Kaydet' sol", "yaz 12 karakter"); günlüğün satırlar kısmı (`type …` = yazılan metin) HİÇ kullanılmaz. Günlükte
-    maskeli (***) girdi ya da etikette bir yazı/tuş satırı izi → "gizli alana yazı" (içerik yok)."""
+    """Bir girdi kaydının GÖSTERİLEBİLİR özeti: yalnız komut etiketinden insan dilinde parça (ör. "tıklandı",
+    "'Kaydet' öğesine tıklandı", "12 karakter yazıldı"); günlüğün satırlar kısmı (`type …` = yazılan metin) HİÇ
+    kullanılmaz. Günlükte maskeli (***) girdi ya da etikette bir yazı/tuş satırı izi → "gizli alana yazı" (içerik yok)."""
     etiket = str(e.get("etiket") or "")
     if e.get("gizli") or not etiket or _GIZLI_IZ.search(etiket):
         return _(T.A_EYLEM_GIZLI)
-    from .dil import _komut_adlari
-    return _komut_adlari(etiket)[:100]
+    from .insan_metni import GIRDI_GENEL, _bas_buyuk, komut_parcasi
+    return _bas_buyuk(komut_parcasi(etiket) or _(GIRDI_GENEL))[:100]
 
 
 class SonEylemler:
@@ -254,7 +254,8 @@ def eylem_satiri(e: dict | None, simdi: float) -> str:
     """"Ajan şu an ne yapıyor" satırı."""
     if e is None:
         return _(T.A_EYLEM_YOK)
-    pencere = str(e.get("pencere") or "?")
+    from .insan_metni import pencere_metni
+    pencere = pencere_metni({"pencere": e.get("pencere") or "", "etiket": e.get("etiket") or ""}) or "?"
     if len(pencere) > 60:
         pencere = pencere[:59] + "…"
     return _(T.A_EYLEM).format(eylem=guvenli_eylem(e), pencere=pencere,

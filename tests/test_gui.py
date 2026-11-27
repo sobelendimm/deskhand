@@ -726,7 +726,7 @@ from PyQt6.QtWidgets import QGroupBox, QLineEdit  # noqa: E402
 from deskhand import i18n  # noqa: E402
 
 SAHTE_EN = {"Görev": "Task", "Etkinlik": "Activity", "Arka plan ekranı": "Background screen", "Ayarlar": "Settings",
-            "Onaylar": "Approvals", "Onaylar ({n})": "Approvals ({n})", "Zaman": "Time", "Boşta": "Idle",
+            "Onaylar": "Approvals", "Onaylar ({n})": "Approvals ({n})", "Saat": "Time", "Boşta": "Idle",
             "DUR": "STOP", "Devam et": "Resume", "DUR — tüm girdileri durdur": "STOP — halt all input",
             "Dil": "Language", "Reddet": "Deny", "Bir kez izin ver": "Allow once", "izin verildi": "allowed",
             "Otomatik kaydır": "Auto-scroll", "DUR anahtarı açıldı (panel)": "STOP switch on (panel)",
@@ -779,7 +779,8 @@ try:
     m = w.etkinlik.model
     sira = next((i for i, d in enumerate(m.satirlar) if d["eylem"] == "DUR anahtarı açıldı (panel)"), None)
     kontrol("sabit günlük satırı görüntüde çevrilir, ham satır Türkçe kalır", sira is not None and
-            m.data(m.index(sira, 3)) == "STOP switch on (panel)" and "DUR anahtarı" in m.satirlar[sira]["ham"])
+            m.data(m.index(sira, 1)) == "STOP switch on (panel)" and "DUR anahtarı" in m.satirlar[sira]["ham"] and
+            "DUR anahtarı" in m.data(m.index(sira, 3)))
     w.durum_guncelle(D.Durum(bekleyen=2))
     kontrol("İngilizce: Onaylar sekmesi sayılı ad", w.sekmeler.tabText(3) == "Approvals (2)", w.sekmeler.tabText(3))
     w.durum_guncelle(p.izleyici.durum)

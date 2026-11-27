@@ -73,14 +73,14 @@ se.ekle([G.ayristir(s) for s in (
     "12:00:23 yaz 6 karakter | arka :93 [Not] | type gizliparola123",
 )], simdi)
 s91 = D.eylem_satiri(se.son(":91"), simdi)
-kontrol("ajan şu an: son eylem + pencere + 'N sn önce'", "ogeye-tikla 'Kaydet' sol" in s91 and "Belge — KWrite" in s91
+kontrol("ajan şu an: son eylem + pencere + 'N sn önce'", "'Kaydet' öğesine tıklandı" in s91 and "Belge — KWrite" in s91
         and "12 sn önce" in s91, s91)
 s92 = D.eylem_satiri(se.son(":92"), simdi)
 kontrol("ajan şu an: gizli alana yazı → içerik yok, gizli metni", T.A_EYLEM_GIZLI in s92 and "***" not in s92,
         s92)
 s93 = D.eylem_satiri(se.son(":93"), simdi)
 kontrol("ajan şu an: günlüğün satırlar kısmı (type …) HİÇ gösterilmez", "gizliparola123" not in s93 and
-        "yaz 6 karakter" in s93, s93)
+        "6 karakter yazıldı" in s93, s93)
 kontrol("ajan şu an: kullanıcının ekranı ve DUR satırları sayılmaz", se.son("") is None and len(se._son) == 3)
 kontrol("ajan şu an: masaüstü açılışından önceki kayıt (aynı ekran adı) yok sayılır", se.son(":91", simdi) is None)
 kontrol("ajan şu an: eylem yoksa açık ileti", D.eylem_satiri(None, simdi) == T.A_EYLEM_YOK)
@@ -218,7 +218,7 @@ kontrol("listeden k7 seçildi → panel bağlamı k7", masalar.secili() == "k7")
 k0 = arka.kareler["k7"]
 kontrol("k7'nin canlı önizlemesi düzenli yenileniyor", bekle(lambda: arka.kareler["k7"] >= k0 + 2, 3.5) and
         a.onizleme.resim.pixelColor(5, 5).green() > 150)
-kontrol("ajan şu an (k7): son eylem satırı", "ogeye-tikla 'Yayınla' sol" in a.l_eylem.text() and
+kontrol("ajan şu an (k7): son eylem satırı", "'Yayınla' öğesine tıklandı" in a.l_eylem.text() and
         "Panel — Firefox" in a.l_eylem.text(), a.l_eylem.text())
 kontrol("izleme aralığı makul (Devral kapalı: 1 sn)", a.zaman.interval() == 1000)
 

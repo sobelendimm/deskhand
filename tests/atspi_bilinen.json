@@ -1,7 +1,6 @@
 {
  "aciklama": "Bugünkü AT-SPI ihlalleri (G1, 27 Kas). UX görevleri listeyi boşaltır; yeni ihlal test_atspi_kural'da KALDI. Biçim: 'kural|rol|ad|ata zinciri' → adet.",
  "ihlaller": {
-  "ADSIZ_GIRIS|text||frame:Deskhand/filler:/filler:/layered pane:/filler:": 1,
   "HEDEF_KUCUK|check box|Otomatik kaydır|frame:Deskhand/filler:/filler:/layered pane:/filler:": 1
  }
 }

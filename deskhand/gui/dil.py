@@ -50,16 +50,9 @@ def dil_secenekleri() -> list[tuple[str, str]]:
 
 
 def gunluk_eylemi(d: dict) -> str:
-    """Etkinlik satırının Eylem sütunu: günlük metni (Türkçe) olduğu gibi; yalnız sabit satırlar ve onay
-    satırlarının "onay <karar>" öneki çevrilir."""
-    eylem = d.get("eylem", "")
-    if eylem in T.GUNLUK_ESLEME:
-        return _(T.GUNLUK_ESLEME[eylem])
-    if d.get("tur") == "onay" and eylem.startswith("onay "):
-        karar, ayrac, kalan = eylem[5:].partition(": ")
-        if ayrac and karar in T.O_KARAR:
-            return _(T.E_ONAY_SATIRI).format(karar=_(T.O_KARAR[karar]), eylem=kalan)
-    return _komut_adlari(eylem)
+    """Etkinlik satırının "Ne oldu" metni: insan dilinde tek cümle (insan_metni; Y3). Ham satır Ayrıntı'da kalır."""
+    from .insan_metni import insan_metni
+    return insan_metni(d)
 
 
 _SOZ = {"sol": "left", "sag": "right", "cift": "double", "orta": "middle", "karakter": "chars", "asagi": "down",
