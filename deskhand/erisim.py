@@ -313,6 +313,11 @@ def _cerceve_bul(Atspi, pid, baslik):
         raise Dur(6, _("pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): {ipucu}").format(
             baslik=repr(baslik), pid=pid, ipucu=_girmeyen_ipucu(pid)), tur="agacta_yok")
     secim = sorted(adaylar, key=lambda x: (not x[0], -x[1]))[0]
+    esit = sum(1 for a in adaylar if a[:2] == secim[:2])
+    if esit > 1:  # ABM-F3-R2: aynı süreçte aynı başlık: AT-SPI'de pencere kimliği yok, sıra öbür pencereyi seçebilir
+        raise Dur(6, _("aynı süreçte bu başlığı taşıyan {n} erişilebilirlik çerçevesi var (pid {pid}): hangisinin bu "
+                       "pencere olduğu belirlenemiyor; okuma/eylem başka pencereye gitmesin diye durduruldu").format(
+            n=esit, pid=pid))
     return secim[2], secim[3], secim[4]
 
 

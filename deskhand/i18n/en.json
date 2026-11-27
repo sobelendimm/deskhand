@@ -1760,5 +1760,6 @@
  "başka bir açılış sürüyor ({ne}); {sn} sn içinde sıra gelmedi, hiçbir şey yapılmadı": "another launch is in progress ({ne}); no turn within {sn} s, nothing was done",
  "tarayıcı penceresi": "browser window",
  "{sn} sn içinde yeni pencere görünmedi": "no new window appeared within {sn} s",
- "yeni pencereyle aynı başlıklı başka tarayıcı penceresi var: erişilebilirlik ağacı bu pencereye güvenle eşlenemez (adres çubuğu doğrulanamaz); adres yazılmadı": "another browser window has the same title as the new window: the accessibility tree cannot be mapped to this window safely (the address bar cannot be verified); the address was not typed"
+ "yeni pencereyle aynı başlıklı başka tarayıcı penceresi var: erişilebilirlik ağacı bu pencereye güvenle eşlenemez (adres çubuğu doğrulanamaz); adres yazılmadı": "another browser window has the same title as the new window: the accessibility tree cannot be mapped to this window safely (the address bar cannot be verified); the address was not typed",
+ "aynı süreçte bu başlığı taşıyan {n} erişilebilirlik çerçevesi var (pid {pid}): hangisinin bu pencere olduğu belirlenemiyor; okuma/eylem başka pencereye gitmesin diye durduruldu": "the same process has {n} accessibility frames with this title (pid {pid}): it cannot tell which one is this window; stopped so that reading/actions do not go to another window"
 }

@@ -848,6 +848,17 @@ kontrol("denetim 2a/2b: X penceresinin PID'i ağaçta yoksa başlık benzerliği
 kontrol("PID bilinmiyorsa → 6", kod_al(erisim._cerceve_bul, A, "", "Deskhand") == 6)
 c, p, _ad = erisim._cerceve_bul(A, os.getpid(), "Deskhand notlar")
 kontrol("aynı PID: başlığa en yakın çerçeve", c.ad == "Deskhand notlar" and p == os.getpid())
+# ABM-F3-R2: aynı süreçte AYNI başlıklı iki çerçeve (ör. iki "Mozilla Firefox" penceresi): AT-SPI'de pencere kimliği
+# yok; sıradaki ilk çerçeveyi seçmek okumayı/eylemi öbür pencereye götürür → belirsizlikte Dur 6
+e = hata_al(erisim._cerceve_bul, SahteAtspi([Uyg(os.getpid(), "firefox", [Cerceve("Mozilla Firefox"),
+                                                                         Cerceve("Mozilla Firefox")])]),
+            os.getpid(), "Mozilla Firefox")
+kontrol("F3-R2: aynı PID'de aynı başlıklı iki çerçeve → sessiz seçim yok, 6 (belirsiz)", e is not None and e.kod == 6 and
+        "2" in e.mesaj, str(e))
+c, _p, _ad = erisim._cerceve_bul(SahteAtspi([Uyg(os.getpid(), "firefox", [Cerceve("A — Mozilla Firefox"),
+                                                                        Cerceve("B — Mozilla Firefox")])]),
+                                 os.getpid(), "B — Mozilla Firefox")
+kontrol("F3-R2: başlıklar farklıysa tam eşleşen çerçeve seçilir (belirsizlik yok)", c.ad == "B — Mozilla Firefox")
 torun = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])  # aynı exe, bu sürecin çocuğu
 try:
     c, p, _ad = erisim._cerceve_bul(SahteAtspi([Uyg(torun.pid, "x", [Cerceve("Pencere")])]), os.getpid(), "Pencere")

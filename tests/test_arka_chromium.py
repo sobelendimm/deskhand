@@ -741,6 +741,26 @@ try:
     def kimlik(r):
         return str((r.get("window") or {}).get("id") or "")
 
+    # pencerelerin başlıkları FARKLI olsun diye ayrı yerel sayfalar (aynı başlıklı iki çerçeve AT-SPI'de ayırt
+    # edilemez → erisim._cerceve_bul Dur 6 verir; F3-R2)
+    class _Sayfa(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            ad_ = self.path.strip("/").upper()
+            govde = f"<html><head><title>F3R2-{ad_}</title></head><body>ok</body></html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(govde.encode())
+
+        def log_message(self, *a):
+            pass
+    srv_c = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Sayfa)
+    threading.Thread(target=srv_c.serve_forever, daemon=True).start()
+    atexit.register(srv_c.shutdown)
+
+    def sayfa(y):
+        return f"http://127.0.0.1:{srv_c.server_address[1]}/{y}"
+
     if shutil.which("firefox"):
         time.sleep(2)
         # SAHTE: kafeste komut satırı Firefox gibi görünen ama Deskhand kaydında olmayan süreç (hedef seçilmemeli)
@@ -750,21 +770,7 @@ try:
         time.sleep(1)
         m0 = kafes_mb()
         k1 = kopya.yeni_kopya_dizini("firefox")
-        class _Sayfa(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):  # noqa: N802
-                ad_ = self.path.strip("/").upper()
-                govde = f"<html><head><title>F3R2-{ad_}</title></head><body>ok</body></html>"
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(govde.encode())
-
-            def log_message(self, *a):
-                pass
-        srv_c = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Sayfa)
-        threading.Thread(target=srv_c.serve_forever, daemon=True).start()
-        atexit.register(srv_c.shutdown)
-        url_bir, url_iki = (f"http://127.0.0.1:{srv_c.server_address[1]}/{y}" for y in ("bir", "iki"))
+        url_bir, url_iki = sayfa("bir"), sayfa("iki")
         r1 = ac(["firefox", "--profile", k1, "--no-remote", "--new-instance", url_bir], "Firefox", k1)
         time.sleep(5)
         m1, ana1 = kafes_mb(), ana_surecler("firefox", k1)
@@ -821,11 +827,11 @@ try:
 
     ana0 = chromium_analari()
     h1 = chromium.on_karari(_on(["chromium"]))
-    r1 = ac([*h1.argv, "about:blank"], "Chromium", h1.kopya_yolu)
+    r1 = ac([*h1.argv, sayfa("cr-bir")], "Chromium", h1.kopya_yolu)
     time.sleep(3)
     ana1 = chromium_analari()
     h2 = chromium.on_karari(_on(["chromium"]))
-    r2 = ac([*h2.argv, "about:blank"], "Chromium", h2.kopya_yolu)
+    r2 = ac([*h2.argv, sayfa("cr-iki")], "Chromium", h2.kopya_yolu)
     time.sleep(3)
     ana2 = chromium_analari()
     print(f"   chromium: kopyalı ana süreçler {ana1} → {ana2}; pencereler {kimlik(r1)} {kimlik(r2)}")
