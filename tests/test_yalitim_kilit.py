@@ -13,12 +13,16 @@ Bu test gerçek kullanıcının dizinine DOKUNMAZ: "gerçek" kök, GECICI altın
    dizini GECICI altındadır; sahte "gerçek" kökteki istek görünmez.
 3. Olayın yeniden üretimi: test_odeme_kilit, XDG_RUNTIME_DIR'inde canlı ekran + arka devir isteği olan bir ortamda
    alt süreç olarak koşar ve geçer.
+4. Sınıf denetimi (otomatik): tests/ altında DESKHAND_RUNTIME_DIR / XDG_RUNTIME_DIR'i silen ya da değiştiren her kalıp
+   (os.environ.pop, del, monkeypatch.delenv/setenv, atama, ortam sözlüğü kopyasında anahtar/kwarg/süzme) yalnız
+   tests/_yalitim.py'de serbest; başka yerde ancak IZINLI listesinde (gerekçeli) olabilir, yoksa dosya:satır ile düşer.
 
 Çalıştır:  python3 tests/test_yalitim_kilit.py"""
 import _yalitim
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -136,6 +140,87 @@ finally:
     os.environ["DESKHAND_RUNTIME_DIR"] = ASIL_RT
     SAHIP.kill()
     SAHIP.wait()
+
+# ================================================================ 4. sınıf denetimi: runtime ortam değişkeni kalıpları
+_V = r"(?:DESKHAND|XDG)_RUNTIME_DIR"
+_T = r"[\"']"
+KALIP = re.compile("|".join((
+    rf"\.pop\(\s*{_T}{_V}{_T}",                          # os.environ.pop / ortam_kopyasi.pop
+    rf"\bdel\s+\S*\[\s*{_T}{_V}{_T}\s*\]",              # del os.environ[...] / del ortam[...]
+    rf"\b(?:delenv|setenv)\(\s*{_T}{_V}{_T}",            # monkeypatch
+    rf"\[\s*{_T}{_V}{_T}\s*\]\s*=(?!=)",                 # os.environ[...] = / ortam[...] =
+    rf"{_T}{_V}{_T}\s*:",                                # sözlük anahtarı (alt süreç ortamı, update({...}))
+    rf"(?<![\w\"'])\b{_V}\s*=(?!=)",                     # dict(os.environ, X=...) / update(X=...)
+    rf"!=\s*{_T}{_V}{_T}",                               # süzerek silme: {k: v ... if k != "X"}
+    rf"\bnot\s+in\s*[(\[{{][^)\]}}]*{_T}{_V}{_T}",       # süzerek silme: if k not in ("X", ...)
+)))
+# Meşru kurulumlar: (dosya, satırın kırpılmış metni). Hepsi değişkeni GEÇİCİ/sahte bir köke yöneltir ya da DESKHAND_RUNTIME_DIR
+# ayarlıyken yalnız XDG_RUNTIME_DIR'i değiştirir (calisma_dizini gerçek köke düşmez). Yeni satır eklemek yerine
+# _yalitim.gercek_calisma_dizini() kullanın.
+IZINLI = {
+    # cuzdan_ac XDG_RUNTIME_DIR altında soket açar: S geçici dizin (DESKHAND_RUNTIME_DIR ayarlı kalır)
+    ("tests/test_cuzdan_ac.py", 'os.environ["XDG_RUNTIME_DIR"] = os.path.join(S, "run")'),
+    # K2-3: XDG_RUNTIME_DIR yok/gevşek/göreli → ret sınaması; Popen sahte, DESKHAND_RUNTIME_DIR ayarlı kalır
+    ("tests/test_k2_arac_yolu.py", 'eski_rt = os.environ.pop("XDG_RUNTIME_DIR", None)'),
+    ("tests/test_k2_arac_yolu.py", 'os.environ["XDG_RUNTIME_DIR"] = gevsek'),
+    ("tests/test_k2_arac_yolu.py", 'os.environ["XDG_RUNTIME_DIR"] = "goreli/yol"'),
+    ("tests/test_k2_arac_yolu.py", 'os.environ["XDG_RUNTIME_DIR"] = eski_rt'),
+    # görünmez masaüstünün KENDİ çalışma klasörü (D["calisma"]) ile wl-copy / araç alt süreçleri
+    ("tests/test_kwin_oturum.py", 'wenv = {"PATH": "/usr/bin", "WAYLAND_DISPLAY": D["wayland_yol"], "XDG_RUNTIME_DIR": D["calisma"]}'),
+    ("tests/test_kwin_oturum.py", 'aenv = {"PATH": "/usr/bin", "HOME": os.path.join(D["calisma"], "ev"), "XDG_RUNTIME_DIR": D["calisma"],'),
+    # Wayland sızıntı sınaması: sahte_rt geçici klasör (gerçek wayland-0'a bağlanılmasın)
+    ("tests/test_sanal.py", 'e0 = {k_: v_ for k_, v_ in ue.items() if k_ != "WAYLAND_DISPLAY"} | {"XDG_RUNTIME_DIR": sahte_rt}'),
+    ("tests/test_sanal.py", 'pw = masaustu.baslat([sys.executable, "-c", kod_], {"XDG_RUNTIME_DIR": sahte_rt}, stdout=subprocess.PIPE,'),
+    # env -i karşılığı: tüm XDG_* geçici `ev` altında
+    ("tests/_gorsel.py", '"XDG_RUNTIME_DIR": os.path.join(ev, "r"), "DESKHAND_ANAHTARLIK": "kapali",'),
+    # bu test: sahte "gerçek" kök (SAHTE_XDG, GECICI altında) ile üretim kilidini sınar (bölüm 1 ve 3)
+    ("tests/test_yalitim_kilit.py", 'os.environ["XDG_RUNTIME_DIR"] = SAHTE_XDG'),
+    ("tests/test_yalitim_kilit.py", 'os.environ.pop("DESKHAND_RUNTIME_DIR")'),
+    ("tests/test_yalitim_kilit.py", 'os.environ["DESKHAND_RUNTIME_DIR"] = ASIL_RT'),
+    ("tests/test_yalitim_kilit.py", "ortam = dict(os.environ, XDG_RUNTIME_DIR=SAHTE_XDG)"),
+    ("tests/test_yalitim_kilit.py", 'os.environ.pop("XDG_RUNTIME_DIR", None)'),
+    ("tests/test_yalitim_kilit.py", 'os.environ["XDG_RUNTIME_DIR"] = ASIL_XDG'),
+}
+
+
+def runtime_kaliplari(kok):
+    """tests/ altındaki .py dosyalarında runtime değişkenini silen/değiştiren satırlar → [(göreli yol, satır no, metin)]."""
+    bulgu = []
+    for dizin, alt, dosyalar in os.walk(os.path.join(kok, "tests")):
+        alt[:] = sorted(a for a in alt if a != "__pycache__")
+        for ad in sorted(dosyalar):
+            if not ad.endswith(".py"):
+                continue
+            yol = os.path.join(dizin, ad)
+            goreli = os.path.relpath(yol, kok)
+            if goreli == "tests/_yalitim.py":
+                continue
+            with open(yol, encoding="utf-8", errors="replace") as f:
+                for no, satir in enumerate(f, 1):
+                    if goreli == "tests/test_yalitim_kilit.py" and satir.startswith("# " + "=" * 64 + " 4."):
+                        break  # bu bölümün kendi kalıp/izin/örnek metinleri taranmaz
+                    if KALIP.search(satir):
+                        bulgu.append((goreli, no, satir.strip()))
+    return bulgu
+
+
+ORNEKLER = ('os.environ.pop("DESKHAND_RUNTIME_DIR")', "del os.environ['XDG_RUNTIME_DIR']",
+            'monkeypatch.delenv("DESKHAND_RUNTIME_DIR")', 'os.environ["DESKHAND_RUNTIME_DIR"] = "/x"',
+            'env = {"XDG_RUNTIME_DIR": "/run/user/1000"}', "e = dict(os.environ, DESKHAND_RUNTIME_DIR='')",
+            'e = {k: v for k, v in os.environ.items() if k != "DESKHAND_RUNTIME_DIR"}',
+            'e = {k: v for k, v in os.environ.items() if k not in ("A", "DESKHAND_RUNTIME_DIR")}')
+ZARARSIZ = ('d = os.environ.get("DESKHAND_RUNTIME_DIR")', 'rt = os.environ["DESKHAND_RUNTIME_DIR"]',
+            'any(s.startswith("XDG_RUNTIME_DIR=") for s in x)', 'if os.environ["XDG_RUNTIME_DIR"] == y: pass')
+kontrol("sınıf denetimi: kalıp her silme/değiştirme biçimini yakalar",
+        all(KALIP.search(s) for s in ORNEKLER), [s for s in ORNEKLER if not KALIP.search(s)])
+kontrol("sınıf denetimi: okuma/karşılaştırma yanlış alarm değil",
+        not any(KALIP.search(s) for s in ZARARSIZ), [s for s in ZARARSIZ if KALIP.search(s)])
+_bulgu = runtime_kaliplari(_yalitim.KOK)
+_ihlal = [f"{y}:{n}: {s}" for y, n, s in _bulgu if (y, s) not in IZINLI]
+kontrol("sınıf denetimi: runtime değişkenini silen/değiştiren kalıp yalnız _yalitim'de (ya da gerekçeli izin listesinde)",
+        not _ihlal, "; ".join(_ihlal))
+_kullanilmayan = sorted(IZINLI - {(y, s) for y, _n, s in _bulgu})
+kontrol("sınıf denetimi: izin listesinde bayat satır yok", not _kullanilmayan, str(_kullanilmayan))
 
 print(f"\n{GECEN}/{TOPLAM} yalıtım/kilit testi geçti")
 raise SystemExit(0 if GECEN == TOPLAM else 1)

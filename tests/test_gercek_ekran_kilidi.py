@@ -17,7 +17,7 @@ import sys
 import time
 import types
 
-import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler + DESKHAND_GERCEK_EKRAN=kapali; Deskhand'den ÖNCE)
+import _yalitim  # (DESKHAND_* geçici klasörler + DESKHAND_GERCEK_EKRAN=kapali; Deskhand'den ÖNCE)
 
 from deskhand import api, arka_uc, doktor, erisim, girdi_merkezi as GM, hata, masaustu, mesgul
 from deskhand.arka_uc import EKRAN, kde, kde_goruntu
@@ -343,7 +343,7 @@ kontrol("D: sahte kde arka ucu kilitten etkilenmez (gerçek araç çağırmaz)",
 kontrol("D: sahte kde ile api.tikla → 17 DEĞİL", dur_kodu(api.tikla, "{sahte-1}", 10, 10)[0] != 17)
 
 # ---------------------------------------------------------------- E. inceleme ekleri (web eylemi, onay kanalı, kwinscript)
-from deskhand import onay, web  # noqa: E402
+from deskhand import web  # noqa: E402
 from deskhand.mesgul import KWIN_BETIK  # noqa: E402
 
 _asil_baglam = web._baglam
@@ -353,12 +353,9 @@ try:
             dur_kodu(web.eylem_yap, "{k}", {"_bus": ":1.9", "_yol": "/x"})[0] == 17)
 finally:
     web._baglam = _asil_baglam
-_rt = os.environ.pop("DESKHAND_RUNTIME_DIR")
-try:
+with _yalitim.gercek_calisma_dizini():  # DESKHAND_RUNTIME_DIR yok, kök sahte (kullanıcının runtime dizini sızmaz)
     _r = dur_kodu(_ASIL_ISTE, "tıkla", "deneme")
     kontrol("E: onay.iste_sonuc GERÇEK çalışma dizininde (kullanıcının paneli) → 17", _r[0] == 17, str(_r))
-finally:
-    os.environ["DESKHAND_RUNTIME_DIR"] = _rt
 kontrol("E: kwinscript yalnız mesgul'ün sabit betiği okuma; başka inline/dosya betik yan etki",
         not kde._yan_etkili_mi(["kdotool", "kwinscript", "--inline", KWIN_BETIK]) and
         kde._yan_etkili_mi(["kdotool", "kwinscript", "--inline", "workspace.activeWindow.closeWindow()"]) and
