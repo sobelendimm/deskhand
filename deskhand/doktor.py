@@ -702,13 +702,8 @@ def _gpu_ocr_satiri(satir: dict, eksik: list[str]) -> dict:
                                       "python-torchvision, python-opencv, python-scikit-image, python-shapely, "
                                       "python-pyclipper, python-scipy)")
     if "model" in eksik:
-        paket = yollar.PAKET_DIZIN
-        kod = ("import importlib.util as u, sys\n"
-               f"s = u.spec_from_file_location('deskhand', {os.path.join(paket, '__init__.py')!r}, "
-               f"submodule_search_locations=[{paket!r}])\n"
-               "m = u.module_from_spec(s); sys.modules['deskhand'] = m; s.loader.exec_module(m)\n"
-               "from deskhand import ocr_gpu\n"
-               "ocr_gpu.indir(sys.argv[1])")
+        kod = (ocr_gpu.paket_yukleme_kodu(yollar.PAKET_DIZIN) +
+               "\nimport sys\nfrom deskhand import ocr_gpu\nocr_gpu.indir(sys.argv[1])")
         adimlar.append(shlex.join([venv_py, "-I", "-c", kod, ocr_gpu.model_dizin()]))
     satir["oneri"] = " && ".join(adimlar) if adimlar else _("günlüğe bakın: {yol}").format(yol=ocr_gpu.gunluk_yolu())
     return satir
@@ -735,4 +730,56 @@ def satir_masaustu():
         yol=h["acilis"]), _("deskhand install-desktop (ya da her oturumda: deskhand panel --tepsi)"))
 
 
-SATIRLAR = (*SATIRLAR, satir_masaustu)
+def _yardimci_python() -> str:
+    """The interpreter Deskhand's helper scripts really run under (notification catcher, clipboard owner, guards):
+    arka_ortak.python_yolu() — in a pipx/venv install the system python3, not this one."""
+    from . import arka_ortak
+    return arka_ortak.python_yolu()
+
+
+def _yardimci_eksikleri(py: str, moduller: list[str]) -> list[str] | None:
+    """Which of `moduller` `py` cannot find (find_spec: nothing is imported or run); None: `py` did not run."""
+    import subprocess
+    kod = "import importlib.util as u, sys; print(' '.join(m for m in sys.argv[1:] if u.find_spec(m) is None))"
+    try:
+        r = subprocess.run([py, "-I", "-c", kod, *moduller], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           timeout=15, cwd="/")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.split() if r.returncode == 0 else None
+
+
+def satir_yardimci_modulleri():
+    """pip/pipx: the helper scripts run under the system python3 (arka_ortak.python_yolu), which does not see this
+    environment's packages: without the distribution's jeepney / python-xlib notifications and the clipboard silently
+    do nothing. No row in a source checkout (install.sh checks) or when the helpers run under this interpreter (the
+    module rows above cover it)."""
+    import sys
+    if _kaynak_kurulumu():
+        return None
+    try:
+        py = _yardimci_python()
+    except Exception:  # noqa: BLE001 - Dur(9): no safe python3
+        py = None
+    if py and os.path.realpath(py) == os.path.realpath(sys.executable or ""):
+        return None
+    ad = _("Yardımcı Python modülleri")
+    moduller = (("jeepney", "python-jeepney", _("bildirim yakalama")), ("Xlib", "python-xlib", _("pano")))
+    eksik = _yardimci_eksikleri(py, [m for m, _p, _n in moduller]) if py else None
+    if eksik is None:
+        return _satir(ad, "uyari", _("yardımcı betiklerin yorumlayıcısı çalıştırılamadı: {py}").format(py=py or "python3"),
+                      _("paketi kur: {paket}").format(paket="python"))
+    if not eksik:
+        return _satir(ad, "tamam", _("{py}: jeepney, Xlib var").format(py=py))
+    secilen = [(m, p, n) for m, p, n in moduller if m in eksik]
+    arch = [p for _m, p, _n in secilen]
+    oneri = _("paketi kur: {paket}").format(paket=" ".join(arch))
+    for i, dagitim in ((0, "Debian/Ubuntu"), (1, "Fedora")):
+        adlar = [DAGITIM_PAKETLERI.get(p, ("-", "-"))[i] for p in arch]
+        if "-" not in adlar:
+            oneri += f" · {dagitim}: {' '.join(adlar)}"
+    return _satir(ad, "uyari", _("{py} ile çalışan yardımcılarda eksik: {liste} (sessizce çalışmaz)").format(
+        py=py, liste=", ".join(f"{m} ({n})" for m, _p, n in secilen)), oneri)
+
+
+SATIRLAR = (*SATIRLAR, satir_masaustu, satir_yardimci_modulleri)

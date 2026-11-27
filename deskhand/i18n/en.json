@@ -2262,5 +2262,10 @@
  "menü girdisi var; oturum açılışında panel kapalı (tercih; açmak için: deskhand install-desktop --autostart)": "menu entry present; panel at login is off (your choice; to turn it on: deskhand install-desktop --autostart)",
  "panel oturum açılışında başlamasın (tercih kalıcı)": "do not start the panel at login (the choice is remembered)",
  "panel oturum açılışında başlasın (--no-autostart tercihini kaldırır)": "start the panel at login (undoes --no-autostart)",
- "yol geçerli UTF-8 değil, masaüstü girdisine yazılamaz: {yol}": "the path is not valid UTF-8 and cannot be written to a desktop entry: {yol}"
+ "yol geçerli UTF-8 değil, masaüstü girdisine yazılamaz: {yol}": "the path is not valid UTF-8 and cannot be written to a desktop entry: {yol}",
+ "Yardımcı Python modülleri": "Helper Python modules",
+ "bildirim yakalama": "notification capture",
+ "yardımcı betiklerin yorumlayıcısı çalıştırılamadı: {py}": "the interpreter of the helper scripts could not be run: {py}",
+ "{py} ile çalışan yardımcılarda eksik: {liste} (sessizce çalışmaz)": "missing for the helpers that run under {py}: {liste} (they silently do nothing)",
+ "{py}: jeepney, Xlib var": "{py}: jeepney and Xlib present"
 }

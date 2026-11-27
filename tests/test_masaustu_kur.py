@@ -377,12 +377,14 @@ try:
                                "print(ocr_gpu.__file__); print(any(os.path.realpath(p) == os.path.realpath("
                                f"{os.path.dirname(yollar.PAKET_DIZIN)!r}) for p in sys.path))")
         kod = "import os\n" + kod
-        r =subprocess.run([sys.executable, "-I", "-c", kod, ocr_gpu.model_dizin()], cwd=tuzak, capture_output=True,
+        r = subprocess.run([sys.executable, "-I", "-c", kod, ocr_gpu.model_dizin()], cwd=tuzak, capture_output=True,
                            text=True, timeout=60)
         cikti = r.stdout.splitlines()
         kontrol("indirme kodu: gerçek deskhand.ocr_gpu yüklenir, site-packages yola eklenmez",
                 r.returncode == 0 and cikti[:1] == [os.path.realpath(ocr_gpu.__file__)] and cikti[1:2] == ["False"],
                 r.stdout + r.stderr)
+        kontrol("indirme kodu ocr_gpu.paket_yukleme_kodu()'nu kullanır (tek kaynak)",
+                parca[3].startswith(ocr_gpu.paket_yukleme_kodu(yollar.PAKET_DIZIN)), parca[3][:200])
         sahte_on = os.path.join(KOK, "venv-on")
         yaz(os.path.join(sahte_on, "pyvenv.cfg"), "home = /x\n")
         os.symlink(sahte_on, sahte_on + "-bag")
@@ -404,6 +406,46 @@ try:
         doktor._kaynak_kurulumu = lambda: True
         s = doktor.satir_gpu_ocr()
         kontrol("GPU OCR (git klonu): ./install.sh", "./install.sh" in s["oneri"], s["oneri"])
+
+        # yardımcı betiklerin yorumlayıcısı (arka_ortak.python_yolu: pipx/venv'de sistem python3'ü)
+        kontrol("yardımcı modül denetimi: gerçek alt süreç, yalnız eksik olanı döner",
+                doktor._yardimci_eksikleri(sys.executable, ["json", "olmayan_modul_xyz"]) == ["olmayan_modul_xyz"])
+        kontrol("yardımcı modül denetimi: yorumlayıcı çalışmazsa None",
+                doktor._yardimci_eksikleri(os.path.join(KOK, "yok", "python3"), ["json"]) is None)
+        eski_y = doktor._yardimci_python, doktor._yardimci_eksikleri
+        try:
+            doktor._kaynak_kurulumu = lambda: True
+            doktor._yardimci_python = lambda: "/usr/bin/python3-sahte"
+            kontrol("yardımcı modüller (git klonu): satır yok (install.sh denetler)",
+                    doktor.satir_yardimci_modulleri() is None)
+            doktor._kaynak_kurulumu = lambda: False
+            doktor._yardimci_python = lambda: sys.executable
+            kontrol("yardımcı modüller: yardımcılar bu yorumlayıcıyla koşuyorsa satır yok (modül satırları kapsar)",
+                    doktor.satir_yardimci_modulleri() is None)
+            doktor._yardimci_python = lambda: "/usr/bin/python3-sahte"
+            doktor._yardimci_eksikleri = lambda py, moduller: []
+            s = doktor.satir_yardimci_modulleri()
+            kontrol("yardımcı modüller (pipx, tamam)", s and s["durum"] == "tamam" and "/usr/bin/python3-sahte" in s["ayrinti"],
+                    str(s))
+            doktor._yardimci_eksikleri = lambda py, moduller: ["jeepney", "Xlib"]
+            s = doktor.satir_yardimci_modulleri()
+            arch = "python-jeepney python-xlib"
+            deb = " ".join(doktor.DAGITIM_PAKETLERI[p][0] for p in ("python-jeepney", "python-xlib"))
+            fed = " ".join(doktor.DAGITIM_PAKETLERI[p][1] for p in ("python-jeepney", "python-xlib"))
+            kontrol("yardımcı modüller (pipx, eksik): uyarı + Arch/Debian/Fedora paket adları (tablodan)",
+                    s and s["durum"] == "uyari" and arch in s["oneri"] and f"Debian/Ubuntu: {deb}" in s["oneri"]
+                    and f"Fedora: {fed}" in s["oneri"] and "jeepney" in s["ayrinti"] and "Xlib" in s["ayrinti"]
+                    and "/usr/bin/python3-sahte" in s["ayrinti"], str(s))
+            doktor._yardimci_eksikleri = lambda py, moduller: ["Xlib"]
+            s = doktor.satir_yardimci_modulleri()
+            kontrol("yardımcı modüller (yalnız Xlib eksik): yalnız python-xlib önerilir",
+                    s and "python-xlib" in s["oneri"] and "jeepney" not in s["oneri"], str(s))
+            doktor._yardimci_eksikleri = lambda py, moduller: None
+            s = doktor.satir_yardimci_modulleri()
+            kontrol("yardımcı modüller: yorumlayıcı çalışmadı → uyarı", s and s["durum"] == "uyari", str(s))
+            kontrol("doctor topla() yardımcı modül satırını çağırır", doktor.satir_yardimci_modulleri in doktor.SATIRLAR)
+        finally:
+            doktor._yardimci_python, doktor._yardimci_eksikleri = eski_y
     finally:
         doktor._kaynak_kurulumu = eski_dk
         ocr_gpu.eksikler = eski_ocr

@@ -2141,7 +2141,7 @@
   "gui/metinler.py:339"
  ],
  "Masaüstü girdileri": [
-  "doktor.py:723"
+  "doktor.py:718"
  ],
  "Masaüstü oturumu": [
   "doktor.py:79",
@@ -2778,6 +2778,9 @@
  "Yanıt yoksa": [
   "gui/metinler.py:142"
  ],
+ "Yardımcı Python modülleri": [
+  "doktor.py:766"
+ ],
  "Yarım kaldı.": [
   "gui/metinler.py:279"
  ],
@@ -3212,6 +3215,9 @@
  "bildirim kapandı (süre doldu)": [
   "mesgul.py:521"
  ],
+ "bildirim yakalama": [
+  "doktor.py:767"
+ ],
  "bildirim yakalayıcı hazır olmadı ({yanit}): bildirimler kaybolabilir": [
   "masaustu.py:1224"
  ],
@@ -3471,7 +3477,7 @@
   "doktor.py:416"
  ],
  "deskhand install-desktop (ya da her oturumda: deskhand panel --tepsi)": [
-  "doktor.py:735"
+  "doktor.py:730"
  ],
  "deskhand secret list ile kasayı denetleyin; gerekirse Ayarlar'dan anahtar deposunu seçin": [
   "doktor.py:249"
@@ -4331,7 +4337,7 @@
   "gui/insan_metni.py:380"
  ],
  "günlüğe bakın: {yol}": [
-  "doktor.py:713"
+  "doktor.py:708"
  ],
  "günlüğe metni yazma": [
   "cli.py:724",
@@ -4959,10 +4965,10 @@
   "masaustu.py:868"
  ],
  "menü girdisi var; oturum açılışında panel kapalı (tercih; açmak için: deskhand install-desktop --autostart)": [
-  "doktor.py:727"
+  "doktor.py:722"
  ],
  "menü girdisi ve oturum açılışında panel var": [
-  "doktor.py:730"
+  "doktor.py:725"
  ],
  "metin erişilebilirlik ağacında hiç görülmedi; pencere önde değilken OCR yapılmaz — pencereyi öne getirip yeniden dene ya da window deseniyle arka plan masaüstünü kullan": [
   "mcp_sunucu.py:2880"
@@ -5228,7 +5234,9 @@
   "arka_ortak.py:1272"
  ],
  "paketi kur: {paket}": [
-  "doktor.py:61"
+  "doktor.py:61",
+  "doktor.py:771",
+  "doktor.py:776"
  ],
  "panel bildirimi (ayrıntı sütununda)": [
   "gui/insan_metni.py:84"
@@ -5258,7 +5266,7 @@
   "masaustu_kur.py:320"
  ],
  "panel oturum açılışında başlamıyor: onaylar için panel açık olmalı ({yol} yok)": [
-  "doktor.py:734"
+  "doktor.py:729"
  ],
  "panel oturum açılışında başlasın (--no-autostart tercihini kaldırır)": [
   "masaustu_kur.py:322"
@@ -5288,7 +5296,8 @@
   "liste_koruma.py:365"
  ],
  "pano": [
-  "cli.py:296"
+  "cli.py:296",
+  "doktor.py:767"
  ],
  "pano (wl-clipboard)": [
   "arka_uc/kde.py:727"
@@ -6114,7 +6123,7 @@
   "arka_ortak.py:1032"
  ],
  "uygulama menüsünde Deskhand yok ({yol})": [
-  "doktor.py:732"
+  "doktor.py:727"
  ],
  "uygulamanın erişilebilirlik ağacında pencere yok (pid {pid}). Firefox GNOME_ACCESSIBILITY=1 ile, Chromium --force-renderer-accessibility ile başlatılmalı": [
   "web.py:303"
@@ -6218,6 +6227,9 @@
   "arka_uc/sanal.py:789",
   "kwin_oturum.py:1284",
   "masaustu.py:1225"
+ ],
+ "yardımcı betiklerin yorumlayıcısı çalıştırılamadı: {py}": [
+  "doktor.py:770"
  ],
  "yardımcı süreç kapandı": [
   "insan.py:84"
@@ -6647,6 +6659,12 @@
  ],
  "{py} bu Deskhand paketini ({paket}) kendi başına bulamıyor (paket PYTHONPATH ya da çalışma klasörüyle mi yükleniyor?): menü girdisi çalışmaz. Deskhand'i pipx ya da pip ile kurup komutu yeniden çalıştırın.": [
   "masaustu_kur.py:252"
+ ],
+ "{py} ile çalışan yardımcılarda eksik: {liste} (sessizce çalışmaz)": [
+  "doktor.py:781"
+ ],
+ "{py}: jeepney, Xlib var": [
+  "doktor.py:773"
  ],
  "{sayi} adet, {mb} MB": [
   "doktor.py:441"
