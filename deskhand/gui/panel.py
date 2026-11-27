@@ -202,7 +202,7 @@ class Panel(QObject):
 
         from .. import liste_koruma
         self.liste_uyarilari: list[str] = []
-        self.koruyucu = liste_koruma.panel_baslat(self._liste_uyari, self._kalici_onayla)
+        self.koruyucu = liste_koruma.panel_baslat(self._liste_uyari, self._kalici_onayla, self._degisiklik_onayla)
         self._liste_izci = QFileSystemWatcher(self)
         self._liste_izle()
         self._liste_izci.fileChanged.connect(self._liste_degisti)
@@ -239,6 +239,20 @@ class Panel(QObject):
                                      QMessageBox.StandardButton.No)
         evet = cevap == QMessageBox.StandardButton.Yes
         gunluk(f"kalıcı oturum sitesi onayı: {'evet' if evet else 'hayır'}: {', '.join(siteler)}")
+        return evet
+
+    def _degisiklik_onayla(self, tur: str, aciklama: str) -> bool:
+        """A panel-authoritative setting changed while the panel was closed (or its mark cannot be verified) in the
+        LOOSENING direction (liste_koruma): it is not used until the user says Yes. Default answer: No."""
+        from PyQt6.QtWidgets import QMessageBox
+        metin = _("Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı:\n\n{aciklama}\n\n"
+                  "Bu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin (panelin son kaydı kullanılır)."
+                  ).format(aciklama=aciklama)
+        cevap = QMessageBox.question(None, "Deskhand — Onay", metin,
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                     QMessageBox.StandardButton.No)
+        evet = cevap == QMessageBox.StandardButton.Yes
+        gunluk(f"panel ayarı değişiklik onayı ({tur}): {'evet' if evet else 'hayır'}")
         return evet
 
     def _liste_uyari(self, metin: str):

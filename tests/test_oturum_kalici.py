@@ -179,7 +179,8 @@ def depo_dizini():
 
 def depo_dosyalari():
     d = depo_dizini()
-    return sorted(os.listdir(d)) if os.path.isdir(d) else []
+    # records only: the lock (.kilit) and forget markers (.<site>.unutuldu) are dot files
+    return sorted(a for a in os.listdir(d) if not a.startswith(".")) if os.path.isdir(d) else []
 
 
 def depo_ham():

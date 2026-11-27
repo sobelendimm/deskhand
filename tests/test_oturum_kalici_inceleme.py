@@ -21,6 +21,7 @@ import io
 import os
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -86,6 +87,160 @@ def kopyadan_sil(k, host_deseni):
     con.execute("DELETE FROM moz_cookies WHERE host LIKE ?", (host_deseni,))
     con.commit()
     con.close()
+
+
+ALT_KAYDET = r"""
+import sys, time
+sys.path.insert(0, sys.argv[1])
+from deskhand.oturum import kalici
+class A:
+    def anahtar(self, olustur):
+        return bytes.fromhex(sys.argv[2])
+kalici.anahtarlik_ayarla(A())
+eski = kalici.Depo._oku
+def yavas(self, *a, **k):
+    r = eski(self, *a, **k)
+    time.sleep(float(sys.argv[5]))
+    return r
+kalici.Depo._oku = yavas
+bas = float(sys.argv[4])
+while time.time() < bas:
+    time.sleep(0.005)
+print(kalici.kaydet(sys.argv[3], ["dukkan.test"]))
+"""
+
+
+def alt_kaydet(anahtarlik, kopya_yolu, bas, bekle):
+    """A separate PROCESS (a copy watchdog) saving the copy; its read is slowed down to open the race window."""
+    import _yalitim as Y
+    return subprocess.Popen([sys.executable, "-c", ALT_KAYDET, Y.KOK, anahtarlik.k.hex(), kopya_yolu, str(bas),
+                             str(bekle)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+
+def elle_kopya(satirlar, erisim=None):
+    """A bare copy directory (user.js without the task marker) for direct kaydet calls."""
+    k = tempfile.mkdtemp(prefix="deskhand-elle-", dir=os.environ["HOME"])
+    open(os.path.join(k, "user.js"), "w").write("// test\n")
+    kopyaya(k, satirlar, erisim=erisim)
+    return k
+
+
+def adla_sil(k, ad):
+    con = sqlite3.connect(os.path.join(k, "cookies.sqlite"))
+    con.execute("DELETE FROM moz_cookies WHERE name=?", (ad,))
+    con.commit()
+    con.close()
+
+
+def ikinci_tur(anahtarlik):
+    """Second security review (rapor-H3-inceleme-2.md): C2, C3, C1 (+C4), Y3, Y4, Y2."""
+    from deskhand.oturum import firefox
+
+    # ---- C3: expiry 0 / malformed read the same way on both paths (one helper)
+    dene("C3: sessionstore expiry 0 = oturumluk (cookies.sqlite ile aynı), bozuk değer oturumluk değil",
+         lambda: firefox._kaynak_bitis({"expiry": 0}) is None and kalici._sn(0, True) is None
+         and firefox._kaynak_bitis({"expiry": "abc"}) == 0.0 and kalici._sn("abc", True) is False
+         and kalici._sn(float("nan"), True) is False)
+    k = elle_kopya([("panel.test", "c3_bozuk", "BOZUK", "abc"), ("panel.test", "c3_iyi", "IYI", T._ms(7200))])
+    try:
+        kalici.kaydet(k, ["panel.test"])
+        hata = None
+    except Exception as e:  # noqa: BLE001 - the malformed value must not crash the save
+        hata = e
+    shutil.rmtree(k, ignore_errors=True)
+    dene("C3: bozuk expiry kaydet'i çökertmez", lambda: hata is None, lambda: repr(hata))
+    dene("C3: cookies.sqlite'ta bozuk expiry'li çerez 30 günlük oturumluk olarak saklanmaz",
+         lambda: deger("panel.test", "c3_bozuk") == [] and deger("panel.test", "c3_iyi") == ["IYI"],
+         lambda: str(deger("panel.test", "c3_bozuk")))
+
+    # ---- C2: a session-only cookie in daily use slides its deadline (cap: last use + N days)
+    simdi = time.time()
+    k = elle_kopya([("panel.test", "c2_oturum", "S", 0)], erisim=simdi)
+    kalici.kaydet(k, ["panel.test"])
+    shutil.rmtree(k, ignore_errors=True)
+    ilk = [c["expiry"] for c in (T.kayit("panel.test") or {}).get("cerezler", ()) if c["name"] == "c2_oturum"]
+    yirmi = 20 * 86400
+    k = elle_kopya([("panel.test", "c2_oturum", "S", int(ilk[0] * 1000) if ilk else 0)], erisim=simdi + yirmi)
+    for ad in os.listdir(k):
+        os.utime(os.path.join(k, ad), (simdi + yirmi, simdi + yirmi))
+    with T.zaman_kaydir(yirmi + 5):
+        kalici.kaydet(k, ["panel.test"])
+    shutil.rmtree(k, ignore_errors=True)
+    son = [c["expiry"] for c in (T.kayit("panel.test") or {}).get("cerezler", ()) if c["name"] == "c2_oturum"]
+    dene("C2: günlük kullanılan sitenin oturumluk çerezi son kullanımdan N gün kayar (30. günde düşmez)",
+         lambda: ilk and son and son[0] > simdi + 45 * 86400 and son[0] <= simdi + yirmi + 30 * 86400 + 60,
+         lambda: f"ilk={ilk} son={son} simdi={simdi}")
+
+    # ---- C1: two copies closing at once in two PROCESSES: both new logins and the logout tombstone survive
+    k = T.yeni_kopya()
+    kopyaya(k, [("dukkan.test", "c1s", "S0", T._ms(7200))], erisim=time.time() + 1000)
+    T.kapat(k)
+    ka, kb = T.yeni_kopya(), T.yeni_kopya()
+    adla_sil(ka, "c1s")  # copy A logs out of c1s (it received it)
+    kopyaya(ka, [("dukkan.test", "c1a", "A", T._ms(7200))], erisim=time.time() + 2000)
+    kopyaya(kb, [("dukkan.test", "c1b", "B", T._ms(7200))], erisim=time.time() + 2000)
+    bas = time.time() + 1.0
+    pa, pb = alt_kaydet(anahtarlik, ka, bas, 0.8), alt_kaydet(anahtarlik, kb, bas, 0.8)
+    ca, cb = pa.communicate(timeout=60), pb.communicate(timeout=60)
+    for x in (ka, kb):
+        kopya.temizle(x)
+    dene("C1: iki süreç eşzamanlı kaydet → iki yeni giriş de korunur",
+         lambda: deger("dukkan.test", "c1a") == ["A"] and deger("dukkan.test", "c1b") == ["B"],
+         lambda: f"{deger('dukkan.test', 'c1a')} {deger('dukkan.test', 'c1b')} {ca[1][-300:]} {cb[1][-300:]}")
+    dene("C1: …ve A'nın çıkış mezar taşı da (c1s geri gelmez)",
+         lambda: deger("dukkan.test", "c1s") == [] and
+         any("c1s" in km for km in ((T.kayit("dukkan.test") or {}).get("silinen") or {})))
+    kilit = os.path.join(T.depo_dizini(), ".kilit")
+    dene("C1: kilit dosyası depo dizininde 0600",
+         lambda: os.path.isfile(kilit) and (os.stat(kilit).st_mode & 0o777) == 0o600)
+
+    # ---- Y3: forget removes a leftover temporary file of an interrupted write
+    artik = os.path.join(T.depo_dizini(), ".dukkan.test.yarim1.tmp")
+    with open(artik, "wb") as f:
+        f.write(b"DHK2-yarim")
+    os.chmod(artik, 0o600)
+    kalici.unut("dukkan.test")
+    dene("Y3: forget <site> yarım yazımın .tmp artığını da siler", lambda: not os.path.exists(artik))
+
+    # ---- Y4: forget www.<site> finds the record of the listed site (same parser as the settings)
+    k = T.yeni_kopya()
+    kopyaya(k, [("dukkan.test", "y4", "Y4", T._ms(7200))], erisim=time.time() + 3000)
+    T.kapat(k)
+    dene("Y4: hazırlık: kayıt var", lambda: deger("dukkan.test", "y4") == ["Y4"])
+    dene("Y4: forget www.dukkan.test → dukkan.test kaydı silinir",
+         lambda: kalici.unut("www.dukkan.test") is True and T.kayit("dukkan.test") is None)
+
+    # ---- Y2: forget while a copy is open: its close does not write the site back; a copy opened later saves
+    k = T.yeni_kopya()
+    kopyaya(k, [("dukkan.test", "y2", "ESKI", T._ms(7200))], erisim=time.time() + 4000)
+    T.kapat(k)
+    acik = T.yeni_kopya()  # received the record
+    kopyaya(acik, [("dukkan.test", "y2b", "ACIK", T._ms(7200))], erisim=time.time() + 4100)
+    time.sleep(0.05)
+    kalici.unut("dukkan.test")
+    T.kapat(acik)
+    dene("Y2: forget'ten önce açılmış kopyanın kapanışı siteyi geri yazmaz", lambda: T.kayit("dukkan.test") is None,
+         lambda: T.depo_metni()[:300])
+    time.sleep(0.05)
+    k = T.yeni_kopya()
+    kopyaya(k, [("dukkan.test", "y2c", "YENI", T._ms(7200))], erisim=time.time() + 4200)
+    T.kapat(k)
+    dene("Y2: forget'ten SONRA açılan kopyadaki yeni giriş normal kaydedilir",
+         lambda: deger("dukkan.test", "y2c") == ["YENI"])
+
+    # ---- C4: forget --all while another process is saving: waits for the save, nothing survives
+    k = T.yeni_kopya()
+    kopyaya(k, [("dukkan.test", "c4", "C4", T._ms(7200))], erisim=time.time() + 5000)
+    bas = time.time() + 0.5
+    p = alt_kaydet(anahtarlik, k, bas, 1.0)
+    while time.time() < bas + 0.3:
+        time.sleep(0.02)
+    kalici.unut_hepsi()
+    cikti = p.communicate(timeout=60)
+    kopya.temizle(k)
+    dene("C4: forget --all eşzamanlı kaydet'i bekler; sonrasında kayıt kalmaz",
+         lambda: T.kayit("dukkan.test") is None and not [a for a in T.depo_dosyalari() if a.endswith(".kayit")],
+         lambda: f"{T.depo_dosyalari()} {cikti[1][-300:]}")
 
 
 def main():
@@ -275,6 +430,8 @@ def main():
             kopya.temizle(k)
             return all(v[0] != "ELLE-BANKA" for v in c.values())
         dene("I10b: elle eklenmiş böyle bir çerez uygulanmaz", bolum_uygula)
+
+        ikinci_tur(anahtarlik)
     finally:
         T.sessiz(liste_koruma.panel_durdur)
         if eski_home:

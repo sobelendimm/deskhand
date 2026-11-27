@@ -554,18 +554,34 @@ def _cookies_suz(cookies_db: str, politika: Politika, gorev_siteleri, bilinen_ko
         con.close()
 
 
-def _kaynak_bitis(c: dict) -> float | None:
-    """Source expiry of a sessionstore cookie in SECONDS (None = no expiry given). Firefox writes nsICookie.expiry:
-    seconds in older releases, milliseconds in newer ones (values above 1e11 are taken as ms). A value that is not a
-    number counts as already expired (0) so the cookie is skipped."""
-    v = c.get("expiry")
+def bitis_coz(v, ms: bool | None = None) -> float | None | bool:
+    """THE reading of a cookie expiry, shared by cookies.sqlite and sessionstore readers (here and oturum/kalici.py;
+    H3 review C3): → seconds; None = session-only (no expiry, or a value <= 0, as cookies.sqlite stores it); False =
+    malformed (not a finite number: the cookie is skipped, never turned into a session-only one). `ms`: the unit when
+    known (cookies.sqlite: decided per database); None = guess (above 1e11 → milliseconds; Firefox writes
+    nsICookie.expiry in seconds in older releases, milliseconds in newer ones)."""
     if v is None:
         return None
+    if isinstance(v, bool):
+        return False
     try:
-        v = float(v)
-    except (TypeError, ValueError):
-        return 0.0
-    return v / 1000 if v > 1e11 else v
+        f = float(v)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    if f != f or f in (float("inf"), float("-inf")):
+        return False
+    if f <= 0:
+        return None
+    if ms is None:
+        ms = f > 1e11
+    return f / 1000 if ms else f
+
+
+def _kaynak_bitis(c: dict) -> float | None:
+    """Source expiry of a sessionstore cookie in SECONDS (None = session-only; bitis_coz). A malformed value counts
+    as already expired (0) so the cookie is skipped."""
+    v = bitis_coz(c.get("expiry"))
+    return 0.0 if v is False else v
 
 
 def _oturum_cerezleri_ekle(recovery: str, cookies_db: str, politika: Politika, gorev_siteleri, gorev: bool = False,

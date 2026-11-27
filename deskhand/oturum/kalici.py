@@ -28,11 +28,17 @@ renamed, or written under an older key) is deleted. Plain JSON records of the fi
 (overwritten, then unlinked) the first time they are seen; they are not migrated.
 
 Lifetime (user decision 27 Kas, no one-day cap): a persistent cookie keeps its own expiry; a session-only cookie
-(no expiry, or expiry <= 0 in cookies.sqlite) gets `[oturum] kalici_sure_gun` days (default 30, 1..365) from the
-first save; when that cookie comes back in a later copy unchanged in expiry it keeps the first deadline (no endless
-renewal). A record whose cookies have all expired, or one "saved" in the future, is deleted when read. The server's
-own session lifetime is not extended: a site that ends the session on its side still asks for a login, and
-`sessions check` says so.
+(no expiry, or expiry <= 0; the same reading for cookies.sqlite and sessionstore, firefox.bitis_coz; a malformed
+expiry is skipped) gets `[oturum] kalici_sure_gun` days (default 30, 1..365, panel-authoritative) from its LAST USE:
+the cookie's own lastAccessed, never later than the copy's last use (review C2: a site used every day does not lose
+its login on day 30; an unused cookie is not renewed). A record whose cookies have all expired, or one "saved" in the
+future, is deleted when read. The server's own session lifetime is not extended: a site that ends the session on its
+side still asks for a login, and `sessions check` says so.
+
+Concurrency (review C1): every write/delete of the store holds one cross-process flock (DATA_DIR/<ad>/.kilit).
+Forget (review Y2-Y4): `unut` resolves www./subdomains to the stored site, deletes the record and its temporary
+leftovers and leaves <site>.unutuldu (forget --all: .hepsi.unutuldu); a copy opened before that time
+(.deskhand-kalici-acilis in the copy, written by uygula) does not write the site back when it closes.
 
 Never stored, never applied (checked at save AND at apply time, so a record written by hand or by an older release is
 filtered as well):
@@ -48,6 +54,7 @@ directory name and its own `kabul` rule (and the same key ring); the default sto
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -55,7 +62,9 @@ import re
 import sqlite3
 import stat
 import tempfile
+import threading
 import time
+import time as _saat  # monotonic / sleep for the lock (tests replace the module-level `time` with a shifted clock)
 from pathlib import Path
 
 from .. import yollar
@@ -73,6 +82,11 @@ _UZANTI = ".kayit"
 _ESKI_UZANTI = ".json"        # plain records of the first release (b72755f)
 _SIHIR = b"DHK2"
 _NONCE = 12
+_KILIT_AD = ".kilit"          # cross-process store lock (review C1), in the store directory, 0600
+_KILIT_SURE = 30.0            # seconds to wait for it; then nothing is written (logged)
+_UNUTULDU = ".unutuldu"       # .<site>.unutuldu: when `sessions forget <site>` ran (review Y2)
+_HEPSI_UNUTULDU = ".hepsi.unutuldu"  # `sessions forget --all`
+_ACILIS = ".deskhand-kalici-acilis"  # in the copy: when the store was first offered to it (uygula)
 
 
 # ---------------------------------------------------------------- key ring
@@ -211,9 +225,9 @@ def ayar_siteleri() -> set[str]:
 
 def sure_gun() -> int:
     """`[oturum] kalici_sure_gun`: lifetime of a session-only cookie in the store (days, 1..365)."""
-    from .. import ayarlar
+    from .. import liste_koruma
     try:
-        return max(1, min(365, int(ayarlar.al("oturum", "kalici_sure_gun"))))
+        return liste_koruma.kalici_sure_gun()  # panel-authoritative (review Y5): a longer value needs the panel
     except Exception:  # noqa: BLE001
         return SURE_GUN_VARSAYILAN
 
@@ -259,15 +273,11 @@ def _sayi(v) -> bool:
         return False
 
 
-def _sn(deger, ms: bool) -> float | None:
-    """cookies.sqlite expiry → seconds; None for a session-only cookie (no expiry / <= 0) or a malformed value."""
-    try:
-        v = float(deger)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if not math.isfinite(v) or v <= 0:
-        return None
-    return v / 1000 if ms else v
+def _sn(deger, ms: bool) -> float | None | bool:
+    """cookies.sqlite expiry → seconds; None = session-only (no expiry / <= 0); False = malformed (the cookie is
+    skipped). The same helper reads sessionstore (firefox.bitis_coz; review C3)."""
+    from .firefox import bitis_coz
+    return bitis_coz(deger, ms)
 
 
 def _kopya_cerezleri(kopya: Path, kullanim: float | None = None) -> tuple[list[dict], set[str]] | None:
@@ -288,14 +298,18 @@ def _kopya_cerezleri(kopya: Path, kullanim: float | None = None) -> tuple[list[d
             con = sqlite3.connect(gecici)
             try:
                 sutunlar = {r[1] for r in con.execute("PRAGMA table_info(moz_cookies)")}
-                (enbuyuk,) = con.execute("SELECT MAX(expiry) FROM moz_cookies").fetchone()
+                (enbuyuk,) = con.execute("SELECT MAX(expiry) FROM moz_cookies WHERE typeof(expiry) IN "
+                                         "('integer', 'real')").fetchone()
                 ms = not enbuyuk or enbuyuk > 1e11
                 ek = [s for s in ("sameSite", "schemeMap", "isPartitionedAttributeSet") if s in sutunlar]
                 for r in con.execute("SELECT originAttributes, name, value, host, path, expiry, lastAccessed, "
                                      "creationTime, isSecure, isHttpOnly" + "".join(f", {s}" for s in ek) +
                                      " FROM moz_cookies"):
+                    bitis = _sn(r[5], ms)
+                    if bitis is False:
+                        continue  # malformed expiry: skipped (not a 30-day session-only cookie)
                     c = {"originAttributes": r[0] or "", "name": r[1] or "", "value": r[2] or "", "host": r[3] or "",
-                         "path": r[4] or "/", "expiry": _sn(r[5], ms), "lastAccessed": int(r[6] or 0),
+                         "path": r[4] or "/", "expiry": bitis, "lastAccessed": int(r[6] or 0),
                          "creationTime": int(r[7] or 0), "isSecure": int(bool(r[8])), "isHttpOnly": int(bool(r[9]))}
                     for i, s in enumerate(ek):
                         c[s] = int(r[10 + i] or 0)
@@ -424,6 +438,35 @@ def _kopya_isareti_yaz(kopya: Path, d: dict) -> None:
             pass
 
 
+def _kopya_acilisi_yaz(kopya: Path) -> None:
+    """Record once when this copy was opened (prepared) for the store (review Y2: a forget after this time wins)."""
+    try:
+        fd = os.open(kopya / _ACILIS, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    except OSError:
+        return
+    try:
+        os.write(fd, repr(time.time()).encode())
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _kopya_acilisi(kopya: Path) -> float:
+    """When the copy was opened (0.0 = unknown: older than any forget, closed-safe)."""
+    try:
+        fd = os.open(kopya / _ACILIS, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return 0.0
+    try:
+        v = float(os.read(fd, 64).decode("ascii", "replace").strip())
+        return v if math.isfinite(v) else 0.0
+    except (OSError, ValueError):
+        return 0.0
+    finally:
+        os.close(fd)
+
+
 def _son_kullanim(kopya: Path, simdi: float) -> float:
     """When the copy was last used: the newest mtime of its cookie / session files (never later than now)."""
     zamanlar = []
@@ -471,6 +514,7 @@ class Depo:
             raise ValueError(ad)
         self.ad = ad
         self.kabul = kabul
+        self._yerel = threading.local()  # lock depth of this thread (_kilitli is re-entrant)
 
     # ---- files
     def dizin(self) -> str:
@@ -607,42 +651,189 @@ class Depo:
                 pass
             return False
 
-    def sil(self, site: str) -> bool:
-        """Delete the record of a site (and a plain record of the first release). → something was deleted."""
-        silindi = False
-        for uzanti in (_UZANTI, _ESKI_UZANTI):
-            yol = self._dosya(site, uzanti)
-            if yol is None or not self._dizin_gecerli() or not os.path.lexists(yol):
-                continue
-            if uzanti == _ESKI_UZANTI:
-                _guvenli_sil(yol)
-            else:
+    @contextlib.contextmanager
+    def _kilitli(self):
+        """Cross-process exclusive lock of the store (review C1): flock on DATA_DIR/<ad>/.kilit (0600). Every path
+        that writes or deletes records holds it (kaydet's read-merge-write, sil, sil_hepsi, unut, uygula's deletions),
+        so two copies closing at once cannot overwrite each other's logins or tombstones, and forget --all cannot
+        cut a write in half (C4). Re-entrant within a thread. Yields False (the caller changes nothing) when the store
+        directory is not usable or the lock is not obtained in _KILIT_SURE seconds (logged)."""
+        import fcntl
+        if getattr(self._yerel, "derinlik", 0):
+            self._yerel.derinlik += 1
+            try:
+                yield True
+            finally:
+                self._yerel.derinlik -= 1
+            return
+        d = self._dizin_hazirla()
+        fd = -1
+        if d is not None:
+            try:
+                fd = os.open(os.path.join(d, _KILIT_AD), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+                os.fchmod(fd, 0o600)
+            except OSError:
+                if fd >= 0:
+                    os.close(fd)
+                fd = -1
+        if fd < 0:
+            yield False
+            return
+        try:
+            son = _saat.monotonic() + _KILIT_SURE
+            alindi = False
+            while True:
                 try:
-                    os.unlink(yol)
-                except OSError:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    alindi = True
+                    break
+                except BlockingIOError:
+                    if _saat.monotonic() > son:
+                        break
+                    _saat.sleep(0.05)
+            if not alindi:
+                from ..gunluk import gunluk
+                gunluk(f"oturum: kalıcı depo kilidi {_KILIT_SURE:.0f} sn içinde alınamadı; hiçbir şey yazılmadı")
+                yield False
+                return
+            self._yerel.derinlik = 1
+            try:
+                yield True
+            finally:
+                self._yerel.derinlik = 0
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+    def sil(self, site: str) -> bool:
+        """Delete the record of a site (a plain record of the first release, and a leftover temporary file of an
+        interrupted write: review Y3). → something was deleted."""
+        if self._dosya(site) is None or not self._dizin_gecerli():
+            return False
+        with self._kilitli() as tamam:
+            if not tamam:
+                return False
+            silindi = False
+            for uzanti in (_UZANTI, _ESKI_UZANTI):
+                yol = self._dosya(site, uzanti)
+                if yol is None or not os.path.lexists(yol):
                     continue
-            silindi = True
-        return silindi
+                if uzanti == _ESKI_UZANTI:
+                    _guvenli_sil(yol)
+                else:
+                    try:
+                        os.unlink(yol)
+                    except OSError:
+                        continue
+                silindi = True
+            try:
+                adlar = os.listdir(self.dizin())
+            except OSError:
+                adlar = []
+            for a in adlar:  # .<site>.XXXX.tmp: an encrypted full record (writes hold the lock: none is in flight)
+                if a.startswith(f".{site}.") and a.endswith(".tmp"):
+                    try:
+                        os.unlink(os.path.join(self.dizin(), a))
+                    except OSError:
+                        pass
+            return silindi
 
     def sil_hepsi(self) -> int:
-        """Delete every record (forget --all). → number of sites deleted."""
+        """Delete every record. → number of sites deleted."""
         if not self._dizin_gecerli():
             return 0
+        with self._kilitli() as tamam:
+            if not tamam:
+                return 0
+            try:
+                adlar = os.listdir(self.dizin())
+            except OSError:
+                return 0
+            n = 0
+            for a in adlar:
+                for uzanti in (_UZANTI, _ESKI_UZANTI):
+                    if a.endswith(uzanti) and _SITE.fullmatch(a[: -len(uzanti)]):
+                        n += self.sil(a[: -len(uzanti)])
+                if a.startswith(".") and a.endswith(".tmp"):  # leftover of an interrupted write
+                    try:
+                        os.unlink(os.path.join(self.dizin(), a))
+                    except OSError:
+                        pass
+            return n
+
+    # ---- forget (sessions forget): a lasting "forgotten at" time (review Y2)
+    def _unutma_yolu(self, site: str | None) -> str:
+        return os.path.join(self.dizin(), _HEPSI_UNUTULDU if site is None else f".{site}{_UNUTULDU}")
+
+    def _unutma_yaz(self, site: str | None) -> None:
+        d = self._dizin_hazirla()
+        if d is None:
+            return
         try:
-            adlar = os.listdir(self.dizin())
+            fd, gecici = tempfile.mkstemp(prefix=".unut-", suffix=".tmp", dir=d)
         except OSError:
-            return 0
-        n = 0
-        for a in adlar:
-            for uzanti in (_UZANTI, _ESKI_UZANTI):
-                if a.endswith(uzanti) and _SITE.fullmatch(a[: -len(uzanti)]):
-                    n += self.sil(a[: -len(uzanti)])
-            if a.startswith(".") and a.endswith(".tmp"):  # leftover of an interrupted write
-                try:
-                    os.unlink(os.path.join(self.dizin(), a))
-                except OSError:
-                    pass
-        return n
+            return
+        try:
+            with os.fdopen(fd, "w") as f:
+                os.fchmod(f.fileno(), 0o600)
+                f.write(repr(time.time()))
+            os.replace(gecici, self._unutma_yolu(site))
+        except OSError:
+            try:
+                os.unlink(gecici)
+            except OSError:
+                pass
+
+    def _unutma_zamani(self, site: str) -> float | None:
+        """When the site (or every site) was last forgotten; None = never."""
+        zamanlar = []
+        for s in (site, None):
+            try:
+                fd = os.open(self._unutma_yolu(s), os.O_RDONLY | os.O_NOFOLLOW)
+            except OSError:
+                continue
+            try:
+                v = float(os.read(fd, 64).decode("ascii", "replace").strip())
+                if math.isfinite(v):
+                    zamanlar.append(v)
+            except (OSError, ValueError):
+                zamanlar.append(time.time())  # unreadable marker: forgotten (closed-safe)
+            finally:
+                os.close(fd)
+        return max(zamanlar) if zamanlar else None
+
+    def unut_site(self, site: str) -> str | None:
+        """The stored site `site` refers to (review Y4: same parser as the settings; www.<site> or any subdomain →
+        the listed / stored parent site, the longest match), or None when the name is not a site."""
+        adaylar = _siteler([site])
+        if not adaylar:
+            return None
+        s = adaylar[0]
+        if os.path.lexists(self._dosya(s) or ""):
+            return s
+        bilinen = set(self.kayitli_siteler()) | ayar_siteleri()
+        ust = sorted((b for b in bilinen if s.endswith("." + b)), key=len, reverse=True)
+        return ust[0] if ust else s
+
+    def unut(self, site: str) -> bool:
+        """sessions forget <site>: delete the record and leave a forgotten-at time, so a copy that is open now does
+        not write the site back when it closes (review Y2). → a record was deleted."""
+        s = self.unut_site(site)
+        if s is None:
+            return False
+        with self._kilitli() as tamam:
+            if not tamam:
+                return False
+            self._unutma_yaz(s)
+            return self.sil(s)
+
+    def unut_hepsi(self) -> int:
+        """sessions forget --all (forgotten-at time for every site)."""
+        with self._kilitli() as tamam:
+            if not tamam:
+                return 0
+            self._unutma_yaz(None)
+            return self.sil_hepsi()
 
     # ---- lifetime
     @staticmethod
@@ -668,14 +859,25 @@ class Depo:
         k = _anahtar(True)
         if k is None:
             return 0  # closed-fail: no plain-text fallback, existing records are kept
+        with self._kilitli() as tamam:  # C1: one writer at a time across processes (read → merge → write)
+            if not tamam:
+                return 0
+            return self._kaydet_kilitli(kopya, siteler, okunan, k, politika, kullanim)
+
+    def _kaydet_kilitli(self, kopya: Path, siteler, okunan, k: bytes, politika, kullanim: float) -> int:
         cerezler, bilinen = okunan
         pol = politika or _politika()
         simdi = time.time()
-        # a session-only cookie's deadline counts from the copy's last use (a dead copy may be swept days later)
-        oturumluk_bitis = kullanim + sure_gun() * 86400
+        # a session-only cookie's deadline slides with its use (review C2): its own last access (never later than
+        # the copy's last use; a dead copy may be swept days later) + N days. Unused → no renewal.
+        omur = sure_gun() * 86400
         alinan_hepsi = _kopya_isareti_oku(kopya)
+        acilis = _kopya_acilisi(kopya)
         toplam = 0
         for site in siteler:
+            unutma = self._unutma_zamani(site)
+            if unutma is not None and acilis <= unutma:
+                continue  # review Y2: forgotten while this copy was open; only a copy opened later may save it
             if not self.kabul(pol, site, ()):
                 self.sil(site)
                 continue
@@ -697,10 +899,12 @@ class Depo:
                 bitis = c["expiry"]
                 p = P.get(anahtar)
                 eski = float(p["expiry"]) if p is not None and p.get("oturumluk") else None
-                if bitis is None:  # session-only: the first deadline is kept, otherwise last use + N days
-                    bitis, oturumluk = (eski if eski is not None else oturumluk_bitis), True
+                erisim = _tamsayi(c.get("lastAccessed")) / 1e6
+                kayan = (min(kullanim, erisim) if erisim > 0 else kullanim) + omur
+                if bitis is None:  # session-only: last access + N days
+                    bitis, oturumluk = kayan, True
                 elif eski is not None and abs(bitis - eski) <= _ESIT_PAYI:
-                    oturumluk = True  # a stored session-only cookie that came back through cookies.sqlite
+                    bitis, oturumluk = kayan, True  # a stored session-only cookie that came back through cookies.sqlite
                 else:
                     oturumluk = False
                 if not _sayi(bitis) or bitis <= simdi:
@@ -755,6 +959,8 @@ class Depo:
         kopya = Path(kopya)
         siteler = _siteler(siteler)
         db = kopya / "cookies.sqlite"
+        if not gorev_kipi.etkin() and kopya.is_dir():
+            _kopya_acilisi_yaz(kopya)  # review Y2: a forget after this moment wins over this copy's close
         # (no user.js check here: firefox.hazirla applies before writing user.js; it never calls this in task mode)
         if not siteler or gorev_kipi.etkin() or not db.is_file() or db.is_symlink():
             return 0
@@ -773,7 +979,8 @@ class Depo:
         con = sqlite3.connect(str(db))
         try:
             sutunlar = {r[1] for r in con.execute("PRAGMA table_info(moz_cookies)")}
-            (enbuyuk,) = con.execute("SELECT MAX(expiry) FROM moz_cookies").fetchone()
+            (enbuyuk,) = con.execute("SELECT MAX(expiry) FROM moz_cookies WHERE typeof(expiry) IN "
+                                     "('integer', 'real')").fetchone()
             carpan = 1000 if (not enbuyuk or enbuyuk > 1e11) else 1
             bilinen = set(bilinen_konaklar or ()) | {_konak(r[0]).lstrip(".") for r in
                                                      con.execute("SELECT DISTINCT host FROM moz_cookies")}
@@ -901,11 +1108,11 @@ def durum(site: str, siteler=None, simdi: float | None = None) -> dict:
 
 
 def unut(site: str) -> bool:
-    return DEPO.sil(site)
+    return DEPO.unut(site)
 
 
 def unut_hepsi() -> int:
-    return DEPO.sil_hepsi()
+    return DEPO.unut_hepsi()
 
 
 def kapanirken(kopya_yolu: str) -> int:

@@ -451,7 +451,8 @@ class _Kanal:
             c.settimeout(KANAL_ZAMAN_ASIMI)
             satir = _satir_oku(c)
             parca = (satir or "").split()
-            if len(parca) == 2 and parca[0] == "liste" and parca[1] in ("yasak", "seviye", "onaylar", "kimlik", "kalici"):
+            if len(parca) == 2 and parca[0] == "liste" and parca[1] in ("yasak", "seviye", "onaylar", "kimlik", "kalici",
+                                                                            "kalici_sure"):
                 # panelin bellekteki yetkili kopyası (liste_koruma; onaylar=kapsam, kimlik=hesap oturumu izni); SALT OKUMA
                 c.sendall(_liste_yaniti(parca[1]))
                 return
