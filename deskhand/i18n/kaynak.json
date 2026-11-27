@@ -4236,7 +4236,7 @@
  "sistemi kapatma/yeniden başlatma ({komut})": [
   "guvenlik.py:941"
  ],
- "site alan adı ya da adresi (shopier.com)": [
+ "site alan adı ya da adresi (example.com)": [
   "oturum/cli.py:79"
  ],
  "site oturumu Firefox profilinde ve kopyada var mı (salt okuma; 0 = var, 1 = yok/eski)": [

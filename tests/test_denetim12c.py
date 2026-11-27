@@ -1,4 +1,4 @@
-"""Denetim 12c (bwrap ad alanı katmanı) — REGRESYON testi: denetimin kaçışları (docs/denetim/12c/: denetim12b_aygit,
+"""Denetim 12c (bwrap ad alanı katmanı) — REGRESYON testi: denetimin kaçışları (iç denetim betikleri: denetim12b_aygit,
 denetim12b_path, denetim12b_kacis + ad alanı içi ic_kacis/ic_aygit → tests/yardimci/ic_kacis.py) düzeltmeden sonra
 HEPSİ başarısız olmalı. Arka plan masaüstü türü DESKHAND_ARKA_TUR'a göre (iki türle de koşulur: kwin, xvfb).
 

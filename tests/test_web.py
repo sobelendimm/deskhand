@@ -177,7 +177,7 @@ try:
             "isaretli" in es[("radio button", "Kargo ile")]["durum"] and
             "isaretli" not in es[("radio button", "Mağazadan teslim")]["durum"])
     kontrol("form: seçim kutusu değeri (seçili seçenek) ve kapalı durumu",
-            es[("combo box", "Şehir")].get("deger") == "Niğde" and "kapali" in es[("combo box", "Şehir")]["durum"],
+            es[("combo box", "Şehir")].get("deger") == "Çınarlı" and "kapali" in es[("combo box", "Şehir")]["durum"],
             str(es[("combo box", "Şehir")]))
     # href Firefox'un erişilebilirlik önbelleğine yüklemeden hemen sonra kısa bir süre boş gelebiliyor (ölçüldü)
     href = bekle(lambda: web.oge_bul(k, "Yardım", rol="bağlantı").get("href"), 3)

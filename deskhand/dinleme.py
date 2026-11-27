@@ -1,4 +1,4 @@
-"""Dinleme: görünmez masaüstündeki uygulamaların SESİNİ yazıya dök (docs/PLAN_TUR3.md §5; MCP aracı `listen`).
+"""Dinleme: görünmez masaüstündeki uygulamaların SESİNİ yazıya dök (MCP aracı `listen`).
 
 Ses yolu: uygulama → oturuma özel ses sunucusunun boş çıkışı (ses.py) → o çıkışın MONİTÖRÜ → `parec` (16 kHz mono
 s16, bellekte) → `whisper-cli` (yerel; model ayarlanabilir; silero VAD) → {text, segments, language, duration}.

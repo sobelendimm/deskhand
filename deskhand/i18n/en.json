@@ -1212,7 +1212,7 @@
  "ESKİ: profilde daha yeni oturum var (tazeleyin: deskhand open firefox)": "STALE: the profile has a newer session (refresh: deskhand open firefox)",
  "Deskhand: insan doğrulaması sizi bekliyor": "Deskhand: a human verification is waiting for you",
  "Son etkinlik": "Last activity",
- "site alan adı ya da adresi (shopier.com)": "site domain or address (shopier.com)",
+ "site alan adı ya da adresi (example.com)": "site domain or address (example.com)",
  "süresiz (tarayıcı oturumu)": "session-only (browser session)",
  "{sure} kaldı": "{sure} left",
  "{dk} dk": "{dk} min",

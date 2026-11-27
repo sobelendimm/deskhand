@@ -1,4 +1,4 @@
-"""Görünmez masaüstü için OTURUMA ÖZEL ses sunucusu (dinleme, docs/PLAN_TUR3.md §5).
+"""Görünmez masaüstü için OTURUMA ÖZEL ses sunucusu (dinleme: deskhand/dinleme.py).
 
 Her masaüstü kendi küçük PipeWire + WirePlumber + pipewire-pulse örneğini alır (oturum dizininde). Örnek
 DONANIM bilmez: yapılandırma ALSA/Bluetooth/kamera eklentisini ve aygıt fabrikalarını yüklemez, WirePlumber yalnız

@@ -397,12 +397,12 @@ satırı veritabanından geç siler ve eski kod (`INSERT OR IGNORE`) canlı otur
 atlıyordu. Geçerli kalıcı çakışan satır kalır. Bölümlenmiş (CHIPS) çerezde `isPartitionedAttributeSet` de yazılır.
 Değerler yalnız kopyaya gider; günlüğe ve çıktıya yazılmaz; kopya 0700, dosyaları 0600.
 
-**24 Kas olayı (Shopier, kanıt):** satıcı paneli kopyada giriş istedi. Sebep süresiz çerezlerin taşınmaması DEĞİLDİ:
-`sec_session_id` ve `shopier_buyer` kalıcı çerezlerdir, ömürleri son istekten itibaren **2 saat** (kayan); yalnız
-`PHPSESSID` süresizdir ve kopyaya taşınıyordu. Kullanıcının panele son girişi önceki akşamdı; kopya alındığında giriş
-çerezlerinin süresi ~12 saat önce dolmuştu. Kullanıcının kendi Firefox geçmişinde de panel adresi önce giriş sayfasına
-yönlendi (`/m/orders.php` → `/m/login.php`), yani kendi tarayıcısı da girişsizdi (açık sekme eski sayfayı
-gösteriyordu). Yeniden girişten sonra alınan kopya girişli açıldı.
+**Örnek olay (bir pazar yeri satıcı paneli, kanıtlı):** satıcı paneli kopyada giriş istedi. Sebep süresiz çerezlerin
+taşınmaması DEĞİLDİ: sitenin giriş çerezleri (`sec_session_id` ve bir `…_buyer` çerezi) kalıcıdır, ömürleri son
+istekten itibaren **2 saat** (kayan); yalnız `PHPSESSID` süresizdir ve kopyaya taşınıyordu. Kullanıcının panele son
+girişi önceki akşamdı; kopya alındığında giriş çerezlerinin süresi ~12 saat önce dolmuştu. Kullanıcının kendi Firefox
+geçmişinde de panel adresi önce giriş sayfasına yönlendi (`/orders` → `/login`), yani kendi tarayıcısı da girişsizdi
+(açık sekme eski sayfayı gösteriyordu). Yeniden girişten sonra alınan kopya girişli açıldı.
 
 **`deskhand sessions check <site>`** (`oturum denetle`; salt okuma): profilin `cookies.sqlite`'ını geçici 0700
 klasöre tutarlı kopyalayıp okur, `recovery.jsonlz4`'ü çözer, en yeni Firefox kopyasına (önce bağlamdaki masaüstü)
@@ -410,7 +410,7 @@ bakar. Çerez başına: ad, konak, kalıcı/süresiz, kalan süre ya da "süresi
 yalnız bellekte SHA-256 özetiyle karşılaştırılır; değer ve özet yazılmaz. Giriş çerezi ad deseniyle tahmin edilir
 (`session`, `sid`, `auth`, `token`, `login`, `user`, `buyer`…) ya da `--cerez AD` (fnmatch, tekrarlanabilir) ile
 verilir. Süresi geçmiş kalıcı giriş çerezi var, geçerli kalıcı yoksa (yalnız süresiz `PHPSESSID` kalmışsa) oturum YOK
-sayılır: Shopier olayındaki durum budur. "Kopyaya taşınır mı" kararı kopyanın kurallarıyla aynıdır (ret listesi, hesap
+sayılır: yukarıdaki örnek olaydaki durum budur. "Kopyaya taşınır mı" kararı kopyanın kurallarıyla aynıdır (ret listesi, hesap
 oturumu izni, görev kipi, alan çerezi kuralı; §8 "Site ret listesi"): reddedilen bir alt alana gidebilecek alan
 çerezi `politika_disi` sayılır. Bilinen konaklar için de profilin `cookies.sqlite`'ına ve `places.sqlite`'ına
 bağlanılmaz (WAL dahil geçici 0700 kopyadan okunur).
@@ -421,7 +421,7 @@ bağlanılmaz (WAL dahil geçici 0700 kopyadan okunur).
 | 1 | profilde oturum yok / süresi geçmiş / politika dışı, kopya oturumsuz ya da profilde daha yeni giriş var | kullanıcı kendi Firefox'unda girsin, sonra kopyayı tazeleyin (`deskhand open firefox`) |
 | 2 | geçersiz alan adı | — |
 
-Yayın ajanları için ön kontrol: `deskhand sessions check shopier.com --cerez sec_session_id || <kullanıcıya giriş
+Yayın ajanları için ön kontrol: `deskhand sessions check example.com --cerez sec_session_id || <kullanıcıya giriş
 yaptırın>`. Sınır: Firefox süresi geçen satırı zaten silmişse ve yalnız süresiz bir çerez kalmışsa bu ayırt edilemez
 (sunucu tarafındaki zaman aşımı bilinmez); kesin sonuç için sitenin giriş çerezini `--cerez` ile verin.
 

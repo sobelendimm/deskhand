@@ -2,3 +2,11 @@ pre-commit:
   commands:
     kontrol:
       run: tools/kontrol.sh {staged_files}
+    iz:
+      # personal-trace scan; private words live outside the repo (a missing file only warns)
+      run: python3 tools/iz_tara.py --ek "$HOME/.config/deskhand/iz-desenleri.txt" {staged_files}
+
+commit-msg:
+  commands:
+    iz-ileti:
+      run: python3 tools/iz_tara.py --ek "$HOME/.config/deskhand/iz-desenleri.txt" --ileti "$(cat {1})"

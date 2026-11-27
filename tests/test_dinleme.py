@@ -453,7 +453,7 @@ kontrol("kur yeniden: eski ses süreçleri öldürüldü, yenileri çalışıyor
 dd = masaustu.durum()
 
 # ---------------------------------------------------------------- 3b) Tur 8: ses sunucusuna GÜVENME
-# Ele geçirilmiş sunucu (bwrap içinde `ses/` ve `ses-pulse/` yazabilir) simülasyonu: tuzak dosyalar YALNIZ scratchpad altında
+# Ele geçirilmiş sunucu (bwrap içinde `ses/` ve `ses-pulse/` yazabilir) simülasyonu: tuzak dosyalar YALNIZ _yalitim geçici dizininde
 # (kullanıcının gerçek ~/.bashrc, ~/.ssh dosyalarına hiçbir yerde dokunulmaz, bağ hedefi bile değil).
 import hashlib  # noqa: E402
 import signal  # noqa: E402
@@ -461,14 +461,14 @@ import socket as _sock  # noqa: E402
 import stat as _stat  # noqa: E402
 import tempfile  # noqa: E402
 
-TUZAK_KOK = "/tmp/claude-1000/-home-mustafa/10082ba7-82ea-4b36-ae15-9f61ff9d0931/scratchpad/olgunlastirma-ses"
+TUZAK_KOK = os.path.join(GECICI, "tuzak-ses")
 os.makedirs(TUZAK_KOK, mode=0o700, exist_ok=True)
 TZ = tempfile.mkdtemp(prefix="tuzak-", dir=TUZAK_KOK)
 atexit.register(shutil.rmtree, TZ, True)
 
 
 class Dinleyici:
-    """Tuzak unix soketi (scratchpad): gelen bağlantıları sayar. Yol AF_UNIX sınırından uzun: göreli bind (bağlantı sembolik
+    """Tuzak unix soketi (geçici dizin): gelen bağlantıları sayar. Yol AF_UNIX sınırından uzun: göreli bind (bağlantı sembolik
     bağ üzerinden gelir; sun_path'e giden yol kısa)."""
 
     def __init__(self, yol):
@@ -765,7 +765,7 @@ os.kill(eski_p["ses_pw"], signal.SIGKILL)
 bekle(lambda: not any(ao._canli(p) for p in eski_p.values()), 8)
 c_, u_, kd = sunucuyu_yeniden_kur()
 iz1 = {y: dosya_izi(y) for y in tuz.values()}
-kontrol("tur8 (a): `kur` sembolik bağları İZLEMEDİ: tuzak dosyalar (scratchpad) bayt/mtime/inode aynı, tuzak dizinine dosya eklenmedi",
+kontrol("tur8 (a): `kur` sembolik bağları İZLEMEDİ: tuzak dosyalar (geçici dizin) bayt/mtime/inode aynı, tuzak dizinine dosya eklenmedi",
         iz0 == iz1 and sorted(os.listdir(TZ)) == liste0 and all(open(y).read() == "KORUNAN-ICERIK\n" for y in tuz.values()),
         str((iz0 == iz1, sorted(os.listdir(TZ)), liste0)))
 kontrol("tur8 (a): yeni `ses/` sıfırdan: eski sembolik bağlar ve 0000 dizin silindi, sunucu yeniden kuruldu",

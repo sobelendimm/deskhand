@@ -59,7 +59,7 @@ ALANLAR = [  # (ad, değer, açıklama, nitelikler, beklenen)
     ("Alan altı", "gizli", "", {"placeholder": "Şifre"}, "***"),
     ("Kutu", "abc", "", {"text-input-type": "password"}, "***"),
     ("Doğrulama kodu", "55667", "", {}, "***"),
-    ("Şehir", "Niğde", "", {"id": "sehir"}, "Niğde"),
+    ("Şehir", "Çınarlı", "", {"id": "sehir"}, "Çınarlı"),
     ("Not", "a\x1bb\nc", "", {}, "ab c"),
     ("Maske", "••••", "", {}, None),
 ]
@@ -170,10 +170,10 @@ def firefox_bolumu():
                 ogeler = {o["ad"]: o for o in web.oku(k, gorunur=False, en_cok=0)["ogeler"]}
             except Exception:  # noqa: BLE001
                 ogeler = {}
-            if ogeler.get("Şehir", {}).get("deger") == "Niğde":
+            if ogeler.get("Şehir", {}).get("deger") == "Çınarlı":
                 break
             time.sleep(0.2)
-        kontrol("firefox: sıradan alan değeri okunuyor (Şehir = Niğde)", ogeler.get("Şehir", {}).get("deger") == "Niğde",
+        kontrol("firefox: sıradan alan değeri okunuyor (Şehir = Çınarlı)", ogeler.get("Şehir", {}).get("deger") == "Çınarlı",
                 str(ogeler.get("Şehir")))
         for ad, gizli in (("Kod", "482913"), ("Numara", "4111111111111111"), ("Üç hane", "737"), ("PIN", "1234"),
                           ("Doğrulama kodu", "55667"), ("Alan altı", "gizli-deger-6"), ("Güvenlik kodu", "909")):

@@ -12,9 +12,9 @@ Hangi çerez "oturum" (giriş) çerezidir? --cerez AD (fnmatch, tekrarlanabilir)
 deseni (_GIRIS_DESENI: session, sess, sid, auth, token, login, user, account, buyer…). Karar:
   profil  var           : geçerli (süresi geçmemiş) giriş çerezi var ve süresi GEÇMİŞ kalıcı giriş çerezi yok
                           (ya da geçmişin yanında geçerli bir kalıcı giriş çerezi de var)
-          suresi_gecmis : kalıcı giriş çerezlerinin süresi dolmuş, geçerli kalıcı yok (gerçek olay 24 Kas: Shopier
-                          sec_session_id 2 saat kayan ömürlü; kullanıcı 12 saattir girmemişti, kendi Firefox'u da
-                          giriş istedi; tarayıcı oturumunun PHPSESSID'i ise hâlâ duruyordu)
+          suresi_gecmis : kalıcı giriş çerezlerinin süresi dolmuş, geçerli kalıcı yok (örnek olay: bir satıcı
+                          panelinin sec_session_id çerezi 2 saat kayan ömürlü; kullanıcı 12 saattir girmemişti, kendi
+                          Firefox'u da giriş istedi; tarayıcı oturumunun PHPSESSID'i ise hâlâ duruyordu; docs/SESSIONS.md §3.4.1)
           yok           : giriş çerezi hiç yok
           politika_disi : giriş çerezleri ret listesinde / görev izni dışında (kopyaya hiç taşınmaz)
   kopya   guncel        : kopyanın kendi giriş çerezleri aynı ölçüte göre 'var' ve profilde daha yenisi yok

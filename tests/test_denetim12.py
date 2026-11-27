@@ -1,4 +1,4 @@
-"""Faz 12b bağımsız denetiminin saldırıları (docs/denetim/12b/ kanıt betiklerinden) — REGRESYON testi: düzeltmeden sonra
+"""Faz 12b bağımsız denetiminin saldırıları (iç denetimin kanıt betiklerinden) — REGRESYON testi: düzeltmeden sonra
 HER saldırı BAŞARISIZ olmalı. Kullanıcının GERÇEK oturumuna bağlantı/girdi YOK: "gerçek oturum" rolünü ikinci bir
 yalıtık KWin oturumu (B) ya da sahte bir dinleyen soket oynar.
 

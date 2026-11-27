@@ -76,7 +76,7 @@ def main(argv=None) -> int:
     komut("sil", h_("tüm oturum kopyalarını sil"))
 
     pk = komut("denetle", h_("site oturumu Firefox profilinde ve kopyada var mı (salt okuma; 0 = var, 1 = yok/eski)"))
-    pk.add_argument("alan", help=h_("site alan adı ya da adresi (shopier.com)"))
+    pk.add_argument("alan", help=h_("site alan adı ya da adresi (example.com)"))
     pk.add_argument("--cerez", action="append", default=None, metavar="AD",
                     help=h_("giriş çerezinin adı (fnmatch; tekrarlanabilir). Yoksa ad deseniyle tahmin edilir"))
     pk.add_argument("--json", action="store_true")

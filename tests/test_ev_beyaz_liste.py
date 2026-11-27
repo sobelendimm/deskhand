@@ -1,6 +1,6 @@
 """Ev dizini BEYAZ LİSTE kanıt testi (arka plan uygulaması ad alanı; arka_ortak.ev_baglari / EV_BEYAZ_LISTE).
 
-Bulgu (docs/olcum/rakip_kiyas.md): eski geçici katman + kara liste (SIR_YOLLARI) düzeninde listede OLMAYAN gizli dosya
+Bulgu (iç rakip kıyası ölçümü): eski geçici katman + kara liste (SIR_YOLLARI) düzeninde listede OLMAYAN gizli dosya
 (`.config/baskauygulama/token`) arka plan uygulamasına okunuyordu. Yeni düzen: ev dizini BOŞ tmpfs; gerçek evden yalnız
 görünüm ayarları (beyaz liste) salt okunur, XDG veri klasörleri yazılabilir ve kalıcı, politikanın uygulama başına `ev`
 girdileri (varsayılan YOK) salt okunur.

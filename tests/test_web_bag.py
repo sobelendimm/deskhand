@@ -217,7 +217,7 @@ async def senaryo():
                 y["total"] == len(y["items"]) == 17)
         kontrol("read_text(web): bağlantı adresi (href) ve kapalı seçim kutusunun değeri",
                 any(o["text"] == "Yardım" and o.get("href", "").endswith("#yardim") for o in y["items"]) and
-                any(o["text"] == "Şehir" and o.get("value") == "Niğde" for o in y["items"]),
+                any(o["text"] == "Şehir" and o.get("value") == "Çınarlı" for o in y["items"]),
                 str([o for o in y["items"] if o["text"] in ("Yardım", "Şehir")]))
         kontrol("read_text(web): devre dışı düğme durumu", any(o["text"] == "Gönder" and "devre_disi" in o.get("state", [])
                                                               for o in y["items"]))
