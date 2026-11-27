@@ -205,7 +205,7 @@ class Panel(QObject):
         self.koruyucu = liste_koruma.panel_baslat(self._liste_uyari, self._kalici_onayla, self._degisiklik_onayla)
         from .. import onay as _onay
         # the panel removed DUR itself on the user's Yes to a removal request: it is no longer the panel's own DUR
-        _onay.dur_kaldirildi = lambda: setattr(self, "_dur_kullanici", False)
+        _onay.dur_kaldirildi = lambda: self._dur_kaydet(False)
         _onay.onay_reddedildi = self._liste_uyari  # a refused Yes (request changed / not as shown): log + tray
         self._liste_izci = QFileSystemWatcher(self)
         self._liste_izle()
@@ -215,6 +215,7 @@ class Panel(QObject):
         self._liste_zaman.setInterval(self.LISTE_YOKLA_MS)
         self._liste_zaman.timeout.connect(self._liste_degisti)
         self._liste_zaman.start()
+        self._dur_baslat()
 
     def _liste_izle(self):
         from .. import liste_koruma
@@ -224,9 +225,36 @@ class Panel(QObject):
         if yeni:
             self._liste_izci.addPaths(yeni)
 
+    def _dur_kaydet(self, acik: bool):
+        """The user's DUR on/off as the panel knows it: in memory AND in the panel's signed state (Secret Service), so
+        a panel restart does not lose it (review INC3 B4). Wallet unusable → memory + the DUR file only."""
+        self._dur_kullanici = bool(acik)
+        try:
+            from .. import liste_koruma
+            liste_koruma.panel_dur_sakla(bool(acik))
+        except Exception:  # noqa: BLE001 - the switch itself works without the wallet
+            pass
+
+    def _dur_baslat(self):
+        """Panel start (B4): the user's DUR is the panel's own when the DUR file says "kullanici" OR the panel's
+        signed state says it was on (the agent may have killed the panel and deleted the file): put back."""
+        kayitli = False
+        try:
+            from .. import liste_koruma
+            kayitli = liste_koruma.panel_dur_kayitli()
+        except Exception:  # noqa: BLE001 - wallet unusable: the DUR file only
+            pass
+        self._dur_kullanici = guvenlik.dur_kaynagi() == "kullanici" or kayitli
+        if self._dur_kullanici:
+            self._dur_kaydet(True)
+            self._dur_koru()
+
     def _dur_koru(self):
         """The user's DUR (set in this panel) vanished without the panel's Devam (a process deleted the file): put it
-        back and warn. Removing DUR is the user's decision only (CLI resume asks the panel: guvenlik.dur_kaldir_iste)."""
+        back and warn. Removing DUR is the user's decision only (CLI resume asks the panel: guvenlik.dur_kaldir_iste).
+        A user DUR set outside this panel (the file says "kullanici") becomes the panel's own (B4)."""
+        if not getattr(self, "_dur_kullanici", False) and guvenlik.dur_kaynagi() == "kullanici":
+            self._dur_kaydet(True)
         if getattr(self, "_dur_kullanici", False) and not guvenlik.dur_acik():
             guvenlik.dur_ac("kullanici")
             self._liste_uyari(_("DUR anahtarı panel dışında kaldırıldı; geri konuldu (yalnız kullanıcı kaldırır)."))
@@ -300,7 +328,7 @@ class Panel(QObject):
     # -------- DUR / devam (insanın kararı: kaynak "kullanici")
     def dur(self):
         guvenlik.dur_ac("kullanici")
-        self._dur_kullanici = True  # the panel knows its own DUR: deleted outside the panel → put back (_dur_koru)
+        self._dur_kaydet(True)  # the panel knows its own DUR: deleted outside the panel → put back (_dur_koru)
         self.pencere.gorev.durdur()  # çalışan görev varsa o da dursun (ajan DUR hatalarıyla boşuna beklemesin)
         gunluk("DUR anahtarı açıldı (panel)")
         self.izleyici.yenile()
@@ -308,7 +336,7 @@ class Panel(QObject):
     def devam(self):
         """Panel penceresindeki Devam (yerleşik yasak pencere: ajan tıklayamaz) → DUR kalkar."""
         acikti = guvenlik.dur_kapat("kullanici")
-        self._dur_kullanici = False
+        self._dur_kaydet(False)
         if acikti:
             gunluk("DUR anahtarı kaldırıldı (panel)")
         self.izleyici.yenile()

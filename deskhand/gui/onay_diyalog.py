@@ -49,6 +49,7 @@ class OnayDiyalog(QDialog):
             def yanitla(k, karar):
                 return onay.yanitla(k, karar, gosterilen=gosterilen)
         self.istek, self._yanitla, self.saat = istek, yanitla, saat
+        self.ret_nedeni: str | None = None  # set when a Yes was refused (closed as "red", B5)
         self._istek_var = istek_var or (lambda: os.path.exists(onay.istek_yolu(self.istek_id)))
         self.bitti = False
         self.setObjectName("deskhandOnay")
@@ -247,7 +248,13 @@ class OnayDiyalog(QDialog):
             return
         if karar == "izin" and kapat:
             self.hide()  # izin isteyene ulaşmadan önce: isteyen onaylanan bölgeyi yeniden görüntülerken diyalog örtmesin
-        self._yanitla(self.istek_id, karar)  # izin YALNIZ onay kanalından gider (onay.yanitla)
+        gitti = self._yanitla(self.istek_id, karar)  # izin YALNIZ onay kanalından gider (onay.yanitla)
+        if karar == "izin" and gitti is False:
+            # the Yes was refused (request changed / not as the requester wrote it / already answered): never
+            # reported as "izin" (review INC3 B5); the reason is shown by the panel (onay.onay_reddedildi)
+            self.ret_nedeni = "izin-reddedildi"
+            self._bitir("red", kapat)
+            return
         self._bitir(neden or karar, kapat)
 
     def _bitir(self, neden: str, kapat: bool = True):

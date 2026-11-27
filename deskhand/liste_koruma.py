@@ -23,12 +23,19 @@ Rule, per value read from disk while the panel was closed (panel start) or from 
      the approved value and asks the user once (`sor(tur, aciklama)` / `onayla(siteler)`, a Qt dialog in gui/panel.py,
      default No); panel closed → Dur 10 (yasak/seviye);
   c) no signed state (first start, locked wallet, no Secret Service, any error): only the defaults (TABAN: onaylar=hepsi,
-     hesap_oturumlari=∅, kalici=∅, kalici_sure_gun=30; yasak = the built-in list, seviye = no rule, so any file is the
-     default or tighter) and tightenings apply; every loosening is asked; one visible warning per panel start; no
-     fallback to sha256 or to an unsigned mark, no Dur 10 loop;
+     hesap_oturumlari=∅, kalici=∅, kalici_sure_gun=30) and tightenings apply; every loosening is asked; one visible
+     warning per panel start; no fallback to sha256 or to an unsigned mark, no Dur 10 loop.
+     yasak/seviye (their default is "no rule", so "tighter than the default" proves nothing): a file is used without a
+     question ONLY on a first start (the key ring answered "no item" AND no mark). Otherwise (locked wallet, no Secret
+     Service, marks deleted or forged) ONE combined question shows the file contents (default No; review INC3 B1).
+     Yes → applied, signed as soon as the wallet can be read. No / no dialog → the lists are "not verified": the
+     channel answers `dogrulanamadi` and clients stop with Dur 10 (visible reason); when the wallet can be read again
+     the panel restores the signed value and checks again (`denetle`);
   d) migration: values under an old sha256 mark have no approved value yet → (c): loosenings are asked once, Yes → signed;
-  e) one question per (setting, file content) per panel session; a file that cannot be written is reported once
-     (no dialog loop, review C6).
+  e) only a No is remembered, per (setting, file content, approved value) and panel session: no dialog loop (review
+     C6). A Yes is never replayed: the reference is the approved state (the user's Yes and Settings edits update it),
+     so content the user removed and an agent writes back is asked again (review INC3 B2). A file that cannot be
+     written is reported once.
 
 Direction per type (siki_mi):
   yasak       tighter = every pattern line of the reference is still there (adding lines tightens)
@@ -74,6 +81,9 @@ ONBELLEK_SN = 0.3  # istemci: panelden alınan listeyi bu kadar süre yeniden so
 #                   için denetim); panelin Kaydet'i en geç bu kadar sonra geçerli. Dosya yolu önbelleksiz.
 MESAJ_DOGRULANAMADI = N_("Deskhand ayar dosyasının ({dosya}) önceki onaylı değeri doğrulanamadı (cüzdan kilitli/yok); "
                          "güvenli tarafta hiçbir girdi gönderilmez; Deskhand paneli açın.")
+MESAJ_PANEL_DOGRULANAMADI = N_("Deskhand paneli {tur} listesini doğrulayamadı (cüzdan okunamıyor; listeler "
+                               "doğrulanamadı); güvenli tarafta hiçbir girdi gönderilmez. Cüzdanı açın ya da listeyi "
+                               "panelin Ayarlar'ından kaydedin.")
 MESAJ_KAYIP = N_("Deskhand ayar dosyası ({dosya}) kayıp ya da panel dışında değişti; güvenli tarafta hiçbir girdi "
                  "gönderilmez; Deskhand paneli açın (panel kendi kaydını geri yükler).")
 _AYAR_ADI = {"yasak": N_("yasak pencereler"), "seviye": N_("uygulama erişim seviyeleri"), KAPSAM: N_("onay kapsamı"),
@@ -210,9 +220,10 @@ def _durum_coz(ham) -> dict | None:
         k = bytes.fromhex(d["anahtar"])
         sayac = {t: int(v) for t, v in d.get("sayac", {}).items() if t in TUM and int(v) >= 0}
         son = {t: v for t, v in d.get("son", {}).items() if t in TUM and (v is None or isinstance(v, str))}
-    except (ValueError, TypeError, KeyError, AttributeError):
+        dur = d.get("dur") is True
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
         return None
-    return {"anahtar": k, "sayac": sayac, "son": son} if len(k) == 32 else None
+    return {"anahtar": k, "sayac": sayac, "son": son, "dur": dur} if len(k) == 32 else None
 
 
 def _neden(e: Exception) -> str:
@@ -253,8 +264,8 @@ def _durum(olustur: bool = False) -> dict | None:
 
 def _durum_kaydet(d: dict) -> bool:
     global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
-    veri = json.dumps({"surum": 1, "anahtar": d["anahtar"].hex(), "sayac": d["sayac"], "son": d["son"]},
-                      ensure_ascii=False).encode("utf-8", "surrogateescape")
+    veri = json.dumps({"surum": 1, "anahtar": d["anahtar"].hex(), "sayac": d["sayac"], "son": d["son"],
+                       "dur": bool(d.get("dur"))}, ensure_ascii=False).encode("utf-8", "surrogateescape")
     with _DURUM_KILIT:
         try:
             _kasa_nesnesi().yaz(veri)
@@ -295,17 +306,17 @@ def _imza(k: bytes, tur: str, sayac: int, metin: str | None) -> str:
     return hmac.new(k, veri.encode("utf-8", "surrogateescape"), hashlib.sha256).hexdigest()
 
 
-def _isaret_yaz(tur: str, metin: str | None) -> None:
+def _isaret_yaz(tur: str, metin: str | None) -> bool:
     """Panel only: `metin` becomes the panel's approved value: the Secret Service item (son[tur], sayac[tur] + 1 when
-    the value changed) and the file mark HMAC(key, [tur, sayac, metin]). No usable item → an unsigned mark."""
+    the value changed) and the file mark HMAC(key, [tur, sayac, metin]). No usable item → an unsigned mark.
+    → signed (False: the wallet could not be read/written; the caller may sign it later)."""
     d = _durum(True)
     sayac = None
     if d is not None:
         if tur in d["son"] and d["son"][tur] == metin:
             sayac = d["sayac"].get(tur, 0)
         else:
-            yeni = {"anahtar": d["anahtar"], "sayac": {**d["sayac"], tur: d["sayac"].get(tur, 0) + 1},
-                    "son": {**d["son"], tur: metin}}
+            yeni = {**d, "sayac": {**d["sayac"], tur: d["sayac"].get(tur, 0) + 1}, "son": {**d["son"], tur: metin}}
             d = yeni if _durum_kaydet(yeni) else None
             sayac = yeni["sayac"][tur] if d is not None else None
     m = {"surum": ISARET_SURUM, "sha256": _ozet(metin), "icerik": metin, "var": metin is not None,
@@ -318,6 +329,24 @@ def _isaret_yaz(tur: str, metin: str | None) -> None:
         os.chmod(isaret_yolu(tur), 0o600)
     except OSError:
         pass
+    return d is not None and sayac is not None
+
+
+def panel_dur_sakla(acik: bool) -> bool:
+    """Panel only (review INC3 B4): keep "the user's DUR is on" in the panel's signed state, so that killing the panel,
+    deleting the DUR file and starting a new panel does not lift it. → stored (False: the wallet cannot be used)."""
+    d = _durum(True)
+    if d is None:
+        return False
+    if bool(d.get("dur")) == bool(acik):
+        return True
+    return _durum_kaydet({**d, "dur": bool(acik)})
+
+
+def panel_dur_kayitli() -> bool:
+    """The panel's signed state says the user's DUR is on (False: no / cannot be read)."""
+    d = _durum(False)
+    return bool(d is not None and d.get("dur"))
 
 
 def isaret_dogrula(tur: str) -> tuple[str, str | None]:
@@ -427,46 +456,144 @@ class Koruyucu:
         self.onayla = onayla
         self.sor = sor
         self._soruyor = False
-        self._cevaplar: dict[tuple[str, str | None], bool] = {}  # C6: one question per (setting, file content)
+        self._redler: set[tuple[str, str, str]] = set()  # C6/B2: (setting, sha256 file, sha256 approved) refused
         self._yazilamadi: set[tuple[str, str | None]] = set()
         self._kilit = threading.Lock()
         self.bellek: dict[str, str | None] = {}
+        self._dogrulanamayan: set[str] = set()  # yasak/seviye not verified (wallet unreadable, user said No): Dur 10
+        self._imzasiz: set[str] = set()  # approved by the user while the wallet could not be written: sign later
+        self._dogrulanacak: list[tuple[str, str | None]] = []
+        self._kasa_deneme = time.monotonic()
         self._gecmis = isaret_gecmisi()  # before this start writes any mark
         self._ilk = ilk_kurulum()  # the key ring answered "no item" AND no mark: a first start
-        self._dogrulanamadi_uyarildi = False
         for tur in TUM:
             self._acilis(tur)
+        self._dogrulanamayanlari_sor()
         if kasa_nedeni():  # once per start, visible: why loosening values are being asked / not applied
             self.uyari(_("Panelin imzalı kaydı kullanılamıyor ({neden}); yalnız varsayılanlar ve daraltmalar "
                          "uygulanıyor, gevşetmeler panelde sorulur.").format(neden=kasa_nedeni()))
 
+    KASA_YENIDEN_SN = 5.0  # unverified / unsigned values: how often denetle tries the wallet again
+
     # ---- the question
-    def _sor(self, tur: str, yeni: str | None, ref: str | None) -> bool:
-        anahtar = (tur, yeni)
-        if anahtar in self._cevaplar:
-            return self._cevaplar[anahtar]
+    def _soru(self, tur: str, aciklama: str, siteler: list[str] | None = None) -> bool:
+        """Ask once (default No). Nothing is cached here: see _sor (only a No is remembered)."""
         if self._soruyor:  # the dialog runs a nested event loop: the poll timer must not ask again meanwhile
             return False
         self._soruyor = True
         try:
-            if tur == KALICI and self.onayla is not None:
-                siteler = sorted(kalici_ayristir(yeni) - kalici_ayristir(ref)) or sorted(kalici_ayristir(yeni))
-                cevap = bool(self.onayla(siteler))
-            elif self.sor is not None:
-                cevap = bool(self.sor(tur, _("{ayar}: panelin kaydı «{eski}», dosyada «{yeni}»").format(
-                    ayar=_(_AYAR_ADI[tur]), eski=_kisa(ref), yeni=_kisa(yeni))))
-            else:
-                cevap = False
+            if siteler is not None and self.onayla is not None:
+                return bool(self.onayla(siteler))
+            if self.sor is not None:
+                return bool(self.sor(tur, aciklama))
+            return False
         except Exception:  # noqa: BLE001 - the dialog failed: not approved
-            cevap = False
+            return False
         finally:
             self._soruyor = False
-        self._cevaplar[anahtar] = cevap
+
+    @staticmethod
+    def _red_anahtari(tur: str, yeni: str | None, ref: str | None) -> tuple[str, str, str]:
+        return (tur, _ozet(yeni), _ozet(ref))
+
+    def _sor(self, tur: str, yeni: str | None, ref: str | None) -> bool:
+        """A loosening of `ref` (the approved value) to `yeni`. Only a No is remembered (review INC3 B2: a cached Yes
+        let content the user later removed come back without a question)."""
+        anahtar = self._red_anahtari(tur, yeni, ref)
+        if anahtar in self._redler:
+            return False
+        if self._soruyor:
+            return False
+        siteler = None
+        if tur == KALICI and self.onayla is not None:
+            siteler = sorted(kalici_ayristir(yeni) - kalici_ayristir(ref)) or sorted(kalici_ayristir(yeni))
+        cevap = self._soru(tur, _("{ayar}: panelin kaydı «{eski}», dosyada «{yeni}»").format(
+            ayar=_(_AYAR_ADI[tur]), eski=_kisa(ref), yeni=_kisa(yeni)), siteler)
+        if not cevap:
+            self._redler.add(anahtar)
         return cevap
 
+    def _imza_izle(self, tur: str, imzali: bool) -> None:
+        """A value the user approved (Yes / Settings): not signed now (wallet unreadable) → signed in denetle."""
+        if imzali:
+            self._imzasiz.discard(tur)
+        else:
+            self._imzasiz.add(tur)
+
+    def _dogrulanamayanlari_sor(self) -> None:
+        """Panel start, yasak/seviye with no signed value and not a first start (locked wallet, no Secret Service,
+        marks deleted or forged): ONE question with the file contents, default No (review INC3 B1)."""
+        liste, self._dogrulanacak = self._dogrulanacak, []
+        if not liste:
+            return
+        neden = kasa_nedeni() or _("panelin imzalı kaydı yok")
+        satirlar = "\n".join(_("{ayar}: dosyada «{yeni}»").format(ayar=_(_AYAR_ADI[t]), yeni=_kisa(d))
+                             for t, d in liste)
+        aciklama = _("Panelin imzalı kaydı okunamıyor ({neden}); şu listeler doğrulanamadı:\n{satirlar}").format(
+            neden=neden, satirlar=satirlar)
+        if self._soru(",".join(t for t, _d in liste), aciklama):
+            for tur, d in liste:
+                if d is None and tur == "yasak":
+                    from .guvenlik import VARSAYILAN_YASAK
+                    d = _(VARSAYILAN_YASAK)
+                    try:
+                        _yaz_atomik(dosya(tur), d)
+                    except OSError:
+                        pass
+                self._kabul(tur, d, onay=True)
+            return
+        with self._kilit:
+            for tur, d in liste:
+                self.bellek[tur] = d  # kept as found (the settings page shows it); NOT served: Dur 10
+                self._dogrulanamayan.add(tur)
+        self.uyari(_("Cüzdan okunamıyor; listeler doğrulanamadı ({ayarlar}). Bu listeler doğrulanana kadar Deskhand "
+                     "girdi göndermez (Dur 10). Cüzdan açılınca panel imzalı kaydı geri yükler; ya da listeleri "
+                     "Ayarlar'dan kaydedin.").format(ayarlar=", ".join(_(_AYAR_ADI[t]) for t, _d in liste)))
+
+    def _kasa_yeniden(self) -> list[str]:
+        """denetle: the wallet can be read again → sign the values approved meanwhile, restore + re-check the
+        unverified lists from the signed state."""
+        if not (self._dogrulanamayan or self._imzasiz) or self._soruyor:
+            return []
+        simdi = time.monotonic()
+        if simdi - self._kasa_deneme < self.KASA_YENIDEN_SN:
+            return []
+        self._kasa_deneme = simdi
+        if _durum(False) is None:
+            return []
+        for tur in sorted(self._imzasiz):
+            with self._kilit:
+                deger = self.bellek.get(tur)
+                if tur not in self._dogrulanamayan and _isaret_yaz(tur, deger):
+                    self._imzasiz.discard(tur)
+        uyarilar = []
+        for tur in sorted(self._dogrulanamayan):
+            var, ref = onayli_deger(tur)
+            if not var:
+                continue  # still no signed value: stays unverified (the user can save the list in Ayarlar)
+            with self._kilit:
+                reddedilen = self.bellek.get(tur)
+            # the user already said No to this file content at start: restored without a second question
+            self._redler.add(self._red_anahtari(tur, reddedilen, ref))
+            self._acilis(tur)  # signed value now known: tighter file → kept, looser → restored (or asked)
+            with self._kilit:
+                self._dogrulanamayan.discard(tur)
+            uyarilar.append(_("Cüzdan okunabildi; {ayar} panelin imzalı kaydıyla doğrulandı.").format(
+                ayar=_(_AYAR_ADI[tur])))
+        return uyarilar
+
+    def yanit(self, tur: str) -> str | None:
+        """The value served on the approval channel (`liste <tur>`): an unverified list is not served (B1)."""
+        with self._kilit:
+            if tur in self._dogrulanamayan:
+                from .onay import ListeDogrulanamadi
+                raise ListeDogrulanamadi(tur)
+            return self.bellek.get(tur)
+
     # ---- file writes
-    def _dosyaya_yaz(self, tur: str, deger: str | None) -> bool:
-        """Write the panel's value back to its file (+ signed mark). A failure is reported once per content (C6)."""
+    def _dosyaya_yaz(self, tur: str, deger: str | None, onay: bool = False) -> bool:
+        """Write the panel's value back to its file (+ signed mark). A failure is reported once per content (C6).
+        onay=True: the user approved `deger` (Yes / Settings): if it cannot be signed now, it is signed later."""
         try:
             if tur in TURLER:
                 if deger is None:
@@ -491,9 +618,12 @@ class Koruyucu:
                              "değişiklik bu oturumda yeniden sorulmaz.").format(hata=type(e).__name__,
                                                                                ayar=_(_AYAR_ADI[tur])))
         try:
-            _isaret_yaz(tur, deger)
+            imzali = _isaret_yaz(tur, deger)
         except OSError:
-            pass
+            imzali = False
+        if onay:
+            self._dogrulanamayan.discard(tur)  # the user's own value: verified by the user
+            self._imza_izle(tur, imzali)
         return tamam
 
     # ---- panel start
@@ -505,14 +635,9 @@ class Koruyucu:
                 self._kabul(tur, d)
                 return
         elif tur in TURLER:
-            if self._ilk or not self._gecmis:
-                # first start (key ring: no item, no mark), or no mark while the wallet cannot be read: the default
-                # is the built-in list only (yasak) and no rule (seviye); any file is that or stricter. In the second
-                # case the previous approved values cannot be checked: said once, visibly (clients refuse: Dur 10)
-                if not self._ilk and not self._dogrulanamadi_uyarildi:
-                    self._dogrulanamadi_uyarildi = True
-                    self.uyari(_("Önceki onaylı ayarlar doğrulanamadı (cüzdan kilitli/yok); dosyadaki değer "
-                                 "kullanılıyor."))
+            if self._ilk:
+                # first start (the key ring answered "no item" AND no mark): the default is the built-in list only
+                # (yasak) and no rule (seviye); any file is that or stricter
                 if d is None and tur == "yasak":
                     from .guvenlik import VARSAYILAN_YASAK
                     d = _(VARSAYILAN_YASAK)
@@ -522,18 +647,18 @@ class Koruyucu:
                         pass
                 self._kabul(tur, d)
                 return
-            # the panel signed before (marks exist) but its record cannot be read (locked wallet, no Secret Service,
-            # DESKHAND_ANAHTARLIK=kapali, deleted item): closed-fail, never a first start. The unverified mark only
-            # makes the value stricter; the file is used only after the user's Yes (security scan 2, finding 1)
-            m = (isaret_oku(tur) or {}).get("icerik")
-            ref = en_siki(tur, d, m if isinstance(m, str) else None)
+            # not a first start and no signed value (locked wallet, no Secret Service, DESKHAND_ANAHTARLIK=kapali,
+            # marks deleted or forged): "tighter than the default" proves nothing for these lists and an unsigned
+            # mark is no evidence (review INC3 B1). Asked together after the loop (_dogrulanamayanlari_sor)
+            self._dogrulanacak.append((tur, d))
+            return
         else:
             if siki_mi(tur, d, TABAN[tur]):
                 self._kabul(tur, d)
                 return
             ref = en_siki(tur, d, TABAN[tur])
         if self._sor(tur, d, ref):
-            self._kabul(tur, d)
+            self._kabul(tur, d, onay=True)
             return
         self.bellek[tur] = ref
         if ref != d:
@@ -542,9 +667,11 @@ class Koruyucu:
             _isaret_yaz(tur, ref)
         self.uyari(self._ret_iletisi(tur, d, ref))
 
-    def _kabul(self, tur: str, d: str | None) -> None:
+    def _kabul(self, tur: str, d: str | None, onay: bool = False) -> None:
         self.bellek[tur] = d
-        _isaret_yaz(tur, d)
+        imzali = _isaret_yaz(tur, d)
+        if onay:
+            self._imza_izle(tur, imzali)
         if tur == KIMLIK and kimlik_ayristir(d):  # visible on every start
             from .oturum.politika import KIMLIK_ADLARI
             self.uyari(_("Hesap oturumu izni açık: {saglayici}. Görünmez masaüstündeki tarayıcı bu hesaplara girişli "
@@ -576,27 +703,27 @@ class Koruyucu:
             raise ValueError(deger)
         with self._kilit:
             self.bellek[KAPSAM] = deger
-            self._dosyaya_yaz(KAPSAM, deger)
+            self._dosyaya_yaz(KAPSAM, deger, onay=True)
 
     def kimlik_kaydet(self, deger: str) -> None:
         """Panelin Ayarlar'ı: hesap oturumu izni (tek yetkili yazar; açarken onay diyaloğu gui'de)."""
         k = kimlik_ayristir(deger, kati=True)
         with self._kilit:
             self.bellek[KIMLIK] = kimlik_metni(k)
-            self._dosyaya_yaz(KIMLIK, self.bellek[KIMLIK])
+            self._dosyaya_yaz(KIMLIK, self.bellek[KIMLIK], onay=True)
 
     def kalici_kaydet(self, deger: str) -> None:
         """Panel (user-approved): the persistent-session site list (single authoritative writer)."""
         k = kalici_ayristir(deger, kati=True)
         with self._kilit:
             self.bellek[KALICI] = kalici_metni(k)
-            self._dosyaya_yaz(KALICI, self.bellek[KALICI])
+            self._dosyaya_yaz(KALICI, self.bellek[KALICI], onay=True)
 
     def sure_kaydet(self, gun: int) -> None:
         """Panel (user-approved): [oturum] kalici_sure_gun."""
         with self._kilit:
             self.bellek[SURE] = str(_sure_sayi(gun))
-            self._dosyaya_yaz(SURE, self.bellek[SURE])
+            self._dosyaya_yaz(SURE, self.bellek[SURE], onay=True)
 
     def _tek_yonlu_denetle(self, tur: str) -> list[str]:
         """File vs memory for a one-way setting (kalici, kalici_sure): tightening is accepted; loosening is asked
@@ -614,11 +741,11 @@ class Koruyucu:
                 _isaret_yaz(tur, dosyada)
             return [_("Kalıcı oturum listesinden ayar dosyasında site çıkarıldı; kabul edildi.") if tur == KALICI else
                     _("Kalıcı oturum süresi ayar dosyasında kısaltıldı; kabul edildi.")]
-        tekrar = (tur, dosyada) in self._cevaplar
+        tekrar = self._red_anahtari(tur, dosyada, bellekte) in self._redler
         if self._sor(tur, dosyada, bellekte):
             with self._kilit:
                 self.bellek[tur] = dosyada
-                self._dosyaya_yaz(tur, dosyada)
+                self._dosyaya_yaz(tur, dosyada, onay=True)
             return []
         with self._kilit:
             self._dosyaya_yaz(tur, bellekte)
@@ -630,24 +757,28 @@ class Koruyucu:
                           siteler=", ".join(sorted(kalici_ayristir(dosyada) - kalici_ayristir(bellekte))))]
         return [self._ret_iletisi(tur, dosyada, bellekte)]
 
-    def _dosyaya(self, tur: str) -> None:
-        self._dosyaya_yaz(tur, self.bellek.get(tur))
+    def _dosyaya(self, tur: str, onay: bool = False) -> None:
+        self._dosyaya_yaz(tur, self.bellek.get(tur), onay)
 
     def metin(self, tur: str) -> str | None:
         with self._kilit:
             return self.bellek.get(tur)
 
     def kaydet(self, tur: str, metin: str) -> None:
-        """Panelin Kaydet'i: bellek + dosya + işaret (tek yetkili yazar)."""
+        """Panelin Kaydet'i: bellek + dosya + işaret (tek yetkili yazar). The user's own value: an unverified list
+        becomes verified (B1), and it is signed now or as soon as the wallet can be written."""
         with self._kilit:
             self.bellek[tur] = metin
-            self._dosyaya(tur)
+            self._dosyaya(tur, onay=True)
 
     def denetle(self) -> list[str]:
-        """Dosyalar bellekle aynı mı? Değilse (silindi/değişti) bellekteki içerik geri yazılır. → uyarı metinleri."""
-        uyarilar = []
+        """Dosyalar bellekle aynı mı? Değilse (silindi/değişti) bellekteki içerik geri yazılır. → uyarı metinleri.
+        Unverified / unsigned values: the wallet is tried again (KASA_YENIDEN_SN) and the lists re-checked (B1)."""
+        uyarilar = self._kasa_yeniden()
         with self._kilit:
             for tur in TURLER:
+                if tur in self._dogrulanamayan:
+                    continue  # not served (Dur 10) and not signed: nothing to restore until it is verified (B1)
                 if _oku(dosya(tur)) != self.bellek.get(tur):
                     self._dosyaya(tur)
                     uyarilar.append(_("{dosya} panel dışında silindi ya da değiştirildi; panelin kaydı korundu ve dosya "
@@ -691,7 +822,7 @@ def panel_baslat(uyari=None, onayla=None, sor=None) -> Koruyucu:
     global AKTIF
     AKTIF = Koruyucu(uyari, onayla, sor)
     from . import onay
-    onay.liste_saglayici = AKTIF.metin
+    onay.liste_saglayici = AKTIF.yanit
     return AKTIF
 
 
@@ -881,7 +1012,10 @@ def metin(tur: str, olustur: bool = True) -> str | None:
     → metin | None (seviye dosyası yok = kısıt yok). Kayıp/değişmiş işaretli dosyada Dur 10. olustur=False: ilk
     kurulumda (işaret yok, dosya yok) varsayılan yasak listesi DÖNER ama dosya yazılmaz (salt okuyan durum yolları)."""
     if AKTIF is not None:
-        return AKTIF.metin(tur)
+        try:
+            return AKTIF.yanit(tur)
+        except Exception as e:  # noqa: BLE001 - onay.ListeDogrulanamadi: not verified (B1)
+            raise Dur(10, _(MESAJ_PANEL_DOGRULANAMADI).format(tur=_(_AYAR_ADI.get(tur, tur)))) from e
     simdi = time.monotonic()
     with _ONBELLEK_KILIT:
         o = _ONBELLEK.get(tur)
@@ -908,6 +1042,8 @@ def _panelden(tur: str):
     from . import onay
     try:
         return onay.liste_iste(tur)
+    except onay.ListeDogrulanamadi:  # the panel answered: this list is not verified (wallet unreadable): Dur 10
+        raise Dur(10, _(MESAJ_PANEL_DOGRULANAMADI).format(tur=_(_AYAR_ADI.get(tur, tur)))) from None
     except Exception:  # noqa: BLE001 - panel yok / doğrulanamadı / eski panel: dosya yolu (işaret denetimli)
         return _YOK
 
