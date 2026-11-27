@@ -1,8 +1,12 @@
 """Persistent background sessions (deskhand/oturum/kalici.py, docs/SESSIONS.md §3.8) — EKRANSIZ; the real Firefox
-profile is never touched (fake HOME in a temporary folder, fake profiles.ini + cookies.sqlite; made-up *.test domains).
+profile is never touched (fake HOME in a temporary folder, fake profiles.ini + cookies.sqlite; made-up *.test domains)
+and the real Secret Service / KDE Wallet is never touched (a fake key ring is injected: kalici.anahtarlik_ayarla;
+_yalitim also sets DESKHAND_ANAHTARLIK=kapali so the real backend refuses inside tests).
 
-Plan H3 red list 1a–1h, plus: the `sessions check` report line (2a/2b), the other copy-deletion paths (masaüstü
-kapanışı, süpürme: 3a/3b), the `[oturum] kalici` setting (4a/4b) and value-free durum() (5).
+Plan H3 red list 1a–1h, plus: the `sessions check` report line (2a–2d), the other copy-deletion paths (masaüstü
+kapanışı, süpürme: 3a/3b), the settings (4a–4d), value-free durum() (5), and H3-2 (user decision 27 Kas: encrypted,
+no one-day cap): 6a encrypted on disk, 6b wrong key / corrupt data, 6c no key ring, 6d AAD, 6e lifetime, 6f forget,
+6g old plain records, 6h doctor row.
 
 Çalıştır:  python3 tests/test_oturum_kalici.py
 """
@@ -45,7 +49,19 @@ def dene(ad, fn, ek=""):
     except Exception as e:  # noqa: BLE001
         kontrol(ad, False, f"{type(e).__name__}: {e}")
         return
-    kontrol(ad, sonuc, ek() if callable(ek) else ek)
+    try:
+        ek = ek() if callable(ek) else ek
+    except Exception as e:  # noqa: BLE001
+        ek = f"{type(e).__name__}: {e}"
+    kontrol(ad, sonuc, ek)
+
+
+def sessiz(fn, *a, **k):
+    """Call for setup steps whose failure is reported by the checks that follow (old code)."""
+    try:
+        return fn(*a, **k)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 _SEMA = (
@@ -58,6 +74,45 @@ _SEMA = (
 SIMDI = time.time()
 GUN = 86400
 ACE_BANKA = "örnekbank.test".encode("idna").decode()  # xn--…bank-… : the `*bank*` rule against the ACE spelling
+
+
+class SahteAnahtarlik:
+    """Fake key ring (no D-Bus): one 32-byte key in memory; `neden` set = unavailable (locked wallet…)."""
+
+    def __init__(self):
+        self.k = None
+        self.neden = None
+        self.okuma = 0
+
+    def anahtar(self, olustur):
+        self.okuma += 1
+        if self.neden:
+            raise kalici.AnahtarYok(self.neden)
+        if self.k is None:
+            if not olustur:
+                raise kalici.AnahtarYok("anahtar yok", yok=True)
+            self.k = os.urandom(32)
+        return self.k
+
+
+class SahteZaman:
+    """kalici.time replacement: the clock moved by `kayma` seconds."""
+
+    def __init__(self, kayma):
+        self.kayma = kayma
+
+    def time(self):
+        return time.time() + self.kayma
+
+
+@contextlib.contextmanager
+def zaman_kaydir(sn):
+    eski = kalici.time
+    kalici.time = SahteZaman(sn)
+    try:
+        yield
+    finally:
+        kalici.time = eski
 
 
 def _ms(sn):
@@ -122,21 +177,45 @@ def depo_dizini():
     return os.path.join(yollar.data_dir(), "oturum-kalici")
 
 
-def depo_metni():
-    """Every byte of every file in the store, as text (to prove which values are NOT stored)."""
+def depo_dosyalari():
     d = depo_dizini()
+    return sorted(os.listdir(d)) if os.path.isdir(d) else []
+
+
+def depo_ham():
+    """Every byte of every file in the store (what an attacker reading the disk sees)."""
     parcalar = []
-    if os.path.isdir(d):
-        for ad in sorted(os.listdir(d)):
-            with open(os.path.join(d, ad), "rb") as f:
-                parcalar.append(f.read().decode("utf-8", "replace"))
+    for ad in depo_dosyalari():
+        with open(os.path.join(depo_dizini(), ad), "rb") as f:
+            parcalar.append(f.read())
+    return b"\n".join(parcalar)
+
+
+def kayit(site):
+    """The decrypted record of a site (via the store itself) or None."""
+    try:
+        return kalici.DEPO._oku(site)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def depo_metni():
+    """The decrypted contents of every record (to prove which values are / are NOT stored)."""
+    parcalar = []
+    for ad in depo_dosyalari():
+        site = ad.rsplit(".", 1)[0]
+        parcalar.append(json.dumps(kayit(site), ensure_ascii=False))
     return "\n".join(parcalar)
 
 
-def ayar_yaz(metin):
+def kayit_yolu(site):
+    return os.path.join(depo_dizini(), f"{site}.kayit")
+
+
+def ayar_yaz(metin, sure=None):
     os.makedirs(os.path.dirname(ayarlar.dosya()), exist_ok=True)
     with open(ayarlar.dosya(), "w") as f:
-        f.write(f'[oturum]\nkalici = "{metin}"\n')
+        f.write(f'[oturum]\nkalici = "{metin}"\n' + (f"kalici_sure_gun = {sure}\n" if sure else ""))
 
 
 def yeni_kopya():
@@ -157,18 +236,26 @@ def kapat(yol, umask=None):
 
 
 def kayit_duzenle(site, fn):
-    """Edit a stored record by hand; no record (old code) → False, the checks that depend on it fail."""
-    yol = os.path.join(depo_dizini(), f"{site}.json")
+    """Edit a stored record through the store (decrypt → change → encrypt); no record → False."""
     try:
-        with open(yol) as f:
-            d = json.load(f)
+        d = kalici.DEPO._oku(site)
+        if d is None:
+            return False
         fn(d)
-        with open(yol, "w") as f:
-            json.dump(d, f)
-        os.chmod(yol, 0o600)
-    except (OSError, ValueError, KeyError, TypeError):
+        return bool(kalici.DEPO._yaz(site, d))
+    except Exception:  # noqa: BLE001
         return False
-    return True
+
+
+def cli_kos(argv):
+    from deskhand.oturum import cli
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            kod = cli.main(argv)
+    except SystemExit as e:  # argparse (old code: unknown command)
+        kod = e.code
+    return kod, out.getvalue()
 
 
 def main():
@@ -178,6 +265,8 @@ def main():
     os.environ.pop("XDG_CONFIG_HOME", None)
     for ad in (gorev_kipi.ORTAM, gorev_kipi.SITE_ORTAM):
         os.environ.pop(ad, None)
+    anahtarlik = SahteAnahtarlik()
+    sessiz(lambda: kalici.anahtarlik_ayarla(anahtarlik))
     try:
         fx_kok = os.path.join(tdir, ".config", "mozilla", "firefox")
         pdir = sahte_profil(fx_kok)
@@ -188,7 +277,8 @@ def main():
         k1 = yeni_kopya()
         cerez_yaz(os.path.join(k1, "cookies.sqlite"), [
             ("www.dukkan.test", "sec_session_id", "ARKA-GIRIS", _ms(7200)),
-            (".dukkan.test", "remember_me", "ARKA-UZUN", _ms(30 * GUN)),
+            (".dukkan.test", "remember_me", "ARKA-UZUN", _ms(10 * GUN)),
+            ("www.dukkan.test", "sess0", "ARKA-SIFIR", 0),  # expiry 0: a session-only cookie
             ("eski.dukkan.test", "sid", "ARKA-GECMIS", _ms(-60)),
             ("liste-disi.test", "sid", "ARKA-LISTE-DISI", _ms(7200)),
             ("www.ornekbank.test", "sessionid", "ARKA-BANKA", _ms(7200)),
@@ -197,48 +287,65 @@ def main():
         ])
         silindi = kapat(k1, umask=0)
         kontrol("kopya kapanınca bekçi kopyayı siler", silindi and not os.path.exists(k1))
-        dukkan = os.path.join(depo_dizini(), "dukkan.test.json")
+        dukkan = kayit_yolu("dukkan.test")
         dene("1a: listedeki alanın oturum çerezi kopya kapanınca depoya yazılır",
-             lambda: os.path.isfile(dukkan) and "ARKA-GIRIS" in depo_metni(), lambda: depo_metni()[:200])
+             lambda: os.path.isfile(dukkan) and "ARKA-GIRIS" in depo_metni(), lambda: str(depo_dosyalari()))
         dene("1a': süresi geçmiş çerez depoya yazılmaz", lambda: "ARKA-GECMIS" not in depo_metni())
         dene("1c: listede olmayan alan yazılmaz",
              lambda: os.path.isfile(dukkan) and "LISTE-DISI" not in depo_metni()
-             and not os.path.exists(os.path.join(depo_dizini(), "liste-disi.test.json")))
+             and not any(a.startswith("liste-disi") for a in depo_dosyalari()))
         dene("1d: banka alanı listede olsa da reddedilir (`*bank*` düz + ACE, büyük harf/sondaki nokta)",
              lambda: os.path.isfile(dukkan) and not any(v in depo_metni() for v in
                                                         ("ARKA-BANKA", "ARKA-BANKA-ACE", "ARKA-ISBANK"))
-             and sorted(os.listdir(depo_dizini())) == ["dukkan.test.json"],
-             lambda: str(os.listdir(depo_dizini())) if os.path.isdir(depo_dizini()) else "depo yok")
+             and depo_dosyalari() == ["dukkan.test.kayit"], lambda: str(depo_dosyalari()))
         dene("1e: depo 0600, dizin 0700 (umask 0 iken de)",
              lambda: (os.stat(depo_dizini()).st_mode & 0o777) == 0o700
              and all((os.stat(os.path.join(depo_dizini(), a)).st_mode & 0o777) == 0o600
-                     for a in os.listdir(depo_dizini())) and os.listdir(depo_dizini()))
+                     for a in depo_dosyalari()) and depo_dosyalari())
+        # H3-2: encrypted at rest
+        ham = depo_ham()
+        dene("6a: diskteki dosyada çerez değeri/adı düz metin geçmez",
+             lambda: ham and not any(s.encode() in ham for s in ("ARKA-GIRIS", "ARKA-UZUN", "sec_session_id",
+                                                                 "remember_me", "dukkan")), lambda: ham[:80])
+
+        def anahtar_disarda_yok():
+            k = anahtarlik.k
+            if not k:
+                return False
+            for kok, _d, fs in os.walk(_yalitim.GECICI):
+                for f in fs:
+                    try:
+                        with open(os.path.join(kok, f), "rb") as fh:
+                            b = fh.read()
+                    except OSError:
+                        continue
+                    if k in b or k.hex().encode() in b:
+                        return False
+            return True
+        dene("6a': anahtar diske (veri/ayar/durum/günlük) yazılmaz", anahtar_disarda_yok)
+        r = kayit("dukkan.test") or {}
+        oturumluk = [c for c in r.get("cerezler", ()) if c.get("name") == "sess0"]
+        dene("6e1: expiry=0 (süresiz) çerez → 30 gün",
+             lambda: oturumluk and abs(oturumluk[0]["expiry"] - (time.time() + 30 * GUN)) < 120, lambda: str(oturumluk))
 
         # ---- next background browser: the saved session comes back
         k2 = yeni_kopya()
         c2 = cerezler(k2)
-        tavan = (time.time() + GUN) * 1000 + 5000
-        dene("1b: yeni kopyada geri yüklenir, ömür ≤ 1 gün",
+        dene("1b: yeni kopyada geri yüklenir; kalıcı çerez kendi ömrüyle (1 gün tavanı yok)",
              lambda: c2[("www.dukkan.test", "sec_session_id")][0] == "ARKA-GIRIS"
              and c2[(".dukkan.test", "remember_me")][0] == "ARKA-UZUN"
-             and c2[(".dukkan.test", "remember_me")][1] <= tavan
-             and c2[("www.dukkan.test", "sec_session_id")][1] <= tavan, lambda: str(c2))
+             and abs(c2[(".dukkan.test", "remember_me")][1] - _ms(10 * GUN)) < 120_000, lambda: str(c2))
         dene("1b': listede olmayan alanın kopyası profilden gelir (depodan değil)",
              lambda: c2[("liste-disi.test", "sid")][0] == "PROFIL-LISTE-DISI")
 
-        # a record for a bank domain written by hand (tampered / older release) is never applied
+        # a bank record written by someone holding the key (tampered / older release) is never applied
         def banka_kaydi():
-            kaynak = os.path.join(depo_dizini(), "dukkan.test.json")
-            with open(kaynak) as f:
-                d = json.load(f)
+            d = kayit("dukkan.test")
             d["site"] = "ornekbank.test"
             for c in d.get("cerezler", ()):
                 c["host"] = "www.ornekbank.test"
                 c["value"] = "SAHTE-BANKA"
-            yol = os.path.join(depo_dizini(), "ornekbank.test.json")
-            with open(yol, "w") as f:
-                json.dump(d, f)
-            os.chmod(yol, 0o600)
+            kalici.DEPO._yaz("ornekbank.test", d)
             return kalici.uygula(Path(k2), {"ornekbank.test"}) == 0 and \
                 all(v[0] != "SAHTE-BANKA" for v in cerezler(k2).values())
         dene("1d': elle yazılmış banka kaydı uygulanmaz", banka_kaydi)
@@ -262,6 +369,66 @@ def main():
         dene("1f': görev kopyası kapanınca depoya yazılmaz", lambda: "GOREV-GIRIS" not in depo_metni()
              and depo_metni() == once)
 
+        # ---- H3-2 6b: wrong key / corrupt data → nothing applied, no exception, the browser still opens
+        yedek = sessiz(Path(dukkan).read_bytes) or b""
+        dogru = anahtarlik.k
+
+        def yanlis_anahtar():
+            anahtarlik.k = os.urandom(32)
+            try:
+                k = yeni_kopya()
+                c = cerezler(k)
+                kopya.temizle(k)
+                return c.get(("www.dukkan.test", "sec_session_id"), ("",))[0] == "PROFIL-ESKI"
+            finally:
+                anahtarlik.k = dogru
+
+        def bozuk_veri():
+            with open(dukkan, "wb") as f:
+                f.write(yedek[:-5] + bytes(b ^ 0xFF for b in yedek[-5:]))
+            os.chmod(dukkan, 0o600)
+            k = yeni_kopya()
+            c = cerezler(k)
+            kopya.temizle(k)
+            return c.get(("www.dukkan.test", "sec_session_id"), ("",))[0] == "PROFIL-ESKI" and \
+                kalici.durum("dukkan.test")["cerezler"] == []
+        dene("6b: yanlış anahtar → uygulanmaz, istisna yok", yanlis_anahtar)
+        dene("6b': bozuk şifreli veri → uygulanmaz, istisna yok", bozuk_veri)
+
+        # ---- H3-2 6d: AAD binds the record to its domain (a file copied/renamed to another domain does not open)
+        def aad():
+            with open(kayit_yolu("panel.test"), "wb") as f:
+                f.write(yedek)
+            os.chmod(kayit_yolu("panel.test"), 0o600)
+            k = yeni_kopya()
+            c = cerezler(k)
+            kopya.temizle(k)
+            return kalici.DEPO._oku("panel.test") is None and not any(v[0].startswith("ARKA-") for v in c.values())
+        dene("6d: AAD: başka alanın dosyası bu alana kopyalanınca çözülmez", aad)
+        sessiz(os.remove, kayit_yolu("panel.test"))
+
+        # ---- H3-2 6c: no key ring (locked wallet / no Secret Service): nothing written, nothing applied, a reason
+        with open(dukkan, "wb") as f:
+            f.write(yedek)
+        os.chmod(dukkan, 0o600)
+        anahtarlik.neden = "cüzdan kilitli"
+        try:
+            k = yeni_kopya()
+            c = cerezler(k)
+            cerez_yaz(os.path.join(k, "cookies.sqlite"), [("panel.test", "sec_session_id", "KILITLI-GIRIS", _ms(7200))])
+            kapat(k)
+            neden = sessiz(lambda: kalici.son_neden()) or ""
+            from deskhand import doktor
+            satir = sessiz(lambda: doktor.satir_kalici_oturum()) or {}
+        finally:
+            anahtarlik.neden = None
+        dene("6c: cüzdan yokken kayıt yazılmaz, uygulanmaz, neden söylenir",
+             lambda: c.get(("www.dukkan.test", "sec_session_id"), ("",))[0] == "PROFIL-ESKI"
+             and not os.path.exists(kayit_yolu("panel.test")) and "cüzdan kilitli" in neden
+             and os.path.isfile(dukkan), lambda: f"{neden!r} {depo_dosyalari()}")
+        dene("6c': doctor satırı nedeni söyler (uyarı)",
+             lambda: satir.get("durum") == "uyari" and "cüzdan kilitli" in satir.get("ayrinti", ""), lambda: str(satir))
+
         # ---- expiry: an expired record is not applied and is deleted
         def gecmis_cerez(d):
             for c in d["cerezler"]:
@@ -269,27 +436,57 @@ def main():
         duzenlendi = kayit_duzenle("dukkan.test", gecmis_cerez)
         k4 = yeni_kopya()
         c4 = cerezler(k4)
-        gecti_1 = duzenlendi and c4.get(("www.dukkan.test", "sec_session_id"), ("",))[0] == "PROFIL-ESKI" and not os.path.exists(dukkan)
+        gecti_1 = duzenlendi and c4.get(("www.dukkan.test", "sec_session_id"), ("",))[0] == "PROFIL-ESKI" \
+            and not os.path.exists(dukkan)
         kopya.temizle(k4)
-        # a record older than one day whose cookies claim a later expiry (written by hand): not applied, deleted
+        # a record "saved" in the future (clock change / hand edit): not applied, deleted
         k5 = yeni_kopya()
-        cerez_yaz(os.path.join(k5, "cookies.sqlite"), [("www.dukkan.test", "sec_session_id", "ESKI-KAYIT", _ms(7200))])
+        cerez_yaz(os.path.join(k5, "cookies.sqlite"), [("www.dukkan.test", "sec_session_id", "GELECEK", _ms(7200))])
         kapat(k5)
 
-        def eski_kayit(d):
-            d["kayit"] = time.time() - 2 * GUN
-            for c in d["cerezler"]:
-                c["expiry"] = time.time() + 3600
-        duzenlendi = kayit_duzenle("dukkan.test", eski_kayit)
+        def gelecek_kayit(d):
+            d["kayit"] = time.time() + 2 * GUN
+        duzenlendi = kayit_duzenle("dukkan.test", gelecek_kayit)
         k6 = yeni_kopya()
         c6 = cerezler(k6)
-        dene("1g: süresi geçmiş kayıt uygulanmaz ve silinir",
+        dene("1g: süresi geçmiş (ya da gelecekte kaydedilmiş) kayıt uygulanmaz ve silinir",
              lambda: gecti_1 and duzenlendi and c6.get(("www.dukkan.test", "sec_session_id"), ("",))[0] == "PROFIL-ESKI"
              and not os.path.exists(dukkan), lambda: f"{gecti_1} {c6.get(('www.dukkan.test', 'sec_session_id'))}")
         kopya.temizle(k6)
 
+        # ---- H3-2 6e: lifetime without the one-day cap
+        k = yeni_kopya()
+        cerez_yaz(os.path.join(k, "cookies.sqlite"), [("www.dukkan.test", "sec_session_id", "IKI-SAAT", _ms(7200)),
+                                                     (".dukkan.test", "remember_me", "ON-GUN", _ms(10 * GUN))])
+        kapat(k)
+
+        def ikinci_gun():
+            k = yeni_kopya()
+            try:
+                con = sqlite3.connect(os.path.join(k, "cookies.sqlite"))  # hazirla already applied it: start empty
+                con.execute("DELETE FROM moz_cookies WHERE host LIKE ?", ("%dukkan.test",))
+                con.commit()
+                con.close()
+                with zaman_kaydir(2 * GUN):
+                    n = kalici.uygula(Path(k), {"dukkan.test"})
+                c = cerezler(k)
+                return n == 1 and c[(".dukkan.test", "remember_me")][0] == "ON-GUN" and os.path.isfile(dukkan)
+            finally:
+                kopya.temizle(k)
+
+        def on_birinci_gun():
+            k = yeni_kopya()
+            try:
+                with zaman_kaydir(11 * GUN):
+                    n = kalici.uygula(Path(k), {"dukkan.test"})
+                return n == 0 and not os.path.exists(dukkan)
+            finally:
+                kopya.temizle(k)
+        dene("6e2: 10 günlük çerez 2. gün uygulanır", ikinci_gun)
+        dene("6e3: süresi geçen kayıt okunurken silinir (11. gün)", on_birinci_gun)
+
         # ---- sessions check: the store is part of the answer (no copy, the real profile has no session)
-        from deskhand.oturum import cli, denetle
+        from deskhand.oturum import denetle
         k7 = yeni_kopya()
         cerez_yaz(os.path.join(k7, "cookies.sqlite"), [("panel.test", "sec_session_id", "PANEL-GIRIS", _ms(7200))])
         # a session-only cookie the site set in the background (Firefox keeps it only in the copy's sessionstore)
@@ -297,25 +494,22 @@ def main():
             {"host": "panel.test", "name": "PHPSESSID", "value": "PANEL-OTURUM", "path": "/",
              "originAttributes": {"userContextId": 0, "privateBrowsingId": 0}}]})
         kapat(k7)
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            kod = cli.main(["check", "panel.test"])
-        cikti = out.getvalue()
+        kod, cikti = cli_kos(["check", "panel.test"])
         dene("2a: sessions check kalıcı depo satırını gösterir, değer yok",
              lambda: "kalıcı depo" in cikti and "PANEL-GIRIS" not in cikti and "PANEL-OTURUM" not in cikti, cikti)
+        dene("2a': kaydın yaşı ve son kullanma tarihi görünür",
+             lambda: "kaydedildi" in cikti and "son kullanma" in cikti, cikti)
         dene("2b: kopya yok, profilde oturum yok, depoda geçerli giriş → 0", lambda: kod == 0, cikti)
         d = denetle.denetle("panel.test", simdi=time.time() + 3 * 3600)
         dene("2b': kopyanın oturumluk çerezi (sessionstore) de depoya yazılır", lambda: "PANEL-OTURUM" in depo_metni())
         dene("2c: depodaki giriş çerezinin süresi geçmiş → giriş gerekli (1)",
              lambda: d["kod"] == 1 and d["kalici"]["durum"] == "suresi_gecmis", str(d.get("kalici")))
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            cli.main(["check", "panel.test", "--json"])
-        dene("2d: JSON çıktısında değer yok", lambda: "PANEL-" not in out.getvalue() and '"kalici"' in out.getvalue())
+        _k, cikti_json = cli_kos(["check", "panel.test", "--json"])
+        dene("2d: JSON çıktısında değer yok", lambda: "PANEL-" not in cikti_json and '"kalici"' in cikti_json)
 
         # ---- a record others could have written (group/other bits) or with a non-finite time is not read
         def genis_izin():
-            yol = os.path.join(depo_dizini(), "panel.test.json")
+            yol = kayit_yolu("panel.test")
             os.chmod(yol, 0o644)
             try:
                 return kalici.durum("panel.test")["kayit"] is None
@@ -323,17 +517,13 @@ def main():
                 os.chmod(yol, 0o600)
 
         def nan_kayit():
-            yol = os.path.join(depo_dizini(), "panel.test.json")
-            with open(yol) as f:
+            with open(kayit_yolu("panel.test"), "rb") as f:
                 ham = f.read()
-            d = json.loads(ham)
-            d["kayit"] = float("nan")
-            with open(yol, "w") as f:
-                json.dump(d, f)
             try:
+                kayit_duzenle("panel.test", lambda d: d.__setitem__("kayit", float("nan")))
                 return kalici.durum("panel.test")["kayit"] is None
             finally:
-                with open(yol, "w") as f:
+                with open(kayit_yolu("panel.test"), "wb") as f:
                     f.write(ham)
         dene("1e': başkasının yazabileceği (0644) kayıt okunmaz", genis_izin)
         dene("1g': sonlu olmayan (NaN) kayıt zamanı okunmaz", nan_kayit)
@@ -352,22 +542,70 @@ def main():
         dene("3b: sahipsiz kopya süpürülürken depoya yazar",
              lambda: k9 in silinen and "SUPUR-GIRIS" in depo_metni(), str(silinen))
 
-        # ---- the setting
+        # ---- H3-2 6h: doctor row (value-free: presence, age, expiry)
+        from deskhand import doktor
+        dene("6h: doctor kalıcı oturum satırı (değersiz, yaş + son kullanma)",
+             lambda: doktor.satir_kalici_oturum in doktor.SATIRLAR
+             and "panel.test" in doktor.satir_kalici_oturum()["ayrinti"]
+             and "SUPUR" not in json.dumps(doktor.satir_kalici_oturum(), ensure_ascii=False),
+             lambda: str(doktor.satir_kalici_oturum()))
+
+        # ---- H3-2 6g: a plain record of the first release (b72755f) is deleted on first read, never applied
+        os.makedirs(depo_dizini(), mode=0o700, exist_ok=True)
+        with open(os.path.join(depo_dizini(), "dukkan.test.json"), "w") as f:
+            json.dump({"surum": 1, "site": "dukkan.test", "kayit": time.time(), "cerezler": [
+                {"host": "www.dukkan.test", "name": "sec_session_id", "value": "DUZ-ESKI", "path": "/",
+                 "originAttributes": "", "expiry": time.time() + 3600}]}, f)
+        os.chmod(os.path.join(depo_dizini(), "dukkan.test.json"), 0o600)
+        k = yeni_kopya()
+        c = cerezler(k)
+        kopya.temizle(k)
+        dene("6g: eski düz JSON kayıt uygulanmaz ve silinir",
+             lambda: c.get(("www.dukkan.test", "sec_session_id"), ("",))[0] != "DUZ-ESKI"
+             and not os.path.exists(os.path.join(depo_dizini(), "dukkan.test.json")))
+
+        # ---- H3-2 6f: forget
+        kod_f, cikti_f = cli_kos(["forget", "panel.test"])
+        dene("6f: `sessions forget <site>` kaydı siler",
+             lambda: kod_f == 0 and not os.path.exists(kayit_yolu("panel.test")), cikti_f)
+        k = yeni_kopya()
+        cerez_yaz(os.path.join(k, "cookies.sqlite"), [("www.dukkan.test", "sec_session_id", "HEPSI", _ms(7200))])
+        kapat(k)
+        kod_h, cikti_h = cli_kos(["unut", "--all"])
+        dene("6f': `sessions forget --all` (Türkçe takma ad) depoyu boşaltır",
+             lambda: kod_h == 0 and depo_dosyalari() == [] and os.path.isfile(dukkan) is False, cikti_h)
+        kod_g, cikti_g = cli_kos(["forget", "x"])
+        dene("6f'': geçersiz alan → 2", lambda: kod_g == 2 and "geçersiz alan" in cikti_g, cikti_g)
+
+        # ---- the settings
         dene("4a: [oturum] kalici normalleşir (adres, büyük harf, tekrar)",
              lambda: ayarlar.dogrula("oturum", "kalici", "Shopier.com, https://www.x.test/a, shopier.com")
              == "shopier.com,www.x.test")
 
-        def ret(deger):
+        def ret(anahtar, deger):
             try:
-                ayarlar.dogrula("oturum", "kalici", deger)
+                ayarlar.dogrula("oturum", anahtar, deger)
             except ValueError:
                 return True
             return False
-        dene("4b: joker ve tek başına genel son ek reddedilir", lambda: ret("*.test") and ret("com.tr"))
+        dene("4b: joker ve tek başına genel son ek reddedilir", lambda: ret("kalici", "*.test") and ret("kalici", "com.tr"))
+        dene("4c: kalici_sure_gun 1..365, varsayılan 30",
+             lambda: ayarlar.VARSAYILAN["oturum"]["kalici_sure_gun"] == 30 and ret("kalici_sure_gun", 366)
+             and ret("kalici_sure_gun", 0) and ayarlar.dogrula("oturum", "kalici_sure_gun", 365) == 365)
+
+        def sure_ayari():
+            ayar_yaz("panel.test", sure=7)
+            k = yeni_kopya()
+            mozlz4_yaz(os.path.join(k, "sessionstore-backups", "recovery.jsonlz4"), {"cookies": [
+                {"host": "panel.test", "name": "PHPSESSID", "value": "YEDI", "path": "/", "originAttributes": {}}]})
+            kapat(k)
+            r = kayit("panel.test") or {}
+            return any(c["name"] == "PHPSESSID" and abs(c["expiry"] - (time.time() + 7 * GUN)) < 120
+                       for c in r.get("cerezler", ()))
+        dene("4d: kalici_sure_gun = 7 → süresiz çerez 7 gün", sure_ayari)
 
         dene("5: durum() değer içermez",
-             lambda: kalici.durum("panel.test")["listede"] and "PANEL" not in json.dumps(kalici.durum("panel.test"))
-             and "SUPUR-GIRIS" not in json.dumps(kalici.durum("panel.test")))
+             lambda: kalici.durum("panel.test")["listede"] and "YEDI" not in json.dumps(kalici.durum("panel.test")))
 
         dene("1h: gerçek profil dosyaları (profiles.ini, cookies.sqlite) sha1 aynı",
              lambda: all(sha1(y) == s for y, s in izler.items()))

@@ -19,9 +19,9 @@ Dosya yoksa varsayılanlar kullanılır; OKUMA dosya oluşturmaz. Bilinmeyen/yan
 
   [oturum]
   kalici = ""              # virgüllü alan adları ("" = hiçbiri): görünmez masaüstündeki Firefox kopyası kapanınca bu
-                           # sitelerin oturum çerezleri saklanır, sonraki kopyaya geri konur (ömür kaynak çerezin
-                           # ömrü, en çok 1 gün; banka/ödeme/devlet/merkezi kimlik asla; görev kipinde hiç;
-                           # docs/SESSIONS.md §3.8)
+                           # sitelerin oturum çerezleri ŞİFRELİ saklanır (anahtar KDE Cüzdanı'nda), sonraki kopyaya
+                           # geri konur (banka/ödeme/devlet/merkezi kimlik asla; görev kipinde hiç; docs/SESSIONS.md §3.8)
+  kalici_sure_gun = 30     # süresiz (oturumluk) çerez depoda kaç gün tutulur (1..365); kalıcı çerez kendi tarihiyle
 
   [gorev]
   model = "sonnet"         # sonnet | opus | haiku   (panelin "Görev" sekmesi: görevi yapan Claude modeli)
@@ -64,6 +64,7 @@ VARSAYILAN = {
     },
     "oturum": {
         "kalici": "",
+        "kalici_sure_gun": 30,
     },
     "gorev": {
         "model": "sonnet",
@@ -88,7 +89,7 @@ SECENEK = {("karar", "mesgulken"): {"sor", "arka", "bekle"}, ("karar", "cevapsiz
 KUME = {("guvenlik", "hesap_oturumlari"): ("microsoft", "google", "edevlet")}
 ARALIK = {("karar", "sor_sure"): (1, 3600), ("karar", "girdi_esik_sn"): (0, 3600),
           ("gorev", "azami_dakika"): (1, 240), ("gorev", "azami_tur"): (1, 500),
-          ("masaustu", "azami"): (1, 6), ("masaustu", "bosta_kapat_dk"): (0, 1440)}
+          ("masaustu", "azami"): (1, 6), ("oturum", "kalici_sure_gun"): (1, 365), ("masaustu", "bosta_kapat_dk"): (0, 1440)}
 
 _uyarilan = set()
 

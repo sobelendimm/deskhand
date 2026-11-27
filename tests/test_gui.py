@@ -692,13 +692,13 @@ sd = S.denetle(which=lambda a: a in ("kdotool", "Xvfb"), find_spec=lambda m: obj
                diller_f=lambda: {"tur"})
 ok_ = {d["ad"]: d["ok"] for d in sd}
 kontrol("sağlık: araç/dil/modül denetimi", ok_["kdotool"] and ok_["Xvfb"] and not ok_["dotool"] and
-        ok_["tesseract: tur"] and not ok_["tesseract: eng"] and ok_["numpy"] and not ok_["mcp"] and len(sd) == 18,
+        ok_["tesseract: tur"] and not ok_["tesseract: eng"] and ok_["numpy"] and not ok_["mcp"] and not ok_["cryptography"] and len(sd) == 20,
         str(ok_))
 
 ek = S.ek_satirlar()
 adlar_ = [r["ad"] for r in ek]
-kontrol("sağlık: yardımcılar + arka plan türü + onay kapsamı + hesap oturumları satırları (doctor'dan)",
-        len(ek) == 4 and "C yardımcıları" in adlar_ and "Arka plan masaüstü türü" in adlar_ and
+kontrol("sağlık: yardımcılar + arka plan türü + onay kapsamı + hesap/kalıcı oturum satırları (doctor'dan)",
+        len(ek) == 5 and "Kalıcı oturumlar" in adlar_ and "C yardımcıları" in adlar_ and "Arka plan masaüstü türü" in adlar_ and
         "Onay kapsamı" in adlar_ and "Hesap oturumları" in adlar_ and all(r["tur"] == "ek" and r["durum"] in ("tamam", "uyari", "eksik") for r in ek), str(adlar_))
 kontrol("sağlık: bwrap zorunlu (kırmızı), kwin_wayland bilgi (sarı)",
         {d["ad"]: d["durum"] for d in S.denetle(which=lambda a: False, find_spec=lambda m: None,

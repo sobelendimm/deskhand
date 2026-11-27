@@ -27,6 +27,9 @@ os.mkdir(PAYLASIM, 0o700)
 os.environ["DESKHAND_TEST_PAYLASIM"] = PAYLASIM
 os.environ.pop("DESKHAND_HEDEF", None)
 os.environ["DESKHAND_GERCEK_EKRAN"] = "kapali"  # alt süreçler devralır
+# the real Secret Service (KDE Wallet) is never read or written by a test: the key ring of the persistent session store
+# refuses (deskhand/oturum/kalici.py GizliServis); tests that need a key inject a fake (kalici.anahtarlik_ayarla)
+os.environ["DESKHAND_ANAHTARLIK"] = "kapali"
 # ajanın kendi istemcisi ipuçları (deskhand/kendi.py): testleri çalıştıran uçbirimin türü sonuçları değiştirmesin
 for _ad in ("KONSOLE_DBUS_WINDOW", "WINDOWID", "TERM_PROGRAM", "GHOSTTY_RESOURCES_DIR", "KITTY_PID",
             "ALACRITTY_WINDOW_ID", "TMUX", "STY", "ZELLIJ"):

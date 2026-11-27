@@ -278,8 +278,10 @@ def denetle(alan: str, desenler=None, kopya_yolu: str | None = None, simdi: floa
 def _kalici_durum(alan: str, desenler, simdi: float, profil_suresiz: set) -> dict:
     """The persistent store's answer for the site (kalici.durum, value-free): {listede, durum, cerez, kalan_sn}.
     durum: listede_degil | gorev (not used in task mode) | politika_disi (reject list) | var | suresi_gecmis | yok,
-    the same login-cookie rules as the profile. A stored cookie that is session-only in the profile counts as
-    session-only (the copy wrote it with a one-day expiry), like the copy's own cookies."""
+    the same login-cookie rules as the profile | okunamadi (the key ring is not available: `neden`). kayit / bitis:
+    when the record was saved and when its last live cookie expires (epoch seconds; no values). A stored cookie
+    that is session-only in the profile counts as session-only (the copy wrote it with a one-day expiry), like the
+    copy's own cookies."""
     from .. import gorev_kipi
     from . import kalici
     kd = kalici.durum(alan, simdi=simdi)
@@ -295,11 +297,18 @@ def _kalici_durum(alan: str, desenler, simdi: float, profil_suresiz: set) -> dic
         durum = "gorev"
     elif kd["reddedildi"]:
         durum = "politika_disi"
+    elif kd.get("neden"):
+        durum = "okunamadi"  # no key (locked wallet…): closed-fail, the store is not used
     else:
         durum = _siniflandir(giris, simdi * 1000, lambda *_a, **_k: True)
     gecerli = [c["bitis_ms"] for c in giris if not _gecmis(c, simdi * 1000)]
-    return {"listede": kd["listede"], "durum": durum, "cerez": len(giris),
+    return {"listede": kd["listede"], "durum": durum, "cerez": len(giris), "neden": kd.get("neden"),
+            "kayit": kd.get("kayit"), "bitis": kd.get("bitis"),
             "kalan_sn": int((float(min(gecerli)) - simdi * 1000) / 1000) if gecerli and durum == "var" else None}
+
+
+def _tarih(sn: float) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(sn))
 
 
 def _gecmis(c: dict, simdi_ms: float) -> bool:
@@ -363,10 +372,15 @@ def metin(d: dict) -> list[str]:
                       "suresi_gecmis": _("giriş çerezlerinin süresi geçmiş (giriş gerekir)"),
                       "yok": _("kayıt yok (giriş gerekir)"),
                       "politika_disi": _("banka/ödeme/devlet/kimlik alanı: kalıcı depoya alınmaz"),
-                      "gorev": _("görev kipinde kullanılmaz")}
+                      "gorev": _("görev kipinde kullanılmaz"),
+                      "okunamadi": _("kullanılamıyor: {neden}").format(neden=k.get("neden") or "?")}
         metin_ = kalici_adi.get(k.get("durum"), str(k.get("durum")))
         if k.get("kalan_sn") is not None:
             metin_ += ", " + _sure_metni(k["kalan_sn"])
+        if k.get("kayit"):
+            metin_ += "; " + _("kaydedildi: {zaman}").format(zaman=_tarih(k["kayit"]))
+        if k.get("bitis"):
+            metin_ += "; " + _("son kullanma: {zaman}").format(zaman=_tarih(k["bitis"]))
         satirlar.append(_("kalıcı depo: {durum}").format(durum=metin_))
     satirlar.append(_("sonuç: oturum VAR") if d["kod"] == 0 else _("sonuç: oturum YOK"))
     return satirlar

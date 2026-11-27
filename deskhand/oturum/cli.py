@@ -1,11 +1,13 @@
 """Oturum köprüsü alt komutları: `main(argv)` (ana cli.py'ye koordinatör bağlar). İngilizce adlar birincil,
-Türkçeleri takma ad (status/durum, prepare/hazirla, policy/politika, clear/sil, check/denetle; komutlar.OTURUM).
+Türkçeleri takma ad (status/durum, prepare/hazirla, policy/politika, clear/sil, check/denetle, forget/unut;
+komutlar.OTURUM).
 
   durum [<uygulama>]        uygulama başına: kurulu mu, kullanıcıda açık mı, politika, kopya var mı
   hazirla <uygulama> [--site ALAN ...] [--json]   kararı + (kopya ise) argv'yi üret
   politika [<uygulama>]     çözülmüş politikayı yaz
   sil                       tüm oturum kopyalarını sil
   denetle <alan> [--cerez AD ...] [--json]   site oturumu profilde/kopyada var mı (salt okuma; çıkış 0 var, 1 yok)
+  unut <alan> | --all       kalıcı oturum deposundan sil (kalici.py; docs/SESSIONS.md §3.8)
 
 Sır değerleri yazılmaz. `hazirla` kopya üretir (kaynak YAZILMAZ) ama uygulamayı BAŞLATMAZ.
 """
@@ -81,6 +83,10 @@ def main(argv=None) -> int:
                     help=h_("giriş çerezinin adı (fnmatch; tekrarlanabilir). Yoksa ad deseniyle tahmin edilir"))
     pk.add_argument("--json", action="store_true")
 
+    pu = komut("unut", h_("kalıcı oturum deposundan bir sitenin kaydını sil ([oturum] kalici)"))
+    pu.add_argument("alan", nargs="?", help=h_("site alan adı ya da adresi (example.com)"))
+    pu.add_argument("--all", "--hepsi", dest="hepsi", action="store_true", help=h_("bütün kayıtları sil"))
+
     a = p.parse_args(argv)
     yap = politika.yukle()
 
@@ -140,6 +146,20 @@ def main(argv=None) -> int:
         d = denetle.denetle(alan, desenler=a.cerez)
         print(json.dumps(d, ensure_ascii=False, indent=2) if a.json else "\n".join(denetle.metin(d)))
         return d["kod"]
+
+    if a.komut == "unut":
+        from . import denetle, kalici
+        if a.hepsi:
+            print(_("kalıcı depo: {sayi} site kaydı silindi").format(sayi=kalici.unut_hepsi()))
+            return 0
+        alan = denetle.alan_normu(a.alan or "")
+        if not alan:
+            print(_("geçersiz alan adı: {alan}").format(alan=a.alan or ""))
+            return 2
+        silindi = kalici.unut(alan)
+        print(_("kalıcı depo: {alan} kaydı silindi").format(alan=alan) if silindi else
+              _("kalıcı depo: {alan} için kayıt yok").format(alan=alan))
+        return 0
 
     if a.komut == "sil":
         n = sil_hepsi()

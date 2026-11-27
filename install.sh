@@ -204,7 +204,7 @@ for pair in "PyQt6:python-pyqt6:panel, tepsi ve onay diyaloğu:panel, tray and a
             "Xlib:python-xlib:arka planda girdi ve görüntü:input and screenshots in the background" \
             "numpy:python-numpy:görüntü işleme:image processing" \
             "PIL:python-pillow:görüntü:images" \
-            "jeepney:python-jeepney:D-Bus (bildirimler, meşgul algısı, kısayol):D-Bus (notifications, busy detection, shortcut)" \
+            "jeepney:python-jeepney:D-Bus (bildirimler, meşgul algısı, kısayol):D-Bus (notifications, busy detection, shortcut)" "secretstorage:python-secretstorage:kalıcı oturum deposunun anahtarı (KDE Cüzdanı):the persistent session store key (KDE Wallet)" "cryptography:python-cryptography:kalıcı oturum deposu şifrelemesi:persistent session store encryption" \
             "mcp:python-mcp:MCP sunucusu (deskhand mcp):the MCP server (deskhand mcp)"; do
     IFS=: read -r mod pkg tr en <<<"$pair"
     has_module "$mod" || dep_miss req "$pkg" pac "Python modülü $mod ($pkg): $tr" "Python module $mod ($pkg): $en"

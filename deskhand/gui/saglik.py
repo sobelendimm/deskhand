@@ -22,6 +22,8 @@ DILLER = {"tur": N_("Türkçe OCR (tesseract-data-tur)"), "eng": N_("İngilizce 
 MODULLER = {"PyQt6": N_("arayüz (python-pyqt6)"), "Xlib": N_("arka plan girdi/görüntü (python-xlib)"),
             "numpy": N_("görüntü işleme (python-numpy)"), "scipy": N_("simge eşleme (python-scipy)"),
             "PIL": N_("görüntü (python-pillow)"), "jeepney": N_("D-Bus (python-jeepney)"),
+            "secretstorage": N_("kalıcı oturum anahtarı, KDE Cüzdanı (python-secretstorage)"),
+            "cryptography": N_("kalıcı oturum şifrelemesi (python-cryptography)"),
             "mcp": N_("MCP sunucusu (python-mcp)")}
 
 
@@ -64,7 +66,7 @@ def ek_satirlar(doktor_f=None) -> list[dict]:
     if doktor_f is None:
         from .. import doktor
         doktor_f = (doktor.satir_yardimcilar, doktor.satir_arka_tur, doktor.satir_onay_kapsami,
-                    doktor.satir_hesap_oturumlari)
+                    doktor.satir_hesap_oturumlari, doktor.satir_kalici_oturum)
     sonuc = []
     for f in doktor_f:
         try:

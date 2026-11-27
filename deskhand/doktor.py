@@ -202,6 +202,38 @@ def satir_hesap_oturumlari():
     return _satir(_("Hesap oturumları"), "tamam", metin)
 
 
+def satir_kalici_oturum():
+    """Persistent background sessions ([oturum] kalici; oturum/kalici.py): per listed site whether a record exists,
+    when it was saved and when it expires (never a value); a warning with the reason when the key ring cannot be used
+    (locked wallet, no Secret Service). Reads the key ring, never creates a key."""
+    import time
+    from .oturum import kalici
+    ad = _("Kalıcı oturumlar")
+    siteler = sorted(kalici.ayar_siteleri())
+    if not siteler:
+        return _satir(ad, "tamam", _("kapalı ([oturum] kalici boş)"))
+    parcalar, neden = [], None
+    for s in siteler:
+        d = kalici.durum(s, siteler=siteler)
+        if d.get("reddedildi"):
+            parcalar.append(_("{site}: banka/ödeme/devlet/kimlik alanı, alınmaz").format(site=s))
+        elif d.get("neden"):
+            neden = d["neden"]
+            parcalar.append(_("{site}: okunamadı").format(site=s))
+        elif d.get("kayit"):
+            gun = max(0, int((time.time() - d["kayit"]) // 86400))
+            bitis = time.strftime("%Y-%m-%d", time.localtime(d["bitis"])) if d.get("bitis") else "-"
+            parcalar.append(_("{site}: {gun} gün önce kaydedildi, son kullanma {bitis}").format(
+                site=s, gun=gun, bitis=bitis))
+        else:
+            parcalar.append(_("{site}: kayıt yok").format(site=s))
+    metin = "; ".join(parcalar)
+    if neden:
+        return _satir(ad, "uyari", _("{neden}: kalıcı oturum bu açılışta kullanılmadı").format(neden=neden) +
+                      f" ({metin})", _("KDE Cüzdanı'nı açın (kilidi açık olmalı)"))
+    return _satir(ad, "tamam", metin)
+
+
 def satir_girdi_merkezi():
     from . import girdi_merkezi
     yol = girdi_merkezi.soket_yolu()
@@ -436,7 +468,7 @@ def satir_dinleme():
                   _("pipewire, wireplumber, pipewire-pulse ve libpulse araçlarını kur"))
 
 
-SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_mcp_surecleri, satir_onay_kapsami, satir_hesap_oturumlari, satir_girdi_merkezi, satir_yardimcilar,
+SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_mcp_surecleri, satir_onay_kapsami, satir_hesap_oturumlari, satir_kalici_oturum, satir_girdi_merkezi, satir_yardimcilar,
             satir_erisim, satir_tarayici_erisim, satir_arka_plan, satir_calisma_dizini, satir_oturum_kopyalari, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
 
 

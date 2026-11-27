@@ -458,13 +458,25 @@ Ayar (`ayarlar.toml`): `[oturum] kalici = "shopier.com, ornek.test"` (virgüllü
 `*` ve tek başına genel son ek reddedilir). Kod: `deskhand/oturum/kalici.py`.
 
 - **Kaydetme:** kopya silinmeden hemen önce (bekçi, süpürme, masaüstü kapanışı) kopyanın `cookies.sqlite`'ındaki (ve
-  Firefox yazdıysa kopyanın `sessionstore-backups/recovery.jsonlz4`'ündeki) listedeki sitelere ait çerezler
-  `DATA_DIR/oturum-kalici/<alan>.json` dosyasına yazılır (dizin 0700, dosya 0600, atomik). Sitede canlı çerez
+  Firefox yazdıysa kopyanın `sessionstore-backups/recovery.jsonlz4`'ündeki) listedeki sitelere ait çerezler ŞİFRELİ
+  olarak `DATA_DIR/oturum-kalici/<alan>.kayit` dosyasına yazılır (dizin 0700, dosya 0600, atomik). Sitede canlı çerez
   kalmadıysa (çıkış yapıldıysa) kayıt silinir.
+- **Şifreleme:** AES-256-GCM (`python-cryptography`). 256 bitlik rastgele anahtar kullanıcının Secret Service'inde (KDE
+  Cüzdanı; etiket "Deskhand session store", öznitelikler `application=deskhand`, `purpose=kalici-oturum`) tek öge
+  olarak durur, `python-secretstorage` ile okunur (sır oturum veri yolunda DH ile şifreli gider). İlk kayıtta üretilir;
+  diske, günlüğe ya da herhangi bir çıktıya asla yazılmaz. Her kaydın kendi nonce'u vardır; ek veri (AAD) kaydı depoya
+  ve alan adına bağlar: başka alana kopyalanan/yeniden adlandırılan dosya çözülmez. **Kapalı-başarısız:** Secret
+  Service yok, cüzdan kilitli (Deskhand arka plandan kilit açma penceresi açmaz), anahtar okunamıyor ya da kayıt
+  çözülmüyor → kayıt yazılmaz ve uygulanmaz, düz metne düşüş yok; `deskhand doctor` ("Kalıcı oturumlar") ve `sessions
+  check` nedeni tek satırda söyler. Okunabilen anahtarla çözülmeyen kayıt (oynanmış, yeniden adlandırılmış, eski
+  anahtar) silinir. İlk sürümün düz JSON kayıtları ilk görüldüklerinde üzerine yazılıp silinir (göç yok).
 - **Uygulama:** yeni Firefox kopyası hazırlanırken kayıt kopyanın `cookies.sqlite`'ına konur. Kopyada aynı anahtarda
   geçerli ve daha SONRA kullanılmış bir satır varsa (kullanıcı gerçek profilde yeniden girdi) o kalır.
-- **Ömür:** kaynak çerezin ömrü, kayıttan itibaren en çok 1 gün (süresiz çerez: kayıt + 1 gün; §3.4.1 kuralı). Bir
-  günden eski ya da bütün çerezlerinin süresi geçmiş kayıt uygulanmaz ve silinir. Her kayıt günü tazeler.
+- **Ömür:** kalıcı çerez kendi son kullanma tarihini korur. Süresiz (oturumluk) çerez ilk kaydından itibaren
+  `[oturum] kalici_sure_gun` gün tutulur (varsayılan 30, 1..365); sonraki kopyalarda geri gelince ilk tarihini korur.
+  Bütün çerezlerinin süresi geçmiş (ya da gelecekte "kaydedilmiş") kayıt okunurken silinir.
+- **Unutma:** `deskhand sessions forget <alan>` (Türkçe takma ad `unut`) bir kaydı, `--all` hepsini siler. `deskhand
+  doctor` listedeki her sitenin kaydını gösterir: kaç gün önce kaydedildi, ne zaman sona eriyor (değer asla).
 - **Asla:** banka/ödeme/devlet/merkezi kimlik alanları (§8 ret listesi, her yazım: büyük/küçük harf, sondaki nokta,
   Unicode/ACE) liste de olsa ne kaydedilir ne uygulanır (elle yazılmış kayıt da süzülür; panelin hesap oturumu izni
   burada açmaz); görev kipinde hiç uygulanmaz ve görev kopyası kaydedilmez. Banka/ödeme oturumları şimdilik taşınmaz;
