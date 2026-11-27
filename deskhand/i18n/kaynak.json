@@ -2140,7 +2140,7 @@
   "uygulama.py:574"
  ],
  "bellek için Firefox {saat} saatinde yeniden başlatıldı ({once} → {sonra} MB, {sekme} sekme geri yüklendi); pencere kimlikleri değişti, yeniden gözlem yapın": [
-  "bellek_bekcisi.py:168"
+  "bellek_bekcisi.py:169"
  ],
  "bellek kafesi KAPALI (DESKHAND_SANAL_BELLEK=0)": [
   "kwin_oturum.py:951",
@@ -2281,7 +2281,7 @@
   "arka_ortak.py:1281"
  ],
  "boşta kalınca Firefox oturumu geri yüklenerek yeniden başlatılır (sekmeler geri gelir, pencere kimlikleri değişir)": [
-  "bellek_bekcisi.py:94"
+  "bellek_bekcisi.py:95"
  ],
  "bu MCP oturumunu adlı görünmez masaüstüne sabitle (yoksa kendiliğinden seçilir)": [
   "cli.py:569"
@@ -2850,7 +2850,7 @@
   "eylem.py:1241"
  ],
  "gereksiz sekme ve pencereleri kapatın": [
-  "bellek_bekcisi.py:96"
+  "bellek_bekcisi.py:97"
  ],
  "geri yükleme": [
   "arka_uc/__init__.py:156",
@@ -3116,7 +3116,7 @@
   "uygulama.py:821"
  ],
  "görünmez masaüstü bellek sınırının %{yuzde} kadarını kullanıyor ({cur} / {max} MB)": [
-  "bellek_bekcisi.py:91"
+  "bellek_bekcisi.py:92"
  ],
  "görünmez masaüstü yok": [
   "masaustu.py:1410"

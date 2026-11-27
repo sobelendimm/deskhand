@@ -15,9 +15,10 @@ KWin ve yardımcılar düz. memory.reclaim 512M → −151 MB, gecikme değişme
   Görev ortasında (boşta değilken) hiçbir şey yapılmaz: yalnız uyarı.
 
 Firefox yeniden başlatma: başlatma kaydı (masaustu.baslat → tarayici_kaydet; çalışma dizininde, uygulamanın ad
-alanında GÖRÜNMEZ) aynı komut/ortam/kopya/ev ile yeniden kullanılır. Ana Firefox SIGTERM ile kapanır (oturumu
-sessionstore.jsonlz4'e yazar), kopyanın user.js'ine browser.sessionstore.resume_session_once eklenir ve aynı kopya
-ile yeniden açılır (sekmeler geri gelir). Kapanış sırasında kopya bekçisi (oturum/kopya_bekcisi) kopyayı silmesin
+alanında GÖRÜNMEZ) aynı komut/ortam/kopya/ev ile yeniden kullanılır. Ana Firefox SIGTERM ile kapanır, kopyanın
+user.js'ine browser.sessionstore.resume_session_once eklenir ve aynı kopya ile yeniden açılır (sekmeler geri gelir;
+ölçüldü 27 Kas: SIGTERM sessionstore.jsonlz4 YAZMIYOR, geri yükleme ~15 sn'de bir yazılan
+sessionstore-backups/recovery.jsonlz4'ten geliyor → son ~15 sn'de açılan sekme kaybolabilir). Kapanış sırasında kopya bekçisi (oturum/kopya_bekcisi) kopyayı silmesin
 diye kopya dizininde açık bir tanımlayıcı tutulur; yeni süreç kendi bekçisini alır, eski bekçi sonlandırılır.
 """
 from __future__ import annotations
