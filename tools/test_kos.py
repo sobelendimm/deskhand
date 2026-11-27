@@ -5,6 +5,7 @@ Kullanım:
   python3 tools/test_kos.py                 # tüm tests/test_*.py, 4 işçi
   python3 tools/test_kos.py -j 3 test_web test_mcp
   python3 tools/test_kos.py --tur xvfb      # DESKHAND_ARKA_TUR=xvfb ile
+  python3 tools/test_kos.py --tam-cikti      # CI: düşen takımın TAM çıktısı (GitHub ::group:: içinde)
   python3 tools/test_kos.py --degisen main  # yalnız `git diff main` ile değişen dosyalara dokunan takımlar (kaba eşleme)
 
 Takım dosyasının ilk 40 satırında `test_kos: tek-basina` işareti varsa o takım paralel havuzdan SONRA tek başına koşar
@@ -66,7 +67,7 @@ def degisen_takimlar(taban: str) -> list[str]:
     return sorted(secim)
 
 
-def kos(t: str, zaman: int, env: dict) -> tuple[str, int, float, str, list[str]]:
+def kos(t: str, zaman: int, env: dict) -> tuple[str, int, float, str, list[str], str]:
     bas = time.monotonic()
     try:
         p = subprocess.run([sys.executable, os.path.join("tests", t + ".py")], cwd=KOK, env=env, capture_output=True,
@@ -78,7 +79,7 @@ def kos(t: str, zaman: int, env: dict) -> tuple[str, int, float, str, list[str]]
     sure = time.monotonic() - bas
     ozet = [s for s in out.splitlines() if OZET.search(s)]
     hatalar = [s[:200] for s in out.splitlines() if HATA.search(s)][:6] if rc else []
-    return t, rc, sure, (ozet[-1] if ozet else (out.strip().splitlines() or [""])[-1][:150]), hatalar
+    return t, rc, sure, (ozet[-1] if ozet else (out.strip().splitlines() or [""])[-1][:150]), hatalar, out
 
 
 def main() -> int:
@@ -88,6 +89,7 @@ def main() -> int:
     a.add_argument("--tur", choices=("kwin", "xvfb"), help="DESKHAND_ARKA_TUR")
     a.add_argument("--zaman", type=int, default=600, help="takım başına zaman aşımı (sn)")
     a.add_argument("--degisen", metavar="TABAN", help="yalnız git diff TABAN ile ilgili takımlar")
+    a.add_argument("--tam-cikti", action="store_true", help="düşen takımın tam çıktısı (CI günlüğü için)")
     g = a.parse_args()
     liste = g.takim or (degisen_takimlar(g.degisen) if g.degisen else takimlar())
     if not liste:
@@ -101,10 +103,12 @@ def main() -> int:
     bas = time.monotonic()
     sonuc = []
     def yaz(r):
-        t, rc, sure, ozet, hatalar = r
+        t, rc, sure, ozet, hatalar, out = r
         print(f"{'✓' if rc == 0 else '✗'} {t} rc={rc} {sure:.0f}s | {ozet}", flush=True)
         for s in hatalar:
             print("      " + s, flush=True)
+        if rc and g.tam_cikti:
+            print(f"::group::{t} (tam çıktı)\n{out.rstrip()}\n::endgroup::", flush=True)
         sonuc.append(r)
 
     tek = [t for t in liste if tek_basina_mi(t)]

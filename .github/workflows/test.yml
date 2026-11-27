@@ -59,7 +59,7 @@ jobs:
             gcc make pkg-config libsystemd-dev libwayland-dev wayland-protocols libxkbcommon-dev \
             at-spi2-core bubblewrap dbus dbus-x11 \
             libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
-            libxcb-image0 libxcb-render-util0 libxcb-xinerama0 libgl1 fonts-dejavu-core
+            libxcb-image0 libxcb-render-util0 libxcb-xinerama0 libgl1 fonts-dejavu-core fonts-noto-core
 
       # libei (deskhand-eis, the KWin background desktop's input helper) is optional: the Makefile skips
       # that target when it is missing or older than LIBEI_EN_AZ (ei_ping; Ubuntu 24.04 ships an older libei),
@@ -86,7 +86,7 @@ jobs:
       - name: Build native helpers
         run: make -C deskhand/yardimci deskhand-etkinlik deskhand-goruntu deskhand-eis
 
-      - name: Test suites (one by one)
+      - name: Test suites (4 in parallel)
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
@@ -99,7 +99,9 @@ jobs:
           # KWin suites (test_kwin_oturum, test_arka_kwin) exit 0 with "ATLANDI" when KWin >= 6.8 is absent
           # (Ubuntu 24.04 ships Plasma 5); the other suites use the Xvfb background desktop there.
           # test_ocr_gpu skips its GPU case without the OCR venv/GPU. tests/ekranli/ is never run (real screen).
-          dbus-run-session -- tests/ci_kos.sh
+          # 4 parallel workers (4 vCPU runner): each suite has its own temp dir and background desktop
+          # (tests/_yalitim.py); suites marked `test_kos: tek-basina` run alone after the pool.
+          dbus-run-session -- python3 tools/test_kos.py -j 4 --tam-cikti
 
       - name: i18n source audit
         run: python3 tools/i18n_cikar.py --denetle
