@@ -401,7 +401,7 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
                 raise Dur(e.kod, _("{mesaj} ({yazilan}/{toplam} karakter tamam)").format(
                     mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
             yazilan += len(p)
-            gunluk(f"{g.etiket} | [{au.baslik(k)}] | " + ("yapistir ***" if g.gizli else
+            gunluk(f"{g.etiket} | [{guvenlik.gizli_yer() if g.gizli else au.baslik(k)}] | " + ("yapistir ***" if g.gizli else
                    f"yapistir {p[:200]!r}" if p not in "\n\t" else ("key enter" if p == "\n" else "key tab")))
     finally:
         g.izle_bitir()
@@ -573,7 +573,7 @@ def _harf_harf_yaz(g, k, desen, metin, onayli):
                     # ardından harf varsa onun ön yoklaması (kelime başı + harf öncesi) yine durdurur.
                     if yokla and c != "\n":
                         odak_yokla()
-                baslik = guvenlik.baslik_goster(None) if g.gizli else _au().baslik(k)
+                baslik = guvenlik.gizli_yer() if g.gizli else _au().baslik(k)  # günlük = panelin etkinlik akışı
                 gunluk(f"{g.etiket} | [{baslik}] | " + ("type ***" if g.gizli else f"type {p!r}"))
     finally:
         g.izle_bitir()

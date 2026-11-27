@@ -292,6 +292,79 @@ async def r2_testleri(c, sm):
             repr(gorulen))
     kontrol("R2-4: eylem bitince sınıf kilidi kalkar", getattr(guvenlik._KIMLIK_KILIDI, "sinif", None) is None)
 
+    await ek1_testleri(c, sm)
+
+
+def _gunluk_metni():
+    from deskhand import yollar
+    d = yollar.gunluk_dizin()
+    try:
+        return "".join(open(os.path.join(d, f)).read() for f in sorted(os.listdir(d)) if f.startswith("gunluk-"))
+    except OSError:
+        return ""
+
+
+def _sizinti(metin_, sir):
+    """Gizli metnin 3'lük parçalarından ya da önizleme biçiminden (ilk harf parantezde) biri metinde mi."""
+    return [sir[i:i + 3] for i in range(len(sir) - 2) if sir[i:i + 3] in metin_] + (["(" + sir[0]] if "(" + sir[0] in metin_ else [])
+
+
+async def ek1_testleri(c, sm):
+    """EK-1: KWrite önizlemeli başlıkta secret=true → sonuçta, günlükte ve etkinlik akışında gizli harf yok."""
+    from deskhand.gui import gunluk_okur
+    sir = "qzxjkw"
+
+    def onizlemeli():
+        au = iki_pencere(sm, baslik="Başlıksız — KWrite")
+        yazilan = []
+
+        def onizleme(x):
+            if x.startswith("type "):
+                yazilan.append(x[5:])
+                au.pen[A][0] = f"Başlıksız ({''.join(yazilan)}) * — KWrite"
+        au.kanca_satir = onizleme
+        return au
+
+    g0 = _gunluk_metni()
+    au = onizlemeli()
+    r = await c.call_tool("type_text", {"window": A, "text": sir, "secret": True, **F})
+    m = metin(r)
+    kontrol("EK-1: secret=true önizlemeli başlık → MCP sonucunda gizli harf yok, after.title gizlendi",
+            not r.is_error and not _sizinti(m, sir) and "(gizli yazı: gizlendi)" in m
+            and au.pen[A][0].startswith("Başlıksız (qzxjkw)"), m[:400])
+    yeni = _gunluk_metni()[len(g0):]
+    kontrol("EK-1: günlükte gizli harf yok", yeni and not _sizinti(yeni, sir), yeni[-400:])
+    akis = [gunluk_okur.ayristir(x) for x in yeni.splitlines()]
+    akis_metni = " ".join(f"{d.get('pencere')} {d.get('eylem')}" for d in akis if d)
+    kontrol("EK-1: etkinlik akışında (gunluk_okur) gizli harf yok", akis_metni and not _sizinti(akis_metni, sir),
+            akis_metni[-400:])
+    # gizli olmayan yazıda after.title kalır (gerileme)
+    au = onizlemeli()
+    r = await c.call_tool("type_text", {"window": A, "text": "acik", **F})
+    kontrol("EK-1: gizli olmayan yazıda after.title kalır", "Başlıksız (acik)" in metin(r), metin(r)[:300])
+    # batch: gizli adım + observe_after → gözlem gizli önizlemeyi döndürmez
+    au = onizlemeli()
+    r = await c.call_tool("batch", {"steps": [{"tool": "type_text", "args": {"window": A, "text": sir, "secret": True}}],
+                                    "observe_after": True, **F})
+    m = metin(r)
+    kontrol("EK-1: batch gizli adım + observe_after → çıktıda gizli harf yok, gözlem atlandı",
+            not r.is_error and not _sizinti(m, sir) and "observe_after skipped" in m, m[:500])
+    # gizli yazı hata yolunda (yasak/sistem istemi gibi başlıklı ret) hedefin önizlemeli başlığı iletiye girmez
+    au = onizlemeli()
+    au.kanca_satir = None
+    au.pen[A][0] = "Başlıksız (qzx) * — KWrite"  # önceki gizli yazının önizlemesi başlıkta
+    from deskhand import guvenlik
+    eski = guvenlik.yasak_desenler
+    guvenlik.yasak_desenler = lambda: [r"Başlıksız"]
+    try:
+        r = await c.call_tool("type_text", {"window": A, "text": sir, "secret": True, **F})
+    finally:
+        guvenlik.yasak_desenler = eski
+    m = metin(r)
+    kontrol("EK-1: gizli yazıda yasak pencere reddi → [10], iletide önizlemeli başlık yok",
+            r.is_error and "[10]" in m and not _sizinti(m, sir), m[:400])
+    au.kanca_satir = None
+
 
 def gozcu_kesintisi_testleri():
     """kde/sanal gözcüsü başlıklı Dur bırakırsa (kesildi): gizli yazıda başlık iletiye taşınmaz; hiç harf gitmeden
@@ -324,6 +397,69 @@ def gozcu_kesintisi_testleri():
     kontrol("R2-5 nit: hiç harf gitmeden gözcü kesintisi → 'girdi gönderilmedi' eki (tutarlı)",
             "girdi gönderilmedi" in m and not any(x.startswith("type ") for x in au.satirlar), m)
     au.kanca_satir = None
+
+
+def kde_sanal_gozcu_testleri():
+    """EK-1: kde ve sanal gözcüleri gizli yazıda odağı çalanın / hedefin başlığını kaynakta gizler."""
+    from deskhand.arka_uc import kde, sanal
+
+    def bekle(g):
+        bitis = time.monotonic() + 3
+        while g.kesildi is None and time.monotonic() < bitis:
+            time.sleep(0.01)
+        g.izle_bitir()
+        return g.kesildi
+
+    eski = kde.aktif, kde.fare, kde.baslik, kde.baslik_ve_fare
+    kde.aktif, kde.fare = (lambda: "{diger}"), (lambda: (None, None, None))
+    kde.baslik = lambda k: "Başlıksız (qzx) * — KWrite"
+    kde.baslik_ve_fare = lambda k: ("Başlıksız (qzx) * — KWrite", (None, None, None))
+    try:
+        sonuc = {}
+        for gizli in (False, True):
+            g = kde.Girdi.__new__(kde.Girdi)
+            g.gizli, g.kesildi = gizli, None
+            g.izle("{hedef}", None)
+            sonuc[gizli] = bekle(g)
+    finally:
+        kde.aktif, kde.fare, kde.baslik, kde.baslik_ve_fare = eski
+    e0, e1 = sonuc[False], sonuc[True]
+    kontrol("EK-1 gözcü (kde): gizli olmayanda başlık var, gizlide yok ('başlık gizlendi')",
+            e0 is not None and "(qzx)" in e0.mesaj and e1 is not None and e1.kod == 3 and "(qzx)" not in e1.mesaj
+            and "başlık gizlendi" in e1.mesaj, f"{e0 and e0.mesaj} | {e1 and e1.mesaj}")
+
+    class SahteX:
+        def __init__(self, ekran):
+            pass
+
+        def aktif(self):
+            return 0x99
+
+        def baslik(self, w):
+            return "Başlıksız (qzx) * — KWrite"
+
+        def kapat(self):
+            pass
+
+    class SahteArka:
+        def ekran_adi(self):
+            return ":99"
+
+    eski_x = sanal._X
+    sanal._X = SahteX
+    try:
+        sonuc = {}
+        for gizli in (False, True):
+            g = sanal.SanalGirdi.__new__(sanal.SanalGirdi)
+            g.gizli, g.kesildi, g._izleyici, g.arka = gizli, None, None, SahteArka()
+            g.izle(sanal.kimlik_yap(0x42), None)
+            sonuc[gizli] = bekle(g)
+    finally:
+        sanal._X = eski_x
+    e0, e1 = sonuc[False], sonuc[True]
+    kontrol("EK-1 gözcü (sanal): gizli olmayanda başlık var, gizlide yok ('başlık gizlendi')",
+            e0 is not None and "(qzx)" in e0.mesaj and e1 is not None and e1.kod == 3 and "(qzx)" not in e1.mesaj
+            and "başlık gizlendi" in e1.mesaj, f"{e0 and e0.mesaj} | {e1 and e1.mesaj}")
 
 
 def kwin_gozcu_testleri():
@@ -367,6 +503,7 @@ def kwin_gozcu_testleri():
             e is not None and e.kod == 3 and "aktif pencere değişti" in e.mesaj, repr(e and e.mesaj))
     kontrol("gözcü (kwin): gizli olmayan yazıda çalanın başlığı iletide", e is not None and "Mozilla Firefox" in e.mesaj,
             repr(e and e.mesaj))
+    kde_sanal_gozcu_testleri()
     e = gozle([u, kardes], gizli=True)
     kontrol("R2-3 gözcü (kwin): gizli yazıda odağı çalanın başlığı iletiye girmez",
             e is not None and e.kod == 3 and "Mozilla Firefox" not in e.mesaj and "başlık gizlendi" in e.mesaj,

@@ -1075,7 +1075,7 @@ def yasak_denetle(k):
     for d in yasak_desenler():
         if re.search(d, b, re.I) or re.search(d, sinif, re.I):
             raise Dur(10, _("YASAK pencere: {baslik} (sınıf {sinif}) /{desen}/ ile eşleşti; hiçbir girdi gönderilmez "
-                            "({dosya})").format(baslik=repr(b), sinif=repr(sinif), desen=d, dosya=yollar.yasak_dosya()))
+                            "({dosya})").format(baslik=baslik_goster(b), sinif=repr(sinif), desen=d, dosya=yollar.yasak_dosya()))
 
 
 def _gorev_adresi(k) -> str | None:
@@ -1175,7 +1175,7 @@ def seviye_denetle(k, tur):
     s = seviye_coz(b, sinif, kurallar)
     if s == 0 or (s == 1 and tur == "klavye"):
         raise Dur(10, _("UYGULAMA SEVİYESİ: {baslik} (sınıf {sinif}) '{seviye}' seviyesinde; {tur} girdisi gönderilmez "
-                        "({dosya})").format(baslik=repr(b), sinif=repr(sinif), seviye=_SEVIYE_KOK[s],
+                        "({dosya})").format(baslik=baslik_goster(b), sinif=repr(sinif), seviye=_SEVIYE_KOK[s],
                                             tur=_("klavye") if tur == "klavye" else _("fare"), dosya=yollar.seviye_dosya()))
 
 
@@ -1243,6 +1243,12 @@ class baslik_gizle:  # noqa: N801 - bağlam yöneticisi, işlev gibi kullanılı
         return False
 
 
+def gizli_yer() -> str:
+    """secret=true çıktısında (sonuç alanı, günlük/etkinlik akışı) gizli metni ya da önizlemesini taşıyabilecek her
+    metnin yerine konan sabit."""
+    return _("(gizli yazı: gizlendi)")
+
+
 def baslik_goster(b, baska=False) -> str:
     """Durma iletisinde başlık: normalde repr(b); baslik_gizle altında gizli yer tutucu (baska: odağı çalan pencere)."""
     if getattr(_BASLIK_GIZLI, "acik", False):
@@ -1304,7 +1310,7 @@ def hedef_kayip_hatasi(k, a) -> Dur:
         b = au.baslik(a) if a else ""
     except Dur:
         b = "?"
-    return Dur(3, _("aktif pencere değişti → {baslik}").format(baslik=repr(b)))
+    return Dur(3, _("aktif pencere değişti → {baslik}").format(baslik=baslik_goster(b)))
 
 
 # Kimlik kilidi (B2): kimlik/ref verilen eylem başlığa değil kimliğe kilitlenir; kimliğe ek olarak pencerenin SINIFI
@@ -1382,7 +1388,7 @@ def imlec_alti_denetle(k, px=None, py=None):
     if k == EKRAN:
         return
     if au.sinif(w) != au.sinif(k):
-        raise Dur(3, _("imlecin altında başka pencere var: {baslik}; tıklanmadı").format(baslik=repr(au.baslik(w))))
+        raise Dur(3, _("imlecin altında başka pencere var: {baslik}; tıklanmadı").format(baslik=baslik_goster(au.baslik(w))))
 
 
 # ---------------------------------------------------------------- hassas düğme / ödeme sayfası
@@ -1525,7 +1531,7 @@ def hassas_sayfa_engel(k, onayli, ne, yakin=(), nokta=None, ek="", goruntu_al=Tr
         if not izin:
             raise Dur(10, _("HASSAS sayfa ({eslesen} ← {baslik}): bu sayfada {eylem} kullanıcının onayını ister "
                             "({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
-                eslesen=repr(m.group(0)), baslik=repr(b), eylem=ne, neden=neden), tur="hassas")
+                eslesen=repr(m.group(0)), baslik=baslik_goster(b), eylem=ne, neden=neden), tur="hassas")
     return bool(m)
 
 
@@ -1643,7 +1649,7 @@ def ucbirim_komut_engel(k, onayli, metin, gizli=False, goruntu_al=True):
         if not izin:
             raise Dur(10, _("UÇBİRİM KOMUTU ({neden} ← {baslik}): yıkıcı olabilecek komutu uçbirime yazmak kullanıcının "
                             "onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile "
-                            "tekrarla").format(neden=neden, baslik=repr(b), onay_neden=onay_neden), tur="hassas")
+                            "tekrarla").format(neden=neden, baslik=baslik_goster(b), onay_neden=onay_neden), tur="hassas")
     return True
 
 
@@ -1758,7 +1764,7 @@ def kendi_istemci_denetle(k):
              "sinif": _("PID'i bilinmeyen uçbirim penceresi, ajanın uçbirimiyle aynı türde")}[tur]
     raise Dur(10, _("AJANIN KENDİ İSTEMCİSİ: {baslik} (sınıf {sinif}): {neden}; ajan kendi izin istemini "
                     "onaylayamasın diye bu pencereye hiçbir girdi gönderilmez (okuma serbest)").format(
-        baslik=repr(au.baslik(k)), sinif=repr(sinif), neden=neden))
+        baslik=baslik_goster(au.baslik(k)), sinif=repr(sinif), neden=neden))
 
 
 # ---------------------------------------------------------------- sistem yetki/parola istemleri
@@ -1807,7 +1813,7 @@ def sistem_istemi_denetle(k):
     ad = sistem_istemi_mi(k)
     if ad and k not in getattr(_EYLEM, "sistem_onay", set()):
         raise Dur(10, _("SİSTEM İSTEMİ: {baslik} ({ad}) bir yetki/parola/izin istemi; girdi kullanıcının onayını ister "
-                        "(bu eylem için onay alınmadı)").format(baslik=repr(sec().baslik(k)), ad=ad), tur="hassas")
+                        "(bu eylem için onay alınmadı)").format(baslik=baslik_goster(sec().baslik(k)), ad=ad), tur="hassas")
 
 
 def sistem_istemi_engel(k, onayli, ne, goruntu_al=True):
@@ -1831,7 +1837,7 @@ def sistem_istemi_engel(k, onayli, ne, goruntu_al=True):
         if not izin:
             raise Dur(10, _("SİSTEM İSTEMİ ({ad} ← {baslik}): yetki/parola/izin istemine {ne} kullanıcının onayını "
                             "ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
-                ad=ad, baslik=repr(b), ne=ne, neden=neden), tur="hassas")
+                ad=ad, baslik=baslik_goster(b), ne=ne, neden=neden), tur="hassas")
     _EYLEM.sistem_onay.add(k)
     return True
 

@@ -2056,7 +2056,8 @@ def type_text(
         raise ToolError("[1] " + _("role/nth yalnız element hedefiyle kullanılır"))
     if not window and not ref:
         raise ToolError("[1] " + _("window ya da ref gerekli"))
-    with baglam(desktop, _("yazı: {pencere}").format(pencere=window or ref)) as bilgi:
+    # secret: bu iş parçacığındaki ret iletileri pencere başlığı taşımaz (önizleme gizli harfi gösterebilir; EK-1)
+    with baglam(desktop, _("yazı: {pencere}").format(pencere=window or ref)) as bilgi, guvenlik.baslik_gizle(secret):
         hata.dur_denetle()
         ref_o = None
         if ref:
@@ -2096,8 +2097,10 @@ def type_text(
         elif not secret and _yazi_goruldu(text, after):
             s["effect"] = "confirmed"
         if after is not None:
-            if secret:
-                after.pop("new_text", None)  # gizli yazı sonuçta yankılanmaz
+            if secret:  # gizli metni ya da önizlemesini taşıyabilen metin alanları yer tutucuyla (sayısal alanlar kalır)
+                for alan in ("title", "new_text"):
+                    if alan in after:
+                        after[alan] = guvenlik.gizli_yer()
             s["after"] = after
         _sinama_alani(k, s, tara=True)
         return s
@@ -2639,6 +2642,12 @@ def batch(
         metin.append("observe_after skipped: the batch stopped; call observe on the window you need")
         son_k = None
     icerik: list = [TextContent(type="text", text="\n".join(metin))]
+    if observe_after and son_k and any(ad == "type_text" and args.get("secret") for ad, args in hazir):
+        # gizli yazılı batch: gözlem başlığı/alan değerlerini (önizleme, yazılan metin) döndürürdü (EK-1)
+        s["observe"] = {"skipped": "secret_step"}
+        icerik[0] = TextContent(type="text", text=icerik[0].text + "\nobserve_after skipped: a secret=true step ran "
+                                "(its window may show the secret); call observe yourself if needed")
+        son_k = None
     if observe_after and son_k:
         try:
             g = observe(window=son_k, desktop=desktop)

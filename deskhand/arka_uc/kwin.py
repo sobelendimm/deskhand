@@ -828,11 +828,11 @@ class KwinGirdi:
     # -------- gönderim
     def _kayit(self, k: str, satirlar) -> None:
         from ..gunluk import gunluk
-        from ..guvenlik import gizli_etiket, gizli_satir
+        from ..guvenlik import gizli_etiket, gizli_satir, gizli_yer
         kayit = [gizli_satir(s) if self.gizli else s for s in satirlar]
         etiket = gizli_etiket(self.etiket) if self.gizli else self.etiket
         try:
-            b = self.arka.baslik(k)
+            b = gizli_yer() if self.gizli else self.arka.baslik(k)  # gizli: başlık önizlemesi günlüğe/akışa girmez
         except Dur:
             b = "?"
         gunluk(f"{etiket} | arka {self.ekran} [{b}] | {' ; '.join(kayit)}")
