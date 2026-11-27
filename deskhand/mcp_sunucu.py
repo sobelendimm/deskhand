@@ -1534,6 +1534,7 @@ def manage_desktop(
                     "size": list(d["boyut"][:2]), "scale": masaustu.olcek(d), "warnings": uyarilar,
                     "audio": bool(audio and not uyari)}
         if action == "stop":
+            hata.dur_denetle()  # UX-FIX sınıf taraması: DUR açıkken masaüstü (ve üstündeki uygulamalar) kapatılmaz
             with kilitli():
                 ok, notlar = masaustu.masaustu_durdur(ad)
             with _CEKIM_KILIT:
@@ -2344,6 +2345,9 @@ def open_app(
     saved logins). Returns the new window's id for later calls."""
     with baglam(desktop, _("uygulama aç: {uygulama}").format(uygulama=app)) as bilgi:
         hata.dur_denetle()
+        # erken ret (run_flow gibi): onay beklerken masaüstü açma / oturum politikası dönüşü yok; başlatmadan hemen önce
+        # kilit altında yeniden denetlenir
+        _onay_kapisi()
         # yalnız kurulu masaüstü girdisi + belge argümanları (ham yol/komut, yorumlayıcı, uçbirim → 10)
         argv, ad, yasak_metin, girdi = api.uygulama_komutu(app, args)
         belgeler = argv[3:]

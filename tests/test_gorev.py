@@ -323,6 +323,28 @@ for kotu in ("", "   ", "x" * 5000):
         kontrol(f"geçersiz görev metni ({len(kotu)}) reddedilir", True)
 kontrol("hatalı başlatmalardan sonra görev kilidi serbest", gorev.Gorev(kafes=False)._kilit_al().close() is None)
 
+# UX-FIX D-4: çekirdek gorev.baslat DUR açıkken reddeder (panel dışı yollar da; masaüstü kapatılmaz)
+from deskhand import masaustu as _ms  # noqa: E402
+from deskhand.hata import dur_dosyasi  # noqa: E402
+
+_dur = dur_dosyasi()
+os.makedirs(os.path.dirname(_dur), exist_ok=True)
+open(_dur, "w").close()
+_durdurulan: list = []
+_gercek_durdur = _ms.masaustu_durdur
+_ms.masaustu_durdur = lambda ad=None: (_durdurulan.append(ad), (True, []))[1]
+try:
+    try:
+        gorev.Gorev(kafes=False).baslat("x", masaustu_kapat=True)
+        kontrol("UX-FIX D-4: DUR açık → gorev.baslat reddeder", False)
+    except gorev.GorevHatasi as e:
+        kontrol("UX-FIX D-4: DUR açık → gorev.baslat reddeder (kod 'dur'), masaüstü kapatılmaz",
+                getattr(e, "kod", "") == "dur" and _durdurulan == [], f"{e} {getattr(e, 'kod', '')} {_durdurulan}")
+finally:
+    _ms.masaustu_durdur = _gercek_durdur
+    os.remove(_dur)
+kontrol("DUR reddinden sonra görev kilidi serbest", gorev.Gorev(kafes=False)._kilit_al().close() is None)
+
 # =========================================================================== 6) arayüz
 # =========================================================================== 6) arayüz (Qt offscreen)
 from PIL import Image  # noqa: E402

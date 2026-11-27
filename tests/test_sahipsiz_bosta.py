@@ -172,8 +172,77 @@ try:
     durdurulan.clear()
     hazirla("", sahip=-1, yas_sn=31 * 60)
     masalar.birak("isci", pid=os.getpid())
-    masaustu.main(["list", "--json"])
-    kontrol("`deskhand desktop` CLI'si sahipsiz boştaki masaüstlerini kapatır", "" in durdurulan, str(durdurulan))
+    # UX-FIX D-3: salt okuma alt komutları (list/status) süpürmez; stop süpürür
+    import contextlib
+    import io
+    for komut in (["list", "--json"], ["status", "--desktop-name", "isci", "--json"]):
+        with contextlib.redirect_stdout(io.StringIO()):
+            masaustu.main(komut)
+        kontrol(f"UX-FIX D-3: `deskhand desktop {komut[0]}` (salt okuma) süpürmez", durdurulan == [], str(durdurulan))
+    hazirla("isci", sahip=os.getpid())
+    with contextlib.redirect_stdout(io.StringIO()):
+        masaustu.main(["stop", "--desktop-name", "isci"])
+    kontrol("`deskhand desktop stop` sahipsiz boştaki masaüstlerini de kapatır", "" in durdurulan, str(durdurulan))
+    masalar.birak("isci", pid=os.getpid())
+
+    print("== UX-FIX O-1: DUR açıkken bakım (tarayıcı öldürme/yeniden başlatma) ve süpürme HİÇ çalışmaz")
+    from deskhand import bellek_bekcisi
+    gercek_bakim = bellek_bekcisi.bakim
+    bakimlar: list = []
+    bellek_bekcisi.bakim = lambda ad=None, simdi=None, **k: bakimlar.append(ad)
+    try:
+        durdurulan.clear()
+        hazirla("", sahip=-1, yas_sn=31 * 60)
+        with open(hata.dur_dosyasi(), "w"):
+            pass
+        kontrol("DUR açık → bosta_kapat bakım çağırmaz, kapatmaz",
+                masaustu.bosta_kapat("", simdi=GELECEK) is False and bakimlar == [] and durdurulan == [],
+                f"{bakimlar} {durdurulan}")
+        kontrol("DUR açık → sahipsiz süpürme bakım çağırmaz, kapatmaz",
+                masaustu.sahipsiz_bosta_kapat(simdi=GELECEK) == [] and bakimlar == [] and durdurulan == [],
+                f"{bakimlar} {durdurulan}")
+        mcp_sunucu._MASA.update(bagli=True, ad="", sahip=True)
+        kontrol("DUR açık → MCP bekçisi bakım çağırmaz, kapatmaz",
+                not mcp_sunucu.bosta_denetle() and bakimlar == [] and durdurulan == [], f"{bakimlar} {durdurulan}")
+        try:
+            r = mcp_sunucu.manage_desktop(action="stop")
+        except Exception as e:  # noqa: BLE001 - ToolError [13]
+            r = str(e)
+        kontrol("DUR açık → MCP manage_desktop stop reddedilir [13], masaüstü kapatılmaz",
+                "[13]" in str(r) and durdurulan == [], f"{r} {durdurulan}")
+        mcp_sunucu._MASA.update(bagli=False, sahip=False, ad="")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            kod = masaustu.main(["stop"])
+        kontrol("DUR açık → `deskhand desktop stop` 13 döner, kapatmaz/süpürmez", kod == 13 and durdurulan == [],
+                f"{kod} {durdurulan}")
+        os.remove(hata.dur_dosyasi())
+        kontrol("DUR kalkınca bakım yine çalışır (sahipsiz süpürme)",
+                masaustu.sahipsiz_bosta_kapat(simdi=GELECEK) == [""] and "" in bakimlar,f"{bakimlar} {durdurulan}")
+    finally:
+        bellek_bekcisi.bakim = gercek_bakim
+        if os.path.exists(hata.dur_dosyasi()):
+            os.remove(hata.dur_dosyasi())
+
+    print("== UX-FIX D-3: bir masaüstündeki hata (OSError) kalanların süpürülmesini kesmez")
+    durdurulan.clear()
+    hazirla("", sahip=-1, yas_sn=31 * 60)
+    hazirla("isci", sahip=-1, yas_sn=31 * 60)
+    gercek_kapat = masaustu.bosta_kapat
+    ilk = [True]
+
+    def bozuk_kapat(ad=None, simdi=None, devralan=None):
+        if ilk[0]:
+            ilk[0] = False
+            raise OSError("test: disk hatası")
+        return gercek_kapat(ad, simdi, devralan=devralan)
+    masaustu.bosta_kapat = bozuk_kapat
+    try:
+        k = masaustu.sahipsiz_bosta_kapat(simdi=GELECEK, devralan="test")
+    finally:
+        masaustu.bosta_kapat = gercek_kapat
+    kontrol("ilk masaüstünde OSError → döngü sürer, ikincisi kapatılır", len(k) == 1 and len(durdurulan) == 1,
+            f"{k} {durdurulan}")
+    kontrol("OSError günlüğe yazıldı", "test: disk hatası" in gunluk_metni(), gunluk_metni()[-300:])
 finally:
     masaustu.durum, masaustu.masaustu_durdur, masaustu.devral_var = gercek
 

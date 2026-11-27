@@ -13,7 +13,7 @@ import threading
 import time
 
 import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; Deskhand'den ÖNCE)
-from deskhand import arka_ortak as ao, bellek_bekcisi as bb, masalar, masaustu, yollar
+from deskhand import arka_ortak as ao, bellek_bekcisi as bb, hata, masalar, masaustu, yollar
 from deskhand.hata import Dur
 from deskhand.oturum import firefox, kopya_bekcisi
 
@@ -282,6 +282,31 @@ kontrol("B2: görevli masaüstünde (d.gorev) _engel 'gorev', yeniden başlatma 
         bb._engel(AD, dict(D)) == "gorev" and bakim_at(0) is None and not YENIDEN and reclaim_icerik() == "")
 D.pop("gorev")
 kontrol("B2: görev yokken gerçek _engel engellemez", bb._engel(AD, dict(D)) is None)
+
+# UX-FIX O-1: DUR açıkken bakım HİÇBİR şeye dokunmaz (Firefox ve Chromium yeniden başlatma, reclaim)
+_dur = hata.dur_dosyasi()
+os.makedirs(os.path.dirname(_dur), exist_ok=True)
+for _tur, _argv in (("Firefox", ["firefox", "--profile", "/k/a", "--no-remote"]),
+                    ("Chromium", ["chromium", "--user-data-dir=/k/a"])):
+    sifirla()
+    cg_yaz(0.95)
+    SON["t"] = T - 1000
+    kayit_yaz([{"argv": _argv, "env": {}, "kopya": "/k/a", "ev": [], "pid": 5}])
+    with open(_dur, "w"):
+        pass
+    try:
+        kontrol(f"UX-FIX O-1: DUR açık → _engel 'dur', {_tur} yeniden başlatılmaz, reclaim yok",
+                bb._engel(AD, dict(D)) == "dur" and bakim_at(0) is None and not YENIDEN and reclaim_icerik() == "",
+                f"engel={bb._engel(AD, dict(D))} yeniden={YENIDEN} reclaim={reclaim_icerik()!r}")
+        # bakım başladıktan sonra DUR açıldı: kalan tarayıcılar öldürülmez (_yeniden döngüsü her kayıtta denetler)
+        sifirla()
+        _du = bb.bellek_durumu(CG) or {}
+        _s = bb._yeniden(AD, dict(D), _du, {}, [{"argv": _argv, "kopya": "/k/a"}, {"argv": _argv, "kopya": "/k/b"}],
+                         M, T - 1000)
+        kontrol(f"UX-FIX O-1: _yeniden sırasında DUR açık → {_tur} öldürülmez/başlatılmaz", not YENIDEN, f"{YENIDEN} {_s}")
+    finally:
+        os.remove(_dur)
+sifirla()
 bb._engel = lambda ad, d=None: None
 
 # B5: durum dosyası temizliği + başka masaüstünün olayı gösterilmez

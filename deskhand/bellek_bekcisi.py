@@ -644,8 +644,20 @@ def dogrula(cg: str, kopya: str, p, acildi=None) -> tuple[bool, str | None]:
 
 # ---------------------------------------------------------------- bakım (boşta)
 
+def dur_acik() -> bool:
+    """UX-FIX O-1: kullanıcının DUR anahtarı açık mı? Açıkken bakım hiçbir şeye dokunmaz (tarayıcı öldürme/yeniden
+    başlatma, reclaim; sahipsiz süpürme de). Denetlenemezse açık sayılır (kapalı-başarısız)."""
+    try:
+        from .hata import dur_dosyasi
+        return os.path.exists(dur_dosyasi())
+    except Exception:  # noqa: BLE001 - karar verilemedi: dokunma
+        return True
+
+
 def _engel(ad: str | None, d: dict | None = None) -> str | None:
     from . import masaustu
+    if dur_acik():
+        return "dur"  # insan önceliği: DUR açıkken tarayıcıya ve belleğe dokunulmaz (bosta_neden ile aynı kural)
     if d is not None and d.get("gorev"):
         return "gorev"  # görev masaüstü boşta sayılmaz (masaustu.bosta_neden ile aynı)
     if masaustu.devral_var(masaustu.devral_yolu(ad)):
@@ -826,6 +838,9 @@ def _yeniden(ad: str | None, d: dict, durum: dict, kayit: dict, kayitlar: list[d
     import secrets
     sonuc = []
     for g in kayitlar:
+        if dur_acik():  # UX-FIX O-1: bakım sürerken DUR açıldı → kalan tarayıcılar öldürülmez (her kayıtta denetlenir)
+            sonuc.append((g, {"kopya": g.get("kopya"), "ok": False, "olduruldu": False, "neden": "dur"}))
+            continue
         try:
             s = firefox_yeniden_baslat(d, g, son)
         except Exception as e:  # noqa: BLE001
@@ -835,7 +850,7 @@ def _yeniden(ad: str | None, d: dict, durum: dict, kayit: dict, kayitlar: list[d
     if any(s.get("olduruldu") or s.get("ok") for _g, s in sonuc):
         kayit["yeniden_gecmis"] = _gecmis(kayit, simdi) + [simdi]
     bekleyen = [(g, s) for g, s in sonuc if s.get("ok") is None]
-    hazir = [(g, s) for g, s in sonuc if s.get("ok") is not None and s.get("neden") not in ("kopya-yok", "firefox-yok")]
+    hazir = [(g, s) for g, s in sonuc if s.get("ok") is not None and s.get("neden") not in ("kopya-yok", "firefox-yok", "dur")]
     ozet = [{k: v for k, v in s.items() if k != "popen"} for _g, s in sonuc]
     bid = secrets.token_hex(6)
     if bekleyen:

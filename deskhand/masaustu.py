@@ -463,8 +463,10 @@ def bosta_kapat(ad: str | None = None, simdi: float | None = None, devralan: str
     """Boşta ise masaüstünü kapat ve günlüğe yaz. devralan: sahipsiz masaüstünü kapatan (sahipsiz_bosta_kapat; kapanış
     bildirim akışına da yazılır). → kapatıldı mı."""
     ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
+    from . import bellek_bekcisi
+    if bellek_bekcisi.dur_acik():  # UX-FIX O-1: DUR açık → bakım da kapanış da yok (bakım tarayıcı öldürebilir)
+        return False
     try:  # bellek bakımı (boşta: memory.reclaim / Firefox geri dönüşümü); masaüstünü kapatmaz, hatası kapanışı durdurmaz
-        from . import bellek_bekcisi
         bellek_bekcisi.bakim(ad, simdi)
     except Exception as e:  # noqa: BLE001 - yutulmaz: günlüğe (yeniden başlatma hataları bakim içinde uyarıya da yazılır)
         from .gunluk import gunluk
@@ -525,31 +527,38 @@ def sahipsiz_bosta_kapat(simdi: float | None = None, haric: tuple = (), devralan
     (Devral, bekleyen onay, görev kipi, DUR, kullanımda → kapatmaz). Yarış: masaüstü seçim kilidi (masa_koku/.secim.lock;
     MCP masa_bagla da onu tutar) BEKLEMEDEN alınır, alınamazsa bu tur atlanır; kilit altında sahiplik yeniden denetlenir
     → iki devralan tek kapanış, devralma ile yeni sahiplenme çakışmaz. haric: atlanacak adlar. → kapatılan adlar."""
+    from . import bellek_bekcisi
     devralan = devralan or f"pid {os.getpid()}"
     kapanan: list[str] = []
+    if bellek_bekcisi.dur_acik():  # UX-FIX O-1: DUR açık → süpürme hiç başlamaz (bosta_kapat da her masaüstünde denetler)
+        return kapanan
     try:
         adlar = masalar.adlar()
     except OSError:
         return kapanan
     for ad in adlar:
-        if ad in haric or masalar.sahip_oku(ad) is not None or durum_oku(ad) is None:
-            continue
-        with _secim_kilidi_dene() as alindi:
-            if not alindi:
-                continue  # başka bir süreç devralıyor ya da masaüstü seçiyor: sonraki tur
-            if masalar.sahip_oku(ad) is not None or durum_oku(ad) is None:
-                continue  # arada sahiplenildi ya da kapatıldı
-            temizle = ad != "" and (oto_mu(ad) or masalar.cli_mu(ad))
-            try:
+        try:  # UX-FIX D-3: bir masaüstünün hatası kalanların süpürülmesini kesmez (günlüğe yazılır)
+            if ad in haric or masalar.sahip_oku(ad) is not None or durum_oku(ad) is None:
+                continue
+            with _secim_kilidi_dene() as alindi:
+                if not alindi:
+                    continue  # başka bir süreç devralıyor ya da masaüstü seçiyor: sonraki tur
+                if masalar.sahip_oku(ad) is not None or durum_oku(ad) is None:
+                    continue  # arada sahiplenildi ya da kapatıldı
+                temizle = ad != "" and (oto_mu(ad) or masalar.cli_mu(ad))
                 with masalar.masa_sabit(ad):
                     kapandi = bosta_kapat(ad, simdi, devralan=devralan)
-            except Dur:
-                continue
-            if kapandi:
-                masalar.birak(ad)  # ölü sahibin kaydı (canlı sahipse birak dokunmaz)
-                if temizle:
-                    masalar.kok_sil(ad)
-                kapanan.append(ad)
+                if kapandi:
+                    masalar.birak(ad)  # ölü sahibin kaydı (canlı sahipse birak dokunmaz)
+                    if temizle:
+                        masalar.kok_sil(ad)
+                    kapanan.append(ad)
+        except Dur:
+            continue
+        except Exception as e:  # noqa: BLE001 - yutulmaz: günlüğe; sonraki masaüstü
+            from .gunluk import gunluk
+            gunluk(f"masaustu | {ad or 'varsayılan'} sahipsiz süpürme hatası: {type(e).__name__}: "
+                   f"{getattr(e, 'mesaj', None) or e}")
     return kapanan
 
 
@@ -1527,10 +1536,13 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     try:
         ad = masalar.secili() if a.ad is None else masalar.dogrula(a.ad)
-        try:  # DH-TUR2: sahibi yaşamayan boştaki masaüstlerini devral + kapat (açılacak olan hariç)
-            sahipsiz_bosta_kapat(haric=(ad,) if a.islem == "baslat" else (), devralan="CLI")
-        except Exception:  # noqa: BLE001 - süpürme asla komutu düşürmesin
-            pass
+        if a.islem in ("baslat", "durdur"):  # UX-FIX D-3: salt okuma alt komutları (list/status) süpürmez
+            from .hata import dur_denetle
+            dur_denetle()  # UX-FIX sınıf taraması: DUR açıkken masaüstü açılmaz/kapatılmaz (MCP manage_desktop ile aynı)
+            try:  # DH-TUR2: sahibi yaşamayan boştaki masaüstlerini devral + kapat (açılacak olan hariç)
+                sahipsiz_bosta_kapat(haric=(ad,) if a.islem == "baslat" else (), devralan="CLI")
+            except Exception:  # noqa: BLE001 - süpürme asla komutu düşürmesin
+                pass
         if a.islem == "liste":
             s = liste()
             if a.json:

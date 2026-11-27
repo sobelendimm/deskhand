@@ -390,7 +390,9 @@ def sahte_onay_4a(eylem, hedef, ayrinti="", masaustu="ekran", sure=120, goruntu=
                                                           desktop="background"),
         "clipboard_write": lambda: mcp_sunucu.clipboard(action="write", text="x", desktop="background"),
         "click": lambda: mcp_sunucu.click(window="Ödeme", text="Ürün", verify=False, desktop="background"),
-        "open_app": lambda: mcp_sunucu.open_app(app="firefox", desktop="background", wait_s=1),
+        # profil/oturum politikası gerektirmeyen sahte girdi: sonuç yalnız onay kapısına bağlı (Firefox profili
+        # olmayan yalıtık HOME'da politika "waiting" dönüp kapıyı gizliyordu)
+        "open_app": lambda: mcp_sunucu.open_app(app="deskhand-4a", desktop="background", wait_s=1),
         "run_flow": lambda: mcp_sunucu.run_flow(action="run", name="yok", window="Ödeme", desktop="background"),
         "screenshot": lambda: mcp_sunucu.screenshot(window="Ödeme", desktop="background"),
         "read_text": lambda: mcp_sunucu.read_text(window="Ödeme", desktop="background"),
@@ -419,14 +421,21 @@ def sahte_onay_4b(eylem, hedef, ayrinti="", masaustu="ekran", sure=120, goruntu=
     return onay.OnaySonucu(True, "izin")
 
 
+UYG4 = os.path.join(G, "uygulamalar-4a")
+os.makedirs(UYG4, exist_ok=True)
+with open(os.path.join(UYG4, "deskhand-4a.desktop"), "w") as f:
+    f.write("[Desktop Entry]\nType=Application\nName=Deskhand 4a\nExec=/usr/bin/true\n")
+eski_dizinler4 = uygulama.UYGULAMA_DIZINLERI
 p4 = odeme_ac()
 s = mcp_sunucu.screenshot(window="Ödeme", desktop="background").structured_content
 onay.iste_sonuc = sahte_onay_4a
+uygulama.UYGULAMA_DIZINLERI = (UYG4,)
 try:
     _r, h4 = hata_al(mcp_sunucu.click, window="Ödeme", x=250 * s["scale"], y=150 * s["scale"], shot_id=s["shot_id"],
                      verify=False, desktop="background")
 finally:
     onay.iste_sonuc = gercek_iste_sonuc
+    uygulama.UYGULAMA_DIZINLERI = eski_dizinler4
 time.sleep(0.5)
 l4 = oku(LOG4)
 sn = araya.get("sonuc", {})

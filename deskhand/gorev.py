@@ -80,6 +80,18 @@ class GorevHatasi(Exception):
         super().__init__(mesaj)
         self.mesaj, self.ipucu, self.kod = mesaj, ipucu, kod
 
+
+def _dur_reddet() -> None:
+    """DUR açıksa (ya da denetlenemezse: kapalı-başarısız) GorevHatasi(kod="dur")."""
+    try:
+        from .hata import dur_dosyasi
+        acik = os.path.exists(dur_dosyasi())
+    except Exception:  # noqa: BLE001 - karar verilemedi: başlatma
+        acik = True
+    if acik:
+        raise GorevHatasi(_("DUR açık: görev başlatılmadı."),
+                          _("Devam etmek için panelde 'Devam et'e basın."), kod="dur")
+
     def __str__(self):
         return self.mesaj + (f" — {self.ipucu}" if self.ipucu else "")
 
@@ -419,6 +431,7 @@ class Gorev:
         ajanının erişimine girmez). Görev sürerken masaüstü göreve ayrılır (gorev_kipi.masaustu_ayir)."""
         if self.calisiyor:
             raise GorevHatasi(_("Bir görev zaten çalışıyor."), _("Bitmesini bekleyin ya da Durdur'a basın."))
+        _dur_reddet()  # UX-FIX D-4: DUR açıkken hiçbir yoldan (panel, komut) görev başlamaz
         metin = (metin or "").strip()
         if not metin:
             raise GorevHatasi(_("Görev boş."), _("Ne yapılmasını istediğinizi yazın."))
@@ -443,6 +456,7 @@ class Gorev:
                                       _("Görev kendi temiz masaüstünde çalışır: açık masaüstündeki pencereler "
                                         "kapatılır."), kod="masaustu_acik")
                 from . import masaustu
+                _dur_reddet()  # kapatma onayı beklenirken DUR açılmış olabilir: masaüstü kapatılmaz
                 masaustu.masaustu_durdur("")
                 if _masaustu_acik():
                     raise GorevHatasi(_("Görünmez masaüstü kapatılamadı; görev başlatılmadı."), kod="masaustu_acik")

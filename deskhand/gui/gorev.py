@@ -7,6 +7,7 @@ masaüstünden alınır (arka_f = arka_uc.sec(arka_bayragi=True)); kullanıcın�
 """
 from __future__ import annotations
 
+import os
 import re
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
@@ -435,6 +436,8 @@ class GorevSekmesi(QWidget):
         siteler = ", ".join(gecerli)
         if self.onay_iste and baslat_onayi_sorulsun() and not self._onayla(metin, siteler):
             return
+        if self._dur_simdi():  # UX-FIX D-4: onay penceresi açıkken DUR açıldı → onaylansa da başlamaz
+            return
         self.liste.clear()
         self._bos_durumlar()
         self._adimlar.clear()
@@ -454,6 +457,10 @@ class GorevSekmesi(QWidget):
                 # görünmez masaüstü başka bir iş için açık: kullanıcı onaylarsa kapatılıp görev başlar
                 if getattr(e, "kod", "") != "masaustu_acik" or not self._masaustu_kapat_onayla():
                     raise
+                if self._dur_simdi():  # UX-FIX D-4: onay beklenirken DUR açıldı → masaüstü kapatılmaz, görev başlamaz
+                    self.g = None
+                    self._durum_yaz()
+                    return
                 self.g.baslat(metin, masaustu_kapat=True, **ek)
         except gorev.GorevHatasi as e:
             # UX-F O5: üstte sade cümle + ne yapılacak; ham ileti katlı "Ayrıntı" altında
@@ -468,6 +475,17 @@ class GorevSekmesi(QWidget):
         self._durum_yaz()
         self._dugmeler()
         self._zamanlayici()
+
+    def _dur_simdi(self) -> bool:
+        """DUR şu an açık mı? Panel durumu (self.dur) ya da DUR dosyası; denetlenemezse açık (kapalı-başarısız). Modal
+        pencere (exec) dönüşünden sonra yeniden denetim için: pencere açıkken DUR açılmış olabilir."""
+        if self.dur:
+            return True
+        try:
+            from ..hata import dur_dosyasi
+            return os.path.exists(dur_dosyasi())
+        except Exception:  # noqa: BLE001 - karar verilemedi: başlatma
+            return True
 
     def onay_metni(self, metin: str, siteler: str) -> str:
         kisa = " ".join(metin.split())

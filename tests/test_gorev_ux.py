@@ -21,7 +21,7 @@ from PyQt6.QtCore import Qt  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 from PyQt6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
-from deskhand import ayarlar  # noqa: E402
+from deskhand import ayarlar, gorev  # noqa: E402
 from deskhand.gui import gorev as GS  # noqa: E402
 from deskhand.gui.durum import Durum  # noqa: E402
 from deskhand.gui.pencere import AnaPencere  # noqa: E402
@@ -210,6 +210,56 @@ try:
 finally:
     QMessageBox.exec = eski_exec
     sek.onay_iste = False
+
+# ------------------------------------------------------------------ 4b) UX-FIX D-4: onay penceresi açıkken DUR
+def dur_acip_kabul(k):
+    """Kullanıcı onay penceresine bakarken DUR açıldı (panel durum sinyali), sonra 'Başlat'a bastı."""
+    acilan.append(k)
+    w.durum_guncelle(Durum(ad="dur", dur_kaynak="kullanici"))
+    kabul = [b for b in k.buttons() if k.buttonRole(b) == QMessageBox.ButtonRole.AcceptRole]
+    kabul[0].click()
+    return 0
+
+
+class MasaustuAcikGorev(SahteGorev):
+    kapatarak = 0
+
+    def baslat(self, metin, **kw):
+        if not kw.get("masaustu_kapat"):
+            raise gorev.GorevHatasi("Görünmez masaüstü başka bir iş için açık; kapatıp başlatılsın mı?",
+                                    kod="masaustu_acik")
+        MasaustuAcikGorev.kapatarak += 1
+        return super().baslat(metin, **kw)
+
+
+try:
+    ayarlar.ayarla("gorev", "baslat_onayi", True)
+    sek.onay_iste = True
+    acilan.clear()
+    SahteGorev.baslatma = 0
+    sek.kutu.setPlainText("Trendyol'da şu kasayı sepete ekle")
+    QMessageBox.exec = dur_acip_kabul
+    sek.baslat()
+    app.processEvents()
+    kontrol("UX-FIX D-4: başlatma onayı açıkken DUR → onaylansa da görev başlamaz",
+            len(acilan) == 1 and SahteGorev.baslatma == 0 and not sek.calisiyor, f"{len(acilan)} {SahteGorev.baslatma}")
+    w.durum_guncelle(Durum(ad="bos"))
+    app.processEvents()
+    sek.onay_iste = False
+    acilan.clear()
+    eski_f = sek.gorev_f
+    sek.gorev_f = MasaustuAcikGorev
+    sek.baslat()
+    app.processEvents()
+    kontrol("UX-FIX D-4: 'masaüstünü kapatıp başlat' onayı açıkken DUR → masaüstü kapatılmaz, görev başlamaz",
+            len(acilan) == 1 and MasaustuAcikGorev.kapatarak == 0 and not sek.calisiyor,
+            f"{len(acilan)} {MasaustuAcikGorev.kapatarak}")
+    sek.gorev_f = eski_f
+finally:
+    QMessageBox.exec = eski_exec
+    sek.onay_iste = False
+    w.durum_guncelle(Durum(ad="bos"))
+    app.processEvents()
 
 # ------------------------------------------------------------------ 5) model kaydı hatası görünür
 kontrol("başta: model hata alanı gizli", not sek.l_hata.isVisible())
