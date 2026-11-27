@@ -1,18 +1,20 @@
-"""Onaylar sekmesi."""
+"""Onaylar sekmesi. Boşken bekleyen tablosu gizli, tek satır "Bekleyen onay yok" (UX-F O4); sütunlar içeriğe göre,
+başlıklar içerikle aynı (sola) hizada (D4); Geçmiş'in Eylem sütunu insan dilinde, ham satır ipucunda (insan_metni)."""
 from __future__ import annotations
 
 import time
 
-from PyQt6.QtCore import (QTimer,
+from PyQt6.QtCore import (Qt, QTimer,
                           pyqtSignal)
 from PyQt6.QtWidgets import (QAbstractItemView, QHBoxLayout,
-                             QHeaderView, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+                             QHeaderView, QLabel, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from ...i18n import _
 from .. import metinler as T
 from ..dil import Metinler
 from ..gunluk_okur import onay_gecmisi
-from ..ortak import (YESIL, KIRMIZI, nokta, baslik_etiketi, soluk_etiket, _masaustu_adi, _karar_adi)
+from ..insan_metni import ayrinti, insan_metni, komut_parcasi, pencere_metni
+from ..ortak import (YESIL, KIRMIZI, nokta, baslik_etiketi, _masaustu_adi, _karar_adi)
 
 
 # =========================================================================== Onaylar
@@ -34,7 +36,8 @@ class OnaylarSekmesi(QWidget):
         self.t_bekleyen.itemDoubleClicked.connect(lambda it: self._ac(it.row()))
         kok.addWidget(self.t_bekleyen, 2)
         alt = QHBoxLayout()
-        self.l_bos = soluk_etiket("")
+        self.l_bos = QLabel("")  # normal renk, tek satır (soluk + kırılan iki satır değil)
+        self.l_bos.setWordWrap(False)
         self.mt(self.l_bos.setText, T.O_BOS)
         alt.addWidget(self.l_bos)
         alt.addStretch(1)
@@ -64,11 +67,13 @@ class OnaylarSekmesi(QWidget):
         t.setShowGrid(False)
         t.setAlternatingRowColors(True)
         b = t.horizontalHeader()
-        b.setStretchLastSection(True)
+        b.setStretchLastSection(False)
         b.setHighlightSections(False)
-        for i in range(len(sutunlar) - 1):
-            b.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
-        b.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        b.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)  # içerikle aynı hiza (D4)
+        # kısa ve sabit biçimli sütunlar (Zaman, Masaüstü, Kalan/Durum) içerik kadar; Eylem ve Hedef kalan yeri paylaşır
+        for i in range(len(sutunlar)):
+            b.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch if i in (1, 2) else
+                                   QHeaderView.ResizeMode.ResizeToContents)
         return t
 
     def _ac(self, satir: int):
@@ -86,6 +91,8 @@ class OnaylarSekmesi(QWidget):
                 t.setItem(i, j, QTableWidgetItem(v))
         self._kalanlari_yaz()
         self.l_bos.setVisible(not self.bekleyen)
+        t.setVisible(bool(self.bekleyen))
+        self.b_ac.setVisible(bool(self.bekleyen))
         self.b_ac.setEnabled(bool(self.bekleyen))
         if self.bekleyen and self.isVisible():
             self.zaman.start()
@@ -101,7 +108,9 @@ class OnaylarSekmesi(QWidget):
                 it.setText(sure_metni(d["son_zaman"] - simdi))
 
     def gecmis_ekle(self, satirlar: list[dict]) -> None:
-        for g in onay_gecmisi(satirlar):
+        onay_satirlari = [d for d in satirlar if d.get("tur") == "onay"]  # onay_gecmisi ile aynı süzgeç ve sıra
+        for g, d in zip(onay_gecmisi(satirlar), onay_satirlari, strict=True):
+            g = {**g, "satir": d}
             t = self.t_gecmis
             t.insertRow(0)
             self.gecmis.insert(0, g)
@@ -110,10 +119,25 @@ class OnaylarSekmesi(QWidget):
                 t.removeRow(t.rowCount() - 1)
             del self.gecmis[200:]
 
+    @staticmethod
+    def _eylem_metni(g: dict) -> str:
+        """Ham eylem ("tikla (5,5) sol") → insan dili ("Tıklandı"); bilinmeyen → onay satırının insan cümlesi.
+        Gizlilik insan_metni'nindir: gizli yazının içeriği/uzunluğu, yasak pencere başlığı çıkmaz."""
+        d = g.get("satir") or {}
+        parca = komut_parcasi(g["eylem"], gizli=bool(d.get("gizli")) or "***" in g["eylem"])
+        if parca:
+            return parca[:1].upper() + parca[1:]
+        return insan_metni(d) if d else g["eylem"]
+
     def _gecmis_yaz(self, satir: int, g: dict) -> None:
-        vals = (g["zaman"], g["eylem"], g["hedef"], _masaustu_adi(g["masaustu"]), _karar_adi(g["sonuc"]))
+        d = g.get("satir")
+        hedef = pencere_metni(d) if d else g["hedef"]
+        vals = (g["zaman"], self._eylem_metni(g), hedef, _masaustu_adi(g["masaustu"]), _karar_adi(g["sonuc"]))
+        ham = ayrinti(d) if d else ""
         for j, v in enumerate(vals):
             it = QTableWidgetItem(v)
+            if ham:
+                it.setToolTip(ham)  # ham satır (yasak başlık / URL sorgusu maskeli)
             if j == 4:
                 it.setIcon(nokta(YESIL if g["sonuc"] in ("izin", "devir-tamam", "devir-kosul") else KIRMIZI, 6))
             self.t_gecmis.setItem(satir, j, it)

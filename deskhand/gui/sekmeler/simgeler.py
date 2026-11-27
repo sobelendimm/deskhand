@@ -1,11 +1,11 @@
-"""Simgeler sekmesi."""
+"""Kayıtlı simgeler: Ayarlar › Gelişmiş altındaki bölüm (UX-F O7; eskiden ayrı sekmeydi)."""
 from __future__ import annotations
 
 import os
 
 from PyQt6.QtCore import (QSize, Qt)
 from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtWidgets import (QAbstractItemView, QHBoxLayout,
+from PyQt6.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                              QListView, QListWidget,
                              QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout, QWidget)
 
@@ -13,7 +13,6 @@ from ... import yollar
 from ...i18n import _
 from .. import metinler as T
 from ..dil import Metinler
-from ..ortak import (soluk_etiket)
 
 
 # =========================================================================== Simgeler
@@ -24,6 +23,8 @@ class SimgelerSekmesi(QWidget):
         self.sor = sor or self._sor
         self.mt = Metinler()
         kok = QVBoxLayout(self)
+        kok.setContentsMargins(0, 0, 0, 0)  # Ayarlar › Gelişmiş grubunun içinde (UX-F O7)
+        kok.setSpacing(8)
         self.liste = QListWidget()
         self.liste.setViewMode(QListView.ViewMode.IconMode)
         self.liste.setIconSize(QSize(72, 72))
@@ -36,7 +37,8 @@ class SimgelerSekmesi(QWidget):
         self.liste.itemSelectionChanged.connect(self._secim)
         kok.addWidget(self.liste, 1)
         alt = QHBoxLayout()
-        self.l_bilgi = soluk_etiket("")
+        self.l_bilgi = QLabel("")  # normal renk (soluk gri kontrast eşiğini geçmiyordu, UX-F O9)
+        self.l_bilgi.setWordWrap(True)
         alt.addWidget(self.l_bilgi, 1)
         b = QPushButton()
         self.mt(b.setText, T.I_YENILE)

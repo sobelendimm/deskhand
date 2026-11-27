@@ -70,6 +70,7 @@ VARSAYILAN = {
         "model": "sonnet",
         "azami_dakika": 20,
         "azami_tur": 60,
+        "baslat_onayi": True,  # Görev sekmesi: Başlat'tan önce onay sor ("Bir daha sorma" → false; Ayarlar'dan geri)
     },
     "dinleme": {
         "ozel_ses": False,
