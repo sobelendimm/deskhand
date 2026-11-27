@@ -8,7 +8,7 @@ import types
 
 import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; Deskhand'den ÖNCE)
 
-from deskhand import erisim  # noqa: E402
+from deskhand import erisim, maske  # noqa: E402
 
 gecen = toplam = 0
 
@@ -66,6 +66,45 @@ kontrol("masaüstü: ipucusuz 6 haneli OTP → ***", deger("Kod", "482913") == "
 kontrol("masaüstü: tam genişlikli rakam OTP → ***", deger("A1", "４８２９１３") == "***")
 kontrol("masaüstü: sıradan metin korunur", deger("Şehir", "Çınarlı") == "Çınarlı", str(deger("Şehir", "Çınarlı")))
 kontrol("masaüstü: parola rolü (niteliksiz) değeri okunmaz", deger("", "gizli-1", rol="password text") is None)
+
+# Ortak çekirdek (maske.py): poc2 A–P karşılıkları (INCELEME-maske-R2-A; id'li "nötr" alan: ipucusuz değil)
+for ad, v in (("A 9 hane OTP", "123456789"), ("B 6 hane", "482913"), ("C harf+rakam kod", "A7K9Q2"),
+              ("D boşluklu kod", "482 913"), ("P tam genişlikli", "４８２９１３"), ("sıfır genişlikli", "48\u200b2913")):
+    kontrol(f"çekirdek: id'li nötr alanda {ad} → kısa kod", maske.kisa_kod(v, ("A1", "f1"), ipucusuz=False))
+kontrol("çekirdek: ipucusuz 3 hane kısa kod; id'li 3 hane değil",
+        maske.kisa_kod("737", ("A1",), ipucusuz=True) and not maske.kisa_kod("737", ("A1", "f1"), ipucusuz=False))
+kontrol("çekirdek: zararsız ipucu (adet/yıl/posta kodu) 4–9 katmanını atlar, ipucusuz 3–9 katmanını atlamaz",
+        not maske.kisa_kod("2500", ("Adet", "adet"), ipucusuz=False) and not maske.kisa_kod("2026", ("Yıl",))
+        and not maske.kisa_kod("34000", ("Posta kodu",)) and maske.kisa_kod("250", ("Adet",), ipucusuz=True))
+kontrol("çekirdek: sıradan metin, 10 hane, 2 hane kısa kod değil",
+        not any(maske.kisa_kod(v, ("Not", "not")) for v in ("Çınarlı 12", "1234567890", "12", "Ankara")))
+kontrol("çekirdek: text-input-type tanıtıcı değil", not maske.tanitici_var({"text-input-type": "text", "tag": "input"})
+        and maske.tanitici_var({"id": "f1"}))
+kontrol("çekirdek: kart (ayırıcılı, tam genişlikli, sıfır genişlikli) var; Luhn'suz yok",
+        maske.kart_var("4111-1111-1111-1111") and maske.kart_var("４１１１１１１１１１１１１１１１")
+        and maske.kart_var("4111\u200b1111\u200b1111\u200b1111") and not maske.kart_var("4111 1111 1111 1112"))
+
+
+def bol(parcalar, kutular=None):
+    return maske.bolunmus_kart([(i, p, (kutular[i] if kutular else None)) for i, p in enumerate(parcalar)])
+
+
+k = ["4111", "1111", "1111", "1111"]
+for ad, parca, beklenen in (
+        ("F 4+4+4+4", k, {0, 1, 2, 3}),
+        ("G2 3+3+3+3+4", ["411", "111", "111", "111", "1111"], {0, 1, 2, 3, 4}),
+        ("H 8+8", ["41111111", "11111111"], {0, 1}),
+        ("I karışık sıra", [k[2], k[0], k[3], k[1]], {0, 1, 2, 3}),
+        ("J araya x", [k[0], k[1], "x", k[2], k[3]], {0, 1, 3, 4}),
+        ("K sıfır genişlikli parça", [p + "\u200b" for p in k], {0, 1, 2, 3}),
+        ("N Amex 4+6+5", ["3782", "822463", "10005"], {0, 1, 2}),
+        ("O 6+10", ["411111", "1111111111"], {0, 1})):
+    sonuc = set(bol(parca))
+    kontrol(f"bölünmüş kart: {ad} → hepsi gizli", beklenen <= sonuc, str(sorted(sonuc)))
+kontrol("bölünmüş kart: Luhn'suz birleşim korunur", not bol(["4111", "1111", "1111", "1112"]))
+kontrol("bölünmüş kart: kutu (y, x) sırası", set(bol([k[1], k[3], k[0], k[2]],
+                                                    [(60, 0, 50, 20), (180, 0, 50, 20), (0, 0, 50, 20), (120, 0, 50, 20)]))
+        == {0, 1, 2, 3})
 
 print(f"\n{gecen}/{toplam} geçti")
 sys.exit(0 if gecen == toplam else 1)

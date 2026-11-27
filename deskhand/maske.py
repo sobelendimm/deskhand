@@ -24,7 +24,6 @@ KISA_KARISIK = (6, 8)  # her alanda (zararsız ipucu yoksa) harf+rakam karışı
 KART_HANE = (13, 19)
 PENCERE_AZAMI = 6  # bölünmüş kart: ardışık en çok alan
 PERMUTASYON_AZAMI = 4  # bölünmüş kart: karışık sıralı denetimde en çok alan
-PERMUTASYON_ALAN_AZAMI = 12  # bundan çok rakamlı alanda permütasyon denetimi yapılmaz (belge/kutu sırası yine yapılır)
 
 
 def normal(v: str) -> str:
@@ -79,7 +78,7 @@ def tanitici_var(nit) -> bool:
 
 def _pencere_kart(parcalar: list[str]) -> bool:
     from .guvenlik import kart_numarasi
-    return KART_HANE[0] <= sum(map(len, parcalar)) <= KART_HANE[1] and bool(kart_numarasi(" ".join(parcalar)))
+    return KART_HANE[0] <= sum(map(len, parcalar)) <= KART_HANE[1] and bool(kart_numarasi("".join(parcalar)))
 
 
 def _ardisik(sira: list[tuple], gizli: set) -> None:
@@ -92,8 +91,8 @@ def _ardisik(sira: list[tuple], gizli: set) -> None:
 def bolunmus_kart(alanlar: list[tuple]) -> list:
     """Birden çok alana bölünmüş kart numarası. alanlar: [(anahtar, ham değer, kutu (x, y, w, h) | None)].
     Kod biçimi yalnız rakam olan alanlar alınır (rakamsız/boş alan atlanır); 2–6 alanlık ardışık pencere toplam 13–19
-    hane ve Luhn'lu ise pencerenin anahtarları. Sıralar: verilen (belge) sırası, kutu (y, x) sırası, 2–4 alanlık
-    permütasyonlar (görsel sırası bilinmeyen karışık düzen). Parça boyu sınırı yok. → gizlenecek anahtarlar."""
+    hane ve Luhn'lu ise pencerenin anahtarları. Sıralar: verilen (belge) sırası, kutu (y, x) sırası, ardışık 2–4
+    alanlık pencere içi permütasyonlar (görsel sırası bilinmeyen karışık düzen). Parça boyu sınırı yok. → gizlenecek anahtarlar."""
     rakamli = []
     for anahtar, ham, kutu in alanlar:
         if not isinstance(ham, str):
@@ -108,9 +107,11 @@ def bolunmus_kart(alanlar: list[tuple]) -> list:
     kutulu = [t for t in rakamli if t[2]]
     if len(kutulu) >= 2:
         _ardisik([(a, r) for a, r, _ in sorted(kutulu, key=lambda t: (t[2][1], t[2][0]))], gizli)
-    if len(rakamli) <= PERMUTASYON_ALAN_AZAMI:
-        for k in range(2, min(PERMUTASYON_AZAMI, len(rakamli)) + 1):
-            for grup in itertools.permutations(rakamli, k):
+    # karışık sıra: yalnız (belge sırasında) ardışık 2–4 alanlık pencerenin içinde permütasyon — bütün alanlar
+    # üzerinde permütasyon ilgisiz sayı alanlarını (Luhn 1/10) birleştirip yanlış pozitif üretir
+    for i in range(len(rakamli)):
+        for j in range(i + 2, min(i + PERMUTASYON_AZAMI, len(rakamli)) + 1):
+            for grup in itertools.permutations(rakamli[i:j]):
                 if _pencere_kart([r for _, r, _ in grup]):
                     gizli.update(a for a, _, _ in grup)
     return [a for a, _, _ in rakamli if a in gizli]
