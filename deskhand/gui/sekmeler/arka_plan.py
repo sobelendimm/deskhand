@@ -4,18 +4,46 @@ from __future__ import annotations
 import atexit
 import os
 import time
+import zlib
 
 from PyQt6.QtCore import (Qt, QTimer,
                           pyqtSignal)
-from PyQt6.QtWidgets import (QAbstractItemView, QHBoxLayout,
-                             QHeaderView, QLabel, QPushButton, QTreeWidget,
+from PyQt6.QtWidgets import (QAbstractItemView, QFrame, QHBoxLayout,
+                             QHeaderView, QLabel, QPushButton, QSizePolicy, QTreeWidget,
                              QTreeWidgetItem, QVBoxLayout, QWidget)
 
-from ...i18n import _
+from ...i18n import N_, _
 from .. import metinler as T
 from ..dil import Metinler
-from ..onizleme import MaskeHatasi, Onizleme, maskeli_goruntu, pil_qimage
-from ..ortak import (ONIZLEME_MS, IZLEME_MS, MASA_LISTE_MS, Isci, _devral_temizle, _DEVRAL_ATEXIT, soluk_etiket)
+from ..onizleme import MaskeHatasi, Onizleme, OnizlemePenceresi, maskeli_goruntu, pil_qimage
+from ..ortak import (IZLEME_MS, MASA_LISTE_MS, Isci, _devral_temizle, _DEVRAL_ATEXIT, soluk_etiket)
+
+# Kontrol kullanıcıdayken kare aralığı (ölçülen kare maliyeti ≈16 ms; 100–150 ms hedef, UX-D O3) ve girdiden sonraki
+# tek kare gecikmesi. İzlemede aralık IZLEME_MS kalır; değişmeyen kare yeniden çizilmez (ekran-fark imzası).
+KONTROL_MS = 120
+GIRDI_KARE_MS = 30
+
+# Arka plan sekmesinin kendi metinleri (UX-D; gui/metinler.py başka görevin)
+K_AL = N_("Kontrolü al")
+K_GERI = N_("Geri ver")
+K_AL_IPUCU = N_("Fare ve klavyeniz önizleme üzerinden arka plan masaüstüne gider; bu sırada Claude bekler. "
+                "DUR açıkken hiçbir girdi gönderilmez.")
+K_NOT = N_("Önizlemeye tıklayıp yazabilirsiniz. Bitince Geri ver'e basın.")
+K_AL_HATA = N_("Kontrol alınamadı: geçici dosya yazılamadı (disk dolu olabilir). Biraz sonra yeniden deneyin.")
+K_BANT = N_("Kontrol sizde — Claude bekliyor")
+K_BANT_DUR = N_("Kontrol sizde — DUR açık: girdileriniz gönderilmiyor")
+K_BUYUT = N_("Büyüt")
+K_BUYUT_IPUCU = N_("Önizlemeyi ayrı, büyük bir pencerede açar. Gizli tutulan pencereler orada da karartılır.")
+K_BUYUK_BASLIK = N_("Arka plan masaüstü — büyük görünüm")
+K_GOREV_DURDUR = N_("Görevi durdur")
+K_GOREV_DURDUR_IPUCU = N_("Yakında: Claude'un bu masaüstündeki işini durdurur.")
+K_DURAKLAT = N_("Duraklat / Salt okunur")
+K_DURAKLAT_IPUCU = N_("Yakında: Claude'u duraklatır ya da masaüstünü yalnız izlenir yapar.")
+K_HATA_ULASILAMADI = N_("Önizleme alınamadı: arka plan masaüstüne ulaşılamıyor. Masaüstü kapanmış olabilir; "
+                        "Durdur'a, sonra Başlat'a basın.")
+K_HATA_TEKRAR = N_("bir sonraki karede yeniden denenir")
+K_AYRINTI = N_("Ayrıntı")
+K_AYRINTI_METIN = N_("Teknik ayrıntı (destek için): {tur}")
 
 
 # =========================================================================== Arka plan ekranı
@@ -61,6 +89,8 @@ class ArkaPlanSekmesi(QWidget):
         self.mt = Metinler()
 
         kok = QVBoxLayout(self)
+        kok.setContentsMargins(8, 8, 8, 8)  # aralık biriminin katı (tasarım kapısı ARALIK); dikey yer önizlemenin
+        kok.setSpacing(8)
         # ---- masaüstü seçici: çalışan bütün arka plan masaüstleri (ad, ne zamandır açık, son etkinlik)
         self.agac = QTreeWidget()
         self.agac.setRootIsDecorated(False)
@@ -72,6 +102,7 @@ class ArkaPlanSekmesi(QWidget):
         self.agac.header().setStretchLastSection(True)
         self.agac.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.agac.setMaximumHeight(118)
+        self.agac.setVisible(False)  # yalnız ≥2 masaüstünde (masalar_guncelle)
         self.agac.itemSelectionChanged.connect(self._agac_secim)
         kok.addWidget(self.agac)
         self.l_masa_yok = soluk_etiket("")
@@ -79,11 +110,12 @@ class ArkaPlanSekmesi(QWidget):
         kok.addWidget(self.l_masa_yok)
         self.l_eylem = QLabel("")
         self.l_eylem.setTextFormat(Qt.TextFormat.PlainText)  # pencere başlığı/etiket HTML olarak yorumlanmasın
-        self.l_eylem.setWordWrap(True)
-        kok.addWidget(self.l_eylem)
+        # durum + "ajan şu an" + düğmeler tek satırda: dikey yer önizlemenin (O2); uzun eylem satırı kırpılır, tamamı ipucunda
+        self.l_eylem.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         ust = QHBoxLayout()
         self.l_durum = QLabel(_(T.A_KAPALI))
-        ust.addWidget(self.l_durum, 1)
+        ust.addWidget(self.l_durum)
+        ust.addWidget(self.l_eylem, 1)
         self.b_baslat = QPushButton()
         self.mt(self.b_baslat.setText, T.A_BASLAT)
         self.b_baslat.clicked.connect(self.baslat)
@@ -92,18 +124,67 @@ class ArkaPlanSekmesi(QWidget):
         self.b_durdur.clicked.connect(self.durdur)
         self.b_devral = QPushButton()
         self.b_devral.setCheckable(True)
-        self.mt.fn(lambda: self.b_devral.setText(_(T.A_BIRAK if self.b_devral.isChecked() else T.A_DEVRAL)))
-        self.mt(self.b_devral.setToolTip, T.A_DEVRAL_IPUCU)
+        self.mt.fn(lambda: self.b_devral.setText(_(K_GERI if self.b_devral.isChecked() else K_AL)))
+        self.mt(self.b_devral.setToolTip, K_AL_IPUCU)
         self.b_devral.toggled.connect(self.devral)
-        for b in (self.b_baslat, self.b_durdur, self.b_devral):
+        self.b_buyut = QPushButton()
+        self.mt(self.b_buyut.setText, K_BUYUT)
+        self.mt(self.b_buyut.setToolTip, K_BUYUT_IPUCU)
+        self.b_buyut.clicked.connect(self.buyut)
+        # ana plan yer tutucuları (N1b, C1): yalnız düğme YERİ, işlev yok
+        self.b_ajan_durdur = QPushButton()
+        self.mt(self.b_ajan_durdur.setText, K_GOREV_DURDUR)
+        self.mt(self.b_ajan_durdur.setToolTip, K_GOREV_DURDUR_IPUCU)
+        self.b_duraklat = QPushButton()
+        self.mt(self.b_duraklat.setText, K_DURAKLAT)
+        self.mt(self.b_duraklat.setToolTip, K_DURAKLAT_IPUCU)
+        for b in (self.b_ajan_durdur, self.b_duraklat):
+            b.setEnabled(False)
+        for b in (self.b_baslat, self.b_durdur, self.b_devral, self.b_buyut, self.b_ajan_durdur, self.b_duraklat):
             ust.addWidget(b)
         kok.addLayout(ust)
-        self.onizleme = Onizleme()
+        # "kontrol sizde" bandı: önizlemenin hemen üstünde, yalnız kontrol kullanıcıdayken
+        self.bant = QFrame()
+        self.bant.setObjectName("kontrolBandi")
+        self.bant.setStyleSheet("QFrame#kontrolBandi { background: palette(highlight); border-radius: 4px; }"
+                                "QFrame#kontrolBandi QLabel { color: palette(highlighted-text); font-weight: bold; }")
+        bs = QHBoxLayout(self.bant)
+        bs.setContentsMargins(8, 4, 4, 4)
+        bs.setSpacing(8)
+        self.l_bant = QLabel("")
+        self.l_bant.setTextFormat(Qt.TextFormat.PlainText)
+        bs.addWidget(self.l_bant, 1)
+        self.b_bant_geri = QPushButton()
+        self.mt(self.b_bant_geri.setText, K_GERI)
+        self.b_bant_geri.clicked.connect(lambda: self.b_devral.setChecked(False))
+        bs.addWidget(self.b_bant_geri)
+        self.bant.setVisible(False)
+        kok.addWidget(self.bant)
+        self.onizleme = Onizleme(oranli=True)  # tam genişlik, yükseklik en-boy oranından: gri bant yok
         self.onizleme.satirlar.connect(self.gonder)
-        kok.addWidget(self.onizleme, 1)
+        kok.addWidget(self.onizleme)
+        self.buyuk: OnizlemePenceresi | None = None
+        self.hata_satiri = QWidget()
+        hs = QHBoxLayout(self.hata_satiri)
+        hs.setContentsMargins(0, 0, 0, 0)
+        self.hata_satiri.setVisible(False)
+        self.l_hata_ayrinti = soluk_etiket("")
+        self.l_hata_ayrinti.setVisible(False)
+        self.b_ayrinti = QPushButton()
+        self.b_ayrinti.setCheckable(True)
+        self.b_ayrinti.setFlat(True)
+        self.mt(self.b_ayrinti.setText, K_AYRINTI)
+        self.b_ayrinti.setVisible(False)
+        self.b_ayrinti.toggled.connect(lambda ac: self.l_hata_ayrinti.setVisible(ac and self.b_ayrinti.isVisible()))
+        hs.addWidget(self.b_ayrinti)
+        hs.addWidget(self.l_hata_ayrinti, 1)
+        kok.addWidget(self.hata_satiri)
         self.l_not = soluk_etiket("")
-        self.mt.fn(lambda: self.l_not.setText(_(T.A_DEVRAL_NOT if self.b_devral.isChecked() else T.A_DEVRAL_IPUCU)))
+        self.mt.fn(lambda: self._not(_(K_NOT if self.b_devral.isChecked() else T.A_DEVRAL_IPUCU)))
         kok.addWidget(self.l_not)
+        kok.addStretch(1)
+        self._son_imza = None
+        self._girdi_karesi_bekliyor = False
 
         self.zaman = QTimer(self)
         self.zaman.setInterval(IZLEME_MS)
@@ -164,7 +245,7 @@ class ArkaPlanSekmesi(QWidget):
         finally:
             self.agac.blockSignals(False)
         self.l_masa_yok.setVisible(not self.masalar)
-        self.agac.setVisible(bool(self.masalar))
+        self.agac.setVisible(len(self.masalar) >= 2)  # tek masaüstünde seçilecek bir şey yok: yer önizlemenin
         self._masa_metinleri()
         # seçili masaüstünün durumu listeden (adlı masaüstünün sanal.json değişimini izleyici görmez)
         g = next((m for m in self.masalar if m["ad"] == secili), None)
@@ -193,7 +274,9 @@ class ArkaPlanSekmesi(QWidget):
             self.l_eylem.setText("")
             self.l_eylem.setVisible(False)
         else:
-            self.l_eylem.setText(D.eylem_satiri(self.son_eylemler.son(g["ekran"], g.get("baslangic")), simdi))
+            metin = D.eylem_satiri(self.son_eylemler.son(g["ekran"], g.get("baslangic")), simdi)
+            self.l_eylem.setText(metin)
+            self.l_eylem.setToolTip(metin)
             self.l_eylem.setVisible(True)
 
     def etkinlik_ekle(self, satirlar: list[dict]) -> None:
@@ -226,6 +309,7 @@ class ArkaPlanSekmesi(QWidget):
         else:
             os.environ.pop(masalar.ORTAM, None)
         self._sinif_onb.clear()
+        self._son_imza = None
         self.onizleme.goster(None)
         g = next((m for m in self.masalar if m["ad"] == masa), None)
         if g is not None:
@@ -278,12 +362,14 @@ class ArkaPlanSekmesi(QWidget):
         serbest = self._devral_serbest()
         self.b_devral.setEnabled(acik and (serbest or self.b_devral.isChecked()))
         if not self.b_devral.isChecked():
-            self.l_not.setText(_(T.A_DEVRAL_IPUCU if serbest else T.A_DEVRAL_ADLI))
+            self._not(_(T.A_DEVRAL_IPUCU if serbest else T.A_DEVRAL_ADLI))
         if not acik:
             if self.b_devral.isChecked():
                 self.b_devral.setChecked(False)
+            self._son_imza = None
             self.onizleme.goster(None)
             self.onizleme.bos_metin = _(T.A_KAPALI)
+            _hata_ayrinti(self, None)
         self._zamanlayici()
 
     def _calis(self, fn, metin: str):
@@ -323,7 +409,7 @@ class ArkaPlanSekmesi(QWidget):
         return self.isVisible() and not (w is not None and w.isMinimized())
 
     def _zamanlayici(self):
-        aralik = ONIZLEME_MS if self.b_devral.isChecked() else IZLEME_MS
+        aralik = KONTROL_MS if self.b_devral.isChecked() else IZLEME_MS
         if self.zaman.interval() != aralik:
             self.zaman.setInterval(aralik)
         if self.sanal is not None and self._gorunur():
@@ -346,24 +432,59 @@ class ArkaPlanSekmesi(QWidget):
         self.liste_zaman.stop()
 
     def kare(self):
+        """Bir kare: HER karede yasak pencere maskesi (maskeli_goruntu: liste karenin önü + arkası; api.goruntu_al
+        kuralı) uygulanır; ekran değişmediyse (maskeli karenin imzası aynı) yeniden çizim yapılmaz. Büyük görünüm
+        açıksa aynı maskeli kare orada da gösterilir. Not: test_guv_maske bunu yalın bir nesneyle çağırır; yeni
+        öznitelikler getattr ile okunur."""
         if self.sanal is None or not self._gorunur():
             self.zaman.stop()
             return
-        try:  # yasak pencereler önizlemede de karartılır (api.goruntu_al kuralı); liste karenin önü + arkası
+        try:
             au = self.arka_f()
+            if au is None:
+                raise LookupError("arka uç yok")
             im = maskeli_goruntu(au, self._sinif_onb)
         except MaskeHatasi as e:  # denetlenemedi: kare HİÇ gösterilmez (güvenli taraf)
-            self.onizleme.bos_metin = _(T.A_MASKE_HATA).format(hata=e.mesaj)
-            self.onizleme.goster(None)
+            _onizleme_hatasi(self, _(T.A_MASKE_HATA).format(hata=_(K_HATA_TEKRAR)), e)
             return
-        except Exception as e:  # noqa: BLE001 - masaüstü kapandı / X hatası
-            self.onizleme.bos_metin = _(T.A_ONIZLEME_HATA).format(hata=getattr(e, 'mesaj', None) or e)
-            self.onizleme.goster(None)
+        except Exception as e:  # noqa: BLE001 - masaüstü kapandı / X hatası: ham ileti kullanıcıya çıkmaz
+            _onizleme_hatasi(self, _(K_HATA_ULASILAMADI), e)
             return
-        q, kaynak = pil_qimage(im, self.onizleme.hedef_boyut() if self.onizleme.kaynak.width() else None)
+        _bant_guncelle(self)
+        buyuk = getattr(self, "buyuk", None)
+        buyuk_acik = buyuk is not None and buyuk.isVisible()
+        hedef = self.onizleme.hedef_boyut() if self.onizleme.kaynak.width() else None
+        if buyuk_acik and hedef is not None:
+            hb = buyuk.onizleme.hedef_boyut()
+            if hb.width() > hedef.width():
+                hedef = hb
+        imza = (zlib.crc32(im.tobytes()), im.size, (hedef.width(), hedef.height()) if hedef is not None else None, buyuk_acik)
+        if imza == getattr(self, "_son_imza", None):
+            return  # ekran değişmedi: çizim yok (maske bu karede de denetlendi)
+        self._son_imza = imza
+        q, kaynak = pil_qimage(im, hedef)
         self.onizleme.goster(q, kaynak)
+        if buyuk_acik:
+            buyuk.onizleme.goster(q, kaynak)
+        _hata_ayrinti(self, None)
         if self.l_eylem.isVisible():
             self._masa_metinleri()
+
+    def buyut(self) -> None:
+        """Önizlemeyi ayrı büyük pencerede aç (kare sekmeden gelir: aynı maske, aynı DUR denetimli girdi yolu)."""
+        if self.buyuk is None:
+            self.buyuk = OnizlemePenceresi(_(K_BUYUK_BASLIK), self)
+            self.buyuk.onizleme.satirlar.connect(self.gonder)
+        self.buyuk.onizleme.devral = self.onizleme.devral
+        self.buyuk.onizleme.bos_metin = self.onizleme.bos_metin
+        self.buyuk.show()
+        self.buyuk.raise_()
+        self._son_imza = None  # büyük görünüm için ilk kare hemen çizilsin
+        self.kare()
+
+    def _girdi_karesi(self) -> None:
+        self._girdi_karesi_bekliyor = False
+        self.kare()
 
     # -------- Devral
     def devral(self, acik: bool):
@@ -386,14 +507,14 @@ class ArkaPlanSekmesi(QWidget):
                 self.b_devral.blockSignals(True)
                 self.b_devral.setChecked(False)
                 self.b_devral.blockSignals(False)
-                self.b_devral.setText(_(T.A_DEVRAL))
-                self.l_not.setText(_(T.A_DEVRAL_HATA).format(hata=e))
+                self.b_devral.setText(_(K_AL))
+                self._not(_(K_AL_HATA))
                 return
             if yol not in _DEVRAL_ATEXIT:
                 _DEVRAL_ATEXIT.add(yol)
                 atexit.register(_devral_temizle, yol)
-            self.b_devral.setText(_(T.A_BIRAK))
-            self.l_not.setText(_(T.A_DEVRAL_NOT))
+            self.b_devral.setText(_(K_GERI))
+            self._not(_(K_NOT))
             self.onizleme.devral = True
             self.onizleme.setFocus()
         else:
@@ -402,14 +523,24 @@ class ArkaPlanSekmesi(QWidget):
                 os.remove(yol)
             except FileNotFoundError:
                 pass
-            self.b_devral.setText(_(T.A_DEVRAL))
+            self.b_devral.setText(_(K_AL))
             serbest = self._devral_serbest()
-            self.l_not.setText(_(T.A_DEVRAL_IPUCU if serbest else T.A_DEVRAL_ADLI))
+            self._not(_(T.A_DEVRAL_IPUCU if serbest else T.A_DEVRAL_ADLI))
             self.b_devral.setEnabled(self.sanal is not None and serbest)
             self.onizleme.devral = False
+        if self.buyuk is not None:
+            self.buyuk.onizleme.devral = self.onizleme.devral
+            self.buyuk.onizleme.update()
+        _bant_guncelle(self)
         self.onizleme.update()
         self._zamanlayici()
         self.devral_degisti.emit(acik)
+
+    def _not(self, metin: str) -> None:
+        """Alt not satırı: olağan ipucu (düğme ipucunda ve bantta da var) gizli kalır, yer önizlemenin; uyarı/hata ve
+        "yalnız izleme" notu görünür."""
+        self.l_not.setText(metin)
+        self.l_not.setVisible(metin not in (_(T.A_DEVRAL_IPUCU), _(K_NOT)))
 
     def tazele(self) -> None:
         self.mt.tazele()
@@ -450,15 +581,71 @@ class ArkaPlanSekmesi(QWidget):
                     if e.kod == 12 and s.split()[0] in ("wheel", "hwheel"):
                         if not self._tekerlek_uyarildi:
                             self._tekerlek_uyarildi = True
-                            self.l_not.setText(_(T.A_TEKERLEK_YOK))
+                            self._not(_(T.A_TEKERLEK_YOK))
                         continue
                     raise
             if dur is not None:
                 raise dur
+            if not self._girdi_karesi_bekliyor:  # girdinin etkisi hemen görünsün (zamanlayıcıyı beklemeden)
+                self._girdi_karesi_bekliyor = True
+                QTimer.singleShot(GIRDI_KARE_MS, self._girdi_karesi)
         except Dur as e:
-            self.l_not.setText(_(T.A_GIRDI_HATA).format(hata=e.mesaj))
+            self._not(_(T.A_GIRDI_HATA).format(hata=e.mesaj))
+            _bant_guncelle(self)
             if e.kod != 13:
                 self._girdi_kapat()
         except Exception as e:  # noqa: BLE001
-            self.l_not.setText(_(T.A_GIRDI_HATA).format(hata=e))
+            self._not(_(T.A_GIRDI_HATA).format(hata=e))
             self._girdi_kapat()
+
+
+# -------- kare yardımcıları (modül düzeyi: ArkaPlanSekmesi.kare yalın bir nesneyle de çağrılabilir; test_guv_maske)
+
+def _bant_guncelle(o) -> None:
+    """"Kontrol sizde" bandı: yalnız kontrol kullanıcıdayken; DUR açıkken DUR'u söyler (girdi gitmez)."""
+    bant, etiket, dugme = getattr(o, "bant", None), getattr(o, "l_bant", None), getattr(o, "b_devral", None)
+    if bant is None or etiket is None or dugme is None:
+        return
+    if not dugme.isChecked():
+        bant.setVisible(False)
+        return
+    try:
+        from ... import guvenlik
+        dur = guvenlik.dur_acik()
+    except Exception:  # noqa: BLE001 - okunamadı: DUR varsay (güvenli taraf: girdi zaten her satırda denetlenir)
+        dur = True
+    etiket.setText(_(K_BANT_DUR if dur else K_BANT))
+    bant.setVisible(True)
+
+
+def _hata_ayrinti(o, e) -> None:
+    """Katlı teknik ayrıntı: yalnız hata TÜRÜ (ham ileti kullanıcıya çıkmaz). e=None → gizle."""
+    et, b = getattr(o, "l_hata_ayrinti", None), getattr(o, "b_ayrinti", None)
+    if et is None or b is None:
+        return
+    satir = getattr(o, "hata_satiri", None)
+    if e is None:
+        b.setVisible(False)
+        et.setVisible(False)
+        if satir is not None:
+            satir.setVisible(False)
+        return
+    neden = getattr(e, "__cause__", None) or e
+    et.setText(_(K_AYRINTI_METIN).format(tur=type(neden).__name__))
+    b.setVisible(True)
+    et.setVisible(b.isChecked())
+    if satir is not None:
+        satir.setVisible(True)
+
+
+def _onizleme_hatasi(o, metin: str, e: Exception) -> None:
+    """Kare gösterilmez; insan dilinde ne oldu + ne yapmalı; ham istisna metni gösterilmez."""
+    o._son_imza = None
+    o.onizleme.bos_metin = metin
+    o.onizleme.goster(None)
+    buyuk = getattr(o, "buyuk", None)
+    if buyuk is not None:
+        buyuk.onizleme.bos_metin = metin
+        buyuk.onizleme.goster(None)
+    # etkinlik günlüğüne YAZILMAZ: günlük ajan eylemlerinindir (üst şerit onu "çalışıyor" diye okur)
+    _hata_ayrinti(o, e)

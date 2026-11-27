@@ -76,20 +76,31 @@ class Onizleme(QWidget):
     """Görüntüyü en-boy oranını koruyarak ortalar; Devral açıkken girdileri `satir` sinyaliyle bildirir."""
     satirlar = pyqtSignal(list)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, oranli: bool = False):
         super().__init__(parent)
+        self.oranli = oranli  # True: yükseklik genişlikten (en-boy oranı) → görüntü alanı doldurur, gri bant yok
         self.resim: QImage | None = None
         self.kaynak = QSize(0, 0)  # sanal ekranın gerçek boyutu (koordinat ölçeği)
         self.devral = False
         self.bos_metin = _(T.A_ONIZLEME_YOK)
         self._son_fare = 0.0
         self.setMinimumSize(320, 180)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        pol = QSizePolicy(QSizePolicy.Policy.Expanding,
+                          QSizePolicy.Policy.Preferred if oranli else QSizePolicy.Policy.Expanding)
+        pol.setHeightForWidth(oranli)
+        self.setSizePolicy(pol)
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.setMouseTracking(True)
 
     def sizeHint(self):  # noqa: N802 - Qt API
-        return QSize(800, 450)
+        return QSize(800, self.heightForWidth(800) if self.oranli else 450)
+
+    def hasHeightForWidth(self):  # noqa: N802 - Qt API
+        return self.oranli
+
+    def heightForWidth(self, w):  # noqa: N802 - Qt API
+        g, y = self.kaynak.width(), self.kaynak.height()
+        return max(1, round(w * (y / g if g > 0 and y > 0 else 9 / 16)))
 
     # -------- görüntü
     def hedef_boyut(self) -> QSize:
@@ -107,22 +118,30 @@ class Onizleme(QWidget):
 
     def goster(self, resim: QImage | None, kaynak: QSize | None = None) -> None:
         self.resim = resim
+        eski = QSize(self.kaynak)
         if kaynak is not None:
             self.kaynak = kaynak
         elif resim is not None:
             self.kaynak = resim.size()
+        if self.oranli and self.kaynak != eski:
+            self.updateGeometry()  # en-boy oranı değişti: yerleşim yüksekliği yeniden hesaplasın
         self.update()
 
     def paintEvent(self, _e):  # noqa: N802 - Qt API
         p = QPainter(self)
         pal = self.palette()
-        p.fillRect(self.rect(), pal.color(QPalette.ColorRole.Window).darker(115))
-        if self.resim is None or self.resim.isNull():
+        bos = self.resim is None or self.resim.isNull()
+        if bos or not self.oranli:  # oranlı görünümde görüntünün yanına gri bant boyanmaz (yer kısıtlıysa zemin görünür)
+            p.fillRect(self.rect(), pal.color(QPalette.ColorRole.Window).darker(115))
+        if bos:
             p.setPen(pal.color(QPalette.ColorRole.PlaceholderText))
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.bos_metin)
         else:
-            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-            p.drawImage(self.hedef_rect(), self.resim)
+            r = self.hedef_rect()
+            # küçültmede düzgün (yumuşatma), büyütmede keskin (en yakın piksel: metin bulanıklaşmaz)
+            p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform,
+                            r.width() * self.devicePixelRatioF() < self.resim.width())
+            p.drawImage(r, self.resim)
         if self.devral:
             kalem = p.pen()
             kalem.setColor(pal.color(QPalette.ColorRole.Highlight))
@@ -202,6 +221,21 @@ class Onizleme(QWidget):
         if self.devral:
             return False
         return super().focusNextPrevChild(ileri)
+
+
+class OnizlemePenceresi(QWidget):
+    """"Büyüt": önizlemenin ayrı, büyük penceresi. Kendi karesini ALMAZ: sekmenin maskelenmiş karesini gösterir (yasak
+    pencere maskesi burada da aynıdır); girdisi sekmenin girdi yoluna (DUR denetimli) gider."""
+
+    def __init__(self, baslik: str, parent=None):
+        super().__init__(parent, Qt.WindowType.Window)
+        from PyQt6.QtWidgets import QVBoxLayout
+        self.setWindowTitle(baslik)
+        self.onizleme = Onizleme(self)
+        kok = QVBoxLayout(self)
+        kok.setContentsMargins(0, 0, 0, 0)
+        kok.addWidget(self.onizleme)
+        self.resize(1280, 760)
 
 
 class MaskeHatasi(Exception):
@@ -323,7 +357,8 @@ def pil_qimage(im, boyut: QSize | None = None) -> tuple[QImage, QSize]:
     if boyut is not None and boyut.width() > 0 and (boyut.width() < im.width or boyut.height() < im.height):
         from PIL import Image
         oran = min(boyut.width() / im.width, boyut.height() / im.height)
-        im = im.resize((max(1, int(im.width * oran)), max(1, int(im.height * oran))), Image.Resampling.BILINEAR)
+        # HAMMING: BILINEAR kadar ucuz (1920x1080→1000x562 ≈5 ms), küçük metinde daha keskin; LANCZOS ≈2x pahalı
+        im = im.resize((max(1, int(im.width * oran)), max(1, int(im.height * oran))), Image.Resampling.HAMMING)
     veri = im.tobytes("raw", "RGB")
     q = QImage(veri, im.width, im.height, 3 * im.width, QImage.Format.Format_RGB888).copy()
     return q, kaynak

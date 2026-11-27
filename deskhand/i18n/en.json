@@ -1840,5 +1840,21 @@
  "«Bir daha sorma» seçimi kaydedilemedi; onay bir sonraki görevde yine sorulur. Ne yapmalı: ayarlar klasörünün yazılabilir olduğunu denetleyin.": "The “Don't ask again” choice could not be saved; you will be asked again for the next task. What to do: check that the settings folder is writable.",
  "Görev metni": "Task text",
  "Oturumla girilebilecek siteler": "Sites you can be signed in to",
- "Görev sonucu": "Task result"
+ "Görev sonucu": "Task result",
+ "Kontrolü al": "Take control",
+ "Geri ver": "Give back",
+ "Fare ve klavyeniz önizleme üzerinden arka plan masaüstüne gider; bu sırada Claude bekler. DUR açıkken hiçbir girdi gönderilmez.": "Your mouse and keyboard go to the background desktop through the preview; Claude waits meanwhile. While STOP is on, no input is sent.",
+ "Önizlemeye tıklayıp yazabilirsiniz. Bitince Geri ver'e basın.": "Click the preview and type. When you are done, press Give back.",
+ "Kontrol alınamadı: geçici dosya yazılamadı (disk dolu olabilir). Biraz sonra yeniden deneyin.": "Could not take control: a temporary file could not be written (the disk may be full). Try again in a moment.",
+ "Kontrol sizde — Claude bekliyor": "You have control — Claude is waiting",
+ "Kontrol sizde — DUR açık: girdileriniz gönderilmiyor": "You have control — STOP is on: your input is not sent",
+ "Büyüt": "Enlarge",
+ "Önizlemeyi ayrı, büyük bir pencerede açar. Gizli tutulan pencereler orada da karartılır.": "Opens the preview in a separate, large window. Hidden windows are blacked out there too.",
+ "Arka plan masaüstü — büyük görünüm": "Background desktop — large view",
+ "Yakında: Claude'un bu masaüstündeki işini durdurur.": "Coming soon: stops Claude's work on this desktop.",
+ "Duraklat / Salt okunur": "Pause / Read-only",
+ "Yakında: Claude'u duraklatır ya da masaüstünü yalnız izlenir yapar.": "Coming soon: pauses Claude or makes the desktop watch-only.",
+ "Önizleme alınamadı: arka plan masaüstüne ulaşılamıyor. Masaüstü kapanmış olabilir; Durdur'a, sonra Başlat'a basın.": "No preview: the background desktop cannot be reached. It may have closed; press Stop, then Start.",
+ "bir sonraki karede yeniden denenir": "retrying with the next frame",
+ "Teknik ayrıntı (destek için): {tur}": "Technical detail (for support): {tur}"
 }
