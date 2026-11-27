@@ -38,13 +38,23 @@ def yanitlayici(karar, gecikme=0.2, kontrol_f=None):
                     kontrol_f(b[0])
                 time.sleep(gecikme)
                 if karar:
-                    gorulen.append(onay.yanitla(b[0]["id"], karar))
+                    gorulen.append(gosterip_yanitla(b[0], karar))
                 return
             time.sleep(0.02)
 
     t = threading.Thread(target=calis, daemon=True)
     t.start()
     return t, gorulen
+
+
+def gosterip_yanitla(b, karar):
+    """The panel dialog answers what it SHOWED: b = the request dict it was built from (or an id: read it now)."""
+    if isinstance(b, str):
+        b = onay.istek_oku(onay.istek_yolu(b)) or {"id": b}
+    try:
+        return onay.yanitla(b["id"], karar, gosterilen=b.get("_iz"))
+    except TypeError:  # d78c8d6: the dialog passed only the id
+        return onay.yanitla(b["id"], karar)
 
 
 def gunluk_satirlari():
@@ -133,7 +143,7 @@ sonuclar = {}
 
 def ikili(b):
     sonuclar["ilk"] = onay.yanitla(b["id"], "red")
-    sonuclar["ikinci"] = onay.yanitla(b["id"], "izin")
+    sonuclar["ikinci"] = gosterip_yanitla(b, "izin")
 
 
 t, _ = yanitlayici(None, kontrol_f=ikili)
@@ -149,7 +159,7 @@ kontrol("geçersiz karar reddedilir", onay.yanitla("0" * 32, "evet") is False)
 eski = "e" * 32
 onay._yaz_atomik(onay.istek_yolu(eski), {"id": eski, "eylem": "a", "hedef": "b", "ayrinti": "", "masaustu": "ekran",
                                        "zaman": time.time() - 200, "son_zaman": time.time() - 100, "pid": os.getpid()})
-kontrol("süresi geçmiş isteğe İZİN yazılmaz", onay.yanitla(eski, "izin") is False)
+kontrol("süresi geçmiş isteğe İZİN yazılmaz", gosterip_yanitla(eski, "izin") is False)
 kontrol("süresi geçmiş istek bekleyenlerde yok", not onay.bekleyenler())
 kontrol("temizle süresi geçmiş isteği siler", f"istek-{eski}.json" in onay.temizle() and dosyalar() == [], str(dosyalar()))
 
@@ -232,7 +242,7 @@ for k in (a, b):
 k = "3" * 32
 onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "ekran",
                                     "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getpid()})
-kontrol("izin yanıtı DOSYAYA yazılmaz (yalnız kanal)", onay.yanitla(k, "izin") is True and
+kontrol("izin yanıtı DOSYAYA yazılmaz (yalnız kanal)", gosterip_yanitla(k, "izin") is True and
         not os.path.exists(onay.yanit_yolu(k)))
 kontrol("kanaldan yanıtlanan istek bekleyenlerde görünmez (diyalog yeniden açılmaz)",
         k not in [x["id"] for x in onay.bekleyenler()])
@@ -332,7 +342,7 @@ def baskasi_bekle(b):
     r = subprocess.run([sys.executable, "-c", kod, onay.kanal_yolu(), b["id"]], capture_output=True, text=True,
                        timeout=10)
     alanlar["baskasi"] = r.stdout.strip()
-    onay.yanitla(b["id"], "izin")
+    gosterip_yanitla(b, "izin")
 
 
 alanlar.clear()
@@ -347,7 +357,7 @@ kontrol("asıl isteyen izni kanaldan alır", s.izin and s.neden == "izin", str(s
 k = "5" * 32
 onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "ekran",
                                     "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getpid()})
-onay.yanitla(k, "izin")
+gosterip_yanitla(k, "izin")
 import socket  # noqa: E402
 
 c = socket.socket(socket.AF_UNIX)
@@ -369,6 +379,68 @@ onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayri
                                     "zaman": time.time(), "son_zaman": time.time() + 10 ** 6, "pid": os.getppid()})
 kontrol("bekleyen_var: ömrü olağandışı uzun (sahte) istek girdiyi kilitlemez", not onay.bekleyen_var("arka"))
 onay._sil(onay.istek_yolu(k))
+
+# 13) security scan 4: a Yes is bound to the request the DIALOG showed (not to an earlier background read), and
+# nothing-known-about-what-was-shown means No (fail-closed)
+def istek_yaz(i, tur="", eylem="Kaydet"):
+    simdi = time.time()
+    veri = {"id": i, "eylem": eylem, "hedef": "Belge", "ayrinti": "", "masaustu": "ekran", "zaman": simdi,
+            "son_zaman": simdi + 60, "pid": os.getpid()}
+    if tur:
+        veri["tur"] = tur
+    onay._yaz_atomik(onay.istek_yolu(i), veri)
+    with open(onay.istek_yolu(i), "rb") as f:
+        return f.read()
+
+
+def evet(i, gosterilen):
+    """The dialog's Yes: it hands over the fingerprint of what it showed."""
+    return gosterip_yanitla({"id": i, "_iz": gosterilen}, "izin")
+
+
+try:
+    guvenlik.dur_ac("kullanici")
+    i = "a1" * 16
+    dur_baytlari = istek_yaz(i, tur=onay.TUR_DUR)   # A: "remove DUR?"
+    onay.bekleyenler()                               # the panel's background reads (watcher / channel / cleanup)…
+    onay.temizle()
+    istek_yaz(i, eylem="Kaydet")                     # …B replaces it before the dialog is built
+    gosterilen = onay.istek_oku(onay.istek_yolu(i))  # the dialog shows B (an ordinary "Kaydet" question)
+    with open(onay.istek_yolu(i), "wb") as f:
+        f.write(dur_baytlari)                        # A is put back, byte for byte, before the user clicks Yes
+    r = evet(i, gosterilen["_iz"])
+    kontrol("tarama-4: istek başka yoldan okundu, diyalog farklı içerik gösterdi → Evet DUR'u kaldırmaz",
+            r is False and guvenlik.dur_acik(), f"{r} dur_acik={guvenlik.dur_acik()}")
+    onay._sil(onay.istek_yolu(i))
+
+    j = "b2" * 16
+    istek_yaz(j, tur=onay.TUR_DUR)
+    onay.istek_oku(onay.istek_yolu(j))               # shown…
+    getattr(onay, "_GORULEN", {}).clear()           # …then the panel's memory of it is gone (d78c8d6: >4096 → clear())
+    r = onay.yanitla(j, "izin")                      # nothing says what the user saw
+    kontrol("tarama-4: gösterilen bilinmiyor (önbellek boşaldı) → izin reddedilir, DUR kalır, istek yeniden sorulur",
+            r is False and guvenlik.dur_acik() and j in [x["id"] for x in onay.bekleyenler()],
+            f"{r} dur_acik={guvenlik.dur_acik()}")
+    gosterilen = onay.istek_oku(onay.istek_yolu(j))  # the dialog is shown again: this Yes is the user's
+    kontrol("tarama-4: yeniden gösterilen DUR sorusuna Evet → DUR kalkar (tek kez)",
+            evet(j, gosterilen["_iz"]) is True and not guvenlik.dur_acik() and evet(j, gosterilen["_iz"]) is False)
+    onay._sil(onay.istek_yolu(j))
+
+    guvenlik.dur_ac("kullanici")
+    m = "c3" * 16
+    istek_yaz(m, tur=onay.TUR_DUR)
+    gosterilen = onay.istek_oku(onay.istek_yolu(m))
+    istek_yaz(m, eylem="Kaydet")                     # shown as "remove DUR?", now an ordinary question
+    kontrol("tarama-4: gösterilenden sonra değişen istek → Evet reddedilir (DUR da kalkmaz)",
+            evet(m, gosterilen["_iz"]) is False and guvenlik.dur_acik())
+    try:
+        bicimsiz = onay.yanitla(m, "izin", gosterilen=("dur",))
+    except TypeError:
+        bicimsiz = None
+    kontrol("tarama-4: biçimsiz gösterilen iz → red", bicimsiz is False, str(bicimsiz))
+    onay._sil(onay.istek_yolu(m))
+finally:
+    guvenlik.dur_kapat("kullanici")
 
 # 12) Qt'siz: onay modülü Qt içe aktarmaz (CLI/MCP hafif kalsın)
 r = subprocess.run([sys.executable, "-c", "import sys, deskhand.onay; print('PyQt6' in sys.modules)"],

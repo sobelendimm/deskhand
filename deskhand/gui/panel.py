@@ -206,6 +206,7 @@ class Panel(QObject):
         from .. import onay as _onay
         # the panel removed DUR itself on the user's Yes to a removal request: it is no longer the panel's own DUR
         _onay.dur_kaldirildi = lambda: setattr(self, "_dur_kullanici", False)
+        _onay.onay_reddedildi = self._liste_uyari  # a refused Yes (request changed / not as shown): log + tray
         self._liste_izci = QFileSystemWatcher(self)
         self._liste_izle()
         self._liste_izci.fileChanged.connect(self._liste_degisti)

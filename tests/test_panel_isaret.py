@@ -379,6 +379,27 @@ kontrol("ilk kurulum: imzasız gevşetme sorulur, daraltma sorusuz",
         k.metin("yasak") == "Ilk\n" and istemci().get("kalici") == [], str(SORULAN))
 panel_kapat()
 
+# ================================================================ scan 4 (3): types outside TURLER, locked wallet, no mark
+# not a first start (the key ring did not say "no item") and no history: the loosening is judged against TABAN
+for t in liste_koruma.TUM:
+    if os.path.exists(liste_koruma.isaret_yolu(t)):
+        os.remove(liste_koruma.isaret_yolu(t))
+ANAHTARLIK.kilitli = True
+liste_koruma._anahtar_unut()
+ajan_ayar("guvenlik", "hesap_oturumlari", "google")
+ajan_ayar("oturum", "kalici", "kilit2.test")
+k = panel_ac()
+r = istemci()
+kontrol("tarama-4: kimlik/kalıcı: cüzdan kilitli + işaret yok → gevşetme sorulur, istemciye gitmez",
+        not liste_koruma.ilk_kurulum() and liste_koruma.KIMLIK in sorulan_turler() and
+        ("kalici", ["kilit2.test"]) in SORULAN and r.get("kimlik") == [] and r.get("kalici") == [],
+        f"{SORULAN} {r}")
+panel_kapat()
+ANAHTARLIK.kilitli = False
+liste_koruma._anahtar_unut()
+ajan_ayar("guvenlik", "hesap_oturumlari", "")
+ajan_ayar("oturum", "kalici", "")
+
 # ================================================================ DUR: opening is free, removing is the user's
 from deskhand import guvenlik  # noqa: E402
 
@@ -494,11 +515,21 @@ class SahteKanal:
         return True
 
 
+def evet(i, gosterilen=None):
+    """The panel dialog's Yes: it passes the fingerprint of the request it SHOWED (scan 4; d78c8d6: only the id)."""
+    if gosterilen is None:
+        gosterilen = (onay.istek_oku(onay.istek_yolu(i)) or {}).get("_iz")
+    try:
+        return onay.yanitla(i, "izin", gosterilen=gosterilen)
+    except TypeError:
+        return onay.yanitla(i, "izin")
+
+
 eski_kanal = onay._KANAL
 onay._KANAL = SahteKanal()
 try:
     _g.dur_ac("kullanici")
-    onay.yanitla(dur_istegi(), "izin")
+    evet(dur_istegi())
     kontrol("tarama-2: kullanıcı Evet → DUR'u PANEL kaldırır", not _g.dur_acik())
 finally:
     onay._KANAL = eski_kanal
@@ -514,18 +545,18 @@ try:
     icerik["tur"] = ""
     with open(onay.istek_yolu(i), "w") as f:
         json.dump(icerik, f)  # shown as an ordinary question…
-    onay.istek_oku(onay.istek_yolu(i))  # …the panel reads it for its dialog
+    gosterilen = onay.istek_oku(onay.istek_yolu(i))["_iz"]  # …the panel reads it for its dialog
     icerik["tur"] = TUR_DUR
     with open(onay.istek_yolu(i), "w") as f:
         json.dump(icerik, f)  # …then the requester turns it into a DUR request
-    onay.yanitla(i, "izin")
+    evet(i, gosterilen)
     kontrol("tarama-3: diyalog gösterildikten sonra istek DUR türüne çevrilir → Evet DUR'u kaldırmaz", _g.dur_acik())
     j = dur_istegi()
-    onay.istek_oku(onay.istek_yolu(j))
-    ilk_ = onay.yanitla(j, "izin")
+    gosterilen = onay.istek_oku(onay.istek_yolu(j))["_iz"]
+    ilk_ = evet(j, gosterilen)
     kalkti = not _g.dur_acik()
     _g.dur_ac("kullanici")
-    ikinci = onay.yanitla(j, "izin")
+    ikinci = evet(j, gosterilen)
     kontrol("tarama-3: DUR sorusu Evet → yalnız o istek, DUR kalkar (ikinci yanıt etkisiz)",
             ilk_ and kalkti and not ikinci and _g.dur_acik(), f"{ilk_} {kalkti} {ikinci}")
 finally:
@@ -547,6 +578,26 @@ try:
 finally:
     onay.iste_sonuc = eski_iste
     _g.dur_kapat("kullanici")
+
+# ================================================================ scan 4 (1): the dialog answers with what IT showed
+DIYALOG = ("import os, sys; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path.insert(0, sys.argv[1])\n"
+           "from PyQt6.QtWidgets import QApplication\n"
+           "app = QApplication([])\n"
+           "from deskhand import onay\n"
+           "from deskhand.gui.onay_diyalog import OnayDiyalog\n"
+           "alinan = []\n"
+           "onay.yanitla = lambda *a, **k: alinan.append((a, k)) or True\n"
+           "import time\n"
+           "istek = {'id': 'd' * 32, 'eylem': 'Kaydet', 'hedef': 'Belge', 'ayrinti': '', 'masaustu': 'ekran',\n"
+           "         'zaman': time.time(), 'son_zaman': time.time() + 60, 'pid': 1, 'tur': '',\n"
+           "         'goruntu': None, 'masa': '', '_iz': ('', 'e' * 64)}\n"
+           "dlg = OnayDiyalog(istek, kurma_ms=0, hareket_px=0, istek_var=lambda: True)\n"
+           "dlg.b_izin.setEnabled(True)\n"
+           "dlg._karar('izin')\n"
+           "print(repr(alinan))\n")
+r = subprocess.run([sys.executable, "-c", DIYALOG, _yalitim.KOK], capture_output=True, text=True, timeout=60)
+kontrol("tarama-4: diyalog Evet'te kendi gösterdiği isteğin izini (tür + sha256) iletir",
+        "'gosterilen': ('', '" + "e" * 64 + "')" in r.stdout, (r.stdout + r.stderr)[-400:])
 
 print(f"\n{gecen}/{toplam} panel-işaret testi geçti")
 sys.exit(0 if gecen == toplam else 1)

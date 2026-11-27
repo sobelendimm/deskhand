@@ -660,7 +660,7 @@
  ],
  "Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin.": [
   "guvenlik.py:2185",
-  "onay.py:899"
+  "onay.py:897"
  ],
  "Bir masaüstü seçin: önizleme onu gösterir (yalnız izleme).": [
   "gui/metinler.py:319"
@@ -786,7 +786,7 @@
   "gui/metinler.py:73"
  ],
  "DUR anahtarı panel dışında kaldırıldı; geri konuldu (yalnız kullanıcı kaldırır).": [
-  "gui/panel.py:231"
+  "gui/panel.py:232"
  ],
  "DUR anahtarını aç (hiçbir girdi gönderilmez)": [
   "cli.py:214"
@@ -802,7 +802,7 @@
  ],
  "DUR kaldırılsın mı?": [
   "guvenlik.py:2184",
-  "onay.py:898"
+  "onay.py:896"
  ],
  "DUR kaldırılsın mı? Ajan yeniden girdi gönderebilir.": [
   "gui/metinler.py:45"
@@ -853,7 +853,7 @@
   "liste_koruma.py:75"
  ],
  "Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı:\n\n{aciklama}\n\nBu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin (panelin son kaydı kullanılır).": [
-  "gui/panel.py:259"
+  "gui/panel.py:260"
  ],
  "Deskhand bir iş yapmak istiyor": [
   "mesgul.py:49"
@@ -1164,7 +1164,7 @@
   "gui/metinler.py:280"
  ],
  "Görünmez masaüstündeki tarayıcının şu sitelerdeki oturumu kalıcı saklansın mı (şifreli, KDE Cüzdanı anahtarıyla; banka/ödeme siteleri hiçbir zaman)?\n\n{siteler}\n\nBu isteği siz yapmadıysanız Hayır deyin.": [
-  "gui/panel.py:245"
+  "gui/panel.py:246"
  ],
  "Görünmez masaüstünü siz kullanın (Arka plan ekranı sekmesi): giriş, CAPTCHA, doğrulama kodu…": [
   "gui/metinler.py:243"
@@ -1498,6 +1498,12 @@
  ],
  "Onay bekleniyor ({n}): onay penceresine bakın — Claude sizin kararınızı bekliyor.": [
   "gui/metinler.py:252"
+ ],
+ "Onay isteği gösterildikten sonra değişti; Evet uygulanmadı. İstek yeniden sorulur.": [
+  "onay.py:981"
+ ],
+ "Onay isteğinin panelde gösterilen hâli bilinmiyor; Evet uygulanmadı. İstek yeniden sorulur.": [
+  "onay.py:983"
  ],
  "Onay kapsamı": [
   "doktor.py:149",

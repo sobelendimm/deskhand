@@ -40,9 +40,14 @@ class OnayDiyalog(QDialog):
     karar_verildi = pyqtSignal(str, str)  # (istek id, "izin" | "red" | "sure" | "geri")
     devral_istendi = pyqtSignal(str)      # (istek id): insan doğrulaması devri, arka plan masaüstü → panel Devral açar
 
-    def __init__(self, istek: dict, parent=None, yanitla=onay.yanitla, saat=time.time, kurma_ms: int = KURMA_MS,
+    def __init__(self, istek: dict, parent=None, yanitla=None, saat=time.time, kurma_ms: int = KURMA_MS,
                  istek_var=None, hareket_px: int = HAREKET_PX):
         super().__init__(parent)
+        if yanitla is None:  # security scan 4: the answer carries the fingerprint of THIS request as shown here
+            gosterilen = istek.get("_iz")
+
+            def yanitla(k, karar):
+                return onay.yanitla(k, karar, gosterilen=gosterilen)
         self.istek, self._yanitla, self.saat = istek, yanitla, saat
         self._istek_var = istek_var or (lambda: os.path.exists(onay.istek_yolu(self.istek_id)))
         self.bitti = False

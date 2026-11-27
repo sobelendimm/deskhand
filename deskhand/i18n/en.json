@@ -1712,6 +1712,8 @@
  "Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin.": "A command wants to remove the STOP switch. If you did not ask for it, answer No.",
  "DUR anahtarı panel dışında kaldırıldı; geri konuldu (yalnız kullanıcı kaldırır).": "The STOP switch was removed outside the panel; it was put back (only the user removes it).",
  "DUR kaldırılsın mı?": "Remove STOP?",
+ "Onay isteği gösterildikten sonra değişti; Evet uygulanmadı. İstek yeniden sorulur.": "The approval request changed after it was shown; Yes was not applied. The request will be asked again.",
+ "Onay isteğinin panelde gösterilen hâli bilinmiyor; Evet uygulanmadı. İstek yeniden sorulur.": "What the panel showed for this approval request is unknown; Yes was not applied. The request will be asked again.",
  "DUR yalnız kullanıcı tarafından kaldırılır: Deskhand panelinden ya da DUR kısayoluyla.": "Only the user removes STOP: in the Deskhand panel or with the STOP shortcut.",
  "Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı:\n\n{aciklama}\n\nBu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin (panelin son kaydı kullanılır).": "A Deskhand setting changed while the panel was closed, or the panel's signature could not be verified:\n\n{aciklama}\n\nApply this change? If you did not make it, answer No (the panel's last approved value is used).",
  "Kalıcı oturum süresi ({yeni} gün) panel dışında yazılmış ve onaylanmadı; {eski} gün kullanılıyor.": "Persistent session lifetime ({yeni} days) was written outside the panel and not approved; {eski} days are used.",
