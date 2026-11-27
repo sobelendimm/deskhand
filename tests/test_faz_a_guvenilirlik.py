@@ -105,7 +105,7 @@ kontrol("1a: iptal günlüğe yazıldı (onay devir-iptal)", "onay devir-iptal" 
 for karar, beklenen, etiket in (("izin", "izin", "devir-tamam"), ("red", "red", "devir-red")):
     t, s = arka_plan(onay.iste_sonuc, "human_verification", "Sayfa", "doğrula", "arka", 60, tur="devir")
     d = istek_bekle()
-    ok = d is not None and onay.yanitla(d["id"], karar)
+    ok = d is not None and onay.yanitla(d["id"], karar, gosterilen=d["_iz"])
     t.join(3)
     r = s.get("r")
     kontrol(f"1b: {'Bitti' if karar == 'izin' else 'Vazgeç'} → isteği kapatır ({beklenen}), günlükte {etiket}",

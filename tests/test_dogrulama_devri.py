@@ -1143,7 +1143,7 @@ try:
                     if b.get("tur") == "devir":
                         gorulen.update(b)
                         time.sleep(0.3)
-                        onay.yanitla(b["id"], karar)
+                        onay.yanitla(b["id"], karar, gosterilen=b["_iz"])
                         return
                 time.sleep(0.05)
         t = threading.Thread(target=calis, daemon=True)

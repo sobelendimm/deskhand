@@ -131,7 +131,7 @@ def iptal_yaris():
     # the client cancels right AFTER this check; the panel's "Done" is already on the channel at the next poll
     if not durum["gonderildi"]:
         b = onay.bekleyenler()
-        if b and onay.yanitla(b[0]["id"], "izin"):
+        if b and onay.yanitla(b[0]["id"], "izin", gosterilen=b[0]["_iz"]):
             durum["gonderildi"] = True
             durum["iptal"] = True
             return False

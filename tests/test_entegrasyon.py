@@ -95,7 +95,7 @@ def panel_dongusu():
             if i["id"] not in gorulen:
                 gorulen.add(i["id"])
                 istekler.append(i)
-                onay.yanitla(i["id"], karar["deger"])
+                onay.yanitla(i["id"], karar["deger"], gosterilen=i["_iz"])
         time.sleep(0.05)
 
 
