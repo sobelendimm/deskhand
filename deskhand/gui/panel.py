@@ -144,7 +144,9 @@ class Panel(QObject):
                  girdi_merkezi: bool = False, **pencere_kw):
         super().__init__()
         self.app = app
-        self.merkez = self._merkez_baslat() if girdi_merkezi else None  # gerçek açılışta (gui.__main__) açık
+        from .tema import tema_uygula
+        tema_uygula(app, "sistem")  # tokens.json → QSS (+ açık/koyu kipte QPalette); pencere kurulmadan önce
+        self.merkez =self._merkez_baslat() if girdi_merkezi else None  # gerçek açılışta (gui.__main__) açık
         self.izleyici = izleyici or Izleyici(self)
         self.pencere = AnaPencere(self.izleyici.ilk_satirlar, **pencere_kw)
         self.pencere.setWindowIcon(uygulama_simgesi())
