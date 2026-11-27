@@ -1253,5 +1253,7 @@
  "çağrı iptal edildi": "call cancelled",
  "paneli yeniden başlatın (tepsi → Çık, sonra deskhand panel --tepsi)": "restart the panel (tray → Quit, then deskhand panel --tepsi)",
  "çalışıyor (pid {pid}); kimlik kaydı {saat}'te kendiliğinden tazelendi ({neden})": "running (pid {pid}); identity record refreshed itself at {saat} ({neden})",
- "{g} gün {s} sa": "{g} d {s} h"
+ "{g} gün {s} sa": "{g} d {s} h",
+ "onay isteği beklerken silindi → red": "the approval request was removed while waiting → denied",
+ "devir isteği beklerken silindi; hiçbir girdi gönderilmedi": "the handoff request was removed while waiting; no input was sent"
 }

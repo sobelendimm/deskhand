@@ -66,6 +66,7 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "kanal": N_("onay kanalı doğrulanamadı (yanıtın Deskhand panelinden geldiği kanıtlanamadı) → red"),
     "kosul": N_("beklenen koşul gerçekleşti (insan doğrulaması sayfadan kalktı)"),
     "iptal": N_("isteyen vazgeçti (çağrı iptal edildi) → red"),
+    "silindi": N_("onay isteği beklerken silindi → red"),
 }
 TUR_DEVIR = "devir"           # istek türü: insan doğrulaması devri (panelde "Devral / Bitti / Vazgeç"; izin = Bitti)
 DEVIR_EN_COK = 3600.0         # insan devri isteğinin en uzun ömrü (request_human timeout_s üst sınırı): bekleme boyunca BAŞKA
@@ -74,6 +75,8 @@ KONTROL_ARALIK = 3.0          # isteyen `kontrol` işlevini en çok bu sıklıkt
 NABIZ_SINIR = 30.0            # 0.9.1: isteyen beklerken istek dosyasına CANLILIK_ARALIK'ta bir dokunur (nabız); bu kadar sn
                               # dokunulmadıysa bekleme döngüsü yok (süreç donmuş/durdurulmuş, iş parçacığı terk edilmiş):
                               # istek bekleyen SAYILMAZ (panel göstermez, başka süreçlerin girdisi kilitlenmez; temizle siler)
+                              # The heartbeat comes from a dedicated thread, and a stale mtime is ignored while the owner
+                              # is verifiably running (pid + start time, not stopped): see _calisiyor.
 KARARLAR = ("izin", "red")
 _ID = re.compile(r"[0-9a-f]{32}")
 
@@ -215,33 +218,42 @@ def paket_yolu() -> str:
 def panel_kaydet(pid: int | None = None) -> str:
     """Panel açılışında: onay kanalını aç (yalnız kendi PID'i için) + RUNTIME_DIR/panel.pid
     {pid, baslangic, exe, cmdline}. → yol."""
+    global _PANEL_ACIK
     pid = os.getpid() if pid is None else pid
     os.makedirs(yollar.runtime_dir(), mode=0o700, exist_ok=True)
     _dizin_hazirla()
-    if pid == os.getpid():
-        kanal_ac()
-        _tazeleyici_baslat()  # 0.9.1: kayıt eskirse (ör. Python güncellendi → exe "(deleted)") panel kendisi tazeler
-    _yaz_atomik(panel_pid_yolu(), {"pid": pid, "baslangic": _baslangic(pid), "exe": _exe(pid),
-                                   "cmdline": _komut_satiri(pid), "cwd": _cwd(pid),
-                                   "paket": paket_yolu() if pid == os.getpid() else None, "zaman": time.time()})
+    with _KAYIT_KILIT:  # record + socket lifetime under one lock (refresh thread cannot interleave with shutdown)
+        if pid == os.getpid():
+            _PANEL_ACIK = True
+            kanal_ac()
+            _tazeleyici_baslat()  # 0.9.1: kayıt eskirse (ör. Python güncellendi → exe "(deleted)") panel kendisi tazeler
+        _yaz_atomik(panel_pid_yolu(), {"pid": pid, "baslangic": _baslangic(pid), "exe": _exe(pid),
+                                       "cmdline": _komut_satiri(pid), "cwd": _cwd(pid),
+                                       "paket": paket_yolu() if pid == os.getpid() else None, "zaman": time.time()})
     return panel_pid_yolu()
 
 
 def panel_sil(pid: int | None = None) -> None:
     """Panel kapanırken: pid dosyası yalnız kendisininse silinir; kendi kanalı kapanır (bekleyenlerin bağlantısı
     kopar → isteyenler hemen red)."""
+    global _PANEL_ACIK
     pid = os.getpid() if pid is None else pid
     if pid == os.getpid():
-        _tazeleyici_durdur()
-    d = _json_oku(panel_pid_yolu()) or {}
-    if d.get("pid") == pid:
-        _sil(panel_pid_yolu())
+        _tazeleyici_durdur()  # waits for the refresh thread: no refresh can run after this point
+    with _KAYIT_KILIT:
         if pid == os.getpid():
-            kanal_kapat()
+            _PANEL_ACIK = False
+        d = _json_oku(panel_pid_yolu()) or {}
+        if d.get("pid") == pid:
+            _sil(panel_pid_yolu())
+            if pid == os.getpid():
+                kanal_kapat()
 
 
 TAZELE_ARALIK = 60.0          # panel kendi kimlik kaydını bu sıklıkta denetler (gerekirse yeniden yazar)
-_TAZELEYICI: threading.Event | None = None
+_TAZELEYICI: tuple[threading.Event, threading.Thread] | None = None
+_KAYIT_KILIT = threading.RLock()  # panel.pid + approval socket are created/removed only while holding this lock
+_PANEL_ACIK = False               # this process registered as panel (panel_kaydet) and has not shut down (panel_sil)
 
 
 def _canli_kimlik(pid: int) -> dict:
@@ -260,10 +272,18 @@ def kayit_farki(kayit: dict | None) -> list[str]:
 
 
 def panel_kaydi_tazele() -> str:
-    """Panel sürecinde: kendi kimlik kaydını denetle, eskimişse yeniden yaz. → "ayni" | "tazelendi" | "baskasi".
+    """Panel sürecinde: kendi kimlik kaydını denetle, eskimişse yeniden yaz. → "ayni" | "tazelendi" | "baskasi" |
+    "kapali" (panel_sil already ran: nothing is re-created).
     GÜVENLİK: doğrulama zayıflamaz — kayıt yalnız BU sürecin (panel) kendi canlı /proc değerleriyle yazılır ve isteyen
     yine birebir karşılaştırır (SO_PEERCRED PID + başlangıç + exe + cmdline + cwd + paket). Başka bir CANLI sürecin
     kaydına dokunulmaz ("baskasi"); kayıt yoksa ya da sahibi ölmüşse bu panel yeniden kaydolur (kanal da açılır)."""
+    with _KAYIT_KILIT:
+        if not _PANEL_ACIK:  # panel shut down (or never registered): never re-create the record/socket
+            return "kapali"
+        return _panel_kaydi_tazele()
+
+
+def _panel_kaydi_tazele() -> str:
     benim = os.getpid()
     d = _json_oku(panel_pid_yolu())
     sahip = d.get("pid") if isinstance(d, dict) else None
@@ -295,7 +315,7 @@ def _tazeleyici_baslat() -> None:
     global _TAZELEYICI
     if _TAZELEYICI is not None:
         return
-    dur = _TAZELEYICI = threading.Event()
+    dur = threading.Event()
 
     def dongu():
         while not dur.wait(TAZELE_ARALIK):
@@ -303,14 +323,18 @@ def _tazeleyici_baslat() -> None:
                 panel_kaydi_tazele()
             except Exception:  # noqa: BLE001 - bir tur başarısız: sonraki turda yeniden
                 pass
-    threading.Thread(target=dongu, name="panel-kayit-tazele", daemon=True).start()
+    t = threading.Thread(target=dongu, name="panel-kayit-tazele", daemon=True)
+    _TAZELEYICI = (dur, t)
+    t.start()
 
 
 def _tazeleyici_durdur() -> None:
     global _TAZELEYICI
     t, _TAZELEYICI = _TAZELEYICI, None
     if t is not None:
-        t.set()
+        t[0].set()
+        if t[1] is not threading.current_thread():
+            t[1].join(10)  # a refresh already in progress finishes before the record is removed
 
 
 def panel_kanal_tanisi() -> str | None:
@@ -742,6 +766,26 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
         kanal.close()
         _sil(iy, gy)
         return bitir(OnaySonucu(False, "hata", istek_id))
+    nabiz_dur = threading.Event()
+
+    def nabiz():
+        # Heartbeat from its own thread: a slow `kontrol` (e.g. waiting for the in-process tool lock) must not make
+        # a live request look abandoned to other processes.
+        while not nabiz_dur.wait(CANLILIK_ARALIK):
+            try:
+                os.utime(iy)
+            except OSError:
+                return
+
+    def iptal_mi() -> bool:
+        if iptal is None:
+            return False
+        try:
+            return bool(iptal())
+        except Exception:  # noqa: BLE001 - iptal okunamadı: beklemeye devam
+            return False
+
+    threading.Thread(target=nabiz, name="onay-nabiz", daemon=True).start()
     try:
         son = time.monotonic() + sure
         sonraki_canlilik = time.monotonic() + CANLILIK_ARALIK
@@ -760,37 +804,36 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
                 if b"\n" in tampon or len(tampon) > 256:
                     satir = tampon.split(b"\n", 1)[0].decode("ascii", "replace").split()
                     if len(satir) == 3 and satir[0] == "karar" and satir[1] in KARARLAR and satir[2] == istek_id:
+                        if iptal_mi():  # cancellation wins over a decision that arrived in the same poll
+                            return bitir(OnaySonucu(False, "iptal", istek_id))
                         return bitir(OnaySonucu(satir[1] == "izin", satir[1], istek_id))
                     return bitir(OnaySonucu(False, "red", istek_id))  # biçimsiz yanıt = red
             if os.path.exists(yy):  # dosya yanıtı (eski protokol / panel kapanırken): YALNIZ red sayılır
                 return bitir(OnaySonucu(False, "red", istek_id))
+            if not os.path.exists(iy):  # request file removed (cleanup / another process): the panel can no longer
+                return bitir(OnaySonucu(False, "silindi", istek_id))  # show it, so stop waiting (never an approval)
             t = time.monotonic()
             if t >= son:
                 return bitir(OnaySonucu(False, "sure", istek_id))
             if _dur_acik():
                 return bitir(OnaySonucu(False, "dur", istek_id))
-            if iptal is not None:
-                try:
-                    if iptal():
-                        return bitir(OnaySonucu(False, "iptal", istek_id))
-                except Exception:  # noqa: BLE001 - iptal okunamadı: beklemeye devam
-                    pass
+            if iptal_mi():
+                return bitir(OnaySonucu(False, "iptal", istek_id))
             if t >= sonraki_canlilik:
                 sonraki_canlilik = t + CANLILIK_ARALIK
                 if panel_pid() != ppid:
                     return bitir(OnaySonucu(False, "panel-kapandi", istek_id))
-                try:
-                    os.utime(iy)  # nabız: bekleme döngüsü yaşıyor (bekleyenler NABIZ_SINIR'dan eskisini saymaz)
-                except OSError:
-                    pass
             if kontrol is not None and t >= sonraki_kontrol:
                 try:
                     if kontrol():
+                        if iptal_mi():  # kontrol may take long: re-check cancellation at the decision point
+                            return bitir(OnaySonucu(False, "iptal", istek_id))
                         return bitir(OnaySonucu(False, "kosul", istek_id))
                 except Exception:  # noqa: BLE001 - koşul okunamadı: beklemeye devam (insan kararı/zaman aşımı geçerli)
                     pass
                 sonraki_kontrol = time.monotonic() + KONTROL_ARALIK
     finally:
+        nabiz_dur.set()
         try:
             kanal.close()
         except OSError:
@@ -844,6 +887,20 @@ def _sahibi_canli(d: dict) -> bool:
     return not isinstance(bas, str) or _baslangic(d["pid"]) == bas
 
 
+def _calisiyor(d: dict) -> bool:
+    """Owner verifiably alive AND running: pid + recorded start time match and the process is not stopped/zombie.
+    Such a request is never treated as abandoned on file mtime alone (another process could age the mtime)."""
+    bas = d.get("pid_bas")
+    if not isinstance(bas, str) or not _canli(d["pid"]) or _baslangic(d["pid"]) != bas:
+        return False
+    try:
+        with open(f"/proc/{int(d['pid'])}/stat") as f:
+            st = f.read()
+        return st[st.rindex(")") + 2] not in "TtZX"
+    except (OSError, ValueError, IndexError):
+        return False
+
+
 def _nabiz_var(yol: str) -> bool:
     """İstek dosyasına son NABIZ_SINIR sn içinde dokunulmuş mu (isteyenin bekleme döngüsü yaşıyor)."""
     try:
@@ -870,8 +927,8 @@ def bekleyenler(simdi: float | None = None) -> list[dict]:
             continue
         if d["pid"] and not _sahibi_canli(d):
             continue
-        if not _nabiz_var(os.path.join(dizin(), ad)):  # isteyen artık beklemiyor (donmuş / terk edilmiş)
-            continue
+        if not _nabiz_var(os.path.join(dizin(), ad)) and not _calisiyor(d):  # stale heartbeat counts only when the
+            continue  # owner is not verifiably running (stopped / no start time recorded)
         sonuc.append(d)
     return sorted(sonuc, key=lambda d: d["zaman"])
 
@@ -918,7 +975,7 @@ def temizle(simdi: float | None = None) -> list[str]:
         if tur == "istek" and m.group(3) == "json":
             d = istek_oku(yol)
             eski = (d is None or d["son_zaman"] + ESKI_PAY < simdi or (d["pid"] and not _sahibi_canli(d))
-                    or not _nabiz_var(yol))
+                    or (not _nabiz_var(yol) and not _calisiyor(d)))
         else:  # yanıt ya da görüntü: isteği yoksa ve bir dakikadır duruyorsa
             try:
                 yas = simdi - os.lstat(yol).st_mtime

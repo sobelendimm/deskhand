@@ -2810,12 +2810,21 @@ DEVIR_NEDEN = {  # onay.OnaySonucu.neden → (status, mesaj)
     "kanal": ("unavailable", N_("panel kanalı doğrulanamadı")),
     "hata": ("unavailable", N_("devir isteği yazılamadı")),
     "iptal": ("cancelled", N_("çağrı iptal edildi: devir isteği geri çekildi")),
+    "silindi": ("unavailable", N_("devir isteği beklerken silindi; hiçbir girdi gönderilmedi")),
 }
 
 
-def _adres_ozeti(adres: str | None) -> str:
-    """Adresin yalnız şema + alan adı + yol kısmı (sorgu ve parça yok): sayfa değişti mi karşılaştırması için."""
-    return re.split(r"[?#]", adres or "", maxsplit=1)[0]
+def _belge_anahtari(adres: str | None) -> str:
+    """Document identity for "challenge cleared": the full address including query and fragment (a query or fragment
+    change is a different document), minus Cloudflare's own challenge tokens (`__cf_chl_*`), which the interstitial
+    removes itself when it passes."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+    try:
+        u = urlsplit(adres or "")
+        sorgu = [(a, d) for a, d in parse_qsl(u.query, keep_blank_values=True) if not a.startswith("__cf_chl")]
+        return urlunsplit((u.scheme, u.netloc, u.path, urlencode(sorgu), u.fragment))
+    except ValueError:
+        return adres or ""
 
 
 def _devir_bildir(ozet: str) -> None:
@@ -2875,7 +2884,12 @@ def _devir_yurut(k: str, reason: str, timeout_s: float, bilgi: dict) -> dict[str
         return {**bilgi, "status": "declined", "window": _baslik_simdi(k) or "", "retry_after_s": kalan,
                 "message": _("kullanıcı az önce devri reddetti ya da gelmedi: {sn} sn içinde yeniden isteme; "
                              "kullanıcıya haber ver").format(sn=kalan)}
-    au = api.arka()
+    ad = api.arka().ad
+    with _OnayKaydi(ad):  # handoff input lock is set BEFORE the first poll (pre-wait included), released at the end
+        return _devir_kilitli(k, reason, timeout_s, bilgi, ad)
+
+
+def _devir_kilitli(k: str, reason: str, timeout_s: float, bilgi: dict, ad: str) -> dict[str, Any]:
     baslik = _baslik_simdi(k) or ""
     once = _sinama_yenile(k) if k != EKRAN else None
     if once is not None and dogrulama_sinamasi.bastirilmis_mi(k, once.get("imza")):
@@ -2888,16 +2902,16 @@ def _devir_yurut(k: str, reason: str, timeout_s: float, bilgi: dict) -> dict[str
     if o is None or not hasattr(o, "iste_sonuc"):
         return {**bilgi, "status": "unavailable", "window": baslik,
                 "message": _("onay modülü yok (Deskhand paneli kurulu değil)")}
-    ad = au.ad
     masa = "arka" if ad == "sanal" else "ekran"
     bos = [0]
-    adres_once = _adres_ozeti(dogrulama_sinamasi.son_adres(k)) if once is not None else ""
+    belge = [_belge_anahtari(dogrulama_sinamasi.son_adres(k)) if once is not None else ""]
     degisti = [False]
 
     def kayboldu() -> bool:
-        """Yalnız başta sınama VARDI ise: sayfa OKUNDU, sınama yok, ADRES aynı ve bu art arda DEVIR_ARALIK_SAYISI yoklamada
-        → çözüldü sayılır. Sayfa okunamazsa (geçici a11y hatası) saymaz; adres değiştiyse (sekme/sayfa değişti ya da
-        ajan işareti 'kaybettirdi') saymaz: çözümü yalnız kullanıcı (Bitti) bildirir."""
+        """Yalnız başta sınama VARDI ise: sayfa OKUNDU, sınama yok, BELGE aynı ve bu art arda DEVIR_ARALIK_SAYISI yoklamada
+        → çözüldü sayılır. Sayfa okunamazsa (geçici a11y hatası) saymaz; belge değiştiyse (adres, sorgu ya da parça
+        değişti) saymaz: çözümü yalnız kullanıcı (Bitti) bildirir. The candidate is bound to the document where the
+        challenge was last seen; if a new document shows the challenge again, it is re-evaluated on that document."""
         if once is None:
             return False
         simdi, okundu = _sinama_oku(k)
@@ -2905,8 +2919,10 @@ def _devir_yurut(k: str, reason: str, timeout_s: float, bilgi: dict) -> dict[str
             return False
         if simdi is not None:
             bos[0] = 0
+            belge[0] = _belge_anahtari(dogrulama_sinamasi.son_adres(k))
+            degisti[0] = False
             return False
-        if _adres_ozeti(dogrulama_sinamasi.son_adres(k)) != adres_once:
+        if _belge_anahtari(dogrulama_sinamasi.son_adres(k)) != belge[0]:
             degisti[0] = True
             bos[0] = 0
             return False
@@ -2918,7 +2934,7 @@ def _devir_yurut(k: str, reason: str, timeout_s: float, bilgi: dict) -> dict[str
     if once is not None and once.get("kind") in OTO_GECEN:
         bitis = t0 + min(ON_BEKLE_SN, timeout_s * 0.3)
         while time.monotonic() < bitis:
-            if kayboldu():
+            if kayboldu() and not cagri_iptal_edildi():
                 s = {**bilgi, "window": baslik, "waited_s": round(time.monotonic() - t0, 1), "status": "resolved",
                      "resolved_by": "challenge_cleared", "still_detected": False,
                      "message": _("sınama kendiliğinden geçti; kullanıcı çağrılmadı: observe çağırıp sayfayı yeniden oku")}
@@ -2934,9 +2950,11 @@ def _devir_yurut(k: str, reason: str, timeout_s: float, bilgi: dict) -> dict[str
         _devir_bildir(ozet)
     gunluk(f"insan devri istendi | {'arka sanal ' if masa == 'arka' else ''}[{baslik[:80]}] | {reason[:120]}")
     kalan_sure = max(0.5, timeout_s - (time.monotonic() - t0))
-    with _OnayKaydi(ad):  # beklerken bu masaüstüne girdi yok ([7]); ajan isteği kendi kapatamaz
-        sonuc = o.iste_sonuc("human_verification", baslik or _("tüm ekran"), reason, masa, kalan_sure,
-                             tur="devir", kontrol=kayboldu, iptal=cagri_iptal_edildi)
+    # input lock (_OnayKaydi) is held by the caller for the whole handoff; the agent cannot close the request itself
+    sonuc = o.iste_sonuc("human_verification", baslik or _("tüm ekran"), reason, masa, kalan_sure,
+                         tur="devir", kontrol=kayboldu, iptal=cagri_iptal_edildi)
+    if cagri_iptal_edildi() and sonuc.neden != "iptal":  # cancelled call: never resolved, never suppresses the guard
+        sonuc = sonuc._replace(izin=False, neden="iptal")
     gecen = round(time.monotonic() - t0, 1)
     s = {**bilgi, "window": baslik, "waited_s": gecen}
     if sonuc.izin or sonuc.neden == "kosul":
