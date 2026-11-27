@@ -42,7 +42,7 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -90,9 +90,13 @@ jobs:
       - name: Build native helpers
         run: make -C deskhand/yardimci deskhand-etkinlik deskhand-goruntu deskhand-eis
 
+      # DESKHAND_CI=1: suites that need a real KDE Plasma session, browser end-to-end or OCR timing print "ATLANDI"
+      # and exit 0 here (list: tests/_yalitim.py MASAUSTU_TAKIMLARI); the full local run stays the real gate.
       - name: Test suites (4 in parallel)
+        timeout-minutes: 12
         env:
           QT_QPA_PLATFORM: offscreen
+          DESKHAND_CI: "1"
         run: |
           # Virtual X display + window manager; session D-Bus for the tests that need one (CI runner only).
           Xvfb :99 -screen 0 1920x1080x24 >/tmp/xvfb.log 2>&1 &
@@ -105,7 +109,7 @@ jobs:
           # test_ocr_gpu skips its GPU case without the OCR venv/GPU. tests/ekranli/ is never run (real screen).
           # 4 parallel workers (4 vCPU runner): each suite has its own temp dir and background desktop
           # (tests/_yalitim.py); suites marked `test_kos: tek-basina` run alone after the pool.
-          dbus-run-session -- python3 tools/test_kos.py -j 4 --tam-cikti
+          dbus-run-session -- python3 tools/test_kos.py -j 4 --zaman 120 --tam-cikti
 
       - name: i18n source audit
         run: python3 tools/i18n_cikar.py --denetle

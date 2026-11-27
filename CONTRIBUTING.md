@@ -24,6 +24,8 @@ public issue.
 ## Pull requests
 
 - Run the tests before sending: `for t in tests/test_*.py; do python3 "$t" || break; done`.
+  CI (GitHub, no KDE session) runs with `DESKHAND_CI=1` and skips the desktop suites listed in
+  `tests/_yalitim.py` (`MASAUSTU_TAKIMLARI`); the full local run (`python3 tools/test_kos.py`) is the real gate.
   They redirect every Deskhand directory to a temporary folder and never send input to your
   screen. `test_sanal` and `test_mcp` start their own invisible desktop.
 - Measurement and test scripts must import `tests/_yalitim.py` (or set `DESKHAND_GERCEK_EKRAN=kapali`
