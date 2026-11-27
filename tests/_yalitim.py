@@ -267,6 +267,44 @@ def kilit_eksigi() -> str | None:
     return "oturum kilitli" if d else None
 
 
+def bellek_kafesi_eksigi() -> str | None:
+    """Görünmez masaüstü Xvfb'yi `systemd-run --user --scope` kafesine koyar ve kafeste değilse Dur verir (ürün kuralı,
+    gevşetilmez). YALNIZ DESKHAND_CI=1 iken yoklanır: kullanıcı systemd'si cgroup devretmiyorsa (GitHub runner: süreç
+    '/system.slice/hosted-compute-agent.service' altında kalır) neden döner. Yerelde hep None: kural gerçek kapı."""
+    if os.environ.get("DESKHAND_CI") != "1":
+        return None
+    import subprocess
+    if not shutil.which("systemd-run"):
+        return "systemd-run yok: kullanıcı bellek kafesi kurulamaz"
+    from deskhand import sistemd
+    from deskhand.arka_ortak import _kullanici_bus_ortami, _oncelik
+    birim = f"deskhand-test-kafes-{os.getpid()}.scope"
+    # ürünün Xvfb komutunun aynısı (masaustu._baslat_ic), Xvfb yerine cat: aynı özellikler, aynı öncelik zinciri
+    komut = ["systemd-run", "--user", "--scope", "--quiet", *sistemd.genisleme_kapali(), f"--unit={birim}",
+             "-p", "MemoryMax=64M", "-p", "MemorySwapMax=0", "-p", "Delegate=yes", "-p", "TimeoutStopSec=5",
+             "--", *_oncelik(), "cat", "/proc/self/cgroup"]
+    try:
+        r = subprocess.run(komut, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15,
+                           env=_kullanici_bus_ortami(), start_new_session=True)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"systemd-run --user --scope çalışmadı: {e}"
+    cg = next((s[3:].strip() for s in r.stdout.splitlines() if s.startswith("0::")), "")
+    if r.returncode == 0 and cg.endswith("/" + birim):
+        return None
+    return (f"kullanıcı bellek kafesi yok (systemd-run --user --scope rc {r.returncode}, cgroup {cg!r}"
+            f"{', ' + r.stderr.strip()[-160:] if r.stderr.strip() else ''})")
+
+
+def kafes_durdu_mu(hata: Exception) -> bool:
+    """masaustu_baslat'ın Dur'u ürünün "Xvfb bellek kafesinde değil" kuralından mı (ürünün kendi çevrilmiş kalıbıyla
+    karşılaştırılır; dil bağımsız)? Yalnız DESKHAND_CI=1 iken True olabilir: yerelde bu Dur her zaman KALDI'dır."""
+    if os.environ.get("DESKHAND_CI") != "1":
+        return False
+    from deskhand.i18n import _
+    onek = _("Xvfb bellek kafesinde değil: {cgroup}").split("{", 1)[0]
+    return bool(onek) and str(hata).startswith(onek)
+
+
 def masaustu_girdisi_eksigi(*kimlikler: str) -> str | None:
     """XDG uygulama dizinlerinde <kimlik>.desktop dosyası olmayanlar → neden | None."""
     veri = [os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
