@@ -386,6 +386,48 @@ def cerceve_karari(adlar, baslik, kardes, tam_pid=None) -> int:
     return tam[0]
 
 
+def cerceve_geometri_denetle(geo, ekran, pencere, kardes, baslik="", olcek=1) -> None:
+    """DH-TUR2 D-1 (ad takası yarışı): aynı süreçte BAŞKA pencere de varken (kardes dolu liste) çerçeve kararı yalnız
+    adlara dayanmasın — iki pencerenin başlığı takas edilip erişilebilirlik adları geride kalınca öbür pencerenin
+    (ör. bankanın) çerçevesi seçiliyordu (SON-KAPI2 poc_takas T2). Seçilen çerçevenin GetExtents sınırı (ekran: SCREEN,
+    pencere: WINDOW) hedef pencerenin pencere yöneticisi geometrisiyle (geo) web.konum_coz kurallarıyla eşleşmeli;
+    eşleşmiyor ya da okunamıyorsa Dur 6 (SAYFA_BELIRSIZ; bilinmiyor = güvensiz). olcek > 1: XWayland çerçevesi fiziksel
+    pikselde (xwayland_orani). Tek pencerede (kardes []) ve doğrudan çağrıda şart yok. Kalan risk: kardeş pencere hedefle
+    AYNI geometrideyse (ör. ikisi de ekranı kaplıyor) geometri ayırt etmez; o durumda karar adlarla verilir."""
+    if not (isinstance(kardes, list) and kardes):
+        return
+    from .guvenlik import baslik_goster
+    from .web import konum_coz
+    ok = False
+    try:
+        if geo is not None and len(geo) == 4:
+            geo = tuple(int(v) for v in geo)
+            ekran = tuple(ekran) if ekran is not None and len(ekran) == 4 else None
+            pencere = tuple(pencere) if pencere is not None and len(pencere) == 4 else None
+            olcu = pencere or ekran
+            r = xwayland_orani(olcu[2], olcu[3], geo[2], geo[3], olcek) if olcu else 1
+            if r != 1:
+                ekran = tuple(round(v / r) for v in ekran) if ekran else None
+                pencere = tuple(round(v / r) for v in pencere) if pencere else None
+            ok = konum_coz(geo, ekran, pencere) is not None
+    except (TypeError, ValueError):
+        ok = False
+    if not ok:
+        raise Dur(6, _("sayfa belirsiz: bu uygulamanın başka penceresi de var ve seçilen erişilebilirlik çerçevesinin "
+                       "konumu pencerenin ({baslik}) konumuyla eşleşmiyor ya da okunamadı (başlıklar değişiyor "
+                       "olabilir); başka pencerenin sayfası okunmasın diye durduruldu, kısa süre sonra yeniden dene"
+                       ).format(baslik=baslik_goster(baslik)), tur=SAYFA_BELIRSIZ)
+
+
+def _cerceve_kutusu(cerceve, tur):
+    """Çerçevenin GetExtents(tur) sınırı → (x, y, g, y) | None (okunamadı)."""
+    try:
+        e = cerceve.get_extents(tur)
+        return (int(e.x), int(e.y), int(e.width), int(e.height))
+    except Exception:  # noqa: BLE001 - okunamadı: bilinmiyor
+        return None
+
+
 def _cerceve_bul(Atspi, pid, baslik, kardes=KARDES_VERILMEDI):
     """Pencere → AT-SPI çerçevesi: YALNIZ hedef pencerenin süreç ağacından (pencerenin süreci ya da AYNI
     çalıştırılabilir dosyaya sahip torunları). Atalar ve başka uygulamalar asla (denetimler X/KWin penceresinde yapılır,
@@ -758,6 +800,11 @@ def _atspi_is(istek):
         gercek_ekran_denetle(_("erişilebilirlik eylemi"))
     Atspi = _atspi(istek["a11y"])
     cerceve, app_pid, app_ad = _cerceve_bul(Atspi, istek["pid"], istek["baslik"], istek.get("kardes", KARDES_VERILMEDI))
+    kardes = istek.get("kardes", KARDES_VERILMEDI)
+    if isinstance(kardes, list) and kardes:  # D-1: çok pencerede çerçeve ↔ pencere geometrisi (her işlemde, okuma dahil)
+        cerceve_geometri_denetle(istek.get("geo_cerceve"), _cerceve_kutusu(cerceve, Atspi.CoordType.SCREEN),
+                                 _cerceve_kutusu(cerceve, Atspi.CoordType.WINDOW), kardes, istek["baslik"],
+                                 int(istek.get("olcek") or 1))
     islem = istek["islem"]
     try:
         cerceve_ad = cerceve.get_name() or ""
@@ -1116,8 +1163,19 @@ def _pencere_istegi(k, islem, **ek):
     except (TypeError, ValueError):
         pid = ""
     # kardes: aynı süreçteki öbür pencerelerin başlıkları (pencere yöneticisinden; çerçeve kararının bağımsız kanalı)
+    kardes = kardes_basliklari(au, k, pid)
+    if isinstance(kardes, list) and kardes:  # D-1: çerçeve ↔ pencere geometrisi eşleşmesi için (okunamazsa yok → Dur 6)
+        try:
+            ek.setdefault("geo_cerceve", [int(v) for v in au.geometri(k)])
+        except Exception:  # noqa: BLE001
+            pass
+        if "olcek" not in ek and hasattr(au, "masaustu_olcegi"):
+            try:
+                ek["olcek"] = int(au.masaustu_olcegi() or 1)
+            except Exception:  # noqa: BLE001
+                pass
     return {"a11y": _a11y_adresi(), "pid": str(pid or ""), "baslik": au.baslik(k), "islem": islem, **ek,
-            "kardes": kardes_basliklari(au, k, pid), "_pencere": k,
+            "kardes": kardes, "_pencere": k,
             "baslik_gizli": getattr(guvenlik._BASLIK_GIZLI, "acik", False)}  # yardımcı süreç: gizli yazı bayrağı
 
 

@@ -951,7 +951,7 @@ def _adres_norm(s: str) -> tuple[str, str]:
     s = str(s or "").strip()
     try:
         p = urlsplit(s if "://" in s or s.startswith(("about:", "file:")) else "https://" + s)
-        port = p.port  # geçersiz port (host:abc, :99999) → ValueError
+        port = p.port  # geçersiz port (host:abc, :99999) → ValueError (SON-KAPI D-a; iki dalda da)
     except ValueError:
         return "", s.lower()
     host = (p.hostname or "").lower().removeprefix("www.")
@@ -990,8 +990,9 @@ def adres_kisa(s: str) -> str:
 
 
 def _baslikta_sunucu(b: str, sunucu: str) -> bool:
-    """Başlıkta sunucu adı SINIRLI geçiyor mu (a.com, Visa.com içinde değil; önünde/arkasında harf, rakam, '.', '-' yok)."""
-    return bool(sunucu) and re.search(r"(?<![\w.-])(www\.)?" + re.escape(sunucu) + r"(?![\w-]|\.\w)", b.lower()) is not None
+    """Başlıkta sunucu adı SINIRLI geçiyor mu: önünde harf/rakam/'.'/'-' yok (a.com, Visa.com içinde değil), isteğe bağlı
+    'www.' öneki; arkasında harf/rakam/'-'/'.' yok (bank.com.evil.net ve sondaki nokta geçmez: DH-TUR2 birleşimi, en sıkı)."""
+    return bool(sunucu) and re.search(r"(?<![\w.-])(www\.)?" + re.escape(sunucu) + r"(?![\w.-])", b.lower()) is not None
 
 
 def _adres_dogrula(au, w: str, adres: str, tek_mi=None) -> tuple[bool, str | None, str | None]:

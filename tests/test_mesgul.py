@@ -176,6 +176,15 @@ try:
     kontrol("tam_ekran: ikinci ekranda tam ekran (yedek yol, çıkış listesi)",
             mesgul.tam_ekran_mi({"fs": False, "g": [2560, 0, 1920, 1080], "cg": None}, [(0, 0, 2560, 1440), (2560, 0, 1920, 1080)]))
     kontrol("tam_ekran: pencere yok → hayır", not mesgul.tam_ekran_mi(None))
+    _eski_cikis = mesgul._cikislar
+    mesgul._cikislar = lambda: None
+    kontrol("DH-TUR2 tam_ekran: yedek yolda çıkışlar okunamadı (bilinmiyor) → tam ekran say (kapalı-başarısız)",
+            mesgul.tam_ekran_mi({"fs": False, "g": [0, 0, 800, 600], "cg": None, "sinif": "mpv"}))
+    kontrol("DH-TUR2 ekran_korumasi: çıkışlar okunamadı → koruma açık (ekrana dokunulmaz)",
+            mesgul.ekran_korumasi({"fs": False, "g": [0, 0, 800, 600], "cg": None, "sinif": "mpv"}, []) is not None)
+    kontrol("DH-TUR2 tam_ekran: kabuk yüzeyi bilinmiyorken de tam ekran sayılmaz",
+            not mesgul.tam_ekran_mi({"fs": False, "g": [0, 0, 800, 600], "cg": None, "sinif": "plasmashell"}))
+    mesgul._cikislar = _eski_cikis
 
     # ---------------------------------------------------------------- 3) oyun / yasak
     kontrol("yasak_desenleri: dosya yokken varsayılan (boş) liste, dosya OLUŞTURULMAZ",

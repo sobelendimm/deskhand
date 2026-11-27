@@ -108,6 +108,18 @@ for sinif_ in ("kwrite", "org.kde.konsole", "com.mitchellh.ghostty", "zenity"):
     a = ayristir("yaz", "{w}", "x")
     kontrol(f"tarayıcı olmayan pencere ({sinif_}) → otomatik kilit yok (başlık yazarken değişir)",
             not cli.otomatik_baslik_kilidi(a, au_) and not getattr(a, "baslik", None))
+au_ = SahteAU()
+
+
+def _sinif_okunamaz(k):
+    raise hata.Dur(5, "sınıf okunamadı (taklit)")
+
+
+au_.sinif = _sinif_okunamaz
+a = ayristir("yaz", "{w}", "x")
+kontrol("DH-TUR2: pencere sınıfı okunamadı (bilinmiyor) → kilit YİNE konur (kapalı-başarısız)",
+        cli.otomatik_baslik_kilidi(a, au_) and a.baslik == "^" + re.escape("Belge (1) [taslak] — KWrite") + "$",
+        str(getattr(a, "baslik", None)))
 import os as _os
 _eski = cli._masa_secenegi(["--no-title-lock", "yaz", "{w}", "x"])
 kontrol("--no-title-lock komuttan ÖNCE: argv'den soyulur, ortam bayrağı konur",

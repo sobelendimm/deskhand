@@ -75,6 +75,11 @@ DURUM_DOSYA = "bellek-bekcisi.json"
 KAYIT_DOSYA = "tarayicilar.json"
 YEDEK_AD = "deskhand-yedek.jsonlz4"  # kopyanın sessionstore-backups/ dizininde: yeniden başlatma öncesi kurtarma dosyası
 FIREFOX_ADLARI = ("firefox", "firefox-bin", "firefox-esr")
+# DH-TUR2: Chromium ailesi de aynı nazik yolla (oturum geri yüklemeli) yeniden başlatılır; tarayıcı adları TEK listede
+CHROMIUM_ADLARI = ("chromium", "chromium-browser", "chrome", "google-chrome", "google-chrome-stable")
+TARAYICI_ADLARI = {**{a: "firefox" for a in FIREFOX_ADLARI}, **{a: "chromium" for a in CHROMIUM_ADLARI}}
+CHROMIUM_GERI_YUKLE = "--restore-last-session"  # user.js'in eşi: son oturum (sekmeler) geri gelir
+CHROMIUM_YEDEK_ONEK = "deskhand-yedek-"  # Sessions/ içinde: yeniden başlatma öncesi oturum dosyasının kopyası
 _KAFES_RX = re.compile(r"/[A-Za-z0-9_.@:/\\-]+")
 _GERI_YUKLE = 'user_pref("browser.sessionstore.resume_session_once", true);  // deskhand bellek bekçisi\n'
 _KAPALI = frozenset(("kapali", "kapalı", "false", "0", "no", "off", "hayir", "hayır"))
@@ -270,6 +275,12 @@ def _neden_metni(neden: str) -> str:
     return metin + (f" ({ayrinti.strip()})" if ayrinti.strip() else "")
 
 
+def _tur_ortak(kopyalar) -> str | None:
+    """Bekleyen kayıtların hepsi aynı tarayıcı ailesindense o (ileti markası), değilse None (Firefox metni)."""
+    turler = {k.get("tarayici") for k in (kopyalar or []) if isinstance(k, dict)}
+    return turler.pop() if len(turler) == 1 else None
+
+
 def _bu_masaustu(olay, d: dict) -> TypeGuard[dict]:
     return isinstance(olay, dict) and olay.get("kimlik", d.get("kimlik")) == d.get("kimlik")
 
@@ -292,40 +303,58 @@ def uyari_metni(ad: str | None = None, d: dict | None = None) -> str | None:
         parcalar.append(u)
     b = kayit.get("bekleyen")
     if _bu_masaustu(b, d) and (_taze(b, simdi, BEKLEYEN_AZAMI_SN) or _is_canli(b)):
-        parcalar.append(_("Firefox bellek için yeniden başlıyor; birkaç saniye bekleyip yeniden gözlem yapın (pencere "
-                          "kimlikleri değişecek)"))
+        parcalar.append(_marka(_("Firefox bellek için yeniden başlıyor; birkaç saniye bekleyip yeniden gözlem yapın (pencere "
+                          "kimlikleri değişecek)"), _tur_ortak(b.get("kopyalar"))))
     olay = kayit.get("son_yeniden_olay")
     if _bu_masaustu(olay, d) and _taze(olay, simdi, OLAY_BILDIR_SN):
-        parcalar.append(_("bellek için Firefox {saat} saatinde yeniden başlatıldı ({once} → {sonra} MB, {sekme} sekme "
+        mk = olay.get("tarayici")
+        parcalar.append(_marka(_("bellek için Firefox {saat} saatinde yeniden başlatıldı ({once} → {sonra} MB, {sekme} sekme "
                           "geri yüklendi); pencere kimlikleri değişti, yeniden gözlem yapın").format(
             saat=time.strftime("%H:%M", time.localtime(float(olay["zaman"]))), once=olay.get("once_mb"),
-            sonra=olay.get("sonra_mb"), sekme=olay.get("sekme", "?")))
+            sonra=olay.get("sonra_mb"), sekme=olay.get("sekme", "?")), mk))
         if olay.get("etkisiz"):
-            parcalar.append(_("Firefox yeniden başlatması belleği yeterince azaltmadı ({once} → {sonra} MB); sonraki "
+            parcalar.append(_marka(_("Firefox yeniden başlatması belleği yeterince azaltmadı ({once} → {sonra} MB); sonraki "
                               "yeniden başlatma {dk} dk ertelendi").format(
-                once=olay.get("once_mb"), sonra=olay.get("sonra_mb"), dk=int(float(olay.get("geri_cekilme_sn") or 0) // 60)))
+                once=olay.get("once_mb"), sonra=olay.get("sonra_mb"), dk=int(float(olay.get("geri_cekilme_sn") or 0) // 60)),
+                mk))
     h = kayit.get("son_hata_olay")
     if _bu_masaustu(h, d) and _taze(h, simdi, HATA_BILDIR_SN):
         if h.get("olduruldu"):
-            parcalar.append(_("Firefox yeniden başlatılamadı: {neden}; oturum yedeği: {yedek}").format(
-                neden=_neden_metni(h.get("neden") or ""), yedek=h.get("yedek") or "-"))
+            parcalar.append(_marka(_("Firefox yeniden başlatılamadı: {neden}; oturum yedeği: {yedek}").format(
+                neden=_neden_metni(h.get("neden") or ""), yedek=h.get("yedek") or "-"), h.get("tarayici")))
         else:
-            parcalar.append(_("Firefox bellek için yeniden başlatılmadı: oturum kurtarma dosyası yok ya da bayat ({yol}); "
-                              "sekmeler kaybolmasın diye Firefox'a dokunulmadı").format(yol=h.get("yedek") or "-"))
+            parcalar.append(_marka(_("Firefox bellek için yeniden başlatılmadı: oturum kurtarma dosyası yok ya da bayat ({yol}); "
+                              "sekmeler kaybolmasın diye Firefox'a dokunulmadı").format(yol=h.get("yedek") or "-"),
+                h.get("tarayici")))
     return "; ".join(parcalar) or None
 
 
 # ---------------------------------------------------------------- tarayıcı başlatma kaydı
 
+def tarayici_turu(argv) -> str | None:
+    """argv'nin tarayıcı ailesi: "firefox" | "chromium" | None (TARAYICI_ADLARI; argv[0]'ın dosya adı)."""
+    return TARAYICI_ADLARI.get(os.path.basename(str(argv[0]))) if argv else None
+
+
 def _firefox_mi(argv) -> bool:
-    return bool(argv) and os.path.basename(str(argv[0])) in FIREFOX_ADLARI
+    """Yeniden başlatılabilir tarayıcı mı (adı eski: Firefox ya da DH-TUR2'den beri Chromium ailesi)."""
+    return tarayici_turu(argv) is not None
 
 
 def _profil(argv) -> str | None:
-    for i, a in enumerate(argv[:-1]):
-        if a in ("--profile", "-profile"):
+    """Profil dizini: Firefox --profile/-profile X; Chromium --user-data-dir=X (ya da --user-data-dir X)."""
+    for i, a in enumerate(argv):
+        a = str(a)
+        if a.startswith("--user-data-dir="):
+            return a.split("=", 1)[1]
+        if a in ("--profile", "-profile", "--user-data-dir") and i + 1 < len(argv):
             return argv[i + 1]
     return None
+
+
+def _marka(metin: str, tarayici: str | None) -> str:
+    """Kullanıcı iletisindeki tarayıcı adı (iletiler Firefox adıyla yazılı; marka adı çevrilmez → her dilde geçerli)."""
+    return metin.replace("Firefox", "Chromium") if tarayici == "chromium" else metin
 
 
 def _kayit_yolu(calisma: str) -> str:
@@ -414,7 +443,8 @@ def _argv(pid: int) -> list[str]:
 def firefox_ana_pidleri(cg: str, kopya: str) -> list[int]:
     """Kafesteki, bu kopyayla çalışan ANA Firefox süreçleri (içerik süreçleri -contentproc hariç)."""
     gercek = os.path.realpath(kopya)
-    return [p for p in _kafes_pidleri(cg) if _firefox_mi(a := _argv(p)) and "-contentproc" not in a
+    return [p for p in _kafes_pidleri(cg) if _firefox_mi(a := _argv(p))
+            and not any(x == "-contentproc" or x.startswith("--type=") for x in a)  # içerik/alt süreç değil
             and os.path.realpath(_profil(a) or "/") == gercek]
 
 
@@ -475,13 +505,47 @@ def _kurtarma_sekme(kopya: str) -> int | None:
         return None
 
 
-def kurtarma_denetle(kopya: str, ana_pid: list[int]) -> tuple[bool, int | None]:
-    """Öldürmeden ÖNCE: kurtarma dosyası var, çözülüyor, pencere içeriyor ve şu anki ana Firefox açıldıktan sonra
-    yazılmış mı? → (taze mi, sekme sayısı)."""
+def _chromium_oturum_yolu(kopya: str) -> str:
+    """Chromium'un EN SON yazdığı oturum dosyası (<profil>/Default/Sessions/Session_*; SNSS biçimi); yoksa beklenen
+    dizin (uyarıda gösterilir)."""
+    dizin = os.path.join(kopya, "Default", "Sessions")
     try:
-        mt = os.path.getmtime(_kurtarma_yolu(kopya))
+        adaylar = [os.path.join(dizin, a) for a in os.listdir(dizin) if a.startswith("Session_")]
+        adaylar = [a for a in adaylar if os.path.isfile(a) and not os.path.islink(a)]
+    except OSError:
+        adaylar = []
+    return max(adaylar, key=os.path.getmtime) if adaylar else dizin
+
+
+def _chromium_oturum_gecerli(yol: str) -> bool:
+    """SNSS imzalı, boş olmayan oturum dosyası mı (sekme sayısı ayrıştırılmaz: biçim kararlı değil)."""
+    try:
+        with open(yol, "rb") as f:
+            bas = f.read(8)
+        return bas[:4] == b"SNSS" and os.path.getsize(yol) > 8
+    except OSError:
+        return False
+
+
+def kurtarma_yolu(kopya: str, tur: str | None = "firefox") -> str:
+    """Tarayıcının oturum geri yükleme dosyası: Firefox recovery.jsonlz4, Chromium son Session_* dosyası."""
+    return _chromium_oturum_yolu(kopya) if tur == "chromium" else _kurtarma_yolu(kopya)
+
+
+def kurtarma_denetle(kopya: str, ana_pid: list[int], tur: str | None = "firefox") -> tuple[bool, int | None]:
+    """Öldürmeden ÖNCE: kurtarma dosyası var, çözülüyor, pencere içeriyor ve şu anki ana tarayıcı açıldıktan sonra
+    yazılmış mı? → (taze mi, sekme sayısı). Chromium: son Session_* dosyası SNSS imzalı ve bu süreç açıldıktan sonra
+    yazılmış (sekme sayısı bilinmez: None)."""
+    yol = kurtarma_yolu(kopya, tur)
+    try:
+        mt = os.path.getmtime(yol)
     except OSError:
         return False, None
+    if tur == "chromium":
+        if not _chromium_oturum_gecerli(yol):
+            return False, None
+        baslar = [b for b in (_baslangic_epoch(p) for p in ana_pid) if b is not None]
+        return bool(baslar) and mt >= max(baslar) - 1, None
     sekme = _kurtarma_sekme(kopya)
     if sekme is None:
         return False, None
@@ -502,18 +566,22 @@ def firefox_yeniden_baslat(d: dict, g: dict, son: float | None = None) -> dict:
     temel = {"kopya": kopya, "olduruldu": False}
     if not kopya or not os.path.isdir(kopya) or os.path.islink(kopya) or not cg:
         return {**temel, "ok": False, "neden": "kopya-yok"}
+    tur = tarayici_turu(g.get("argv") or [])
+    temel["tarayici"] = tur
     ana_pid = firefox_ana_pidleri(cg, kopya)
     if not ana_pid:
         return {**temel, "ok": False, "neden": "firefox-yok"}
-    taze, sekme = kurtarma_denetle(kopya, ana_pid)
+    taze, sekme = kurtarma_denetle(kopya, ana_pid, tur)
+    kurtarma = kurtarma_yolu(kopya, tur)
     if not taze:
-        return {**temel, "ok": False, "neden": "kurtarma-yok", "yedek": _kurtarma_yolu(kopya)}
-    yedek = os.path.join(kopya, "sessionstore-backups", YEDEK_AD)
+        return {**temel, "ok": False, "neden": "kurtarma-yok", "yedek": kurtarma}
+    yedek = (os.path.join(os.path.dirname(kurtarma), CHROMIUM_YEDEK_ONEK + os.path.basename(kurtarma))
+             if tur == "chromium" else os.path.join(kopya, "sessionstore-backups", YEDEK_AD))
     try:
-        shutil.copyfile(_kurtarma_yolu(kopya), yedek)
+        shutil.copyfile(kurtarma, yedek)
         os.chmod(yedek, 0o600)
     except OSError:
-        return {**temel, "ok": False, "neden": "kurtarma-yok", "yedek": _kurtarma_yolu(kopya)}
+        return {**temel, "ok": False, "neden": "kurtarma-yok", "yedek": kurtarma}
     kopya_bekcisi.koru_isaretle(kopya, "bellek-yeniden")  # bekleyen/başarısız yeniden başlatmanın kopyası silinmesin
     tut = os.open(kopya, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)  # ek güvence: bekçi kopyayı kullanımda sayar
     sonuc = {**temel, "olduruldu": True, "sekme": sekme, "yedek": yedek}
@@ -531,6 +599,13 @@ def firefox_yeniden_baslat(d: dict, g: dict, son: float | None = None) -> dict:
                     pass
             _bekle(lambda: not any(_canli(p) for p in ana_pid), KAPANIS_AZAMI_SN - KAPANIS_SN)
         _bekle(lambda: not _canli(int(g.get("pid") or 0), g.get("bas")), ESKI_BEKLE_SN)
+        argv = list(g.get("argv") or [])
+        if tur == "chromium":  # user.js'in eşi: son oturumu geri yükle (profil aynı kopya: girişler/çerezler kalır)
+            if CHROMIUM_GERI_YUKLE not in argv:
+                argv.append(CHROMIUM_GERI_YUKLE)
+            p = masaustu.baslat(argv, g.get("env") or None, kopya=kopya,
+                                ev=tuple(tuple(x) if isinstance(x, list) else x for x in (g.get("ev") or ())))
+            return {**sonuc, "ok": None, "pid": p.pid, "popen": p}
         uj = os.path.join(kopya, "user.js")
         try:
             with open(uj, encoding="utf-8") as f:
@@ -632,15 +707,17 @@ def _hata_kaydet(ad: str | None, d: dict, kayit: dict, s: dict, simdi: float) ->
     from .gunluk import gunluk
     onceki = kayit.get("son_hata_olay")
     yeni = {"zaman": time.time(), "mono": simdi, "neden": s.get("neden"), "yedek": s.get("yedek"),
-            "olduruldu": bool(s.get("olduruldu")), "kimlik": d.get("kimlik")}
+            "olduruldu": bool(s.get("olduruldu")), "kimlik": d.get("kimlik"), "tarayici": s.get("tarayici")}
     ayni = isinstance(onceki, dict) and all(onceki.get(k) == yeni[k] for k in ("neden", "yedek", "olduruldu", "kimlik"))
     kayit["son_hata_olay"] = yeni
     if s.get("olduruldu"):
-        gunluk(f"bellek | {ad or 'varsayılan'} Firefox yeniden başlatılamadı: {s.get('neden')}; oturum yedeği: "
+        gunluk(f"bellek | {ad or 'varsayılan'} {_marka('Firefox', s.get('tarayici'))} yeniden başlatılamadı: "
+               f"{s.get('neden')}; oturum yedeği: "
                f"{s.get('yedek')} (kopya korunuyor)")
     elif not ayni:
-        gunluk(f"bellek | {ad or 'varsayılan'} Firefox yeniden başlatılmadı: oturum kurtarma dosyası yok ya da bayat "
-               f"({s.get('yedek')}); Firefox'a dokunulmadı")
+        mk = _marka("Firefox", s.get("tarayici"))
+        gunluk(f"bellek | {ad or 'varsayılan'} {mk} yeniden başlatılmadı: oturum kurtarma dosyası yok ya da bayat "
+               f"({s.get('yedek')}); {mk}'a dokunulmadı")
 
 
 def _sonuclandir(ad: str | None, d: dict, durum: dict, sonuclar: list[tuple[dict, dict]], simdi: float,
@@ -681,7 +758,9 @@ def _sonuclandir(ad: str | None, d: dict, durum: dict, sonuclar: list[tuple[dict
             once_k, sonra_k = durum.get("kullanim", durum["current"]), sonra.get("kullanim", sonra["current"])
             etkisiz = once_k <= 0 or (once_k - sonra_k) / once_k < ETKISIZ_ORAN
             olay = {"zaman": time.time(), "mono": simdi, "once_mb": once_k // mb, "sonra_mb": sonra_k // mb,
-                    "kimlik": d.get("kimlik"), "sekme": sum(s.get("sekme") or 0 for s in basarili), "etkisiz": etkisiz}
+                    "kimlik": d.get("kimlik"), "sekme": (sum(s.get("sekme") or 0 for s in basarili)
+                              if all(s.get("sekme") is not None for s in basarili) else "?"), "etkisiz": etkisiz,
+                    "tarayici": _tur_ortak(basarili)}
             gc = 0.0
             if etkisiz:
                 gc = min(GERI_CEKILME_AZAMI_SN, max(GERI_CEKILME_ILK_SN, 2 * float(kayit.get("geri_cekilme_sn") or 0)))
@@ -691,7 +770,8 @@ def _sonuclandir(ad: str | None, d: dict, durum: dict, sonuclar: list[tuple[dict
                 kayit.pop("geri_cekilme_sn", None)
                 kayit.pop("geri_cekilme_bitis", None)
             kayit["son_yeniden_olay"] = olay
-            gunluk(f"bellek | {ad or 'varsayılan'} Firefox yeniden başlatıldı: {olay['once_mb']} → {olay['sonra_mb']} MB "
+            gunluk(f"bellek | {ad or 'varsayılan'} {_marka('Firefox', olay['tarayici'])} yeniden başlatıldı: "
+                   f"{olay['once_mb']} → {olay['sonra_mb']} MB "
                    f"(anon+shmem), {olay['sekme']} sekme" + (f"; ETKİSİZ (<%{round(ETKISIZ_ORAN * 100)} düşüş), sonraki "
                                                                f"yeniden başlatma {int(gc // 60)} dk ertelendi"
                                                                if etkisiz else ""))
@@ -761,7 +841,7 @@ def _yeniden(ad: str | None, d: dict, durum: dict, kayit: dict, kayitlar: list[d
     if bekleyen:
         kayit["bekleyen"] = {"mono": simdi, "id": bid, "kimlik": d.get("kimlik"), "once_current": durum["current"],
                              "once_kullanim": durum.get("kullanim", durum["current"]),
-                             "kopyalar": [{k: s.get(k) for k in ("kopya", "pid", "sekme", "yedek", "olduruldu")}
+                             "kopyalar": [{k: s.get(k) for k in ("kopya", "pid", "sekme", "yedek", "olduruldu", "tarayici")}
                                           for _g, s in bekleyen]}
     with _KILIT:
         _durum_yaz(ad, kayit)

@@ -3131,17 +3131,25 @@ BOSTA_DENETIM_SN = 60.0
 def bosta_denetle() -> bool:
     """0.9.1: bu oturumun SAHİBİ olduğu görünmez masaüstü [masaustu] bosta_kapat_dk dakikadır kullanılmadıysa kapat
     (masaustu.bosta_kapat: Devral / bekleyen onay / görev kipinde kapatmaz; günlüğe yazar). Araç çalışırken (KILIT tutulu)
-    bu tur atlanır. → kapatıldı mı."""
-    if not (_MASA["bagli"] and _MASA["sahip"]):
-        return False
+    bu tur atlanır. DH-TUR2: ayrıca sahibi YAŞAMAYAN boştaki masaüstlerini (sahibi MCP süreci gitmiş; kimse
+    kapatmıyordu) devralıp kapatır (masaustu.sahipsiz_bosta_kapat: aynı kurallar + seçim kilidi). → kapatıldı mı."""
     if not KILIT.acquire(blocking=False):
         return False
+    kapandi = False
     try:
-        with masalar.masa_sabit(_MASA["ad"]):
-            return masaustu.bosta_kapat(_MASA["ad"])
-    except Exception as e:  # noqa: BLE001 - bekçi asla sunucuyu düşürmesin
-        log.warning("boştaki masaüstü denetimi: %s", e)
-        return False
+        kendi = _MASA["bagli"] and _MASA["sahip"]
+        if kendi:
+            try:
+                with masalar.masa_sabit(_MASA["ad"]):
+                    kapandi = masaustu.bosta_kapat(_MASA["ad"])
+            except Exception as e:  # noqa: BLE001 - bekçi asla sunucuyu düşürmesin
+                log.warning("boştaki masaüstü denetimi: %s", e)
+        try:
+            kapandi = bool(masaustu.sahipsiz_bosta_kapat(haric=(_MASA["ad"],) if kendi else (),
+                                                         devralan=f"MCP {os.getpid()}")) or kapandi
+        except Exception as e:  # noqa: BLE001
+            log.warning("sahipsiz masaüstü denetimi: %s", e)
+        return kapandi
     finally:
         KILIT.release()
 

@@ -795,7 +795,10 @@ try:
                 r1.get("status") == "opened" and r2.get("status") == "opened" and kimlik(r1) != kimlik(r2) and
                 len(ana1) == 1 and ana2 == ana1 and not ana_surecler("firefox", k2) and
                 (m2 - m0) < 2 * (m1 - m0), f"{r1} {r2} ana {ana1}/{ana2} MB {m0:.0f}/{m1:.0f}/{m2:.0f}")
-        kontrol("ikinci pencere F1 kaydında (tek kayıt, ilk kopya, aynı süreç; 2. kopya silindi)",
+        # DH-TUR2: Chromium da kaydedilir (bellek bekçisi onu da yeniden başlatır); burada yalnız Firefox kayıtları
+        kayit1, kayit2 = ([g for g in k_ if bellek_bekcisi.tarayici_turu(g.get("argv")) == "firefox"]
+                          for k_ in (kayit1, kayit2))
+        kontrol("ikinci pencere F1 kaydında (tek Firefox kaydı, ilk kopya, aynı süreç; 2. kopya silindi)",
                 len(kayit2) == 1 and kayit2 == kayit1 and os.path.realpath(kayit2[0]["kopya"]) == os.path.realpath(k1)
                 and bellek_bekcisi.firefox_ana_pidleri(d["cgroup"], k1) == ana2 and not os.path.exists(k2),
                 f"{kayit1} → {kayit2}; k2 var: {os.path.exists(k2)}")

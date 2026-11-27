@@ -332,7 +332,9 @@ try:
     kontrol("3h: MCP bekçisi boştaki kendi masaüstünü kapatır", mcp_sunucu.bosta_denetle() and durdurulan == [""])
     mcp_sunucu._MASA.update(sahip=False)
     durdurulan.clear()
+    masalar.sahiplen("", pid=os.getppid(), ebeveyn=1)  # paylaşılan: CANLI başka sahip (DH-TUR2: sahipsiz olsa devralınırdı)
     kontrol("3h: sahibi olmadığı (paylaşılan) masaüstüne dokunmaz", not mcp_sunucu.bosta_denetle() and durdurulan == [])
+    os.remove(masalar.sahip_yolu(""))
     mcp_sunucu._MASA.update(bagli=False)
 finally:
     masaustu.durum, masaustu.masaustu_durdur, masaustu.devral_var = gercek

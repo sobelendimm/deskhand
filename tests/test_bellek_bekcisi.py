@@ -720,6 +720,110 @@ kontrol("D3: KAPANIS_PAYI_SN varsayılanı 20 sn", "KAPANIS_PAYI_SN = 20.0" in
         open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "deskhand", "bellek_bekcisi.py"),
              encoding="utf-8").read())
 
+# ---------------------------------------------------------------- DH-TUR2: Chromium da aynı nazik yolla
+print("== DH-TUR2: Chromium ailesi")
+kontrol("C0: tarayıcı adları tek listede (Firefox + Chromium ailesi)",
+        all(bb.tarayici_turu([a]) == "chromium" for a in ("chromium", "/usr/lib/chromium/chromium", "google-chrome",
+                                                          "google-chrome-stable", "chrome"))
+        and bb.tarayici_turu(["firefox"]) == "firefox" and bb.tarayici_turu(["kwrite"]) is None)
+CAGRILAN = []
+
+
+def sahte_chromium(ky, ek=(), tur=None):
+    argv = ["chromium", "-c", SAHTE_KOD, f"--user-data-dir={ky}", *ek] + ([f"--type={tur}"] if tur else [])
+    p = subprocess.Popen(argv, executable=sys.executable, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+    threading.Thread(target=p.wait, daemon=True).start()
+    SUREC.append(p)
+    with open(os.path.join(CGD, "cgroup.procs"), "a") as f:
+        f.write(f"{p.pid}\n")
+    for _ in range(100):
+        if any(a.startswith("--user-data-dir") for a in bb._argv(p.pid)):
+            break
+        time.sleep(0.01)
+    return p
+
+
+def sahte_baslat_c(argv, env=None, kopya=None, ev=(), **k):
+    CAGRILAN.append(list(argv))
+    return sahte_chromium(kopya, [a for a in argv if a == bb.CHROMIUM_GERI_YUKLE])
+
+
+def oturum_yaz(ky, eski=False):
+    yol = os.path.join(ky, "Default", "Sessions", "Session_13370000000000000")
+    os.makedirs(os.path.dirname(yol), exist_ok=True)
+    with open(yol, "wb") as f:
+        f.write(b"SNSS\x03\x00\x00\x00" + b"\x00" * 64)
+    if eski:
+        os.utime(yol, (time.time() - 3600, time.time() - 3600))
+    return yol
+
+
+def kurulum_c(oturum=True, eski=False):
+    sifirla()
+    with open(os.path.join(CGD, "cgroup.procs"), "w"):
+        pass
+    _say[0] += 1
+    ky = os.path.join(OTURUM_KOK, f"chromium-20261127-12{_say[0]:04d}-4242-{os.urandom(3).hex()}")
+    os.makedirs(ky, mode=0o700)
+    p = sahte_chromium(ky)
+    r = sahte_chromium(ky, tur="renderer")  # alt süreç: ana sayılmaz, ayrıca öldürülmez
+    time.sleep(0.05)
+    if oturum:
+        oturum_yaz(ky, eski)
+    argv = ["chromium", f"--user-data-dir={ky}", "--force-renderer-accessibility"]
+    kayit_yaz([{"argv": argv, "env": {}, "kopya": ky, "ev": [], "pid": p.pid, "bas": ao.surec_baslangic(p.pid)}])
+    cg_yaz(0.9)
+    SON["t"] = time.time() - 1000
+    return ky, p, r
+
+
+masaustu.baslat = sahte_baslat_c
+os.unlink(os.path.join(CALISMA, bb.KAYIT_DOSYA))
+kc = tempfile.mkdtemp(prefix="kopya-", dir=_yalitim.GECICI)
+bb.tarayici_kaydet(D, ["chromium", f"--user-data-dir={kc}", "--force-renderer-accessibility", "https://example.org"],
+                   {}, kc, (), os.getpid())
+k = bb._kayitlar(CALISMA)
+kontrol("C1: kopyalı Chromium kaydedilir (--user-data-dir = kopya; adres hariç)",
+        len(k) == 1 and k[0]["argv"] == ["chromium", f"--user-data-dir={kc}", "--force-renderer-accessibility"], k)
+ky, p0, r0 = kurulum_c()
+kontrol("C2: ana süreç tespiti: --type= alt süreci ana sayılmaz", bb.firefox_ana_pidleri(CG, ky) == [p0.pid],
+        (bb.firefox_ana_pidleri(CG, ky), p0.pid, r0.pid))
+SAHTE["mod"] = "normal"
+CAGRILAN.clear()
+s = bb.bakim(AD, simdi=time.time())
+bitir()
+bb._ONBELLEK.clear()
+u = bb.uyari_metni(AD) or ""
+yeni = [q for q in SUREC if q not in (p0, r0) and q.poll() is None]
+kontrol("C3: Chromium boşta + kafes ≥ %85 → eski ana süreç öldü, aynı kopyayla --restore-last-session ile açıldı",
+        olu(p0) and len(CAGRILAN) == 1 and bb.CHROMIUM_GERI_YUKLE in CAGRILAN[0]
+        and f"--user-data-dir={ky}" in CAGRILAN[0] and len(yeni) == 1, (s, CAGRILAN))
+kontrol("C3: oturum dosyası yedeklendi, ileti Chromium der (Firefox demez)",
+        any(a.startswith(bb.CHROMIUM_YEDEK_ONEK) for a in os.listdir(os.path.join(ky, "Default", "Sessions")))
+        and "Chromium" in u and "yeniden başlatıldı" in u and "Firefox" not in u, u)
+for q in yeni + [r0]:
+    q.kill()
+ky, p0, r0 = kurulum_c(eski=True)
+CAGRILAN.clear()
+bb.bakim(AD, simdi=time.time())
+bitir()
+bb._ONBELLEK.clear()
+u = bb.uyari_metni(AD) or ""
+kontrol("C4: oturum dosyası bu Chromium açılmadan önceden kalma → öldürme yok, uyarı Chromium der",
+        p0.poll() is None and CAGRILAN == [] and "Chromium bellek için yeniden başlatılmadı" in u, u)
+p0.kill()
+r0.kill()
+ky, p0, r0 = kurulum_c(oturum=False)
+CAGRILAN.clear()
+bb.bakim(AD, simdi=time.time())
+bitir()
+kontrol("C4: oturum dosyası yok → öldürme yok (profil/sekme kaybı riski alınmaz)", p0.poll() is None and CAGRILAN == [])
+p0.kill()
+r0.kill()
+masaustu.baslat = sahte_baslat
+sifirla()
+
 # ---------------------------------------------------------------- ABM-KARAR değerleri
 kontrol("ABM-KARAR (a): varsayılan MemoryMax 8G, DESKHAND_SANAL_BELLEK ezer", ao.VARSAYILAN_BELLEK == "8G" and (
     os.environ.__setitem__("DESKHAND_SANAL_BELLEK", "3G") or ao._bellek_siniri() == "3G"))

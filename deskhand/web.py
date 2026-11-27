@@ -248,6 +248,10 @@ def _baglam(k, islem="tara"):
         ekran, pencere = yol.toplu([_m(bus, cerceve, BILESEN, "GetExtents", "u", (SCREEN,)),
                                     _m(bus, cerceve, BILESEN, "GetExtents", "u", (WINDOW,))])
         cozum = konum_coz(geo, _deg(ekran), _deg(pencere))
+        if isinstance(kardes, list) and kardes:  # D-1: çok pencerede okumada da çerçeve ↔ pencere geometrisi şart
+            from .erisim import cerceve_geometri_denetle
+            olcek = au.masaustu_olcegi() if hasattr(au, "masaustu_olcegi") else 1
+            cerceve_geometri_denetle(geo, _deg(ekran), _deg(pencere), kardes, baslik, int(olcek or 1))
         if cozum:
             return au, yol, bus, cerceve, cozum[0], cozum[1], cozum[2]
         if sanal:  # X11 tek çerçeve: ekran koordinatı kesin (geometri eşleşmese de pencere piksel dönüşümü bellidir)

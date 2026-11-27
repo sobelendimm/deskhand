@@ -670,7 +670,7 @@ def otomatik_baslik_kilidi(a, au) -> bool:
         if not web.tarayici_sinifi_mi(au.sinif(k) or ""):
             return False
     except Dur:
-        return False
+        pass  # DH-TUR2: sınıf okunamadı = tarayıcı olabilir → kilit (kapalı-başarısız; en kötü: Dur 4, yanlış sayfa değil)
     b = au.baslik(k)
     if not b:
         return False
