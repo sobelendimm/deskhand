@@ -432,6 +432,12 @@ def bosta_neden(ad: str | None = None, simdi: float | None = None) -> str | None
         return "masaustu-yok"
     if d.get("gorev"):
         return "gorev"
+    try:  # DH-TUR2: kullanıcı DUR dedi → hiçbir şeye dokunulmaz (kapanış da)
+        from .hata import dur_dosyasi
+        if os.path.exists(dur_dosyasi()):
+            return "dur"
+    except Exception:  # noqa: BLE001 - karar verilemedi: kapatma
+        return "dur?"
     if devral_var(devral_yolu(ad)):
         return "devral"  # insan masaüstünde çalışıyor (ör. devir sırasında)
     try:
@@ -453,8 +459,9 @@ def bosta_neden(ad: str | None = None, simdi: float | None = None) -> str | None
     return None
 
 
-def bosta_kapat(ad: str | None = None, simdi: float | None = None) -> bool:
-    """Boşta ise masaüstünü kapat ve günlüğe yaz. → kapatıldı mı."""
+def bosta_kapat(ad: str | None = None, simdi: float | None = None, devralan: str | None = None) -> bool:
+    """Boşta ise masaüstünü kapat ve günlüğe yaz. devralan: sahipsiz masaüstünü kapatan (sahipsiz_bosta_kapat; kapanış
+    bildirim akışına da yazılır). → kapatıldı mı."""
     ad = masalar.secili() if ad is None else masalar.dogrula(ad, ayrilmis_serbest=True)
     try:  # bellek bakımı (boşta: memory.reclaim / Firefox geri dönüşümü); masaüstünü kapatmaz, hatası kapanışı durdurmaz
         from . import bellek_bekcisi
@@ -469,8 +476,81 @@ def bosta_kapat(ad: str | None = None, simdi: float | None = None) -> bool:
     if kapandi:
         from .gunluk import gunluk
         dk = int(((time.time() if simdi is None else simdi) - son) // 60)
-        gunluk(f"masaustu | {ad or 'varsayılan'} {dk} dk boşta kaldı: kapatıldı (sonraki kullanımda yeniden açılır)")
+        if devralan is None:
+            gunluk(f"masaustu | {ad or 'varsayılan'} {dk} dk boşta kaldı: kapatıldı (sonraki kullanımda yeniden açılır)")
+        else:
+            gunluk(f"masaustu | {ad or 'varsayılan'} sahipsiz, {dk} dk boşta kaldı: {devralan} devralıp kapattı "
+                   f"(sonraki kullanımda yeniden açılır)")
+            _bildirim_ekle("masaustu-bosta-kapatildi", _("Görünmez masaüstü kapatıldı"),
+                           _("'{ad}' masaüstünün sahibi yoktu ve {dk} dk boştaydı; kapatıldı (sonraki kullanımda yeniden "
+                             "açılır)").format(ad=ad or _("varsayılan"), dk=dk), ad=ad, devralan=devralan)
     return kapandi
+
+
+def _bildirim_ekle(olay: str, baslik: str, govde: str, **ek) -> None:
+    """Deskhand'in kendi olayını bildirim akışına (bildirimler.jsonl; arka plan uygulamalarının yakalanan bildirimleriyle
+    aynı biçim, uygulama="deskhand") yaz. Hata sessiz: kayıt asla işlemi durdurmaz."""
+    from . import bildirim_yakalayici
+    satir = {"zaman": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "id": 0, "uygulama": "deskhand", "baslik": baslik,
+             "govde": govde, "olay": olay, **ek}
+    try:
+        bildirim_yakalayici.yaz(bildirim_yolu(), satir)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@contextlib.contextmanager
+def _secim_kilidi_dene():
+    """Masaüstü seçim kilidini (MCP masa_bagla ile aynı dosya) BEKLEMEDEN almayı dene → bağlam: alındı mı."""
+    try:
+        os.makedirs(masalar.masa_koku(), mode=0o700, exist_ok=True)
+        kf = open(os.path.join(masalar.masa_koku(), ".secim.lock"), "w")  # noqa: SIM115 - aşağıda kapanır
+    except OSError:
+        yield False
+        return
+    try:
+        try:
+            fcntl.flock(kf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            alindi = True
+        except OSError:
+            alindi = False
+        yield alindi
+    finally:
+        kf.close()
+
+
+def sahipsiz_bosta_kapat(simdi: float | None = None, haric: tuple = (), devralan: str | None = None) -> list[str]:
+    """DH-TUR2: sahibi YAŞAMAYAN (sahip kaydı yok, PID ölmüş ya da başka sürece geçmiş) ve [masaustu] bosta_kapat_dk'yı
+    aşmış masaüstlerini devralıp kapat (sahibi MCP süreci gidince kimse kapatmıyordu). Kurallar bosta_kapat ile AYNI
+    (Devral, bekleyen onay, görev kipi, DUR, kullanımda → kapatmaz). Yarış: masaüstü seçim kilidi (masa_koku/.secim.lock;
+    MCP masa_bagla da onu tutar) BEKLEMEDEN alınır, alınamazsa bu tur atlanır; kilit altında sahiplik yeniden denetlenir
+    → iki devralan tek kapanış, devralma ile yeni sahiplenme çakışmaz. haric: atlanacak adlar. → kapatılan adlar."""
+    devralan = devralan or f"pid {os.getpid()}"
+    kapanan: list[str] = []
+    try:
+        adlar = masalar.adlar()
+    except OSError:
+        return kapanan
+    for ad in adlar:
+        if ad in haric or masalar.sahip_oku(ad) is not None or durum_oku(ad) is None:
+            continue
+        with _secim_kilidi_dene() as alindi:
+            if not alindi:
+                continue  # başka bir süreç devralıyor ya da masaüstü seçiyor: sonraki tur
+            if masalar.sahip_oku(ad) is not None or durum_oku(ad) is None:
+                continue  # arada sahiplenildi ya da kapatıldı
+            temizle = ad != "" and (oto_mu(ad) or masalar.cli_mu(ad))
+            try:
+                with masalar.masa_sabit(ad):
+                    kapandi = bosta_kapat(ad, simdi, devralan=devralan)
+            except Dur:
+                continue
+            if kapandi:
+                masalar.birak(ad)  # ölü sahibin kaydı (canlı sahipse birak dokunmaz)
+                if temizle:
+                    masalar.kok_sil(ad)
+                kapanan.append(ad)
+    return kapanan
 
 
 def xvfb_karsi_denetle(g: dict) -> None:
@@ -1447,6 +1527,10 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     try:
         ad = masalar.secili() if a.ad is None else masalar.dogrula(a.ad)
+        try:  # DH-TUR2: sahibi yaşamayan boştaki masaüstlerini devral + kapat (açılacak olan hariç)
+            sahipsiz_bosta_kapat(haric=(ad,) if a.islem == "baslat" else (), devralan="CLI")
+        except Exception:  # noqa: BLE001 - süpürme asla komutu düşürmesin
+            pass
         if a.islem == "liste":
             s = liste()
             if a.json:
