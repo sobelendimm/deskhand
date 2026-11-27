@@ -1242,8 +1242,65 @@ def denetle(k, desen):
         return
     a = au.aktif()  # boşsa doğrulanamadı → a != k → durur (güvenli taraf)
     if a != k:
-        raise Dur(3, _("aktif pencere değişti → {baslik}; girdi gönderilmedi").format(baslik=repr(au.baslik(a))))
+        e = hedef_kayip_hatasi(k, a)
+        raise Dur(e.kod, _("{neden}; girdi gönderilmedi").format(neden=e.mesaj))
     pencere_denetle(k, desen)
+
+
+def hedef_kayip_hatasi(k, a) -> Dur:
+    """Hedef `k` etkin değil (etkin: `a`): pencere kapandıysa 8 "hedef pencere kapandı" (aynı başlıklı kardeşin öne
+    geçmesi "aktif değişti" diye yanıltmasın), yoksa 3 "aktif pencere değişti → başlık". İleti "girdi gönderilmedi"
+    EKİ TAŞIMAZ: çağıran ekler (yazı ortasında önceki harfler gitmiştir). Yalnız ret yolunda ek sorgu yapar."""
+    au = sec()
+    try:
+        au.geometri(k)
+    except Dur as e:
+        if e.kod == 8:
+            return Dur(8, _("hedef pencere kapandı"))
+    try:
+        b = au.baslik(a) if a else ""
+    except Dur:
+        b = "?"
+    return Dur(3, _("aktif pencere değişti → {baslik}").format(baslik=repr(b)))
+
+
+# Kimlik kilidi (B2): kimlik/ref verilen eylem başlığa değil kimliğe kilitlenir; kimliğe ek olarak pencerenin SINIFI
+# eylem başında tutulur (X kimliği yeniden kullanılırsa aynı kimlik başka uygulamaya geçer). İş parçacığına özgü: eylem
+# denetle() çağrıları aynı iş parçacığında; gözcü kimliği (UUID) zaten yoklar.
+_KIMLIK_KILIDI = threading.local()
+
+
+class sinif_kilidi:  # noqa: N801 - bağlam yöneticisi, işlev gibi kullanılır
+    """`with sinif_kilidi(k):` boyunca pencere_denetle(k, …) pencerenin sınıfının eylem başındakiyle aynı olduğunu da
+    denetler (değiştiyse 4). Sınıf okunamaz/boşsa kilit kurulmaz (kimlik + etkin pencere denetimi sürer)."""
+
+    def __init__(self, k):
+        self.k = k
+
+    def __enter__(self):
+        self.onceki = getattr(_KIMLIK_KILIDI, "sinif", None)
+        sinif = None
+        if self.k and self.k != EKRAN:
+            try:
+                sinif = sec().sinif(self.k)
+            except Dur:
+                sinif = None
+        _KIMLIK_KILIDI.sinif = (self.k, sinif) if sinif else None
+        return self
+
+    def __exit__(self, *_a):
+        _KIMLIK_KILIDI.sinif = self.onceki
+        return False
+
+
+def _sinif_kilidi_denetle(k):
+    kilit = getattr(_KIMLIK_KILIDI, "sinif", None)
+    if not kilit or kilit[0] != k:
+        return
+    simdi = sec().sinif(k)
+    if simdi != kilit[1]:
+        raise Dur(4, _("pencere sınıfı değişti: {once} → {simdi} (aynı kimlik başka uygulamanın); girdi "
+                       "gönderilmedi").format(once=repr(kilit[1]), simdi=repr(simdi)))
 
 
 def pencere_denetle(k, desen):
@@ -1258,6 +1315,7 @@ def pencere_denetle(k, desen):
             raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); girdi gönderilmedi").format(
                 baslik=repr(b), desen=desen))
     sinif_denetle(k)
+    _sinif_kilidi_denetle(k)
 
 
 def imlec_alti_denetle(k, px=None, py=None):

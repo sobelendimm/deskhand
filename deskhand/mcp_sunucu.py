@@ -773,7 +773,13 @@ def onayla_ve_yap(arac: str, k: str, yap, ayrinti_ek: str = "", nokta=None):
     nokta: koordinatlı tıklamanın pencere pikseli (onaydan sonra o bölgenin görüntüsü karşılaştırılır).
     Çekirdek onay varsa (guvenlik hassas engelde paneli kendisi sorar): bir eylem = bir onay, burada yeniden
     sorulmaz; red → ToolError. Yoksa: hassas engelde (Dur 10 HASSAS) kilit bırakılır, panelden insan onayı istenir;
-    izin gelirse hedef değişmediyse bir kez onaylı yapılır. İki yolda da beklerken masaüstüne başka girdi gitmez."""
+    izin gelirse hedef değişmediyse bir kez onaylı yapılır. İki yolda da beklerken masaüstüne başka girdi gitmez.
+    Kimlik kilidi: eylem boyunca pencerenin sınıfı da eylem başındakiyle aynı kalmalı (guvenlik.sinif_kilidi)."""
+    with guvenlik.sinif_kilidi(k):
+        return _onayla_ve_yap(arac, k, yap, ayrinti_ek, nokta)
+
+
+def _onayla_ve_yap(arac: str, k: str, yap, ayrinti_ek: str, nokta):
     au = api.arka()
     if _cekirdek_onay_sarmala():
         _ONAY_YEREL.izin = 0
@@ -882,8 +888,11 @@ def _kimlik_mi(arg: str, k: str) -> bool:
 
 
 def baslik_kilidi(arg: str | None, k: str, ref_baslik: str | None = None) -> str | None:
-    """Girdi için başlık kilidi: desen verildiyse o; ref verildiyse ref'in anlık görüntüsündeki başlık (tam; eylem
-    sırasında başlık değişirse durur); kimlik verildiyse pencerenin şu anki başlığı (tam)."""
+    """Girdi için başlık kilidi YALNIZ ajan başlık DESENİ verdiyse: o desen. Kimlik ya da ref verilen eylem başlığa
+    değil KİMLİĞE kilitlenir (→ None: etkin pencere = kimlik denetimi + onayla_ve_yap'ın sınıf kilidi): düzenleyiciler
+    başlığa içerik önizlemesi yazar (KWrite "Başlıksız (d) *"), tam başlık kilidi yazıyı ilk harfte keserdi (ABM-PEN B2).
+    ref'in bağlamı (aynı belge/sayfa) eylemden ÖNCE _ref_coz'da denetlenir. ref_baslik: tam başlık kilidini açıkça
+    isteyen çağıran için (MCP eylem araçları geçirmez)."""
     import re
     if k == EKRAN:
         return None
@@ -891,15 +900,16 @@ def baslik_kilidi(arg: str | None, k: str, ref_baslik: str | None = None) -> str
         return desen_denetimi.denetle(arg)  # ajanın deseni: ReDoS sınırı (aşağıdaki üretilmiş kalıplara uygulanmaz)
     if ref_baslik is not None:
         return "^" + re.escape(ref_baslik) + "$"
-    return degisiklik_toleransli(api.arka().baslik(k))
+    return None
 
 
 _DEGISTI_ISARETI = r"(?:\s*[*●•])?"  # düzenleyicilerin "kaydedilmedi" işareti: "a.txt * — KWrite", "*a.txt", "● a.py"
 
 
 def degisiklik_toleransli(baslik: str) -> str:
-    """Kimlikle verilen pencerenin başlık kilidi: tam başlık, ama sözcük aralarında/başında/sonunda düzenleyicinin
-    "kaydedilmedi" işareti (* ● •) çıkıp kaybolabilir — yoksa ilk harf yazılınca başlık değişir, yazma kesilirdi."""
+    """Tam başlık kalıbı, ama sözcük aralarında/başında/sonunda düzenleyicinin "kaydedilmedi" işareti (* ● •) çıkıp
+    kaybolabilir. MCP eylemleri artık kimliğe kilitlenir (baslik_kilidi → None); bu kalıp başlığa içerik önizlemesi
+    yazan düzenleyicide yetmiyordu (ABM-PEN B2). Başlık kalıbı gereken çağıran için duruyor."""
     import re
     parcalar = [re.escape(p) for p in re.sub(r"(?<=\S)\s*[*●•](?=\s|$)|^[*●•]\s*", " ", baslik).split()]
     if not parcalar:
@@ -1934,9 +1944,9 @@ def click(
     with baglam(desktop, _("tıklama: {hedef} @ {pencere}").format(hedef=text or icon or element or ref or _("koordinat"),
                                                                  pencere=window or _("görüntü"))) as bilgi:
         hata.dur_denetle()
-        ref_o = ref_b = None
+        ref_o = None
         if ref:
-            k, ref_o, ref_b = _ref_coz(ref, window)
+            k, ref_o, _rb = _ref_coz(ref, window)
             if ref_o["kaynak"] == "ocr" and via == "action":
                 raise ToolError("[1] " + _("OCR satırının erişilebilirlik eylemi yok: via='mouse' kullan"))
         elif x is not None or y is not None:
@@ -1954,7 +1964,7 @@ def click(
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
         _sinama_kapisi(k, oge=ref_o, ad=text or element, noktalar=[(wx, wy)] if (x is not None and not ref) else (),
                        rol=(ref_o or {}).get("rol") or role)
-        desen = baslik_kilidi(window if not ref else None, k, ref_b)
+        desen = baslik_kilidi(window if not ref else None, k)
         once = {}
         mod = list(dict.fromkeys(modifiers or ()))
         if ref_o is not None:
@@ -2042,16 +2052,16 @@ def type_text(
         raise ToolError("[1] " + _("window ya da ref gerekli"))
     with baglam(desktop, _("yazı: {pencere}").format(pencere=window or ref)) as bilgi:
         hata.dur_denetle()
-        ref_o = ref_b = None
+        ref_o = None
         if ref:
-            k, ref_o, ref_b = _ref_coz(ref, window)
+            k, ref_o, _rb = _ref_coz(ref, window)
         else:
             k = _pencere_zorunlu(window)
         _SON.k = k
         _sinama_kapisi(k, oge=ref_o, ad=element, klavye=not ref and not element,
                        rol=(ref_o or {}).get("rol"),
                        dizi=dogrulama_sinamasi.metin_dizisi(text + ("\n" if submit else "")))  # submit'in Enter'ı da
-        desen = baslik_kilidi(window if not ref else None, k, ref_b)
+        desen = baslik_kilidi(window if not ref else None, k)
         if element and submit:
             raise ToolError("[1] " + _("submit element ile kullanılamaz (değer doğrudan yazılır; Enter yok)"))
         metin_ = text + ("\n" if submit else "")  # submit = sondaki Enter: yazıyla TEK eylem, tek onay
@@ -2193,9 +2203,9 @@ def scroll(
         raise ToolError("[1] " + _("window ya da ref gerekli"))
     with baglam(desktop, _("kaydırma: {pencere}").format(pencere=window or ref)) as bilgi:
         hata.dur_denetle()
-        ref_o = ref_b = None
+        ref_o = None
         if ref:
-            k, ref_o, ref_b = _ref_coz(ref, window)
+            k, ref_o, _rb = _ref_coz(ref, window)
         else:
             k = _pencere_zorunlu(window)
         _SON.k = k
@@ -2204,7 +2214,7 @@ def scroll(
             if x is None or y is None:
                 raise ToolError("[1] " + _("x ve y birlikte verilmeli"))
             nokta = cekim_noktasi(cekim_coz(shot_id, k), x, y)
-        desen = baslik_kilidi(window if not ref else None, k, ref_b)
+        desen = baslik_kilidi(window if not ref else None, k)
         with kilitli(girdi=True):
             if ref_o is not None:
                 nokta = _ref_nokta(k, ref_o)  # kilit altında, eylemden hemen önce: öge hâlâ aynı yerde mi
@@ -2251,12 +2261,12 @@ def drag(
         raise ToolError("[1] " + _("window ya da ref gerekli"))
     with baglam(desktop, _("sürükleme: {pencere}").format(pencere=window or from_ref or to_ref)) as bilgi:
         hata.dur_denetle()
-        o1 = o2 = ref_b = None
+        o1 = o2 = None
         k = None
         if from_ref:
-            k, o1, ref_b = _ref_coz(from_ref, window)
+            k, o1, _rb = _ref_coz(from_ref, window)
         if to_ref:
-            k2, o2, ref_b = _ref_coz(to_ref, window)
+            k2, o2, _rb = _ref_coz(to_ref, window)
             if k is not None and k2 != k:
                 raise _ref_hatasi("window", _("from_ref ve to_ref aynı pencerede olmalı"))
             k = k2
@@ -2273,7 +2283,7 @@ def drag(
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
         for o_ in (o1, o2):
             _sinama_kapisi(k, oge=o_, noktalar=[p1, p2])
-        desen = baslik_kilidi(window if not (from_ref or to_ref) else None, k, ref_b)
+        desen = baslik_kilidi(window if not (from_ref or to_ref) else None, k)
         once = {}
         noktalar = {}
 
@@ -2616,6 +2626,12 @@ def batch(
         kod = s["error"]["code"]
         if kod in IPUCU:
             metin.append(f"next: {IPUCU[kod]}")
+    if observe_after and s["status"] == "stopped":
+        # Durunca gözlem ATLANIR: _SON.k son ÇÖZÜLEN adımın penceresidir; başarısız adımın hedefi çözülemediyse önceki
+        # adımın penceresi gözlenir ve başarısız adımınki sanılırdı (ABM-PEN B3). Ajan zaten next yönergesiyle gözler.
+        s["observe"] = {"skipped": "batch_stopped"}
+        metin.append("observe_after skipped: the batch stopped; call observe on the window you need")
+        son_k = None
     icerik: list = [TextContent(type="text", text="\n".join(metin))]
     if observe_after and son_k:
         try:

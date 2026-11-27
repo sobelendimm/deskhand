@@ -792,8 +792,11 @@ class KwinGirdi:
                         # kdotool zinciri (getactivewindow getwindowname) yalnız ADI basar, kimliği değil: iki sorgu
                         a = self.arka._kd("getactivewindow", d=d).strip()
                         if a != u:
-                            b = self.arka._kd("getwindowname", a, d=d) if UUID.fullmatch(a) else ""
-                            neden = (AKTIF_DEGIL, _("aktif pencere değişti → {baslik}").format(baslik=repr(b)))
+                            if not any(w["i"] == u for w in self.arka._liste(d)):  # yalnız kesilme yolunda tek liste
+                                neden = (PENCERE_YOK, _("hedef pencere kapandı"))
+                            else:
+                                b = self.arka._kd("getwindowname", a, d=d) if UUID.fullmatch(a) else ""
+                                neden = (AKTIF_DEGIL, _("aktif pencere değişti → {baslik}").format(baslik=repr(b)))
                         elif desen:
                             b = self.arka._kd("getwindowname", u, d=d)
                             if not re.search(desen, b, re.I):

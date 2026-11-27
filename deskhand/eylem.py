@@ -491,10 +491,38 @@ def _harf_harf_yaz(g, k, desen, metin, onayli):
     for p in re.findall(r"\n|\t|[^\n\t ]+[ ]*|[ ]+", metin):
         parcalar += [p] if p in "\n\t" else [p[i:i + 6] for i in range(0, len(p), 6)]
     yazilan = 0
+    au = _au()
+    yokla = g.gizli and k != EKRAN  # gizli yazı: her harften hemen önce + sonra etkin pencere kimliği (B1b)
+
+    def kesik(e):
+        """Yazı ortasında durma iletisi. yazilan>0 iken denetimin "girdi gönderilmedi"si yalnız KALAN yazı için doğru:
+        önceki harfler gitti, odak kaçtıysa son 1-2'si yeni pencereye gitmiş olabilir (gözcü ~12 ms aralıkla yoklar).
+        → Dur (sent maybe_partial'ı gönderim sayacı zaten verir)."""
+        if not yazilan:
+            return e
+        if g.gizli:  # gizli yazının harfleri iletiye/günlüğe taşınmaz: yalnız uzunluk
+            return Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
+                                "yeni yere gitmiş olabilir, oraya bak").format(
+                mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
+        return Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
+                            "({son}) yeni yere gitmiş olabilir, oraya bak").format(
+            mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin), son=repr(metin[max(0, yazilan - 2):yazilan])))
+
+    def odak_yokla():
+        """Gizli yazıda harf öncesi/sonrası: etkin pencere hâlâ hedef mi (tek sorgu; gözcünün 12 ms penceresini kapatır)."""
+        a = au.aktif()
+        if a != k:
+            raise kesik(guvenlik.hedef_kayip_hatasi(k, a))
+
     g.izle(k, desen)
     try:
         for p in parcalar:
-            denetle(k, desen)  # kelime başında tam denetim (yasak pencere dahil); harf aralarını gözcü izler
+            if yazilan and k != EKRAN:  # önce odak: gözcünün kaçırdığı geçişte "girdi gönderilmedi" denmesin (B1a)
+                odak_yokla()
+            try:  # kelime başında tam denetim (yasak pencere dahil); harf aralarını gözcü izler
+                denetle(k, desen)
+            except Dur as e:
+                raise kesik(e) from None
             guvenlik.seviye_denetle(k, "klavye")
             if yazi_onay_ister_mi(p):  # yazarken sayfa ödeme sayfasına geçtiyse (ilk Enter formu gönderdi): onay
                 _yazi_hassas(g, k, onayli, metin)
@@ -505,16 +533,11 @@ def _harf_harf_yaz(g, k, desen, metin, onayli):
                     mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
             for c in p:
                 if g.kesildi:
-                    e = g.kesildi
-                    if g.gizli:  # gizli yazının harfleri iletiye/günlüğe taşınmaz: yalnız uzunluk
-                        raise Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
-                                           "yeni yere gitmiş olabilir, oraya bak").format(
-                            mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
-                    raise Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
-                                       "({son}) yeni yere gitmiş olabilir, oraya bak").format(
-                        mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin), son=repr(metin[max(0, yazilan - 2):yazilan])))
+                    raise kesik(g.kesildi)
                 if c == "\n":
                     _enter_oncesi(g, k, desen, onayli)
+                if yokla:
+                    odak_yokla()
                 try:
                     g.ham({"\n": "key enter", "\t": "key tab", " ": "key space"}.get(c, f"type {c}"))
                 except Dur as e:
@@ -524,6 +547,8 @@ def _harf_harf_yaz(g, k, desen, metin, onayli):
                         mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
                 time.sleep(HARF_SN)  # dotool harfi yazsın (typehold 6 + typedelay 4 ms); kuyruk birikmesin
                 yazilan += 1
+                if yokla:  # harf işlendikten SONRA: bu arada odak kaçtıysa bu harf yeni yere gitmiş olabilir
+                    odak_yokla()
             gunluk(f"{g.etiket} | [{_au().baslik(k)}] | " + ("type ***" if g.gizli else f"type {p!r}"))
     finally:
         g.izle_bitir()
