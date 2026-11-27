@@ -947,34 +947,44 @@ def _adres_norm(s: str) -> tuple[str, str]:
     s = str(s or "").strip()
     try:
         p = urlsplit(s if "://" in s or s.startswith(("about:", "file:")) else "https://" + s)
+        port = p.port  # DH-TUR2 D-a: geçersiz port (host:abc, :99999) burada ValueError verir
     except ValueError:
         return "", s.lower()
     host = (p.hostname or "").lower().removeprefix("www.")
-    return host, f"{p.scheme.lower()}://{host}{(':' + str(p.port)) if p.port else ''}{p.path.rstrip('/')}" + \
+    return host, f"{p.scheme.lower()}://{host}{(':' + str(port)) if port else ''}{p.path.rstrip('/')}" + \
         (f"?{p.query}" if p.query else "")
+
+
+def _baslikta_sunucu(baslik: str, sunucu: str) -> bool:
+    """Başlıkta sunucu adı SINIRLI geçiyor mu (a.com ⊄ visa.com, bank.com ⊄ bank.com.evil.net)."""
+    return bool(sunucu) and re.search(r"(?<![\w.-])" + re.escape(sunucu) + r"(?![\w.-])", baslik.lower()) is not None
 
 
 def _adres_dogrula(au, w: str, adres: str, tek_mi=None) -> bool:
     """Return'den sonra yeni pencerenin etkin sekmesi hedefe döndü mü: sayfa adresi (AT-SPI belge adresi) aynı adres ya
-    da aynı sunucu (yönlendirme), ya da pencere başlığı hedef adresi içeriyor. ADRES_DOGRULA_SN içinde olmazsa False.
+    da aynı sunucu (yönlendirme). Adres OKUNDUYSA yalnız ona bakılır (DH-TUR2 D-b: açık yönlendirme + hedef adlı sahte
+    başlık); başlık yalnız adres okunamazken yedek, sunucu adı SINIRLI geçmeli. ADRES_DOGRULA_SN içinde olmazsa False.
     tek_mi(): AT-SPI okuması yalnız pencerenin başlığı tarayıcıda tekse güvenilir (yoksa öbür pencere okunabilir)."""
     from . import web
     h_sunucu, h_tam = _adres_norm(adres)
     bitis = time.monotonic() + ADRES_DOGRULA_SN
     while True:
+        okundu = False
         try:
             s = (web.sayfa_bilgisi(w) or {}) if tek_mi is None or tek_mi() else {}
             s_sunucu, s_tam = _adres_norm(s.get("adres") or "")
-            if s.get("adres") and (s_tam == h_tam or (h_sunucu and s_sunucu == h_sunucu)):
-                return True
+            if s.get("adres"):
+                okundu = True
+                if s_tam == h_tam or (h_sunucu and s_sunucu == h_sunucu):
+                    return True
         except Exception:  # noqa: BLE001 - erişilebilirlik okunamadı: başlığa bak, sonra yeniden dene
             pass
-        try:
-            b = au.baslik(w) or ""
-            if str(adres) in b or (h_sunucu and h_sunucu in b.lower()):
-                return True
-        except Dur:
-            pass
+        if not okundu:  # başlık YALNIZ adres okunamazken (okunan adres başka sunucuysa başlık onu ezemez)
+            try:
+                if _baslikta_sunucu(au.baslik(w) or "", h_sunucu):
+                    return True
+            except Dur:
+                pass
         if time.monotonic() >= bitis:
             return False
         time.sleep(0.3)
@@ -1291,6 +1301,7 @@ def k_ac(a):
     t0 = time.monotonic()
     with open(log, "w") as fp:
         ip = _baslat(au, komut, fp, env, kopya, ev=ev)
+    t_don = time.monotonic()  # DH-TUR2 D-c: 2. pencere bekleme bütçesi _baslat dönüşünden (kilit beklemesi yemesin)
     gunluk(f"ac | {ad} | {' '.join(komut)}")
     print(_("başlatıldı: {ad}").format(ad=ad), file=sys.stderr)
     gorulen = {}
@@ -1298,7 +1309,7 @@ def k_ac(a):
     def uyar(b, s):
         return (not a.baslik or re.search(a.baslik, b, re.I)) and (not a.sinif or re.search(a.sinif, s, re.I))
     if isinstance(ip, IkinciPencere):  # aynı süreçte 2. pencere: YALNIZ doğrulanan pencere (yeniden aranmaz)
-        bs = ikinci_pencere_bekle(au, ip, uyar, max(0.0, a.sure - (time.monotonic() - t0)))
+        bs = ikinci_pencere_bekle(au, ip, uyar, max(0.0, a.sure - (time.monotonic() - t_don)))
         if bs is None:
             raise Dur(7, _("{sn} sn içinde uygun pencere açılmadı").format(sn=f"{a.sure:.0f}")
                       + "; " + _("aynı süreçte açılan pencere: {pencere}").format(pencere=ip.kimlik))

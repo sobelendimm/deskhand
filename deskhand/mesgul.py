@@ -147,13 +147,14 @@ def _yedek_pencere():
 
 
 def _cikislar():
-    """Yedek yol için ekran alanı (kde arka ucu; çok ekranda tüm ekranların birleşimi)."""
+    """Yedek yol için ekran alanı (kde arka ucu; çok ekranda tüm ekranların birleşimi). Okunamazsa None (bilinmiyor;
+    DH-TUR2: eskiden [] → "tam ekran değil" sayılıp film/oyun koruması açık-başarısızdı)."""
     from .arka_uc import kde
     from .hata import Dur
     try:
         x0, y0, x1, y1 = kde.ekran_alani()
     except Dur:
-        return []
+        return None
     return [(x0, y0, x1 - x0, y1 - y0)]
 
 
@@ -189,6 +190,8 @@ def tam_ekran_mi(p, cikislar=None):
         return kapliyor_mu(p.get("g"), p["cg"])
     if cikislar is None:
         cikislar = _cikislar()
+        if cikislar is None:  # çıkışlar okunamadı: tam ekran olup olmadığı bilinmiyor → kapalı-başarısız (meşgul say)
+            return True
     return any(kapliyor_mu(p.get("g"), c) for c in cikislar)
 
 
