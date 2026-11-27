@@ -90,7 +90,8 @@ def ctrl_enter(sek):
     app.processEvents()
 
 
-w = AnaPencere([], arka_f=SahteArka, masaustu_m=SahteMasaustu, gorev_f=SahteGorev)
+w = AnaPencere([], arka_f=SahteArka, masaustu_m=SahteMasaustu, gorev_f=SahteGorev,
+               kart_durum_f=lambda: {"goster": False})  # A3 D5: gerçek /etc, busctl, kasa okunmaz
 w.resize(1000, 700)
 w.show()
 sek = w.gorev

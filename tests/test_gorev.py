@@ -409,7 +409,8 @@ class SahteMasaustu:
 
 gec = [{"dosya": os.path.join(gorev.gecmis_dizini(), "x.jsonl"), "id": "x", "zaman": "2026-11-22 10:30:00",
         "metin": "İndirilenler'i düzenle", "model": "sonnet", "durum": "tamam", "ozet": "12 dosya taşındı."}]
-w = AnaPencere([], arka_f=SahteArka, masaustu_m=SahteMasaustu, gorev_f=SahteGorev)
+w = AnaPencere([], arka_f=SahteArka, masaustu_m=SahteMasaustu, gorev_f=SahteGorev,
+               kart_durum_f=lambda: {"goster": False})  # A3 D5: gerçek /etc, busctl, kasa okunmaz
 sek = w.gorev
 kontrol("pencere: Görev sekmesi İLK sekme", w.sekmeler.widget(0) is sek and w.sekmeler.tabText(0) == "Görev"
         and w.sekmeler.count() == 6)
