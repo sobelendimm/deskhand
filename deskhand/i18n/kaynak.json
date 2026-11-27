@@ -655,7 +655,7 @@
   "gui/metinler.py:124"
  ],
  "Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin.": [
-  "guvenlik.py:2272",
+  "guvenlik.py:2284",
   "onay.py:952"
  ],
  "Bir masaüstü seçin: önizleme onu gösterir (yalnız izleme).": [
@@ -818,7 +818,7 @@
   "cli.py:215"
  ],
  "DUR kaldırılsın mı?": [
-  "guvenlik.py:2271",
+  "guvenlik.py:2283",
   "onay.py:951"
  ],
  "DUR kaldırılsın mı? Ajan yeniden girdi gönderebilir.": [
@@ -828,7 +828,7 @@
   "gui/metinler.py:105"
  ],
  "DUR yalnız kullanıcı tarafından kaldırılır: Deskhand panelinden ya da DUR kısayoluyla.": [
-  "guvenlik.py:2261"
+  "guvenlik.py:2273"
  ],
  "DUR — tüm girdileri durdur": [
   "gui/metinler.py:31"
@@ -840,10 +840,10 @@
   "gui/metinler.py:43"
  ],
  "DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir": [
-  "guvenlik.py:2321"
+  "guvenlik.py:2333"
  ],
  "DUR'u panel koydu (imzalı kayıt okunamıyor); yalnız kullanıcı Deskhand panelinden kaldırabilir": [
-  "guvenlik.py:2319"
+  "guvenlik.py:2331"
  ],
  "DUR: açık ({yol}); hiçbir girdi gönderilmez. {kaldirma}": [
   "cli.py:306"
@@ -5529,7 +5529,7 @@
   "web.py:669"
  ],
  "İstek onaylanmadı ({neden}).": [
-  "guvenlik.py:2277"
+  "guvenlik.py:2289"
  ],
  "İsteyen süreç": [
   "gui/metinler.py:121"
