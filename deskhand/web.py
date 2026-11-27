@@ -382,9 +382,10 @@ def _yuru(yol: _Yol, bus: str, cerceve: str, koord: int, koken, roller: set[str]
             alt_alan, alt_derin = alan, derin
             if belge:
                 oz, j = (_deg(r2[j], {}) or {}), j + 1
-                belgeler.append({"ad": ad, "adres": oz.get("DocURL", ""), "durum": d, "derinlik": derin + 1, "kutu": kutu})
+                belgeler.append({"ad": ad, "adres": oz.get("DocURL") or oz.get("URI", ""), "durum": d, "derinlik": derin + 1, "kutu": kutu})
                 alt_derin = derin + 1
-                badres = oz.get("DocURL", "") or ""  # çocuklar bu belgeye ait (insan doğrulaması: çerçeve adresi)
+                # Firefox belge adresini "DocURL", Chromium "URI" özniteliğinde verir (ABM-F3-R2: Chromium adresi boştu)
+                badres = oz.get("DocURL") or oz.get("URI", "") or ""  # çocuklar bu belgeye ait (insan doğrulaması)
             if kutu and (belge or rol == "internal frame"):
                 alt_alan = _kesisim(alan, kutu)
             if ister:
