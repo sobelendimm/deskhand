@@ -667,7 +667,7 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
             if ikinci_pencere_notu(ip):
                 r["message"] = ikinci_pencere_notu(ip)
         if ip.adres_dogrulandi is False:
-            r["status"], r["message"] = "address_unverified", ikinci_pencere_iletisi(ip)
+            r["status"], r["message"] = "address_unverified", ikinci_pencere_iletisi(ip, yasak=bool(y))
         return r
     t0 = time.monotonic()  # yeni örnek: süre başlatmadan sonra sayılır
     son_kwin = None  # son yutulan geçici pencere listesi hatası (zaman aşımında iletiye eklenir)

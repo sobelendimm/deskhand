@@ -1800,5 +1800,6 @@
  "DUR dosyası okunamıyor (kaynağı bilinmiyor); yalnız kullanıcı Deskhand panelinden kaldırabilir": "The STOP file cannot be read (its source is unknown); only the user can lift it, from the Deskhand panel",
  "İmzasız çalışma kabul edildi (anahtarlık yok); panelin koyduğu DUR kaldırıldı.": "Running unsigned was accepted (no key ring); the STOP set by the panel was lifted.",
  "adres doğrulanamadı: {adres} yazıldı ama sayfanın adresi {sayfa} (başka sunucu ya da gezinme olmadı)": "address not verified: {adres} was typed but the page address is {sayfa} (another host, or no navigation happened)",
+ "adres doğrulanamadı (yasak pencere: sayfa adresi bildirilmez)": "address not verified (forbidden window: the page address is not reported)",
  "adres yalnız pencere başlığından doğrulandı (sayfa adresi okunamadı)": "address verified from the window title only (the page address could not be read)"
 }

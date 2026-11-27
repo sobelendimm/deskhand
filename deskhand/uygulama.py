@@ -971,6 +971,24 @@ def _adres_ayristir(adres: str) -> None:
             from None
 
 
+def adres_kisa(s: str) -> str:
+    """Ajana giden gözlenen adres: YALNIZ şema + ana makine (kullanıcı bilgisi, port, yol, sorgu, parça atılır:
+    belirteç taşıyabilir). Ana makinesiz adreste yalnız şema; about: sayfası adıyla (sorgu/parça yok)."""
+    from urllib.parse import urlsplit
+    s = str(s or "").strip()
+    try:
+        p = urlsplit(s if "://" in s or s.startswith(("about:", "file:")) else "https://" + s)
+        host = p.hostname or ""
+    except ValueError:
+        return ""
+    sema = p.scheme.lower()
+    if host:
+        return f"{sema}://{host.lower()}"
+    if sema == "about":
+        return "about:" + re.sub(r"[^\w-].*", "", p.path)
+    return f"{sema}:" if sema else ""
+
+
 def _baslikta_sunucu(b: str, sunucu: str) -> bool:
     """Başlıkta sunucu adı SINIRLI geçiyor mu (a.com, Visa.com içinde değil; önünde/arkasında harf, rakam, '.', '-' yok)."""
     return bool(sunucu) and re.search(r"(?<![\w.-])(www\.)?" + re.escape(sunucu) + r"(?![\w-]|\.\w)", b.lower()) is not None
@@ -986,9 +1004,12 @@ def _adres_dogrula(au, w: str, adres: str, tek_mi=None) -> tuple[bool, str | Non
     h_sunucu, h_tam = _adres_norm(adres)
     bitis = time.monotonic() + ADRES_DOGRULA_SN
     sayfa = None
+    tek_degil = False  # tek_mi() bir kez bile False → başlık HİÇBİR ZAMAN doğrulama sayılmaz
     while True:
         try:
-            s = (web.sayfa_bilgisi(w) or {}) if tek_mi is None or tek_mi() else {}
+            tek = tek_mi is None or tek_mi()
+            tek_degil = tek_degil or not tek
+            s = (web.sayfa_bilgisi(w) or {}) if tek else {}
             if s.get("adres"):
                 sayfa = str(s["adres"])
                 s_sunucu, s_tam = _adres_norm(sayfa)
@@ -999,10 +1020,10 @@ def _adres_dogrula(au, w: str, adres: str, tek_mi=None) -> tuple[bool, str | Non
         if time.monotonic() >= bitis:
             break
         time.sleep(0.3)
-    if sayfa is None:
+    if sayfa is None and not tek_degil:
         try:
-            b = au.baslik(w) or ""
-            if str(adres) in b or _baslikta_sunucu(b, h_sunucu):
+            # ham alt dizge YOK: yalnız normalleştirilmiş ana makine, sınırlı eşleşme (example.com.evil geçmez)
+            if (tek_mi is None or tek_mi()) and _baslikta_sunucu(au.baslik(w) or "", h_sunucu):
                 return True, "baslik", None
         except Dur:
             pass
@@ -1183,14 +1204,17 @@ def ikinci_pencere_bekle(au, ip: IkinciPencere, uyar, sure: float) -> tuple[str,
         time.sleep(0.25)
 
 
-def ikinci_pencere_iletisi(ip: IkinciPencere) -> str:
-    """Adres doğrulanamadıysa dürüst ileti ("" değilse başarı denmez)."""
+def ikinci_pencere_iletisi(ip: IkinciPencere, yasak: bool = False) -> str:
+    """Adres doğrulanamadıysa dürüst ileti ("" değilse başarı denmez). Adresler şema + ana makineye indirgenir
+    (sorgu/parça/kullanıcı bilgisi belirteç taşıyabilir); yasak pencerede hiçbir adres iletiye girmez."""
     if ip.adres_dogrulandi is False:
+        if yasak:
+            return _("adres doğrulanamadı (yasak pencere: sayfa adresi bildirilmez)")
         if ip.sayfa_adresi:
             return _("adres doğrulanamadı: {adres} yazıldı ama sayfanın adresi {sayfa} (başka sunucu ya da gezinme "
-                     "olmadı)").format(adres=ip.adres, sayfa=ip.sayfa_adresi)
+                     "olmadı)").format(adres=adres_kisa(ip.adres or ""), sayfa=adres_kisa(ip.sayfa_adresi))
         return _("adres doğrulanamadı: {adres} yazıldı ama pencerenin sayfa adresi/başlığı hedefe dönmedi").format(
-            adres=ip.adres)
+            adres=adres_kisa(ip.adres or ""))
     return ""
 
 

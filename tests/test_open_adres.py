@@ -185,8 +185,47 @@ try:
     kontrol("L1c api: başlıktan doğrulama sonuçta açıkça belirtilir (address_source=title + ileti)",
             e is None and r.get("status") == "opened" and r.get("address_source") == "title" and
             "başlığından" in (r.get("message") or ""), f"{r} {e and e.mesaj}")
+    # ---- R1 (otomatik tarama): yasak pencerede gözlenen adres iletiye girmez; diğer durumda şema + ana makine
+    def dogrulanmamis_baslat(au_, *a, **k):
+        return uygulama.IkinciPencere(kimlik="{b}", tur="firefox", adres="https://example.org/x?k=gizli",
+                                      adres_dogrulandi=False, sayfa_adresi="https://u:p@example.org/yol?token=abc#x")
+    uygulama._baslat = dogrulanmamis_baslat
+    api.yasak_mi = lambda w: "yasak" if w == "{b}" else None
+    r, e = dene(lambda: api.uygulama_ac(["firefox", "--no-remote"], "Firefox", [], None, None, 1.0))
+    m = (r or {}).get("message") or ""
+    kontrol("R1 api: yasak pencerede address_unverified iletisinde adres YOK (genel ileti)",
+            e is None and r.get("status") == "address_unverified" and m and "example.org" not in m and
+            "token" not in m and "gizli" not in m and "example.org" not in str(r), f"{r} {e and e.mesaj}")
+    api.yasak_mi = lambda w: None
+    r, e = dene(lambda: api.uygulama_ac(["firefox", "--no-remote"], "Firefox", [], None, None, 1.0))
+    m = (r or {}).get("message") or ""
+    kontrol("R1 api: gözlenen https://u:p@example.org/yol?token=abc#x → iletide yalnız https://example.org",
+            e is None and r.get("status") == "address_unverified" and "https://example.org" in m and
+            not any(x in m for x in ("token", "abc", "u:p", "/yol", "#x", "gizli", "?")), f"{r} {e and e.mesaj}")
+    kontrol("R1: adres_kisa şema + ana makine (userinfo/yol/sorgu/parça yok)",
+            uygulama.adres_kisa("https://u:p@Example.org:8443/yol?token=abc#x") == "https://example.org"
+            and uygulama.adres_kisa("about:newtab") == "about:newtab"
+            and uygulama.adres_kisa("file:///home/u/gizli.txt") == "file:", uygulama.adres_kisa("file:///x"))
     uygulama._baslat = yavas_baslat
     au.gec.clear()
+
+    # ---- R1: başlık yedeği sınırlı ana makine eşleşmesi + yalnız tek pencerede
+    web.sayfa_bilgisi = okunamaz
+    tek = lambda: True  # noqa: E731
+    for sahte in ("evil-example.com.saldirgan — Mozilla Firefox", "example.com.evil — Mozilla Firefox"):
+        au2 = SahteAu({"{c}": [sahte, "firefox", os.getpid()]})
+        sn = uygulama._adres_dogrula(au2, "{c}", "example.com", tek)
+        kontrol(f"R1: başlık {sahte!r} example.com'u DOĞRULAMAZ", sn[0] is False, str(sn))
+    au2 = SahteAu({"{c}": ["Example Domain — example.com — Mozilla Firefox", "firefox", os.getpid()]})
+    sn = uygulama._adres_dogrula(au2, "{c}", "example.com", tek)
+    kontrol("R1 (kontrol): meşru 'Example Domain — example.com' tek pencerede, adres okunamadı → doğrular",
+            sn[:2] == (True, "baslik"), str(sn))
+    sn = uygulama._adres_dogrula(au2, "{c}", "example.com", lambda: False)
+    kontrol("R1: aynı süreçte aynı başlıklı birden çok pencere (tek_mi False) → başlık doğrulaması YOK",
+            sn[0] is False, str(sn))
+    sayac = iter([True, True, False])
+    sn = uygulama._adres_dogrula(au2, "{c}", "example.com", lambda: next(sayac, True))
+    kontrol("R1: tek_mi döngüde bir kez bile False → başlık doğrulaması YOK", sn[0] is False, str(sn))
 
     uygulama.sec = lambda: au
     a = argparse.Namespace(url=None, adres=None, komut_satiri="firefox --no-remote", uygulama=None, baslik="Hedef",
