@@ -417,6 +417,21 @@ async def f2r3_testleri(c, sm):
         eylem._parola_alani_mi, s._sonra = eski_parola, eski_sonra
         sm.YANIT["izin"] = False
 
+    # R3 EK-1: element yolunda (AT-SPI değer yazma) algılanan parola alanı → etkin gizli MCP'ye bildirilir
+    eski_sonra = s._sonra
+    s._sonra = sonra
+    au = iki_pencere(sm, baslik="Giriş — Firefox")
+    sm.YANIT["izin"] = True  # parola alanı onayı
+    g0 = _gunluk_metni()
+    try:
+        r = await c.call_tool("type_text", {"window": A, "element": "Parola", "text": sir, **F})
+    finally:
+        s._sonra = eski_sonra
+        sm.YANIT["izin"] = False
+    tum = metin(r) + str(r.structured_content) + _gunluk_metni()[len(g0):]
+    kontrol("R3 EK-1 element yolu: parola alanına yazılan metin sonuçta/günlükte yok (after yer tutucu)",
+            not r.is_error and not _sizinti(tum, sir) and "(gizli yazı: gizlendi)" in metin(r), tum[:500])
+
     # DÜŞÜK 1: Enter gönderilmeden HEMEN önce odak yoklaması (gizli olsun olmasın)
     eski_enter = eylem._enter_oncesi
     for gizli in (False, True):
@@ -492,6 +507,69 @@ def f2r3_birim_testleri():
             kwin.time.sleep = eski_uyku
     for ad, m in (("kde", m_kde), ("sanal", m_sanal), ("kwin", m_kwin)):
         kontrol(f"R3-4 one_getir ({ad}): gizli yazıda 'aktif: …' başlığı yok", "(qzx)" not in m and "gizlendi" in m, m)
+
+    # R3 EK-1: erisim (AT-SPI çerçeve) ve gorsel (görüntü alınırken pencere değişti) başlık basımı gizli bağlamda
+    from deskhand import erisim, gorsel, kendi
+    m_er = {}
+
+    class SahteMasa:
+        def get_child_count(self):
+            return 0
+
+    class SahteAtspi:
+        @staticmethod
+        def get_desktop(i):
+            return SahteMasa()
+    eski_er = erisim._girmeyen_ipucu, guvenlik.yasak_desenler, kendi.kendi_mi, guvenlik.seviye_coz
+    erisim._girmeyen_ipucu = lambda pid: "ipucu"
+    try:
+        with guvenlik.baslik_gizle(True):
+            for ad, f in (("pid yok", lambda: erisim._cerceve_bul(SahteAtspi, "", onizleme)),
+                          ("ağaçta yok", lambda: erisim._cerceve_bul(SahteAtspi, "4242", onizleme))):
+                try:
+                    f()
+                    m_er[ad] = "(durmadı)"
+                except Dur as e:
+                    m_er[ad] = e.mesaj
+            guvenlik.yasak_desenler = lambda: [r"qzx"]
+            try:
+                erisim._cerceve_denetle("1", "kwrite", onizleme, "yaz")
+            except Dur as e:
+                m_er["yasak"] = e.mesaj
+            guvenlik.yasak_desenler = lambda: []
+            kendi.kendi_mi = lambda *a, **k: True
+            try:
+                erisim._cerceve_denetle("1", "kwrite", onizleme, "yaz")
+            except Dur as e:
+                m_er["kendi"] = e.mesaj
+            kendi.kendi_mi = lambda *a, **k: False
+            guvenlik.seviye_coz = lambda *a: 0
+            try:
+                erisim._cerceve_denetle("1", "kwrite", onizleme, "yaz")
+            except Dur as e:
+                m_er["seviye"] = e.mesaj
+    finally:
+        erisim._girmeyen_ipucu, guvenlik.yasak_desenler, kendi.kendi_mi, guvenlik.seviye_coz = eski_er
+    au = iki_pencere(sm)
+    au.pen[B][0] = onizleme
+    au.aktif_ = B
+    au.one_getir = lambda k: None  # öne getirme sonrası yarış: etkin pencere başka
+    try:
+        with guvenlik.baslik_gizle(True):
+            gorsel._pencere_goruntusu(A)
+        m_er["gorsel"] = "(durmadı)"
+    except Dur as e:
+        m_er["gorsel"] = e.mesaj
+    for ad in ("pid yok", "ağaçta yok", "yasak", "kendi", "seviye", "gorsel"):
+        m = m_er.get(ad, "(yok)")
+        kontrol(f"R3 EK-1 başlık basımı gizli bağlamda gizli ({ad})", "(qzx)" not in m and "gizlendi" in m, m)
+    # gizli olmayan bağlamda başlık kalır (gerileme)
+    try:
+        erisim._cerceve_bul(SahteAtspi, "", onizleme)
+        m = "(durmadı)"
+    except Dur as e:
+        m = e.mesaj
+    kontrol("R3 EK-1 gerileme: gizli olmayanda erisim başlığı iletide", "(qzx)" in m, m)
 
     # NIT 1: kod 10 (yasak) iletisi çelişkisiz
     for kanca_satiri, beklenen in (("typehold 6", 0), ("type c", 4)):

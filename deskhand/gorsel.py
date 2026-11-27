@@ -103,7 +103,9 @@ def _pencere_goruntusu(k, bolge=None, tam_coz=False):
         else:  # → mantıksal koordinat
             tam = tam.resize((sx1 - sx0, sy1 - sy0), Image.LANCZOS)
     if k != EKRAN and au.aktif() != k:
-        raise Dur(3, _("görüntü alınırken pencere değişti → {baslik}").format(baslik=repr(au.baslik(au.aktif()))))
+        from .guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
+        raise Dur(3, _("görüntü alınırken pencere değişti → {baslik}").format(
+            baslik=baslik_goster(au.baslik(au.aktif()))))
     im = tam.crop(tuple(round(v * f) for v in (X - sx0, Y - sy0, X - sx0 + W, Y - sy0 + H)))
     bx = by = 0
     if bolge:

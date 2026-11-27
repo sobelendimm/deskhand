@@ -272,9 +272,10 @@ def _cerceve_bul(Atspi, pid, baslik):
     başlık benzerliğiyle. Tam PID eşleşmesi yoksa yalnız pencere sürecinin TORUNLARINDAN, AYNI çalıştırılabilir dosyaya
     sahip ve başlığı ≥ TORUN_BENZERLIK benzeyen çerçeve. Atalar ve başka uygulamalar asla (denetimler X/KWin penceresinde
     yapılır, eylem BAŞKA uygulamada olurdu): PID bilinmiyor ya da eşleşme yoksa Dur 6. → (çerçeve, uygulama pid, ad)."""
+    from .guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
     if not pid:
         raise Dur(6, _("pencerenin süreç kimliği (PID) bilinmiyor: erişilebilirlik çerçevesi güvenle eşlenemez ({baslik})"
-                       ).format(baslik=repr(baslik)), tur="agacta_yok")
+                       ).format(baslik=baslik_goster(baslik)), tur="agacta_yok")
     adaylar = []
     masa = Atspi.get_desktop(0)
     pencere_exe = None
@@ -311,7 +312,7 @@ def _cerceve_bul(Atspi, pid, baslik):
             adaylar.append((tam, benz, f, app_pid, app_ad))
     if not adaylar:
         raise Dur(6, _("pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): {ipucu}").format(
-            baslik=repr(baslik), pid=pid, ipucu=_girmeyen_ipucu(pid)), tur="agacta_yok")
+            baslik=baslik_goster(baslik), pid=pid, ipucu=_girmeyen_ipucu(pid)), tur="agacta_yok")
     secim = sorted(adaylar, key=lambda x: (not x[0], -x[1]))[0]
     return secim[2], secim[3], secim[4]
 
@@ -330,17 +331,18 @@ def _cerceve_denetle(app_pid, app_ad, cerceve_ad, islem):
     for d in guvenlik.yasak_desenler():
         if re.search(d, cerceve_ad or "", re.I) or re.search(d, app_ad or "", re.I):
             raise Dur(10, _("YASAK pencere (erişilebilirlik çerçevesi): {baslik} (uygulama {uygulama}) /{desen}/ ile "
-                            "eşleşti; hiçbir girdi gönderilmez").format(baslik=repr(cerceve_ad), uygulama=repr(app_ad),
+                            "eşleşti; hiçbir girdi gönderilmez").format(baslik=guvenlik.baslik_goster(cerceve_ad),
+                                                                         uygulama=repr(app_ad),
                                                                          desen=d))
     if islem not in ("eylem", "yaz"):
         return
     if kendi.kendi_mi(app_pid, "", "sanal", lambda s: False):  # yalnız PID kuralı (sınıf yedeği pencerede yapıldı)
         raise Dur(10, _("AJANIN KENDİ İSTEMCİSİ: erişilebilirlik çerçevesi ({baslik}) bu ajanı çalıştıran süreç "
-                        "zincirindeki bir sürece ait; girdi gönderilmez").format(baslik=repr(cerceve_ad)))
+                        "zincirindeki bir sürece ait; girdi gönderilmez").format(baslik=guvenlik.baslik_goster(cerceve_ad)))
     s = guvenlik.seviye_coz(cerceve_ad or "", app_ad or "")
     if s == 0 or (s == 1 and islem == "yaz"):
         raise Dur(10, _("UYGULAMA SEVİYESİ (erişilebilirlik çerçevesi): {baslik} ({uygulama}) bu eylemi kabul etmiyor"
-                        ).format(baslik=repr(cerceve_ad), uygulama=repr(app_ad)))
+                        ).format(baslik=guvenlik.baslik_goster(cerceve_ad), uygulama=repr(app_ad)))
 
 
 # observe (MCP) için ögenin durum belirteçleri: AT-SPI durum adı → API belirteci (çevrilmez)
@@ -1550,6 +1552,8 @@ def k_ogeye_yaz(a):
             gizli = True  # tam numara günlüğe/iletiye yazılmaz
             if guvenlik.kart_bilgisi_engel(k, onayli, metin, alan_kart, _("değer yazma")):
                 etiket += " --onayli"
+    from . import gonderim
+    gonderim.not_yaz("gizli", gizli)  # etkin gizli (secret/parola/kart) MCP sonucuna da: after.title/new_text gizlenir
     if yazi_onay_ister_mi(metin):  # yazmadan ÖNCE (bir eylem = bir onay); Enter/Tab/boşluk = formu gönderme riski
         g = types.SimpleNamespace(gizli=gizli)
         if _yazi_hassas(g, k, onayli, metin, goruntu_al=False):
@@ -1559,7 +1563,6 @@ def k_ogeye_yaz(a):
             etiket += "" if etiket.endswith(" --onayli") else " --onayli"
     _atspi_korumalari(k, a.baslik, "klavye")  # onay beklenmiş olabilir
     ucbirim.tampon_isle(sec(), k, kirli=True)  # değer doğrudan yazıldı: satırın içeriği artık bilinmez
-    from . import gonderim
     gonderim.artir()  # değer yazma yarıda kalsa da "belki gitti" (MCP sent)
     try:
         r = _atspi_calistir(_oge_istegi(k, o, "yaz", metin=metin))
