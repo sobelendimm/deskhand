@@ -236,7 +236,7 @@ def _baslat_komutu(py: str) -> list[str]:
     kod = (f"import sys; sys.path.insert(0, {_KOK!r}); from deskhand import ocr_gpu; "
            f"ocr_gpu.sunucu({soket_yolu()!r}, {kilit_yolu()!r}, {model_dizin()!r}, {float(BOSTA_KAPAN_SN)!r})")
     temel = [py, "-s", "-c", kod]
-    if shutil.which("gpu-is"):
+    if shutil.which("gpu-is"):  # no genisleme_kapali(): gpu-is calls systemd-run --expand-environment=no itself
         return ["gpu-is", "-m", BELLEK] + temel
     if shutil.which("systemd-run"):
         from . import sistemd

@@ -32,20 +32,30 @@ except ImportError as e:  # red phase: module missing
     kontrol("0: deskhand.sistemd içe aktarılır", False, str(e))
 
 
-def _sahte(cikti=None, hata=None):
+def _sahte(cikti=None, hata=None, yardim=None, yardim_hata=None):
+    """systemctl --version -> cikti/hata; systemd-run --help -> yardim/yardim_hata (default: help without the flag)."""
     def calistir(argv, **kw):
+        if argv[0] == "systemd-run":
+            if yardim_hata is not None:
+                raise yardim_hata
+            return subprocess.CompletedProcess(argv, 0, stdout=YARDIM_ESKI if yardim is None else yardim, stderr="")
         if hata is not None:
             raise hata
         return subprocess.CompletedProcess(argv, 0, stdout=cikti, stderr="")
     return calistir
 
 
-def _dene(cikti=None, hata=None):
+YARDIM_ESKI = "systemd-run [OPTIONS...] COMMAND [ARGUMENTS...]\n\n  --scope   Run this as scope rather than service\n"
+YARDIM_YENI = YARDIM_ESKI + "     --expand-environment=BOOL    Control expansion of environment variables\n"
+B = ["--expand-environment=no"]
+
+
+def _dene(cikti=None, hata=None, **yardim):
     if sistemd is None:
         return None
     sistemd._onbellek.clear()
     eski = sistemd._calistir
-    sistemd._calistir = _sahte(cikti, hata)
+    sistemd._calistir = _sahte(cikti, hata, **yardim)
     try:
         return sistemd.genisleme_kapali()
     finally:
@@ -56,9 +66,21 @@ def _dene(cikti=None, hata=None):
 kontrol("1a: 253 → []", _dene("systemd 253 (253.7-1-arch)\n+PAM +AUDIT\n") == [])
 kontrol("1b: 254 → bayrak", _dene("systemd 254 (254.1-1)\n+PAM\n") == ["--expand-environment=no"])
 kontrol("1b2: 262 → bayrak", _dene("systemd 262 (262.2-1-arch)\n") == ["--expand-environment=no"])
-kontrol("1c: systemctl yok → []", _dene(hata=FileNotFoundError("systemctl")) == [])
-kontrol("1d: okunamayan sürüm → []", _dene("garbage\n") == [])
-kontrol("1e: zaman aşımı → []", _dene(hata=subprocess.TimeoutExpired("systemctl", 2)) == [])
+kontrol("1c: systemctl yok, systemd-run yardımında bayrak yok → []", _dene(hata=FileNotFoundError("systemctl")) == [])
+kontrol("1d: okunamayan sürüm, yardımda bayrak yok → []", _dene("garbage\n") == [])
+kontrol("1e: zaman aşımı, yardımda bayrak yok → []", _dene(hata=subprocess.TimeoutExpired("systemctl", 2)) == [])
+# version unreadable: fall back to probing `systemd-run --help` for the flag (H1-KALAN)
+kontrol("1g: okunamayan sürüm + yardımda bayrak → bayrak", _dene("garbage\n", yardim=YARDIM_YENI) == B)
+kontrol("1h: systemctl zaman aşımı + yardımda bayrak → bayrak",
+        _dene(hata=subprocess.TimeoutExpired("systemctl", 2), yardim=YARDIM_YENI) == B)
+kontrol("1i: systemctl yok + yardımda bayrak → bayrak", _dene(hata=FileNotFoundError("systemctl"), yardim=YARDIM_YENI) == B)
+kontrol("1j: sürüm okunur (253) → yardım yoklanmaz bile", _dene("systemd 253 (253)\n", yardim=YARDIM_YENI) == [])
+# both probes fail: systemd-run missing -> [] (no call can be made anyway); help times out / is garbage -> fail closed
+kontrol("1k: sürüm ve systemd-run ikisi de yok → []",
+        _dene(hata=FileNotFoundError("systemctl"), yardim_hata=FileNotFoundError("systemd-run")) == [])
+kontrol("1l: sürüm okunamaz + yardım zaman aşımı → bayrak (açık-kapalı)",
+        _dene("garbage\n", yardim_hata=subprocess.TimeoutExpired("systemd-run", 2)) == B)
+kontrol("1m: sürüm okunamaz + yardım anlamsız → bayrak (açık-kapalı)", _dene("garbage\n", yardim="???\n") == B)
 
 # cached for the process lifetime: second call does not run systemctl again
 if sistemd is not None:
@@ -81,6 +103,27 @@ if sistemd is not None:
             f"sayac={sayac[0]} c={c}")
 else:
     kontrol("1f: önbellekli (systemctl bir kez) ve kopya döner", False, "modül yok")
+
+# fallback path is cached too: systemctl + systemd-run --help run once each
+if sistemd is not None:
+    sistemd._onbellek.clear()
+    cagrilar = []
+    eski = sistemd._calistir
+
+    def _sayan2(argv, **kw):
+        cagrilar.append(argv[0])
+        return subprocess.CompletedProcess(argv, 0, stdout="garbage\n" if argv[0] == "systemctl" else YARDIM_YENI,
+                                           stderr="")
+    sistemd._calistir = _sayan2
+    try:
+        sonuc = [sistemd.genisleme_kapali() for _ in range(3)]
+    finally:
+        sistemd._calistir = eski
+        sistemd._onbellek.clear()
+    kontrol("1n: yedek yoklama önbellekli (her araç bir kez)",
+            cagrilar == ["systemctl", "systemd-run"] and all(x == B for x in sonuc), f"{cagrilar} {sonuc}")
+else:
+    kontrol("1n: yedek yoklama önbellekli (her araç bir kez)", False, "modül yok")
 
 
 # 2: AST scan — every list literal starting with systemd-run carries *genisleme_kapali()
@@ -122,6 +165,31 @@ kontrol("3: gorev argv ilk dört öge değişmedi", argv[:4] == ["systemd-run", 
 if sistemd is not None:
     beklenen = sistemd.genisleme_kapali()
     kontrol("3b: gorev bayrağı 4. ögeden sonra", argv[4:4 + len(beklenen)] == beklenen, str(argv[:6]))
+
+# 4: ocr_gpu's gpu-is branch does not call systemd-run itself; gpu-is passes --expand-environment=no on its own.
+# The rationale is pinned next to the branch, and checked against the installed wrapper when there is one.
+from deskhand import ocr_gpu  # noqa: E402
+import inspect  # noqa: E402
+import shutil  # noqa: E402
+
+satirlar = inspect.getsource(ocr_gpu._baslat_komutu).splitlines()
+gpu_dal = next((i for i, x in enumerate(satirlar) if 'shutil.which("gpu-is")' in x), None)
+yakin = "\n".join(satirlar[max(0, (gpu_dal or 0) - 2):(gpu_dal or 0) + 3]) if gpu_dal is not None else ""
+kontrol("4: ocr_gpu gpu-is dalında genişleme gerekçesi yazılı", "expand-environment" in yakin, yakin)
+gpu_is = shutil.which("gpu-is")
+if gpu_is:
+    with open(os.path.realpath(gpu_is), encoding="utf-8", errors="replace") as f:
+        govde = f.read()
+    kontrol("4b: kurulu gpu-is systemd-run'a --expand-environment=no geçiriyor",
+            "systemd-run" not in govde or "--expand-environment=no" in govde, gpu_is)
+eski_which = ocr_gpu.shutil.which
+ocr_gpu.shutil.which = lambda ad: "/usr/bin/" + ad
+try:
+    gk = ocr_gpu._baslat_komutu("/usr/bin/python3")
+finally:
+    ocr_gpu.shutil.which = eski_which
+kontrol("4c: gpu-is dalı systemd-run çağırmıyor (sarmalayıcıya devreder)",
+        gk[0] == "gpu-is" and "systemd-run" not in gk, str(gk[:4]))
 
 print(f"\n{gecen}/{toplam} geçti")
 sys.exit(0 if gecen == toplam else 1)
