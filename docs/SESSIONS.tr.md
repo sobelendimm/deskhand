@@ -461,7 +461,20 @@ Ayar (`ayarlar.toml`): `[oturum] kalici = "shopier.com, ornek.test"` (virgüllü
 tarafından) dosyaya yazılan site, ancak kullanıcı panelin diyaloğunda ("Deskhand — Onay", varsayılan Hayır) **Evet**
 derse kullanılır; red → dosya o site olmadan geri yazılır. Site çıkarmak soru gerektirmez. Diğer süreçler (kopya bekçisi,
 MCP sunucusu, CLI) listeyi yalnız panelin doğrulanmış kanalından alır; panel kapalıysa liste boş, hiçbir şey kaydedilmez
-ya da uygulanmaz.
+ya da uygulanmaz. `[oturum] kalici_sure_gun` da panel yetkilidir: kısaltma hemen geçer, uzatma yalnız panelde Evet ile.
+
+**Panel yetkili ayarların tehdit modeli** (site listesi, süre, `hesap_oturumlari`, `onaylar`, yasak pencereler, erişim
+seviyeleri; `deskhand/liste_koruma.py`). Her ayarın panelce son onaylanan değeri, ayar başına sayaç ve bir HMAC anahtarı
+TEK Secret Service ögesinde durur (`application=deskhand, purpose=panel-isaret`); ayarın yanındaki işaret dosyası
+HMAC(anahtar, [ayar, sayaç, değer]) taşır ve yalnız sayacı ögedekine eşitse geçer (eski imzalı işaretin geri konması
+replay sayılır, reddedilir). Kural: diskteki DARALTMA (site/sağlayıcı çıkarmak, kısa süre, `hepsi`, yeni yasak pencere,
+düşük seviye) sorusuz kabul; GEVŞETME (ya da yönü belirsiz değişiklik) kullanıcı panelde Evet demeden uygulanmaz
+(varsayılan Hayır); sahte dosya + işaret kaybeder, son onaylı değer ögeden geri gelir. İmzalı kayıt yoksa (ilk açılış,
+cüzdan kilitli, Secret Service yok, her hata): yalnız varsayılanlar ve daraltmalar uygulanır, her gevşetme sorulur;
+imzasız işarete düşüş yok. **Kapsamda:** yalnız dosya yazan süreç (ajanın kabuğu, düzenleyici, istemle yönlendirilmiş
+ajan). **Kapsam dışı:** aynı kullanıcıyla çalışıp Secret Service ögesini BİLEREK okuyan ya da değiştiren kod (KDE
+Cüzdanı'nda uygulama başına erişim denetimi yok; bunun için ajan kabuğunun oturum veri yolundan yalıtılması gerekir);
+cüzdan açıkken ögenin silinmesi ilk açılış gibi görünür.
 
 - **Kaydetme:** kopya silinmeden hemen önce (bekçi, süpürme, masaüstü kapanışı) kopyanın `cookies.sqlite`'ındaki (ve
   Firefox yazdıysa kopyanın `sessionstore-backups/recovery.jsonlz4`'ündeki) listedeki sitelere ait çerezler ŞİFRELİ
@@ -483,10 +496,14 @@ ya da uygulanmaz.
   bayat kopya daha yeni girişi ezmez. Kopyanın depodan alıp sonra düşürdüğü çerez çıkıştır: kayıtta bir silinme izi
   (değer özeti, o çerezin süresi dolana dek) kalır, bayat kopya çıkış yapılmış oturumu geri yazamaz; yeni giriş (başka
   değer) kaydedilir. Kaydı hiç almamış kopya (anahtarlık kilitliydi, siteye girilmedi) kayda dokunmaz.
-- **Ömür:** kalıcı çerez kendi son kullanma tarihini korur. Süresiz (oturumluk) çerez ilk kaydından itibaren
-  `[oturum] kalici_sure_gun` gün tutulur (varsayılan 30, 1..365); sonraki kopyalarda geri gelince ilk tarihini korur.
+- **Ömür:** kalıcı çerez kendi son kullanma tarihini korur. Süresiz (oturumluk; bitişi yok ya da 0, bozuk bitiş atılır)
+  çerez SON KULLANIMINDAN (kendi son erişimi, kopyanın son kullanımından geç değil) itibaren `[oturum] kalici_sure_gun`
+  gün tutulur (varsayılan 30, 1..365): her gün kullanılan site girişini kaybetmez, kullanılmayan uzamaz.
   Bütün çerezlerinin süresi geçmiş (ya da gelecekte "kaydedilmiş") kayıt okunurken silinir.
-- **Unutma:** `deskhand sessions forget <alan>` (Türkçe takma ad `unut`) bir kaydı, `--all` hepsini siler. `deskhand
+- **Unutma:** `deskhand sessions forget <alan>` (Türkçe takma ad `unut`) bir kaydı (`www.` ve diğer alt alanlar listedeki
+  siteyi bulur; yarım yazım artığı da silinir), `--all` hepsini siler. O anda açık arka plan kopyası kapanınca siteyi geri
+  yazmaz; sonra açılan kopyadaki yeni giriş normal kaydedilir. Depo yazımları ve silmeleri süreçler arası tek kilit
+  altındadır: aynı anda kapanan iki kopyanın girişleri ve çıkışları korunur. `deskhand
   doctor` listedeki her sitenin kaydını gösterir: kaç gün önce kaydedildi, ne zaman sona eriyor (değer asla).
 - **Asla:** banka/ödeme/devlet/merkezi kimlik alanları (§8 ret listesi, her yazım: büyük/küçük harf, sondaki nokta,
   Unicode/ACE) liste de olsa ne kaydedilir ne uygulanır (elle yazılmış kayıt da süzülür; panelin hesap oturumu izni

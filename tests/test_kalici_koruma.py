@@ -13,6 +13,44 @@ import _yalitim  # noqa: F401  (deskhand'dan ÖNCE)
 
 from deskhand import ayarlar, doktor, liste_koruma, onay  # noqa: E402
 
+class SahteKasa:
+    """Fake Secret Service item of the panel (liste_koruma: key, counters, last approved values); file-backed so a
+    client process reads the same one (KASA_ISTEMCI). The real wallet is never touched."""
+    yol = os.path.join(os.environ["DESKHAND_STATE_DIR"], "sahte-kasa.json")
+
+    def oku(self):
+        try:
+            with open(self.yol, "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            return None
+
+    def yaz(self, veri):
+        with open(self.yol, "wb") as f:
+            f.write(veri)
+
+
+liste_koruma.isaret_anahtarlik_ayarla(SahteKasa())
+KASA_ISTEMCI = ("class _K:\n"
+                "    def oku(self):\n"
+                "        import os\n"
+                "        try:\n"
+                "            return open(os.path.join(os.environ['DESKHAND_STATE_DIR'], 'sahte-kasa.json'), 'rb').read()\n"
+                "        except FileNotFoundError:\n"
+                "            return None\n"
+                "    def yaz(self, v):\n"
+                "        raise OSError('client')\n"
+                "from deskhand import liste_koruma as _lk\n"
+                "_lk.isaret_anahtarlik_ayarla(_K())\n")
+
+
+def sahte_isaret(tur, metin):
+    """The agent's forged mark (plain sha256 of the content, no panel signature)."""
+    import hashlib
+    os.makedirs(os.path.dirname(liste_koruma.isaret_yolu(tur)), exist_ok=True)
+    with open(liste_koruma.isaret_yolu(tur), "w") as f:
+        json.dump({"sha256": hashlib.sha256(metin.encode()).hexdigest(), "icerik": metin, "var": True}, f)
+
 gecen = toplam = 0
 
 
@@ -77,10 +115,13 @@ k.denetle()
 dene("6c: panel açıkken ajan dosyaya yazar → sorulur, red → liste değişmez, dosya geri yazılır",
      lambda: sorulan[-1] == ["ajan.test", "ikinci.test"] and istemci() == [] and ayarlar.al("oturum", "kalici") == "",
      lambda: f"{sorulan} {istemci()}")
-liste_koruma._isaret_yaz("kalici", "ajan.test")  # sahte işaret: panelin BELLEĞİ yetkili
+sahte_isaret("kalici", "ajan.test")  # sahte işaret: panelin BELLEĞİ yetkili
 ajan_yazar("ajan.test")
+n_sorulan = len(sorulan)
 k.denetle()
-dene("6d: sahte işaret + dosya → yine sorulur ve reddedilir", lambda: istemci() == [] and sorulan[-1] == ["ajan.test"])
+dene("6d: sahte işaret + dosya → reddedilir; aynı içerik bu panel oturumunda zaten reddedildiği için yeniden "
+     "sorulmaz (C6)", lambda: istemci() == [] and len(sorulan) == n_sorulan and ayarlar.al("oturum", "kalici") == "",
+     lambda: f"{sorulan} {istemci()}")
 liste_koruma.panel_durdur()
 onay.panel_sil()
 

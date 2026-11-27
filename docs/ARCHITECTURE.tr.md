@@ -446,9 +446,12 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   (`guvenlik.onayli_gecerli`). Zamanlanmış akışlar için.
 - Başlık (`-b`) ve sınıf (`-s`) kilidi her girdiden hemen önce (4).
 - DUR anahtarı: `DESKHAND_RUNTIME_DIR/dur` varsa her girdi çağrısından önce Dur(13); basılı her şey bırakılır.
-  `deskhand dur` oluşturur, `deskhand devam` siler. Arayüz/tepsi/kısayol bunu kullanır.
-  `guvenlik.dur_ac(kaynak)` / `dur_kapat(kaynak)` / `dur_kaynagi()`: dur dosyasının ilk sözcüğü `kullanici` ya da
-  `cli`'dir. Kullanıcının koyduğu DUR'u CLI ezemez ve kaldıramaz (Dur 13); yalnızca arayüz kaldırır.
+  DUR AÇMAK serbesttir (`deskhand dur`, arayüz/tepsi/kısayol). Kaldırmak yalnız kullanıcının kararıdır: `deskhand devam`
+  (`guvenlik.dur_kaldir_iste`) panele sorar ("DUR kaldırılsın mı?", varsayılan Hayır); panel kapalı / gözetimsiz kip /
+  Hayır → Dur 13; komut satırı `--approved` yanıt sayılmaz. İletiler ajana kaldırma yolunu tarif etmez. Kullanıcının panelde
+  koyduğu DUR panelin Devam'ı olmadan kaybolursa (bir süreç dosyayı sildi) görünür uyarıyla geri konur
+  (`gui/panel._dur_koru`). Kapsam dışı: panel kapalıyken dosyayı silen süreç.
+  `guvenlik.dur_ac(kaynak)` / `dur_kapat(kaynak)` / `dur_kaynagi()`: dur dosyasının ilk sözcüğü `kullanici` ya da `cli`'dir.
 - Girdi merkezi (§2) istemci denetimlerine EK güvenceler verir: soket 0600 / dizin 0700 ve SO_PEERCRED ile yalnız
   aynı kullanıcı (istemci de sunucunun kullanıcısını ve soket iznini denetler); her partiden hemen önce DUR anahtarı
   (açıksa basma satırları 13 ile reddedilir, `keyup`/`buttonup` ve gecikme ayarları geçer); yalnız dotool dilinin

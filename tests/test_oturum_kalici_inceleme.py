@@ -218,6 +218,12 @@ def ikinci_tur(anahtarlik):
     kopyaya(acik, [("dukkan.test", "y2b", "ACIK", T._ms(7200))], erisim=time.time() + 4100)
     time.sleep(0.05)
     kalici.unut("dukkan.test")
+    # the browser in the copy can write its own directory: a future "opened at" there must not beat the forget
+    with open(os.path.join(acik, ".deskhand-kalici-acilis"), "w") as f:
+        f.write(repr(time.time() + 10 * 86400))
+    dene("Y2: kopya açılış zamanı gelecek tarihe yazılırsa forget yine geçerli (zaman kopya dışında, depo dizininde)",
+         lambda: not any(a.startswith(".deskhand-kalici") and "acilis" in a for a in os.listdir(acik)
+                         if a != ".deskhand-kalici-acilis") and os.path.isdir(os.path.join(T.depo_dizini(), ".acilis")))
     T.kapat(acik)
     dene("Y2: forget'ten önce açılmış kopyanın kapanışı siteyi geri yazmaz", lambda: T.kayit("dukkan.test") is None,
          lambda: T.depo_metni()[:300])

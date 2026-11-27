@@ -220,7 +220,21 @@ class Panel(QObject):
         if yeni:
             self._liste_izci.addPaths(yeni)
 
+    def _dur_koru(self):
+        """The user's DUR (set in this panel) vanished without the panel's Devam (a process deleted the file): put it
+        back and warn. Removing DUR is the user's decision only (CLI resume asks the panel: guvenlik.dur_kaldir_iste)."""
+        if getattr(self, "_dur_kullanici", False) and not guvenlik.dur_acik():
+            import time as _t
+
+            from .. import onay
+            if onay.SON_DUR_IZNI and _t.monotonic() - onay.SON_DUR_IZNI < 300:
+                self._dur_kullanici = False  # the user approved the removal in this panel's dialog
+                return
+            guvenlik.dur_ac("kullanici")
+            self._liste_uyari(_("DUR anahtarı panel dışında kaldırıldı; geri konuldu (yalnız kullanıcı kaldırır)."))
+
     def _liste_degisti(self, *_a):
+        self._dur_koru()
         k = getattr(self, "koruyucu", None)
         if k is None:
             return
@@ -288,6 +302,7 @@ class Panel(QObject):
     # -------- DUR / devam (insanın kararı: kaynak "kullanici")
     def dur(self):
         guvenlik.dur_ac("kullanici")
+        self._dur_kullanici = True  # the panel knows its own DUR: deleted outside the panel → put back (_dur_koru)
         self.pencere.gorev.durdur()  # çalışan görev varsa o da dursun (ajan DUR hatalarıyla boşuna beklemesin)
         gunluk("DUR anahtarı açıldı (panel)")
         self.izleyici.yenile()
@@ -295,6 +310,7 @@ class Panel(QObject):
     def devam(self):
         """Panel penceresindeki Devam (yerleşik yasak pencere: ajan tıklayamaz) → DUR kalkar."""
         acikti = guvenlik.dur_kapat("kullanici")
+        self._dur_kullanici = False
         if acikti:
             gunluk("DUR anahtarı kaldırıldı (panel)")
         self.izleyici.yenile()

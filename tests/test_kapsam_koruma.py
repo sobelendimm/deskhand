@@ -13,6 +13,44 @@ import _yalitim  # noqa: F401  (deskhand'dan ÖNCE)
 
 from deskhand import ayarlar, doktor, guvenlik, liste_koruma, onay  # noqa: E402
 
+class SahteKasa:
+    """Fake Secret Service item of the panel (liste_koruma: key, counters, last approved values); file-backed so a
+    client process reads the same one (KASA_ISTEMCI). The real wallet is never touched."""
+    yol = os.path.join(os.environ["DESKHAND_STATE_DIR"], "sahte-kasa.json")
+
+    def oku(self):
+        try:
+            with open(self.yol, "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            return None
+
+    def yaz(self, veri):
+        with open(self.yol, "wb") as f:
+            f.write(veri)
+
+
+liste_koruma.isaret_anahtarlik_ayarla(SahteKasa())
+KASA_ISTEMCI = ("class _K:\n"
+                "    def oku(self):\n"
+                "        import os\n"
+                "        try:\n"
+                "            return open(os.path.join(os.environ['DESKHAND_STATE_DIR'], 'sahte-kasa.json'), 'rb').read()\n"
+                "        except FileNotFoundError:\n"
+                "            return None\n"
+                "    def yaz(self, v):\n"
+                "        raise OSError('client')\n"
+                "from deskhand import liste_koruma as _lk\n"
+                "_lk.isaret_anahtarlik_ayarla(_K())\n")
+
+
+def sahte_isaret(tur, metin):
+    """The agent's forged mark (plain sha256 of the content, no panel signature)."""
+    import hashlib
+    os.makedirs(os.path.dirname(liste_koruma.isaret_yolu(tur)), exist_ok=True)
+    with open(liste_koruma.isaret_yolu(tur), "w") as f:
+        json.dump({"sha256": hashlib.sha256(metin.encode()).hexdigest(), "icerik": metin, "var": True}, f)
+
 gecen = toplam = 0
 
 
@@ -58,7 +96,7 @@ def dosyada():
 # ================================================================ panel kapalı
 ajan_yazar("kart")
 kontrol("panel kapalı + dosyada elle 'kart' → istemci 'hepsi'", istemci().get("kapsam") == "hepsi")
-liste_koruma._isaret_yaz(liste_koruma.KAPSAM, "kart")  # işareti de sahte (panel kapalı → yine panel yok)
+sahte_isaret(liste_koruma.KAPSAM, "kart")  # işareti de sahte (panel kapalı → yine panel yok)
 kontrol("panel kapalı + dosya VE işaret 'kart' → istemci yine 'hepsi' (kanal yok)", istemci().get("kapsam") == "hepsi")
 kontrol("doctor: dosyada kart ama panel teyit etmiyor → uyarı satırı, 'hepsi'",
         doktor.satir_onay_kapsami()["durum"] == "uyari" and doktor.satir_onay_kapsami()["ayrinti"].startswith("hepsi"))
@@ -78,7 +116,7 @@ kontrol("panel açık + dosyaya elle 'kart' (işaret yok) → istemci 'hepsi'", 
 u = k.denetle()
 kontrol("panel denetimi: dosya 'hepsi'ye geri yazıldı + uyarı", dosyada() == "hepsi" and len(u) == 1, str(u))
 ajan_yazar("kart")
-liste_koruma._isaret_yaz(liste_koruma.KAPSAM, "kart")  # sahte işaret de işe yaramaz: panelin BELLEĞİ yetkili
+sahte_isaret(liste_koruma.KAPSAM, "kart")  # sahte işaret de işe yaramaz: panelin BELLEĞİ yetkili
 kontrol("panel açık + dosya ve işaret sahte 'kart' → istemci 'hepsi'", istemci().get("kapsam") == "hepsi")
 k.denetle()
 kontrol("…ve panel dosyayı geri yazar", dosyada() == "hepsi")

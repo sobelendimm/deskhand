@@ -22,6 +22,44 @@ import _yalitim  # noqa: E402
 from deskhand import guvenlik, liste_koruma, onay, uygulama, yollar  # noqa: E402
 from deskhand.hata import Dur  # noqa: E402
 
+class SahteKasa:
+    """Fake Secret Service item of the panel (liste_koruma: key, counters, last approved values); file-backed so a
+    client process reads the same one (KASA_ISTEMCI). The real wallet is never touched."""
+    yol = os.path.join(os.environ["DESKHAND_STATE_DIR"], "sahte-kasa.json")
+
+    def oku(self):
+        try:
+            with open(self.yol, "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            return None
+
+    def yaz(self, veri):
+        with open(self.yol, "wb") as f:
+            f.write(veri)
+
+
+liste_koruma.isaret_anahtarlik_ayarla(SahteKasa())
+KASA_ISTEMCI = ("class _K:\n"
+                "    def oku(self):\n"
+                "        import os\n"
+                "        try:\n"
+                "            return open(os.path.join(os.environ['DESKHAND_STATE_DIR'], 'sahte-kasa.json'), 'rb').read()\n"
+                "        except FileNotFoundError:\n"
+                "            return None\n"
+                "    def yaz(self, v):\n"
+                "        raise OSError('client')\n"
+                "from deskhand import liste_koruma as _lk\n"
+                "_lk.isaret_anahtarlik_ayarla(_K())\n")
+
+
+def sahte_isaret(tur, metin):
+    """The agent's forged mark (plain sha256 of the content, no panel signature)."""
+    import hashlib
+    os.makedirs(os.path.dirname(liste_koruma.isaret_yolu(tur)), exist_ok=True)
+    with open(liste_koruma.isaret_yolu(tur), "w") as f:
+        json.dump({"sha256": hashlib.sha256(metin.encode()).hexdigest(), "icerik": metin, "var": True}, f)
+
 G = _yalitim.GECICI
 gecen = toplam = 0
 
@@ -57,7 +95,8 @@ ISTEMCI = ("import json, sys; sys.path.insert(0, sys.argv[1]); from deskhand imp
 
 def istemci():
     """AYRI süreç (CLI/MCP gibi): listeleri nereden alıyor?"""
-    r = subprocess.run([sys.executable, "-c", ISTEMCI, _yalitim.KOK], capture_output=True, text=True, timeout=30)
+    r = subprocess.run([sys.executable, "-c", ISTEMCI.replace("\n", "\n" + KASA_ISTEMCI, 1), _yalitim.KOK],
+                       capture_output=True, text=True, timeout=30)
     try:
         return json.loads(r.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
@@ -202,9 +241,11 @@ kontrol("D1: panel yeniden açılınca kapalıyken silinen/değişen dosyalar i�
         len(uyarilar) == 2, str(uyarilar))
 liste_koruma.panel_durdur()
 onay.panel_sil()
-# ilk kurulum: işaret yok → bugünkü davranış
+# ilk kurulum: işaret yok, panelin imzalı kaydı yok → bugünkü davranış
 for t in liste_koruma.TURLER:
     os.remove(liste_koruma.isaret_yolu(t))
+os.remove(SahteKasa.yol)
+liste_koruma._anahtar_unut()
 os.remove(YASAK)
 os.remove(SEVIYE)
 kontrol("D1: ilk kurulum (işaret yok): yasak dosyası varsayılanla oluşur, seviye yok = kısıt yok",

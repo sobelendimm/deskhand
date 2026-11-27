@@ -2170,6 +2170,25 @@ def dur_kaynagi():
         return None
 
 
+DUR_KALDIRMA_MESAJI = N_("DUR yalnız kullanıcı tarafından kaldırılır: Deskhand panelinden ya da DUR kısayoluyla.")
+
+
+def dur_kaldir_iste(sure=None):
+    """CLI/MCP asking to remove the STOP switch (loosening: H3 review, same rule as the panel-authoritative settings).
+    Opening DUR is free; removing it needs the user's Yes in the panel dialog (default No). Panel closed, unattended
+    mode, no answer → Dur(13). A command-line --approved is NOT an answer here. → True when it was removed."""
+    if not dur_acik():
+        return False
+    from . import onay
+    s = onay.iste_sonuc(_("DUR kaldırılsın mı?"), "DUR",
+                        _("Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin."),
+                        **({"sure": sure} if sure else {}), dur_kaldirma=True)
+    if not s.izin:
+        raise Dur(KULLANICI_DUR, _(DUR_KALDIRMA_MESAJI) + " " + _("İstek onaylanmadı ({neden}).").format(
+            neden=s.neden))
+    return dur_kapat("kullanici")
+
+
 def dur_kapat(kaynak="cli"):
     """DUR anahtarını kapat. → önceden açık mıydı. Kullanıcının (arayüzden) koyduğu DUR'u yalnız kullanıcı
     kaldırır: ajan 'devam' diyerek insanın durdurma kararını geri alamaz → Dur(13).

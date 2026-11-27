@@ -8,27 +8,27 @@ ya da uygulama-seviyeleri.txt dosyasını silip/değiştirip kısıtları kaldı
   (`denetle`; panelde QFileSystemWatcher + yoklama).
 - CLI ve MCP içeriği panelden onay kanalıyla alır (`liste yasak|seviye|onaylar|kimlik|kalici|kalici_sure`; onay.py).
 
-AUTHENTICATED PANEL MARK (H3 second security review, Y1 class + Y5). Every panel-authoritative value — yasak, seviye,
-onaylar (KAPSAM), hesap_oturumlari (KIMLIK), [oturum] kalici (KALICI), [oturum] kalici_sure_gun (SURE) — has a mark
-STATE_DIR/liste-<tur>.isaret {surum, sha256, icerik, var, zaman, hmac}. hmac = HMAC-SHA256(key, ["deskhand-panel-
-isaret", 2, tur, icerik]); the 256-bit key is its own Secret Service item (application=deskhand, purpose=panel-isaret,
-label "Deskhand panel mark key"), created and used for signing ONLY by the panel (`_isaret_yaz`). A plain sha256 mark
-(the old format) or any mark that does not verify is NOT the panel's word.
+WALLET-ANCHORED PANEL STATE (H3 second security review, Y1 class + Y5, and the follow-up scan). Every panel-
+authoritative value — yasak, seviye, onaylar (KAPSAM), hesap_oturumlari (KIMLIK), [oturum] kalici (KALICI),
+[oturum] kalici_sure_gun (SURE) — has its last APPROVED value in ONE Secret Service item (application=deskhand,
+purpose=panel-isaret, label "Deskhand panel settings": {anahtar, sayac{tur}, son{tur}}), written ONLY by the panel
+(`_isaret_yaz`; the counter of a setting grows when its value changes). The mark file STATE_DIR/liste-<tur>.isaret
+carries HMAC-SHA256(anahtar, ["deskhand-panel-isaret", 3, tur, sayac, icerik]); it is valid only when the HMAC is right
+AND its counter equals the item's (an older signed mark put back = replay → not valid). Decisions take the reference
+from the item (`onayli_deger`), never from a file: a forged file + mark cannot replace the approved value.
 
 Rule, per value read from disk while the panel was closed (panel start) or from the file (panel closed, yasak/seviye):
-  a) TIGHTENING relative to the panel's verified value is accepted without a mark (removing is never asked);
-  b) LOOSENING — or a change whose direction cannot be decided — is applied only with a valid HMAC mark; otherwise it
-     is NOT applied (closed-fail): the panel keeps/restores its last verified value and asks the user once
-     (`sor(tur, aciklama)` / `onayla(siteler)`, a Qt dialog in gui/panel.py, default No); panel closed → Dur 10;
-  c) no key / locked wallet / no Secret Service: nothing verifies, so (b) applies to every loosening; there is NO
-     fallback to sha256 or to an unsigned mark;
-  d) migration: values under an old sha256 mark are asked once at the first start; Yes → signed;
+  a) TIGHTENING relative to the approved value is accepted without a question (removing is never asked);
+  b) LOOSENING — or a change whose direction cannot be decided — is NOT applied (closed-fail): the panel keeps/restores
+     the approved value and asks the user once (`sor(tur, aciklama)` / `onayla(siteler)`, a Qt dialog in gui/panel.py,
+     default No); panel closed → Dur 10 (yasak/seviye);
+  c) no signed state (first start, locked wallet, no Secret Service, any error): only the defaults (TABAN: onaylar=hepsi,
+     hesap_oturumlari=∅, kalici=∅, kalici_sure_gun=30; yasak = the built-in list, seviye = no rule, so any file is the
+     default or tighter) and tightenings apply; every loosening is asked; one visible warning per panel start; no
+     fallback to sha256 or to an unsigned mark, no Dur 10 loop;
+  d) migration: values under an old sha256 mark have no approved value yet → (c): loosenings are asked once, Yes → signed;
   e) one question per (setting, file content) per panel session; a file that cannot be written is reported once
      (no dialog loop, review C6).
-With no verified value (no mark, or one that does not verify) the reference is the strictest default (TABAN):
-onaylar=hepsi, hesap_oturumlari=∅, kalici=∅, kalici_sure_gun=30. yasak/seviye have no such floor: the very first start
-(no mark AND no key in the wallet) takes the file; later an unverifiable mark → the stricter of file and mark content,
-and the user is asked.
 
 Direction per type (siki_mi):
   yasak       tighter = every pattern line of the reference is still there (adding lines tightens)
@@ -39,10 +39,10 @@ Direction per type (siki_mi):
   kalici_sure tighter = fewer or equal days
 
 Threat model (honest): a process that only writes files (the agent's shell, an editor, a prompt-injected agent) cannot
-loosen these settings without the user's Yes in the panel. Code running as the same user that DELIBERATELY reads the
-key from the Secret Service (secret-tool / secretstorage: KDE Wallet has no per-application ACL) can forge a mark: that
-is out of scope here (it needs the S1 isolation of the agent shell from the session bus). Deleting every mark while the
-wallet is locked looks like a first start for yasak/seviye (the file is taken, visibly).
+loosen these settings without the user's Yes in the panel. Code running as the same user that DELIBERATELY reads or
+changes the Secret Service item (secret-tool / secretstorage: KDE Wallet has no per-application ACL) is out of scope (it
+needs the S1 isolation of the agent shell from the session bus); deleting the item while the wallet is unlocked looks
+like a first start (c).
 
 Qt'siz (CLI/MCP hafif kalsın); panel tarafının Qt izleyicisi deskhand/gui/panel.py'de.
 """
@@ -69,13 +69,11 @@ SURE = "kalici_sure"  # kanal türü + işaret adı; dosya: ayarlar.toml [oturum
 SURE_VARSAYILAN = 30
 TUM = TURLER + (KAPSAM, KIMLIK, KALICI, SURE)
 TABAN = {KAPSAM: "hepsi", KIMLIK: "", KALICI: "", SURE: str(SURE_VARSAYILAN)}  # strictest default (no verified value)
-ISARET_SURUM = 2
+ISARET_SURUM = 3
 ONBELLEK_SN = 0.3  # istemci: panelden alınan listeyi bu kadar süre yeniden sormaz (pencere listesinde her pencere
 #                   için denetim); panelin Kaydet'i en geç bu kadar sonra geçerli. Dosya yolu önbelleksiz.
 MESAJ_KAYIP = N_("Deskhand ayar dosyası ({dosya}) kayıp ya da panel dışında değişti; güvenli tarafta hiçbir girdi "
                  "gönderilmez; Deskhand paneli açın (panel kendi kaydını geri yükler).")
-MESAJ_DOGRULANAMADI = N_("Deskhand ayar dosyasının ({dosya}) panel imzası doğrulanamadı (cüzdan kilitli/yok ya da "
-                         "imza geçersiz); güvenli tarafta hiçbir girdi gönderilmez; Deskhand paneli açın.")
 _AYAR_ADI = {"yasak": N_("yasak pencereler"), "seviye": N_("uygulama erişim seviyeleri"), KAPSAM: N_("onay kapsamı"),
              KIMLIK: N_("hesap oturumu izni"), KALICI: N_("kalıcı oturum siteleri"),
              SURE: N_("kalıcı oturum süresi (gün)")}
@@ -122,83 +120,170 @@ def _yaz_atomik(yol: str, metin: str) -> None:
     os.replace(gecici, yol)
 
 
-# ---------------------------------------------------------------- the mark key (Secret Service, its own item)
+# ---------------------------------------------------------------- the panel's signed state (Secret Service item)
 
-_ANAHTARLIK = None
-_ANAHTAR: bytes | None = None
-_ANAHTAR_DENEME = 0.0       # monotonic time of the last failed read (client: not asked again for 2 s)
-_ANAHTAR_YOK_KESIN = False  # the key ring answered: there is no key (the panel never signed anything)
-_ANAHTAR_KILIT = threading.Lock()
+_KASA = None                     # oku() -> bytes | None (None = no item yet), yaz(bytes); errors: kalici.AnahtarYok
+_DURUM: dict | None = None       # cached {"anahtar": bytes, "sayac": {tur: int}, "son": {tur: str | None}}
+_DURUM_ZAMAN = 0.0
+_DURUM_NEDEN: str | None = None  # why there is no signed state (None = it worked, or no item was ever written)
+_DURUM_KILIT = threading.RLock()
+_DURUM_ONBELLEK_SN = 1.0
 
 
-def _anahtarlik():
-    global _ANAHTARLIK
-    if _ANAHTARLIK is None:
-        from .oturum.kalici import GizliServis
+def _kasa_nesnesi():
+    global _KASA
+    if _KASA is None:
+        from .oturum.kalici import AnahtarYok, GizliServis
 
-        class _IsaretAnahtari(GizliServis):
-            ETIKET = "Deskhand panel mark key"
+        class _PanelKasasi(GizliServis):
+            """ONE Secret Service item: the mark key, a counter per setting and the panel's last approved value."""
+            ETIKET = "Deskhand panel settings"
             OZNITELIK = {"application": "deskhand", "purpose": "panel-isaret"}
-        _ANAHTARLIK = _IsaretAnahtari()
-    return _ANAHTARLIK
+
+            def _bul(self, koleksiyon):
+                for oge in koleksiyon.search_items(self.OZNITELIK):
+                    if oge.is_locked():
+                        raise AnahtarYok(_("cüzdan kilitli"))
+                    s = bytes(oge.get_secret())
+                    if s:
+                        return s
+                return None
+
+            def oku(self):
+                try:
+                    return self.anahtar(False)
+                except AnahtarYok as e:
+                    if e.yok:
+                        return None
+                    raise
+
+            def yaz(self, veri: bytes) -> None:
+                if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali":
+                    raise AnahtarYok(_("anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)"))
+                import secretstorage
+                baglanti = secretstorage.dbus_init()
+                try:
+                    koleksiyon = secretstorage.Collection(baglanti)
+                    if koleksiyon.is_locked():
+                        raise AnahtarYok(_("cüzdan kilitli"))
+                    koleksiyon.create_item(self.ETIKET, self.OZNITELIK, veri, replace=True,
+                                           content_type="application/json")
+                finally:
+                    baglanti.close()
+        _KASA = _PanelKasasi()
+    return _KASA
 
 
 def isaret_anahtarlik_ayarla(nesne) -> None:
-    """Replace the mark key ring (tests inject a fake: anahtar(olustur: bool) -> bytes, raises kalici.AnahtarYok)."""
-    global _ANAHTARLIK
-    _ANAHTARLIK = nesne
+    """Replace the panel's Secret Service item (tests: an object with oku() -> bytes | None and yaz(bytes))."""
+    global _KASA
+    _KASA = nesne
     _anahtar_unut()
 
 
 def _anahtar_unut() -> None:
-    global _ANAHTAR, _ANAHTAR_DENEME, _ANAHTAR_YOK_KESIN
-    with _ANAHTAR_KILIT:
-        _ANAHTAR, _ANAHTAR_DENEME, _ANAHTAR_YOK_KESIN = None, 0.0, False
+    global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
+    with _DURUM_KILIT:
+        _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN = None, 0.0, None
 
 
-def _isaret_anahtari(olustur: bool = False) -> bytes | None:
-    """The mark key (cached in memory for the process), or None (no key / locked wallet / no Secret Service)."""
-    global _ANAHTAR, _ANAHTAR_DENEME, _ANAHTAR_YOK_KESIN
-    with _ANAHTAR_KILIT:
-        if _ANAHTAR is not None:
-            return _ANAHTAR
-        if not olustur and time.monotonic() - _ANAHTAR_DENEME < 2.0 and _ANAHTAR_DENEME:
-            return None
-        from .oturum.kalici import AnahtarYok
+def _durum_coz(ham) -> dict | None:
+    try:
+        d = json.loads(bytes(ham).decode("utf-8"))
+        k = bytes.fromhex(d["anahtar"])
+        sayac = {t: int(v) for t, v in d.get("sayac", {}).items() if t in TUM and int(v) >= 0}
+        son = {t: v for t, v in d.get("son", {}).items() if t in TUM and (v is None or isinstance(v, str))}
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return None
+    return {"anahtar": k, "sayac": sayac, "son": son} if len(k) == 32 else None
+
+
+def _neden(e: Exception) -> str:
+    return getattr(e, "neden", None) or _("Secret Service hatası")
+
+
+def _durum(olustur: bool = False) -> dict | None:
+    """The panel's signed state, or None: no item yet (first start), locked wallet, no Secret Service, any error.
+    olustur=True (panel only): a missing (or unreadable-content) item is created with a fresh key."""
+    global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
+    with _DURUM_KILIT:
+        if _DURUM is not None and time.monotonic() - _DURUM_ZAMAN < _DURUM_ONBELLEK_SN:
+            return _DURUM
         try:
-            k = _anahtarlik().anahtar(olustur)
-        except AnahtarYok as e:
-            _ANAHTAR_DENEME, _ANAHTAR_YOK_KESIN = time.monotonic(), bool(e.yok)
+            ham = _kasa_nesnesi().oku()
+        except Exception as e:  # noqa: BLE001 - locked / no service / error: no signed state (closed-fail)
+            _DURUM, _DURUM_NEDEN = None, _neden(e)
             return None
-        except Exception:  # noqa: BLE001 - any key ring error: nothing verifies (closed-fail)
-            _ANAHTAR_DENEME, _ANAHTAR_YOK_KESIN = time.monotonic(), False
-            return None
-        if not isinstance(k, (bytes, bytearray)) or len(k) != 32:
-            _ANAHTAR_DENEME, _ANAHTAR_YOK_KESIN = time.monotonic(), False
-            return None
-        _ANAHTAR, _ANAHTAR_YOK_KESIN = bytes(k), False
-        return _ANAHTAR
+        d = _durum_coz(ham) if ham else None
+        if d is None and ham:
+            _DURUM_NEDEN = _("panelin imzalı kaydı okunamadı (bozuk)")
+        if d is None:
+            if not olustur:
+                _DURUM = None
+                if not ham:
+                    _DURUM_NEDEN = None
+                return None
+            d = {"anahtar": os.urandom(32), "sayac": {}, "son": {}}
+            if not _durum_kaydet(d):
+                return None
+        _DURUM, _DURUM_ZAMAN = d, time.monotonic()
+        if ham:
+            _DURUM_NEDEN = None
+        return d
 
 
-def _ilk_kurulum() -> bool:
-    """No mark key exists at all (the key ring answered so): the panel never ran with this wallet. A locked or missing
-    wallet answers nothing: treated as a first start for yasak/seviye only (documented limit)."""
-    return _isaret_anahtari(False) is None
+def _durum_kaydet(d: dict) -> bool:
+    global _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN
+    veri = json.dumps({"surum": 1, "anahtar": d["anahtar"].hex(), "sayac": d["sayac"], "son": d["son"]},
+                      ensure_ascii=False).encode("utf-8", "surrogateescape")
+    with _DURUM_KILIT:
+        try:
+            _kasa_nesnesi().yaz(veri)
+        except Exception as e:  # noqa: BLE001 - not written: nothing is signed
+            _DURUM, _DURUM_NEDEN = None, _neden(e)
+            return False
+        _DURUM, _DURUM_ZAMAN, _DURUM_NEDEN = d, time.monotonic(), None
+        return True
 
 
-def _imza(k: bytes, tur: str, metin: str | None) -> str:
-    veri = json.dumps(["deskhand-panel-isaret", ISARET_SURUM, tur, metin], ensure_ascii=False)
+def kasa_nedeni() -> str | None:
+    """Why the panel's signed state could not be used in this process (None = it worked / never written)."""
+    return _DURUM_NEDEN
+
+
+def onayli_deger(tur: str) -> tuple[bool, str | None]:
+    """(True, value): the panel's last APPROVED value of `tur`, from the Secret Service item (a file or a mark cannot
+    change it). (False, None): no signed state for it (first start, locked wallet, no Secret Service, error)."""
+    d = _durum(False)
+    if d is None or tur not in d["son"]:
+        return False, None
+    return True, d["son"][tur]
+
+
+def _imza(k: bytes, tur: str, sayac: int, metin: str | None) -> str:
+    veri = json.dumps(["deskhand-panel-isaret", ISARET_SURUM, tur, sayac, metin], ensure_ascii=False)
     return hmac.new(k, veri.encode("utf-8", "surrogateescape"), hashlib.sha256).hexdigest()
 
 
 def _isaret_yaz(tur: str, metin: str | None) -> None:
-    """Panel only: the mark of `tur`, signed when the key is available (created on first use)."""
-    d = {"surum": ISARET_SURUM, "sha256": _ozet(metin), "icerik": metin, "var": metin is not None,
+    """Panel only: `metin` becomes the panel's approved value: the Secret Service item (son[tur], sayac[tur] + 1 when
+    the value changed) and the file mark HMAC(key, [tur, sayac, metin]). No usable item → an unsigned mark."""
+    d = _durum(True)
+    sayac = None
+    if d is not None:
+        if tur in d["son"] and d["son"][tur] == metin:
+            sayac = d["sayac"].get(tur, 0)
+        else:
+            yeni = {"anahtar": d["anahtar"], "sayac": {**d["sayac"], tur: d["sayac"].get(tur, 0) + 1},
+                    "son": {**d["son"], tur: metin}}
+            d = yeni if _durum_kaydet(yeni) else None
+            sayac = yeni["sayac"][tur] if d is not None else None
+    m = {"surum": ISARET_SURUM, "sha256": _ozet(metin), "icerik": metin, "var": metin is not None,
          "zaman": time.time()}
-    k = _isaret_anahtari(True)
-    if k is not None:
-        d["hmac"] = _imza(k, tur, metin)
-    _yaz_atomik(isaret_yolu(tur), json.dumps(d, ensure_ascii=False))
+    if d is not None and sayac is not None:
+        m["sayac"] = sayac
+        m["hmac"] = _imza(d["anahtar"], tur, sayac, metin)
+    _yaz_atomik(isaret_yolu(tur), json.dumps(m, ensure_ascii=False))
     try:
         os.chmod(isaret_yolu(tur), 0o600)
     except OSError:
@@ -206,19 +291,18 @@ def _isaret_yaz(tur: str, metin: str | None) -> None:
 
 
 def isaret_dogrula(tur: str) -> tuple[str, str | None]:
-    """("yok", None) no mark · ("gecerli", content) the panel's verified value · ("dogrulanamadi", content|None) a
-    mark that is not the panel's word (old sha256 format, forged, or no key to check it)."""
+    """The file mark: ("yok", None) · ("gecerli", content): HMAC right AND its counter == the item's (an older signed
+    mark put back = replay → not valid) · ("dogrulanamadi", content|None) otherwise. Decisions use onayli_deger."""
     m = isaret_oku(tur)
     if m is None:
         return "yok", None
     icerik = m.get("icerik") if m.get("var", True) else None
     if icerik is not None and not isinstance(icerik, str):
         return "dogrulanamadi", None
-    h = m.get("hmac")
-    if not isinstance(h, str) or m["sha256"] != _ozet(icerik):
-        return "dogrulanamadi", icerik
-    k = _isaret_anahtari(False)
-    if k is None or not hmac.compare_digest(h, _imza(k, tur, icerik)):
+    d = _durum(False)
+    h, s = m.get("hmac"), m.get("sayac")
+    if d is None or not isinstance(h, str) or not isinstance(s, int) or isinstance(s, bool) or \
+            s != d["sayac"].get(tur) or not hmac.compare_digest(h, _imza(d["anahtar"], tur, s, icerik)):
         return "dogrulanamadi", icerik
     return "gecerli", icerik
 
@@ -319,6 +403,9 @@ class Koruyucu:
         self.bellek: dict[str, str | None] = {}
         for tur in TUM:
             self._acilis(tur)
+        if kasa_nedeni():  # once per start, visible: why loosening values are being asked / not applied
+            self.uyari(_("Panelin imzalı kaydı kullanılamıyor ({neden}); yalnız varsayılanlar ve daraltmalar "
+                         "uygulanıyor, gevşetmeler panelde sorulur.").format(neden=kasa_nedeni()))
 
     # ---- the question
     def _sor(self, tur: str, yeni: str | None, ref: str | None) -> bool:
@@ -379,21 +466,23 @@ class Koruyucu:
     # ---- panel start
     def _acilis(self, tur: str) -> None:
         d = _dosyadaki(tur)
-        durum, m = isaret_dogrula(tur)
-        if tur in TURLER and d is None and tur == "yasak" and durum == "yok" and _ilk_kurulum():
-            from .guvenlik import VARSAYILAN_YASAK
-            d = _(VARSAYILAN_YASAK)
-            _yaz_atomik(dosya(tur), d)
-        if durum == "gecerli":
-            if siki_mi(tur, d, m):
+        var, ref = onayli_deger(tur)  # the panel's last approved value: from the Secret Service item, never a file
+        if var:
+            if siki_mi(tur, d, ref):
                 self._kabul(tur, d)
                 return
-            ref = m
         elif tur in TURLER:
-            if durum == "yok" and _ilk_kurulum():
-                self._kabul(tur, d)
-                return
-            ref = en_siki(tur, d, m)
+            # no signed state (first start / locked wallet / no Secret Service): the default is the built-in list
+            # only (yasak) and no rule (seviye); any file is that or stricter. Nothing is restored from a file.
+            if d is None and tur == "yasak":
+                from .guvenlik import VARSAYILAN_YASAK
+                d = _(VARSAYILAN_YASAK)
+                try:
+                    _yaz_atomik(dosya(tur), d)
+                except OSError:
+                    pass
+            self._kabul(tur, d)
+            return
         else:
             if siki_mi(tur, d, TABAN[tur]):
                 self._kabul(tur, d)
@@ -780,21 +869,17 @@ def _panelden(tur: str):
 
 
 def _dosyadan(tur: str, olustur: bool = True) -> str | None:
-    """Panel closed: the file, only as strict as the panel's VERIFIED last value (HMAC mark) or stricter. A mark that
-    does not verify (old sha256 / forged / locked wallet) or a missing mark once the panel has a key → Dur 10."""
+    """Panel closed: the file is used only when it is the panel's last APPROVED value (Secret Service item) or
+    stricter; looser / deleted → Dur 10. No signed state (first start, locked wallet): the file (any file is the
+    default or stricter for yasak/seviye), no Dur 10 loop."""
     yol = dosya(tur)
     mevcut = _oku(yol)
-    durum, m = isaret_dogrula(tur)
-    if durum == "gecerli":
-        if not siki_mi(tur, mevcut, m):
+    var, ref = onayli_deger(tur)
+    if var:
+        if not siki_mi(tur, mevcut, ref):
             raise Dur(10, _(MESAJ_KAYIP).format(dosya=yol))
         return mevcut
-    if durum == "dogrulanamadi":
-        raise Dur(10, _(MESAJ_KAYIP if (isaret_oku(tur) or {}).get("sha256") != _ozet(mevcut) else
-                        MESAJ_DOGRULANAMADI).format(dosya=yol))
-    if not _ilk_kurulum():
-        raise Dur(10, _(MESAJ_KAYIP).format(dosya=yol))  # the panel signed before: a missing mark was deleted
-    if mevcut is None and tur == "yasak":  # ilk kurulum: eski davranış
+    if mevcut is None and tur == "yasak":  # no signed state: the default list
         from .guvenlik import VARSAYILAN_YASAK
         mevcut = _(VARSAYILAN_YASAK)
         if olustur:

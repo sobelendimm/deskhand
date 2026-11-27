@@ -36,23 +36,41 @@ def kontrol(ad, kosul, ek=""):
 
 
 class SahteAnahtarlik:
-    """Fake Secret Service item for the panel-mark key: `kilitli` = locked wallet."""
+    """Fake Secret Service item of the panel (key + counters + last approved values), file-backed so that client
+    processes see it too (KASA_ISTEMCI below); `kilitli` = locked wallet."""
 
-    def __init__(self):
-        self.k = None
+    def __init__(self, yol):
+        self.yol = yol
         self.kilitli = False
 
+    def oku(self):
+        if self.kilitli:
+            raise kalici.AnahtarYok("cüzdan kilitli")
+        try:
+            with open(self.yol, "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            return None
+
+    def yaz(self, veri):
+        if self.kilitli:
+            raise kalici.AnahtarYok("cüzdan kilitli")
+        with open(self.yol, "wb") as f:
+            f.write(veri)
+
+    # the previous (key-only) fake interface, so this file still runs against 25c56e3 (red/green record)
     def anahtar(self, olustur):
         if self.kilitli:
             raise kalici.AnahtarYok("cüzdan kilitli")
-        if self.k is None:
+        if not hasattr(self, "_k"):
             if not olustur:
                 raise kalici.AnahtarYok("anahtar yok", yok=True)
-            self.k = os.urandom(32)
-        return self.k
+            self._k = os.urandom(32)
+        return self._k
 
 
-ANAHTARLIK = SahteAnahtarlik()
+KASA_YOLU = os.path.join(os.environ["DESKHAND_STATE_DIR"], "sahte-kasa.json")
+ANAHTARLIK = SahteAnahtarlik(KASA_YOLU)
 _ayarla = getattr(liste_koruma, "isaret_anahtarlik_ayarla", None)
 if _ayarla is not None:
     _ayarla(ANAHTARLIK)
@@ -122,12 +140,22 @@ def sahte_isaret(tur, metin, hmac_=None):
 
 ISTEMCI = ("import json, sys; sys.path.insert(0, sys.argv[1]); from deskhand.oturum import kalici\n"
            "from deskhand import liste_koruma\n"
+           "class K:\n"
+           "    def oku(self):\n"
+           "        try:\n"
+           "            return open(sys.argv[2], 'rb').read()\n"
+           "        except FileNotFoundError:\n"
+           "            return None\n"
+           "    def yaz(self, v):\n"
+           "        raise kalici.AnahtarYok('istemci yazmaz')\n"
+           "getattr(liste_koruma, 'isaret_anahtarlik_ayarla', lambda n: None)(K())\n"
            "print(json.dumps({'kalici': sorted(kalici.ayar_siteleri()), 'sure': kalici.sure_gun(),"
            " 'kimlik': sorted(liste_koruma.kimlik_izinleri()), 'kapsam': liste_koruma.kapsam()}))\n")
 
 
 def istemci():
-    r = subprocess.run([sys.executable, "-c", ISTEMCI, _yalitim.KOK], capture_output=True, text=True, timeout=60)
+    r = subprocess.run([sys.executable, "-c", ISTEMCI, _yalitim.KOK, KASA_YOLU], capture_output=True, text=True,
+                       timeout=60)
     try:
         return json.loads(r.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
@@ -308,6 +336,76 @@ try:
 except Dur as e:
     v, e_ = None, e
 kontrol("panel kapalı: boşaltma + sahte işaret → Dur 10 (girdi yok)", e_ is not None and e_.kod == 10, repr(v))
+
+
+# ================================================================ replay: an older signed mark put back
+liste_koruma.onbellek_sil()
+liste_koruma.panel_kalici_kaydet("replay.test")
+eski_isaret = open(liste_koruma.isaret_yolu(liste_koruma.KALICI), "rb").read()
+liste_koruma.panel_kalici_kaydet("")  # the user removed it in the panel
+ajan_ayar("oturum", "kalici", "replay.test")
+with open(liste_koruma.isaret_yolu(liste_koruma.KALICI), "wb") as f:
+    f.write(eski_isaret)
+getattr(liste_koruma, "_anahtar_unut", lambda: None)()
+k = panel_ac()
+kontrol("replay: eski imzalı işaret geri konunca gevşetme uygulanmaz", ("kalici", ["replay.test"]) in SORULAN and
+        istemci().get("kalici") == [], str(SORULAN))
+panel_kapat()
+
+# ================================================================ locked wallet: a new site in the file
+ANAHTARLIK.kilitli = True
+getattr(liste_koruma, "_anahtar_unut", lambda: None)()
+ajan_ayar("oturum", "kalici", "kilit.test")
+k = panel_ac()
+kontrol("cüzdan kilitli: dosyadaki yeni kalıcı site istemciye gitmez, panel sorar",
+        ("kalici", ["kilit.test"]) in SORULAN and istemci().get("kalici") == [], str(SORULAN))
+kontrol("cüzdan kilitli: bir kez görünür uyarı", sum("imzalı kaydı kullanılamıyor" in u for u in UYARILAR) == 1,
+        str(UYARILAR))
+panel_kapat()
+ANAHTARLIK.kilitli = False
+
+# ================================================================ first start (no item, no marks)
+os.remove(KASA_YOLU) if os.path.exists(KASA_YOLU) else None
+for t in liste_koruma.TUM if hasattr(liste_koruma, "TUM") else ():
+    if os.path.exists(liste_koruma.isaret_yolu(t)):
+        os.remove(liste_koruma.isaret_yolu(t))
+getattr(liste_koruma, "_anahtar_unut", lambda: None)()
+open(YASAK, "w").write("Ilk\n")
+ajan_ayar("oturum", "kalici", "ilk.test")
+ajan_ayar("oturum", "kalici_sure_gun", 5)
+k = panel_ac()
+kontrol("ilk kurulum: imzasız gevşetme sorulur, daraltma sorusuz",
+        ("kalici", ["ilk.test"]) in SORULAN and "yasak" not in sorulan_turler() and SURE not in sorulan_turler() and
+        k.metin("yasak") == "Ilk\n" and istemci().get("kalici") == [], str(SORULAN))
+panel_kapat()
+
+# ================================================================ DUR: opening is free, removing is the user's
+from deskhand import guvenlik  # noqa: E402
+
+CLI = "import sys; sys.path.insert(0, sys.argv[1]); from deskhand import cli; cli.main(sys.argv[2:])"
+
+
+def cli_kos(*argv):
+    r = subprocess.run([sys.executable, "-c", CLI, _yalitim.KOK, *argv], capture_output=True, text=True, timeout=60)
+    return r.returncode, r.stdout + r.stderr
+
+
+onay.panel_sil()
+kod, cikti_dur = cli_kos("dur")
+kontrol("DUR: CLI açabilir (sıkılaştırma serbest)", guvenlik.dur_acik(), cikti_dur)
+kod2, cikti2 = cli_kos("devam", "--approved")
+kod, cikti = cli_kos("devam")
+kontrol("DUR: CLI resume panel kapalı → ret, --approved yok sayılır", guvenlik.dur_acik() and kod != 0 and kod2 != 0,
+        f"{kod} {cikti} | {kod2} {cikti2[-200:]}")
+kontrol("DUR: ret iletisi kullanıcının panelden kaldıracağını söyler", "panel" in cikti.lower(), cikti)
+kontrol("DUR iletisi resume komutunu tarif etmez",
+        not any(s in cikti_dur + cikti for s in (" devam", " resume", "'ekran resume'")), cikti_dur + cikti)
+os.environ["DESKHAND_GOZETIMSIZ"] = "1"
+kod, cikti = cli_kos("resume")
+os.environ.pop("DESKHAND_GOZETIMSIZ", None)
+kontrol("DUR: gözetimsiz kipte de kaldırılamaz", guvenlik.dur_acik() and kod != 0, f"{kod} {cikti}")
+guvenlik.dur_kapat("kullanici")  # the panel's own button
+kontrol("DUR: panelin kendi düğmesi kaldırır", not guvenlik.dur_acik())
 
 print(f"\n{gecen}/{toplam} panel-işaret testi geçti")
 sys.exit(0 if gecen == toplam else 1)

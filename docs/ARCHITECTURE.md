@@ -463,9 +463,13 @@ suggests doing the work in the background, otherwise in the foreground.
   is also considered invalid (`guvenlik.onayli_gecerli`). For scheduled flows.
 - The title (`-b`) and class (`-s`) lock right before every input (4).
 - The DUR (stop) switch: if `DESKHAND_RUNTIME_DIR/dur` exists, Dur(13) before every input call; everything held down is released.
-  `deskhand dur` creates it, `deskhand devam` deletes it. The UI/tray/shortcut use this.
+  Turning DUR ON is free (`deskhand dur`, the UI/tray/shortcut). Removing it is the user's decision only: `deskhand devam`
+  (`guvenlik.dur_kaldir_iste`) asks the panel ("Remove STOP?", default No); panel closed / unattended mode / No → Dur 13; a
+  command-line `--approved` is not an answer. Messages never tell an agent how to remove it. A DUR the user set in the panel
+  and that disappears without the panel's Devam (a process deleted the file) is put back with a visible warning
+  (`gui/panel._dur_koru`). Out of scope: a process that deletes the file while the panel is closed.
   `guvenlik.dur_ac(source)` / `dur_kapat(source)` / `dur_kaynagi()`: the first word of the dur file is `kullanici` (user) or
-  `cli`. A DUR set by the user cannot be overridden or lifted by the CLI (Dur 13); only the UI lifts it.
+  `cli`.
 - The input hub (§2) gives guarantees IN ADDITION to the client checks: socket 0600 / directory 0700 and only the same user
   through SO_PEERCRED (the client also checks the server's user and the socket permission); the DUR switch right before every
   batch (if on, press lines are refused with 13, `keyup`/`buttonup` and delay settings pass); only the known verbs of the dotool

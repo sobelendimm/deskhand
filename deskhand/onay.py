@@ -704,7 +704,8 @@ def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str, tur
 
 
 def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran", sure: float = VARSAYILAN_SURE,
-               goruntu=None, gunluge_yaz: bool = True, tur: str = "", kontrol=None, iptal=None) -> OnaySonucu:
+               goruntu=None, gunluge_yaz: bool = True, tur: str = "", kontrol=None, iptal=None,
+               dur_kaldirma: bool = False) -> OnaySonucu:
     """Paneldeki insandan bir kez izin iste ve bekle (en çok `sure` sn). → OnaySonucu.
     masaustu: "ekran" (kullanıcının ekranı) | "arka" (görünmez masaüstü).
     tur: "" (hassas eylem onayı) | "devir" (insan doğrulaması devri: panel "Devral/Bitti/Vazgeç" gösterir; izin = Bitti).
@@ -713,7 +714,9 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
     ajanda değil: koşul sayfanın gerçek durumudur ve bekleme boyunca ajanın girdisi o masaüstüne kapalıdır).
     goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu.
     iptal: isteğe bağlı işlev; True dönerse (ör. MCP çağrısı istemcide iptal edildi) bekleme HEMEN biter, istek silinir,
-    OnaySonucu(False, "iptal") — red; yalnız isteyenin kendi beklemesini bitirir (izin üretemez)."""
+    OnaySonucu(False, "iptal") — red; yalnız isteyenin kendi beklemesini bitirir (izin üretemez).
+    dur_kaldirma: the question IS "remove the STOP switch?" (guvenlik.dur_kaldir_iste): an open DUR does not refuse
+    it (every other request is refused while DUR is on); unattended mode and no panel still refuse."""
     masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
     # Gerçek ekran kilidi (DESKHAND_GERCEK_EKRAN=kapali) gerçek oturuma GİRDİYİ keser. Görünmez masaüstündeki bir eylemin
     # onayını panelde göstermek gerçek ekrana girdi değildir: yalnız hedef kullanıcının ekranıysa reddedilir (yoksa
@@ -729,7 +732,7 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
 
     if gozetimsiz():  # başında insan yok: panel diyaloğu açılmaz, beklenmez (tek nokta: CLI, MCP, akış hep buradan)
         return bitir(OnaySonucu(False, "gozetimsiz"))
-    if _dur_acik():
+    if _dur_acik() and not dur_kaldirma:
         return bitir(OnaySonucu(False, "dur"))
     kayit = _panel_kaydi()
     if kayit is None:
@@ -816,7 +819,7 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
             t = time.monotonic()
             if t >= son:
                 return bitir(OnaySonucu(False, "sure", istek_id))
-            if _dur_acik():
+            if _dur_acik() != dur_kaldirma:  # DUR came on meanwhile / (removal request) the user removed it already
                 return bitir(OnaySonucu(False, "dur", istek_id))
             if iptal_mi():
                 return bitir(OnaySonucu(False, "iptal", istek_id))
@@ -934,6 +937,9 @@ def bekleyenler(simdi: float | None = None) -> list[dict]:
     return sorted(sonuc, key=lambda d: d["zaman"])
 
 
+SON_DUR_IZNI = 0.0  # panel: monotonic time of the user's last Yes to a "remove DUR?" request (gui/panel._dur_koru)
+
+
 def yanitla(istek_id: str, karar: str, simdi: float | None = None) -> bool:
     """Panel: isteği yanıtla (tek kullanımlık). → iletildi mi. İstek yoksa/süresi geçtiyse/zaten yanıtlandıysa False.
     İZİN yalnız bu süreçteki onay kanalından isteyene gider (kanal yoksa False). RED ayrıca yanıt dosyasına yazılır
@@ -948,7 +954,11 @@ def yanitla(istek_id: str, karar: str, simdi: float | None = None) -> bool:
     if (k is not None and k.yanitlandi(istek_id)) or os.path.exists(yanit_yolu(istek_id)):
         return False  # tek kullanımlık: ilk karar kesin
     if karar == "izin":
-        return k is not None and k.gonder(istek_id, "izin")
+        gitti = k is not None and k.gonder(istek_id, "izin")
+        if gitti and d["hedef"] == "DUR":  # the user approved removing DUR (guvenlik.dur_kaldir_iste)
+            global SON_DUR_IZNI
+            SON_DUR_IZNI = time.monotonic()
+        return gitti
     try:
         _yaz_atomik(yanit_yolu(istek_id), {"id": istek_id, "karar": "red", "kaynak": "arayuz", "zaman": simdi,
                                            "panel_pid": os.getpid()}, ozel=True)

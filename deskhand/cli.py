@@ -49,7 +49,7 @@ YARDIM_GUVENLIK = (
        "curl | sh, mkfs, dd of=/dev/…, git push --force…). ~/.config/deskhand/uygulama-seviyeleri.txt (varsayılan: yok)\n"
        "uygulama başına 'DESEN = goruntule | tikla | tam' ile girdiyi sınırlar (goruntule: girdi yok; tikla: klavye yok)."),
     N_("DUR ANAHTARI: 'ekran stop' sonrası hiçbir deskhand süreci girdi göndermez (13), basılı tuşlar bırakılır; "
-       "'ekran resume' kaldırır."),
+       "yalnız kullanıcı kaldırır (Deskhand paneli ya da DUR kısayolu)."),
 )
 YARDIM_KOMUT_BASI = (
     N_("Komutlar (koordinatlar pencereye göre, piksel; <kimlik> yerine tek pencereye uyan ad da verilebilir;\n"
@@ -114,8 +114,8 @@ YARDIM_KOMUTLAR = (
        "                                          YOK, ögenin AT-SPI eylemi"),
     N_("  ekran set-element (ogeye-yaz) <kimlik> <ad> <metin> [--role R] [--nth N] [--secret] [--approved]\n"
        "                                          ögenin değerini AT-SPI ile yaz (metin alanı, kaydırgaç; klavye/odak YOK)"),
-    N_("  ekran stop | resume | status (dur | devam | durum)   DUR anahtarı: aç (hiçbir girdi gönderilmez) / kaldır / "
-       "göster"),
+    N_("  ekran stop | resume | status (dur | devam | durum)   DUR anahtarı: aç (hiçbir girdi gönderilmez) / "
+       "kaldırma isteği (kullanıcı panelde onaylar) / göster"),
     N_("  ekran desktop (masaustu) start|stop|status|list [--name AD] [--json]   görünmez arka plan masaüstü; --background "
        "komutları onu kullanır"),
     N_("  ekran mcp [--desktop auto|background]  MCP sunucusu (stdio) — Claude Code vb. için araçlar"),
@@ -155,7 +155,7 @@ YARDIM_CIKIS = (
        "4 başlık uymadı, 5 birden çok eşleşme (--nth ver), 6 metin bulunamadı, 7 zaman aşımı,\n"
        "8 pencere yok/taşındı, 9 dotool/tesseract çalışmadı, 10 yasak pencere / hassas düğme (onay gerekir),"),
     N_("11 akış hata ekranı / 'dur' adımı, 12 kullanıcı bilgisayarı kullanıyor (insan önceliği),\n"
-       "13 kullanıcı DUR dedi (ekran resume), 14 sanal masaüstü kullanılamıyor,\n"
+       "13 kullanıcı DUR dedi (yalnız kullanıcı kaldırır), 14 sanal masaüstü kullanılamıyor,\n"
        "15 kullanıcı oyunda/film izliyor (ekranına müdahale yok; --background),\n"
        "16 uygulama arka planda açılamaz (kullanıcının ekranında açık ya da yalnız ön plan),\n"
        "17 gerçek ekran bu süreçte kapalı (DESKHAND_GERCEK_EKRAN; --background);\n"
@@ -303,13 +303,15 @@ def k_pano(a):
 def k_dur(a):
     yol = guvenlik.dur_ac()
     gunluk("DUR anahtarı açıldı")
-    print(_("DUR: açık ({yol}); hiçbir girdi gönderilmez. Kaldırmak için: {prog} devam").format(yol=yol, prog=prog_adi()))
+    print(_("DUR: açık ({yol}); hiçbir girdi gönderilmez. {kaldirma}").format(
+        yol=yol, kaldirma=_(guvenlik.DUR_KALDIRMA_MESAJI)))
 
 
 def k_devam(a):
-    acikti = guvenlik.dur_kapat()
+    """Removing DUR is the user's decision: a panel dialog (default No); panel closed / unattended → Dur 13."""
+    acikti = guvenlik.dur_kaldir_iste()
     if acikti:
-        gunluk("DUR anahtarı kaldırıldı")
+        gunluk("DUR anahtarı kaldırıldı (kullanıcı panelde onayladı)")
     print(_("DUR: kapalı") if acikti else _("DUR: kapalı (zaten kapalıydı)"))
 
 

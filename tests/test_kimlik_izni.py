@@ -24,6 +24,44 @@ import _yalitim  # noqa: E402,F401  (deskhand'dan ÖNCE)
 from deskhand import ayarlar, doktor, gorev_kipi, liste_koruma, onay  # noqa: E402
 from deskhand.oturum import firefox, politika  # noqa: E402
 
+class SahteKasa:
+    """Fake Secret Service item of the panel (liste_koruma: key, counters, last approved values); file-backed so a
+    client process reads the same one (KASA_ISTEMCI). The real wallet is never touched."""
+    yol = os.path.join(os.environ["DESKHAND_STATE_DIR"], "sahte-kasa.json")
+
+    def oku(self):
+        try:
+            with open(self.yol, "rb") as f:
+                return f.read()
+        except FileNotFoundError:
+            return None
+
+    def yaz(self, veri):
+        with open(self.yol, "wb") as f:
+            f.write(veri)
+
+
+liste_koruma.isaret_anahtarlik_ayarla(SahteKasa())
+KASA_ISTEMCI = ("class _K:\n"
+                "    def oku(self):\n"
+                "        import os\n"
+                "        try:\n"
+                "            return open(os.path.join(os.environ['DESKHAND_STATE_DIR'], 'sahte-kasa.json'), 'rb').read()\n"
+                "        except FileNotFoundError:\n"
+                "            return None\n"
+                "    def yaz(self, v):\n"
+                "        raise OSError('client')\n"
+                "from deskhand import liste_koruma as _lk\n"
+                "_lk.isaret_anahtarlik_ayarla(_K())\n")
+
+
+def sahte_isaret(tur, metin):
+    """The agent's forged mark (plain sha256 of the content, no panel signature)."""
+    import hashlib
+    os.makedirs(os.path.dirname(liste_koruma.isaret_yolu(tur)), exist_ok=True)
+    with open(liste_koruma.isaret_yolu(tur), "w") as f:
+        json.dump({"sha256": hashlib.sha256(metin.encode()).hexdigest(), "icerik": metin, "var": True}, f)
+
 gecen = toplam = 0
 
 
@@ -145,7 +183,7 @@ def ajan_yazar(deger, isaret=False):
     with open(ayarlar.dosya(), "w") as f:
         f.write(f'[guvenlik]\nhesap_oturumlari = "{deger}"\n')
     if isaret:
-        liste_koruma._isaret_yaz(liste_koruma.KIMLIK, deger)
+        sahte_isaret(liste_koruma.KIMLIK, deger)
 
 
 def dosyada():

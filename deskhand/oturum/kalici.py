@@ -38,7 +38,7 @@ side still asks for a login, and `sessions check` says so.
 Concurrency (review C1): every write/delete of the store holds one cross-process flock (DATA_DIR/<ad>/.kilit).
 Forget (review Y2-Y4): `unut` resolves www./subdomains to the stored site, deletes the record and its temporary
 leftovers and leaves <site>.unutuldu (forget --all: .hepsi.unutuldu); a copy opened before that time
-(.deskhand-kalici-acilis in the copy, written by uygula) does not write the site back when it closes.
+(DATA_DIR/<ad>/.acilis/<copy path digest>, written by uygula; never a file in the copy) does not write the site back when it closes.
 
 Never stored, never applied (checked at save AND at apply time, so a record written by hand or by an older release is
 filtered as well):
@@ -55,6 +55,7 @@ directory name and its own `kabul` rule (and the same key ring); the default sto
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import math
 import os
@@ -86,7 +87,8 @@ _KILIT_AD = ".kilit"          # cross-process store lock (review C1), in the sto
 _KILIT_SURE = 30.0            # seconds to wait for it; then nothing is written (logged)
 _UNUTULDU = ".unutuldu"       # .<site>.unutuldu: when `sessions forget <site>` ran (review Y2)
 _HEPSI_UNUTULDU = ".hepsi.unutuldu"  # `sessions forget --all`
-_ACILIS = ".deskhand-kalici-acilis"  # in the copy: when the store was first offered to it (uygula)
+_ACILIS = ".acilis"               # store dir: when each copy was first offered the store (uygula; review Y2)
+_ACILIS_OMUR = 90 * 86400
 
 
 # ---------------------------------------------------------------- key ring
@@ -438,29 +440,51 @@ def _kopya_isareti_yaz(kopya: Path, d: dict) -> None:
             pass
 
 
-def _kopya_acilisi_yaz(kopya: Path) -> None:
-    """Record once when this copy was opened (prepared) for the store (review Y2: a forget after this time wins)."""
+def _acilis_yolu(depo_dizin: str, kopya: Path) -> str:
+    oz = hashlib.sha256(os.path.abspath(str(kopya)).encode("utf-8", "surrogateescape")).hexdigest()[:40]
+    return os.path.join(depo_dizin, _ACILIS, oz)
+
+
+def _kopya_acilisi_yaz(depo_dizin: str, kopya: Path) -> None:
+    """Record once when this copy was opened (prepared) for the store (review Y2: a forget after this time wins).
+    Kept in the STORE directory (0700, keyed by the copy path), never in the copy: the browser in the copy can write
+    its own directory (security scan 3). Entries older than _ACILIS_OMUR are pruned (unknown → 0.0, closed-safe)."""
+    d = os.path.join(depo_dizin, _ACILIS)
     try:
-        fd = os.open(kopya / _ACILIS, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        os.mkdir(d, 0o700)
+    except FileExistsError:
+        pass
+    except OSError:
+        return
+    simdi = time.time()
+    try:
+        for ad in os.listdir(d):
+            yol = os.path.join(d, ad)
+            try:
+                if os.lstat(yol).st_mtime < simdi - _ACILIS_OMUR:
+                    os.unlink(yol)
+            except OSError:
+                pass
+        fd = os.open(_acilis_yolu(depo_dizin, kopya), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except OSError:
         return
     try:
-        os.write(fd, repr(time.time()).encode())
+        os.write(fd, repr(simdi).encode())
     except OSError:
         pass
     finally:
         os.close(fd)
 
 
-def _kopya_acilisi(kopya: Path) -> float:
-    """When the copy was opened (0.0 = unknown: older than any forget, closed-safe)."""
+def _kopya_acilisi(depo_dizin: str, kopya: Path) -> float:
+    """When the copy was opened (0.0 = unknown: older than any forget, closed-safe); never later than now."""
     try:
-        fd = os.open(kopya / _ACILIS, os.O_RDONLY | os.O_NOFOLLOW)
+        fd = os.open(_acilis_yolu(depo_dizin, kopya), os.O_RDONLY | os.O_NOFOLLOW)
     except OSError:
         return 0.0
     try:
         v = float(os.read(fd, 64).decode("ascii", "replace").strip())
-        return v if math.isfinite(v) else 0.0
+        return min(v, time.time()) if math.isfinite(v) else 0.0
     except (OSError, ValueError):
         return 0.0
     finally:
@@ -872,7 +896,7 @@ class Depo:
         # the copy's last use; a dead copy may be swept days later) + N days. Unused → no renewal.
         omur = sure_gun() * 86400
         alinan_hepsi = _kopya_isareti_oku(kopya)
-        acilis = _kopya_acilisi(kopya)
+        acilis = _kopya_acilisi(self.dizin(), kopya)
         toplam = 0
         for site in siteler:
             unutma = self._unutma_zamani(site)
@@ -959,8 +983,10 @@ class Depo:
         kopya = Path(kopya)
         siteler = _siteler(siteler)
         db = kopya / "cookies.sqlite"
-        if not gorev_kipi.etkin() and kopya.is_dir():
-            _kopya_acilisi_yaz(kopya)  # review Y2: a forget after this moment wins over this copy's close
+        if not gorev_kipi.etkin() and kopya.is_dir() and (siteler or self._dizin_gecerli()):
+            d = self._dizin_hazirla()
+            if d is not None:
+                _kopya_acilisi_yaz(d, kopya)  # review Y2: a forget after this moment wins over this copy's close
         # (no user.js check here: firefox.hazirla applies before writing user.js; it never calls this in task mode)
         if not siteler or gorev_kipi.etkin() or not db.is_file() or db.is_symlink():
             return 0
