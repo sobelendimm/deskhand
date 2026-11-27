@@ -51,7 +51,8 @@ def _bellek_siniri() -> str | None:
         from ..masaustu import _bellek_siniri as bs
         return bs()
     except Exception:  # noqa: BLE001
-        b = (os.environ.get("DESKHAND_SANAL_BELLEK") or "4G").strip()
+        from ..arka_ortak import VARSAYILAN_BELLEK
+        b = (os.environ.get("DESKHAND_SANAL_BELLEK") or VARSAYILAN_BELLEK).strip()
         return None if b.lower() in ("0", "yok", "none", "off") else b
 
 
