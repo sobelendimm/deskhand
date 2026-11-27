@@ -249,10 +249,10 @@
   "erisim.py:1071"
  ],
  "'=' içeren argüman verilemez (ortam değişkeni/seçenek)": [
-  "uygulama.py:309"
+  "uygulama.py:311"
  ],
  "'{ad}' MCP'den başlatılamaz: {neden}": [
-  "uygulama.py:563"
+  "uygulama.py:565"
  ],
  "'{ad}' adlı görünmez masaüstü açık değil (açık olanlar: {acik}); açmak için: deskhand desktop start --name {ad}": [
   "masaustu.py:557"
@@ -265,13 +265,13 @@
   "arka_uc/sanal.py:535"
  ],
  "'{ad}' adlı uygulama bulunamadı (.desktop); komutla başlatmak için: deskhand open --command \"…\"": [
-  "uygulama.py:92"
+  "uygulama.py:94"
  ],
  "'{ad}' bir uçbirim öykünücüsü (uçbirim = kabuk)": [
-  "uygulama.py:173"
+  "uygulama.py:175"
  ],
  "'{ad}' bir yorumlayıcı/kabuk/sarmalayıcı/başlatıcı (keyfi kod çalıştırır)": [
-  "uygulama.py:171"
+  "uygulama.py:173"
  ],
  "'{ad}' devre dışı (tıklanamaz)": [
   "erisim.py:1137",
@@ -279,7 +279,7 @@
   "erisim.py:1315"
  ],
  "'{ad}' doğrulanmamış bir girdi ({neden}); başlatmak kullanıcının onayını ister ({onay}). Başlatılmadı; kullanıcıya bildir.": [
-  "uygulama.py:578"
+  "uygulama.py:580"
  ],
  "'{ad}' erişilebilirlik ağacında yok ({sayi} öge, {sn} sn). İpucu: `{komut}`": [
   "erisim.py:1145"
@@ -305,7 +305,7 @@
   "arka_uc/sanal.py:538"
  ],
  "'{ad}' {sayi} uygulamaya uyuyor; tam adını ya da kimliğini ver:\n{liste}": [
-  "uygulama.py:90"
+  "uygulama.py:92"
  ],
  "'{akor}' geçersiz: '+' yalnız ctrl/alt/shift/super/altgr ile kullanılır; aynı anda basılı tutmak için: ekran bas <k> {akor} <sn>": [
   "eylem.py:827"
@@ -446,7 +446,7 @@
   "eylem.py:765"
  ],
  "--komut ile adres verilemez: uygulama adıyla aç (open firefox --url https://…)": [
-  "uygulama.py:1005"
+  "uygulama.py:1238"
  ],
  "--komut yıkıcı bir kalıba uyuyorsa: kullanıcı AÇIKÇA onayladı": [
   "cli.py:531"
@@ -487,7 +487,7 @@
   "guvenlik.py:1005"
  ],
  "; açılan başka pencereler: {pencereler}": [
-  "uygulama.py:1095"
+  "uygulama.py:1339"
  ],
  "; en yakın aday benzerliği {benzerlik}": [
   "eylem.py:1337"
@@ -505,7 +505,7 @@
   "ocr.py:601"
  ],
  "; çıktı: {log}": [
-  "uygulama.py:1096"
+  "uygulama.py:1340"
  ],
  "> /dev/diskaygıtı: diskin üzerine yazar": [
   "guvenlik.py:867",
@@ -742,6 +742,9 @@
  "Ctrl+Alt+{tus}: sanal uçbirime geçer (masaüstü oturumundan çıkar)": [
   "guvenlik.py:208"
  ],
+ "Ctrl+L sonrası odak adres çubuğunda değil (odak: {rol}); adres yazılmadı": [
+  "uygulama.py:1111"
+ ],
  "D-Bus (python-jeepney)": [
   "gui/saglik.py:24"
  ],
@@ -921,7 +924,7 @@
   "gui/metinler.py:103"
  ],
  "Doğrulanmamış uygulama girdisi ({neden})": [
-  "uygulama.py:572"
+  "uygulama.py:574"
  ],
  "Durdur": [
   "gui/metinler.py:83",
@@ -996,22 +999,22 @@
   "gui/metinler.py:231"
  ],
  "Exec satırı boş ya da çözümlenemedi": [
-  "uygulama.py:200"
+  "uygulama.py:202"
  ],
  "Exec satırı çözümlenemedi": [
-  "uygulama.py:505"
+  "uygulama.py:507"
  ],
  "Exec öğesi boşluklu bir komut metni: {parca}": [
-  "uygulama.py:206"
+  "uygulama.py:208"
  ],
  "Exec öğesi gömülü komut taşıyor: {parca}": [
-  "uygulama.py:204"
+  "uygulama.py:206"
  ],
  "Exec'te '--' sonrasında başka bir program: {p}": [
-  "uygulama.py:210"
+  "uygulama.py:212"
  ],
  "Exec: {exec_}": [
-  "uygulama.py:573"
+  "uygulama.py:575"
  ],
  "Eylem": [
   "gui/metinler.py:59",
@@ -1339,8 +1342,8 @@
   "arka_uc/kwin.py:253"
  ],
  "KWin pencere listesi alınamadı: {hata}": [
-  "api.py:667",
-  "uygulama.py:1097"
+  "api.py:686",
+  "uygulama.py:1341"
  ],
  "KWin süreci doğrulanamadı (pid {pid})": [
   "kwin_oturum.py:1019"
@@ -1758,7 +1761,7 @@
   "guvenlik.py:1177"
  ],
  "Uygulama başlat: {ad}": [
-  "uygulama.py:576"
+  "uygulama.py:578"
  ],
  "Uygulama erişim seviyeleri": [
   "gui/metinler.py:152"
@@ -1895,14 +1898,17 @@
  "adlı görünmez masaüstü yalnız KWin türünde açılabilir ({neden})": [
   "masaustu.py:813"
  ],
+ "adres doğrulanamadı: {adres} yazıldı ama pencerenin sayfa adresi/başlığı hedefe dönmedi": [
+  "uygulama.py:1152"
+ ],
  "adres http:// ya da https:// ile başlamalı": [
-  "uygulama.py:342"
+  "uygulama.py:344"
  ],
  "adres iki kez ve farklı verildi (--url ile konumsal adres)": [
-  "uygulama.py:1002"
+  "uygulama.py:1235"
  ],
  "adres reddedildi {adres}: {neden}": [
-  "uygulama.py:348"
+  "uygulama.py:350"
  ],
  "adı değişti": [
   "erisim.py:1114"
@@ -1932,7 +1938,7 @@
   "mcp_sunucu.py:2471"
  ],
  "akış adı yalnız harf/rakam/._- içermeli: {ad} (list ile adlara bak)": [
-  "api.py:696"
+  "api.py:715"
  ],
  "akış dosyası okunamadı: {hata}": [
   "akis.py:43"
@@ -1953,7 +1959,7 @@
   "akis.py:167"
  ],
  "akış yok: {ad} ({dizin})": [
-  "api.py:699"
+  "api.py:718"
  ],
  "akış {ad}: {pencere}": [
   "mcp_sunucu.py:2459"
@@ -1981,7 +1987,7 @@
   "mcp_sunucu.py:141"
  ],
  "argüman reddedildi {arg}: {neden}. open_app argümanları yalnız açılacak belge olabilir (http/https/file URL'si ya da var olan dosyanın mutlak yolu)": [
-  "uygulama.py:313"
+  "uygulama.py:315"
  ],
  "arka plan": [
   "gui/metinler.py:60"
@@ -2024,6 +2030,13 @@
  "aynı eylem {sayi} kez üst üste ekranı değiştirmedi; özdeş çağrı yapılmadı. observe ile ekranı yeniden oku ve FARKLI bir yol dene (ekran değişince ya da başka bir eylem yapılınca bu kısıt kalkar)": [
   "mcp_sunucu.py:1046"
  ],
+ "aynı süreçte açılan pencere: {pencere}": [
+  "api.py:658",
+  "uygulama.py:1304"
+ ],
+ "aynı süreçteki yeni pencerede tek adres açılır ({sayi} verildi); her adres için ayrı open çağır": [
+  "uygulama.py:1070"
+ ],
  "ayrıntı yok": [
   "arka_uc/kde.py:801",
   "arka_uc/kwin.py:598"
@@ -2049,8 +2062,12 @@
  "açılacak http/https adresi (tarayıcılar; --url ile aynı)": [
   "cli.py:528"
  ],
+ "açılan pencere kapatıldı": [
+  "uygulama.py:1060"
+ ],
  "açıldı ({sn} sn)": [
-  "uygulama.py:1080"
+  "uygulama.py:1308",
+  "uygulama.py:1324"
  ],
  "banka/ödeme/devlet/kimlik alanı: kalıcı depoya alınmaz": [
   "oturum/denetle.py:386"
@@ -2083,6 +2100,9 @@
   "mcp_sunucu.py:589",
   "mcp_sunucu.py:614"
  ],
+ "başka bir açılış sürüyor ({ne}); {sn} sn içinde sıra gelmedi, hiçbir şey yapılmadı": [
+  "uygulama.py:806"
+ ],
  "başlangıç için from_ref YA DA from_x+from_y, bitiş için to_ref YA DA to_x+to_y ver": [
   "mcp_sunucu.py:2261"
  ],
@@ -2101,7 +2121,7 @@
   "masaustu.py:1329"
  ],
  "başlatıldı: {ad}": [
-  "uygulama.py:1061"
+  "uygulama.py:1295"
  ],
  "başlık değişti (otomatik tam başlık kilidi): sayfa başlığı değişen akışlarda -b ile esnek desen ver ya da --no-title-lock kullan": [
   "cli.py:756"
@@ -2159,7 +2179,7 @@
   "gui/metinler.py:106"
  ],
  "belgeler: {b}": [
-  "uygulama.py:574"
+  "uygulama.py:576"
  ],
  "bellek için Firefox {saat} saatinde yeniden başlatıldı ({once} → {sonra} MB, {sekme} sekme geri yüklendi); pencere kimlikleri değişti, yeniden gözlem yapın": [
   "bellek_bekcisi.py:299"
@@ -2172,23 +2192,23 @@
   "arka_ortak.py:1216"
  ],
  "betik okunamadı: {p}": [
-  "uygulama.py:416"
+  "uygulama.py:418"
  ],
  "betik/program dosyasını çalıştırma ({dosya}): içeriği denetlenemez": [
   "guvenlik.py:820",
   "guvenlik.py:934"
  ],
  "betiğin env hedefi root sahipli/yazılamaz bir ikili değil: {h}": [
-  "uygulama.py:428"
+  "uygulama.py:430"
  ],
  "betiğin env satırı yalın bir program adı değil: {s}": [
-  "uygulama.py:425"
+  "uygulama.py:427"
  ],
  "betiğin yorumlayıcısı mutlak yol değil: {p}": [
-  "uygulama.py:419"
+  "uygulama.py:421"
  ],
  "betiğin yorumlayıcısı root sahipli/yazılamaz bir ikili değil: {y}": [
-  "uygulama.py:422"
+  "uygulama.py:424"
  ],
  "bildirim gönderilemedi": [
   "mesgul.py:498"
@@ -2252,7 +2272,8 @@
   "eylem.py:823"
  ],
  "bilinmiyor": [
-  "mcp_sunucu.py:1591"
+  "mcp_sunucu.py:1591",
+  "uygulama.py:1112"
  ],
  "birden çok (ya da eşiğe yakın) eşleşme; --sira N ile seç ya da --bolge ile daralt": [
   "eylem.py:1345"
@@ -2294,10 +2315,10 @@
   "masaustu.py:246"
  ],
  "boş adres": [
-  "uygulama.py:331"
+  "uygulama.py:333"
  ],
  "boş argüman": [
-  "uygulama.py:292"
+  "uygulama.py:294"
  ],
  "boş ses çıkışı kurulamadı ({hata}): arka plan sesi kapatıldı": [
   "arka_ortak.py:1281"
@@ -2559,7 +2580,7 @@
   "dosya_sec.py:50"
  ],
  "dosya/klasör yok": [
-  "uygulama.py:257"
+  "uygulama.py:259"
  ],
  "dosyadaki süreyi geçersiz kıl": [
   "cli.py:540"
@@ -2677,7 +2698,7 @@
   "cli.py:204"
  ],
  "en çok {n} argüman verilebilir": [
-  "uygulama.py:287"
+  "uygulama.py:289"
  ],
  "en çok {sayi} görünmez masaüstü açık olabilir ({adlar}); birini kapatın (deskhand desktop stop --name AD) ya da [masaustu] azami ayarını artırın": [
   "masaustu.py:808"
@@ -2862,7 +2883,7 @@
   "guvenlik.py:980"
  ],
  "flatpak yalnız 'run' ile başlatılabilir ('{alt}')": [
-  "uygulama.py:229"
+  "uygulama.py:231"
  ],
  "flock -c: komutu kabukta çalıştırır": [
   "guvenlik.py:801",
@@ -2890,9 +2911,9 @@
   "hata.py:67"
  ],
  "geçersiz URL": [
-  "uygulama.py:302",
-  "uygulama.py:344",
-  "uygulama.py:346"
+  "uygulama.py:304",
+  "uygulama.py:346",
+  "uygulama.py:348"
  ],
  "geçersiz Wayland soket adı: {ad}": [
   "kwin_oturum.py:162"
@@ -2956,16 +2977,16 @@
   "arka_uc/kde.py:407"
  ],
  "girdi bir uçbirim öykünücüsü (Categories=TerminalEmulator)": [
-  "uygulama.py:245"
+  "uygulama.py:247"
  ],
  "girdi bir uçbirim öykünücüsü ({kimlik})": [
-  "uygulama.py:248"
+  "uygulama.py:250"
  ],
  "girdi bir uçbirimde çalışır (Terminal=true)": [
-  "uygulama.py:243"
+  "uygulama.py:245"
  ],
  "girdi dosyası root sahipli/yazılamaz değil: {yol}": [
-  "uygulama.py:501"
+  "uygulama.py:503"
  ],
  "girdi gönderilmedi": [
   "arka_uc/kde.py:536",
@@ -2977,7 +2998,7 @@
   "arka_uc/sanal.py:1193"
  ],
  "girdi kullanıcının yazabildiği bir dizinde: {yol}": [
-  "uygulama.py:499"
+  "uygulama.py:501"
  ],
  "girdi merkezi (panelin dotool'u)": [
   "girdi_merkezi.py:583"
@@ -3005,10 +3026,10 @@
   "arka_uc/kde.py:526"
  ],
  "girdi okunamadı: {hata}": [
-  "uygulama.py:522"
+  "uygulama.py:524"
  ],
  "girdi onay sırasında değişti; başlatılmadı": [
-  "uygulama.py:532"
+  "uygulama.py:534"
  ],
  "girdi satırında satır sonu olamaz": [
   "kwin_oturum.py:1307"
@@ -3033,7 +3054,7 @@
   "kwin_oturum.py:1245"
  ],
  "girdi: {yol}": [
-  "uygulama.py:573"
+  "uygulama.py:575"
  ],
  "giriş çerezinin adı (fnmatch; tekrarlanabilir). Yoksa ad deseniyle tahmin edilir": [
   "oturum/cli.py:83"
@@ -3084,7 +3105,7 @@
   "gorev_kipi.py:425"
  ],
  "görev kipi: ham komut açılmaz; uygulama adıyla aç": [
-  "uygulama.py:1009"
+  "uygulama.py:1242"
  ],
  "görev kipi: yalnız görev tarayıcısının pencereleri kullanılır; bu pencere ({sinif}/{ikili}) kapatıldı, işlem yapılmadı": [
   "gorev_kipi.py:534"
@@ -3097,7 +3118,7 @@
  ],
  "görev kipi: {uygulama} açılmadı: {neden}": [
   "mcp_sunucu.py:2335",
-  "uygulama.py:1019"
+  "uygulama.py:1252"
  ],
  "görev kipinde Flatpak tarayıcı açılmaz (tarayıcı ilkesi bağlanamaz)": [
   "gorev_kipi.py:283"
@@ -3138,7 +3159,7 @@
  ],
  "görünmez masaüstü başlatıldı": [
   "mcp_sunucu.py:2351",
-  "uygulama.py:1032"
+  "uygulama.py:1265"
  ],
  "görünmez masaüstü bellek sınırının %{yuzde} kadarını kullanıyor ({cur} / {max} MB)": [
   "bellek_bekcisi.py:168"
@@ -3274,10 +3295,10 @@
   "cli.py:682"
  ],
  "ikinci pencere doğrulanamadı (sınıf {sinif}, etkin değil ya da süreç eşleşmiyor); adres yazılmadı": [
-  "uygulama.py:917"
+  "uygulama.py:1103"
  ],
  "ikinci pencere doğrulanamadı: Ctrl+N sonrası {sayi} aday pencere (tam bir olmalı); adres yazılmadı": [
-  "uygulama.py:909"
+  "uygulama.py:1093"
  ],
  "imlecin altında başka pencere var: {baslik}; tıklanmadı": [
   "guvenlik.py:1340"
@@ -3497,7 +3518,7 @@
   "girdi_merkezi.py:455"
  ],
  "kod barındıran uygulama ({ad}: betik/makro/konsol çalıştırabilir)": [
-  "uygulama.py:486"
+  "uygulama.py:488"
  ],
  "kodlanmış metni çözüp başka komuta verme (base64 -d | …)": [
   "guvenlik.py:1028"
@@ -3892,10 +3913,10 @@
   "onay_hedef.py:97"
  ],
  "onaylanan programın içeriği onaydan sonra değişti ({yol}); başlatılmadı, yeniden onay gerekir": [
-  "uygulama.py:622"
+  "uygulama.py:624"
  ],
  "open_app yalnız kurulu bir uygulamanın adını alır (.desktop girdisi); yol ya da komut verilemez: {ad}": [
-  "uygulama.py:556"
+  "uygulama.py:558"
  ],
  "openbox başlamadı: pencereler 0,0'da üst üste açılır": [
   "masaustu.py:1114"
@@ -3973,7 +3994,7 @@
   "oturum/__init__.py:308"
  ],
  "oturum: {karar}": [
-  "uygulama.py:988"
+  "uygulama.py:1221"
  ],
  "oturum: {sayi} Flatpak örneği kapatılamadı ({uygulamalar}); kopyaları silinmedi": [
   "oturum/__init__.py:269"
@@ -4225,19 +4246,19 @@
   "oturum/denetle.py:358"
  ],
  "program bulunamadı: {p}": [
-  "uygulama.py:382"
+  "uygulama.py:384"
  ],
  "program ikili ya da betik değil: {p}": [
-  "uygulama.py:398"
+  "uygulama.py:400"
  ],
  "program okunamadı: {p}": [
-  "uygulama.py:391"
+  "uygulama.py:393"
  ],
  "program root sahipli/yazılamaz değil: {p}": [
-  "uygulama.py:385"
+  "uygulama.py:387"
  ],
  "program çalıştırılabilir bir dosya değil: {p}": [
-  "uygulama.py:393"
+  "uygulama.py:395"
  ],
  "python-secretstorage kurulu değil": [
   "oturum/kalici.py:119"
@@ -4420,8 +4441,8 @@
   "ses.py:517"
  ],
  "seçenek (- ile başlıyor) verilemez": [
-  "uygulama.py:296",
-  "uygulama.py:335"
+  "uygulama.py:298",
+  "uygulama.py:337"
  ],
  "seçildi: {yol}": [
   "dosya_sec.py:119"
@@ -4579,6 +4600,9 @@
  "tam olarak BİR hedef ver: text, icon, element ya da x+y (+shot_id)": [
   "mcp_sunucu.py:1939"
  ],
+ "tarayıcı penceresi": [
+  "uygulama.py:1054"
+ ],
  "tarayıcı penceresinde http(s) adresine git": [
   "cli.py:201"
  ],
@@ -4688,10 +4712,10 @@
   "gui/metinler.py:227"
  ],
  "uygulama adı boş": [
-  "uygulama.py:84"
+  "uygulama.py:86"
  ],
  "uygulama adı ya da --komut gerekli": [
-  "uygulama.py:1022"
+  "uygulama.py:1255"
  ],
  "uygulama adı yerine bu komutu başlat": [
   "cli.py:530"
@@ -4794,13 +4818,13 @@
   "cli.py:548"
  ],
  "yalnız http ya da https adresi ('{sema}:' değil)": [
-  "uygulama.py:341"
+  "uygulama.py:343"
  ],
  "yalnız http, https ya da file URL'si ('{sema}:' değil)": [
-  "uygulama.py:307"
+  "uygulama.py:309"
  ],
  "yalnız yerel file:// URL'si": [
-  "uygulama.py:304"
+  "uygulama.py:306"
  ],
  "yalıtık KWin oturumu (GPU: {gpu})": [
   "doktor.py:446"
@@ -4878,6 +4902,9 @@
  "yazısız simgeyi kaydet": [
   "cli.py:205"
  ],
+ "yeni pencereyle aynı başlıklı başka tarayıcı penceresi var: erişilebilirlik ağacı bu pencereye güvenle eşlenemez (adres çubuğu doğrulanamaz); adres yazılmadı": [
+  "uygulama.py:1106"
+ ],
  "yeri/boyutu değişti": [
   "erisim.py:1118"
  ],
@@ -4902,13 +4929,13 @@
   "doktor.py:262"
  ],
  "yol mutlak olmalı": [
-  "uygulama.py:255"
+  "uygulama.py:257"
  ],
  "yolda satır sonu/sekme var: dosya seçiciye yazılamaz": [
   "dosya_sec.py:55"
  ],
  "yürütülebilir içerik türü belge olarak verilemez ({tur})": [
-  "uygulama.py:263"
+  "uygulama.py:265"
  ],
  "yıkıcı komutu çalıştırılabilecek bir dosyaya yazma ({hedef})": [
   "guvenlik.py:735"
@@ -4921,7 +4948,7 @@
   "masaustu.py:1468"
  ],
  "zaten açıktı, öne geldi ({sn} sn)": [
-  "uygulama.py:1086"
+  "uygulama.py:1330"
  ],
  "zip -TT: komut çalıştırır": [
   "guvenlik.py:841"
@@ -4933,7 +4960,7 @@
   "oturum/__init__.py:42"
  ],
  "{ad} boş profille açıldı: kayıtlı girişler yok (şifre deposu rölesi yok, anahtarlığa dokunulmaz)": [
-  "oturum/chromium.py:88"
+  "oturum/chromium.py:125"
  ],
  "{ad} ekranında açık; aynı anda iki istemci oturumunu düşürür. Kapatınca arka planda yapabilirim ya da Ekranımda yap.": [
   "oturum/__init__.py:40"
@@ -5057,7 +5084,7 @@
   "eylem.py:1322"
  ],
  "{kimlik} (Flatpak) görünmez masaüstünde açılmaz: kök neden, ad alanındaki boş ev dizininde ~/.var/app/{kimlik} yok ve Flatpak başlatıcısının X yetkisi yok; başlatıcı iç içe bwrap'ten önce çıkıyor (ölçüldü). Öneri: yerli chromium kullanın (open chromium; boş profil, kayıtlı girişler yok) ya da Ekranımda yap.": [
-  "oturum/chromium.py:94"
+  "oturum/chromium.py:131"
  ],
  "{komut} -R kök/ev/sistem dizininde: tüm dosyaların izin/sahipliğini değiştirir": [
   "guvenlik.py:956"
@@ -5203,13 +5230,17 @@
   "akis.py:259"
  ],
  "{sn} sn içinde uygun pencere açılmadı": [
-  "uygulama.py:1094"
+  "uygulama.py:1303",
+  "uygulama.py:1338"
  ],
  "{sn} sn içinde yanıt yok": [
   "mesgul.py:505"
  ],
+ "{sn} sn içinde yeni pencere görünmedi": [
+  "api.py:657"
+ ],
  "{sn} sn içinde yeni pencere görünmedi (çıktı: {log})": [
-  "api.py:665"
+  "api.py:684"
  ],
  "{sure} kaldı": [
   "oturum/denetle.py:343"
@@ -5230,7 +5261,7 @@
   "guvenlik.py:197"
  ],
  "{uygulama} arka planda açılamaz ({karar})": [
-  "uygulama.py:983"
+  "uygulama.py:1216"
  ],
  "{uygulama} görünmez masaüstünde açılamaz (şifre deposu ya da kasa gerektiriyor); kullanıcı meşgul değilse desktop='foreground'.": [
   "mcp_sunucu.py:2369"
@@ -5239,16 +5270,16 @@
   "mcp_sunucu.py:2364"
  ],
  "{uygulama} userData yok (hiç açılmamış)": [
-  "oturum/chromium.py:152"
+  "oturum/chromium.py:189"
  ],
  "{uygulama} {kurulu} {acik} kapalıyken={kapali_iken} açıkken={acik_iken} keyring={keyring} kopya={kopya}": [
   "oturum/cli.py:104"
  ],
  "{uygulama}: Flatpak Electron eşlemesi yok": [
-  "oturum/chromium.py:133"
+  "oturum/chromium.py:170"
  ],
  "{uygulama}: oturum politikası 'kapali'": [
-  "uygulama.py:980"
+  "uygulama.py:1213"
  ],
  "{x},{y} noktasındaki yazı: {yazi}": [
   "guvenlik.py:1411"
@@ -5344,7 +5375,7 @@
   "doktor.py:120"
  ],
  "çalıştırılabilir dosya belge olarak verilemez": [
-  "uygulama.py:260"
+  "uygulama.py:262"
  ],
  "çalışıyor (pid {pid})": [
   "doktor.py:119"
@@ -5374,10 +5405,10 @@
   "desen.py:124"
  ],
  "çok uzun ya da boşluk/denetim karakteri içeriyor": [
-  "uygulama.py:333"
+  "uygulama.py:335"
  ],
  "çok uzun ya da denetim karakteri içeriyor": [
-  "uygulama.py:294"
+  "uygulama.py:296"
  ],
  "çözülmüş politika": [
   "oturum/cli.py:74"

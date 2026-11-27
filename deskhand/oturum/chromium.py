@@ -75,15 +75,52 @@ YERLI_DESTEKLI = ("chromium",)
 
 # Flatpak tarayıcıları görünmez masaüstünde AÇILMAZ (rapor-ABM-OLC: com.google.Chrome ölçüldü; aynı başlatıcı düzeni)
 FLATPAK_TARAYICILARI = ("com.google.Chrome", "org.chromium.Chromium", "com.brave.Browser", "com.vivaldi.Vivaldi",
-                        "com.microsoft.Edge", "com.opera.Opera", "io.github.ungoogled_software.ungoogled_chromium")
+                        "com.microsoft.Edge", "com.opera.Opera", "io.github.ungoogled_software.ungoogled_chromium",
+                        "com.github.Eloston.UngoogledChromium")
 
 
-def yerli_hazirla(uygulama: str = "chromium", ek=None) -> dict:
+def _bos_profil_yolu(uygulama: str) -> str:
+    """Yeni boş profil kopyasının YOLU (dizin OLUŞTURULMAZ): kopya kökünde, kopya bekçisinin ad deseninde."""
+    import time
+    from . import politika
+    return os.path.join(politika.kopya_dizini(),
+                        f"{uygulama}-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}-{os.urandom(3).hex()}")
+
+
+def bos_profil_olustur(yol: str | None) -> bool:
+    """Karar anında yalnız YOLU verilen yerli Chromium boş profil kopyasını oluştur (gerçek açılışta, başlatmadan hemen
+    önce: uygulama._baslat). Yalnız kopya kökünün doğrudan altındaki, YERLI_DESTEKLI adlı, ad desenine uyan ve henüz
+    VAR OLMAYAN yol (0700, sahip kaydı yeni_kopya_dizini ile aynı); başka her yol için hiçbir şey yapmaz. → oluşturuldu
+    mu."""
+    import time
+    from . import kopya_bekcisi as _bekci
+    if not yol or os.path.lexists(yol):
+        return False
+    ad = os.path.basename(yol)
+    if not _bekci.KOPYA_DESENI.fullmatch(ad) or not any(ad.startswith(u + "-") for u in YERLI_DESTEKLI):
+        return False
+    kok = kopya_mod.kopya_kok()
+    if os.path.realpath(os.path.dirname(yol)) != os.path.realpath(kok):
+        return False
+    kopya_mod.sinir_uygula()
+    kopya_mod.bos_alan_denetle(kok)
+    os.mkdir(yol, 0o700)  # var olursa FileExistsError (yarış): üzerine kurulmaz
+    os.chmod(yol, 0o700)
+    _bekci.sahip_yaz(yol, {"hazirlayan": os.getpid(), "hazirlayan_bas": _bekci.baslangic(os.getpid()),
+                           "zaman": time.time()})
+    return True
+
+
+def yerli_hazirla(uygulama: str = "chromium", ek=None, olustur: bool = True) -> dict:
     """Yerli Chromium için BOŞ profil kopyası (tmpfs, kopya kökünde; kopya bekçisi ve kapanış onu siler) + argv
-    (erişilebilirlik bayrağıyla). → {kopya_yolu, argv, not}. Başlatmaz."""
+    (erişilebilirlik bayrağıyla). olustur=False: yalnız yol (karar/tanı yan etkisiz; dizin gerçek açılışta
+    bos_profil_olustur ile). → {kopya_yolu, argv, not}. Başlatmaz."""
     from ..uygulama import ERISIM_BAYRAGI
-    hedef = kopya_mod.yeni_kopya_dizini(uygulama)
-    kopya_mod.izinleri_daralt(hedef)
+    if olustur:
+        hedef = kopya_mod.yeni_kopya_dizini(uygulama)
+        kopya_mod.izinleri_daralt(hedef)
+    else:
+        hedef = _bos_profil_yolu(uygulama)
     return {"kopya_yolu": hedef, "argv": chromium_argv(uygulama, hedef, [ERISIM_BAYRAGI, *(ek or [])], "basic"),
             "not": _("{ad} boş profille açıldı: kayıtlı girişler yok (şifre deposu rölesi yok, anahtarlığa "
                      "dokunulmaz)").format(ad=uygulama.capitalize())}
@@ -117,7 +154,7 @@ def on_karari(h):
     politikalar = list(ayr.get("politikalar") or [])
     if flatpaklar or not politikalar or any(p not in YERLI_DESTEKLI for p in politikalar):
         return None
-    b = yerli_hazirla(politikalar[0])
+    b = yerli_hazirla(politikalar[0], olustur=False)  # kopya dizini gerçek açılışta (tanı komutu yan etkisiz)
     from . import Hazirlik
     return Hazirlik(karar="kopya", argv=b["argv"], kopya_yolu=b["kopya_yolu"], aciklama=b["not"],
                     gerekli_keyring=False, ayrinti={**ayr, "yerli_bos_profil": True})

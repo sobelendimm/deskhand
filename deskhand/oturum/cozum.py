@@ -14,6 +14,7 @@ yolun kendisi çözülür. Hiçbir süreç BAŞLATILMAZ; yalnız dosya okunur (.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import shutil
 from dataclasses import dataclass, field
@@ -97,21 +98,69 @@ def _sarmalayicilari_at(argv: list[str]) -> list[str]:
     return argv[i:]
 
 
+# `flatpak run` seçeneklerinden DEĞER alanlar (GOption `--ad değer` yazımını da kabul eder: değer kimlik sayılmaz)
+_FLATPAK_RUN_DEGERLI = {
+    "--arch", "--branch", "--command", "--cwd", "--runtime", "--runtime-version", "--commit", "--runtime-commit",
+    "--share", "--unshare", "--socket", "--nosocket", "--device", "--nodevice", "--allow", "--disallow",
+    "--filesystem", "--nofilesystem", "--add-policy", "--remove-policy", "--env", "--unset-env", "--env-fd",
+    "--own-name", "--talk-name", "--no-talk-name", "--system-own-name", "--system-talk-name",
+    "--system-no-talk-name", "--persist", "--app-path", "--usr-path", "--parent-pid", "--instance-id-fd",
+    "--sandbox-expose", "--sandbox-expose-ro", "--sandbox-expose-path", "--sandbox-expose-path-ro",
+    "--sandbox-expose-path-try", "--sandbox-expose-path-ro-try", "--sandbox-a11y-own-name", "--installation"}
+_FLATPAK_DISA_AKTARIM = re.compile(r"/flatpak/exports/bin/([A-Za-z0-9_.-]+)$")
+_FLATPAK_UYGULAMA_YOLU = re.compile(r"/flatpak/app/([A-Za-z0-9_.-]+)/")
+
+
+def _flatpak_ref_kimligi(ref: str) -> str:
+    """`kimlik`, `kimlik/arch/branch` ya da `app/kimlik/arch/branch` → kimlik."""
+    p = ref.split("/")
+    return p[1] if len(p) > 1 and p[0] in ("app", "runtime") else p[0]
+
+
+def _flatpak_disa_aktarim(program: str) -> str | None:
+    """Flatpak dışa aktarım sarmalayıcısı (…/flatpak/exports/bin/<kimlik>, ör. /var/lib/flatpak/exports/bin/X ya da
+    ~/.local/share/flatpak/exports/bin/X; PATH'teki çıplak adı ve sembolik bağın hedefi dahil) → kimlik | None."""
+    adaylar = [program]
+    if "/" not in program and program.count(".") >= 2:
+        adaylar.append(shutil.which(program) or "")
+    for y in list(adaylar):
+        if y and os.path.islink(y):
+            adaylar.append(os.path.realpath(y))
+    for y in adaylar:
+        m = _FLATPAK_DISA_AKTARIM.search(y or "") or _FLATPAK_UYGULAMA_YOLU.search(y or "")
+        if m and "." in m.group(1):
+            return m.group(1)
+    return None
+
+
 def _flatpak_kimligi(argv: list[str]) -> tuple[str | None, str | None]:
-    """`flatpak run [seçenekler] <kimlik> …` → (kimlik, --command değeri)."""
-    if len(argv) < 2 or os.path.basename(argv[0]) != "flatpak" or "run" not in argv[1:3]:
+    """Flatpak uygulama kimliğine normalleştir → (kimlik, --command değeri). Kapsanan yazımlar:
+    `flatpak [genel seçenekler] run [seçenekler] <ref> …` (ref `kimlik/arch/branch` ya da `app/…` olabilir; `--ad değer`
+    biçimindeki seçenek değeri kimlik sayılmaz) ve dışa aktarım sarmalayıcıları (…/flatpak/exports/bin/<kimlik>)."""
+    if not argv:
         return None, None
-    i = argv.index("run") + 1
+    if os.path.basename(argv[0]) != "flatpak":
+        return _flatpak_disa_aktarim(str(argv[0])), None
+    i = 1
+    while i < len(argv) and argv[i].startswith("-"):  # genel seçenekler (--verbose, --user, --installation=…)
+        i += 1
+    if i >= len(argv) or argv[i] != "run":
+        return None, None
+    i += 1
     komut = None
     while i < len(argv):
         a = argv[i]
+        if a == "--":
+            i += 1
+            return (_flatpak_ref_kimligi(argv[i]), komut) if i < len(argv) else (None, komut)
         if a.startswith("--command="):
             komut = a.split("=", 1)[1]
-        elif a == "--command" and i + 1 < len(argv):
-            komut = argv[i + 1]
+        elif a in _FLATPAK_RUN_DEGERLI and i + 1 < len(argv):
+            if a == "--command":
+                komut = argv[i + 1]
             i += 1
         elif not a.startswith("-"):
-            return a, komut
+            return _flatpak_ref_kimligi(a), komut
         i += 1
     return None, komut
 

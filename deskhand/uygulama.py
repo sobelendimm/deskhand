@@ -1,6 +1,8 @@
 """Uygulama başlatma: .desktop girdileri, ad ile bulma, başlat → YENİ penceresini bekle. Komut: ac."""
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import inspect
 import os
 import re
@@ -764,13 +766,19 @@ def _tarayici_turu(argv) -> str | None:
     return None
 
 
+# Değer alan tarayıcı seçenekleri (Firefox tek tireli de kabul eder): değerleri belge/adres SAYILMAZ (-P work).
+_DEGERLI_SECENEKLER = {f"{t}{s}" for t in ("-", "--") for s in (
+    "P", "profile", "CreateProfile", "class", "name", "display", "search", "window-size", "MOZ_LOG", "MOZ_LOG_FILE",
+    "lang", "remote-debugging-port", "start-debugger-server")}
+
+
 def _belgeler(argv) -> list:
-    """Komuttaki belge/adres argümanları (program, seçenekler ve --profile değeri hariç)."""
+    """Komuttaki belge/adres argümanları (program, seçenekler ve değer alan seçeneklerin değerleri hariç)."""
     out, atla = [], False
     for a in list(argv)[1:]:
         if atla:
             atla = False
-        elif a in ("--profile", "-profile"):
+        elif a in _DEGERLI_SECENEKLER:
             atla = True
         elif not str(a).startswith("-"):
             out.append(a)
@@ -778,27 +786,53 @@ def _belgeler(argv) -> list:
 
 
 CHROMIUM_KAYIT = "tarayicilar-chromium.json"  # çalışma dizininde (0700; uygulamaların ad alanına bağlanmaz)
+KILIT_BEKLE_SN = 45.0
+
+
+@contextlib.contextmanager
+def _dosya_kilidi(yol: str, sure: float = KILIT_BEKLE_SN, ne: str = ""):
+    """Süreçler (ve iş parçacıkları) arası özel kilit (flock; her girişte ayrı açık dosya). sure içinde alınamazsa Dur 7
+    (hiçbir şey yapılmadı)."""
+    import fcntl
+    fd = os.open(yol, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+    try:
+        bitis = time.monotonic() + sure
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() > bitis:
+                    raise Dur(7, _("başka bir açılış sürüyor ({ne}); {sn} sn içinde sıra gelmedi, hiçbir şey yapılmadı")
+                              .format(ne=ne or os.path.basename(yol), sn=f"{sure:.0f}")) from None
+                time.sleep(0.05)
+        yield
+    finally:
+        os.close(fd)  # flock kapanışla kalkar
 
 
 def chromium_kaydet(d: dict, kopya: str, pid: int) -> None:
     """Kopyalı yerli Chromium'un yetkili başlatma kaydı (Firefox F1 kaydıyla aynı düzen: çalışma dizini, atomik, 0600).
+    Oku-değiştir-yaz dosya kilidi altında (eşzamanlı başlatmada kayıt kaybolmaz); ölü/doğrulanamayan kayıtlar budanır.
     Profil kopyasındaki sahip dosyası (uygulamanın yazabildiği yer) hedef seçiminde KULLANILMAZ."""
     import json
-    from .arka_ortak import surec_baslangic
+    from .arka_ortak import pid_dogru, surec_baslangic
     calisma = d.get("calisma") or ""
     if not calisma or not os.path.isdir(calisma) or not kopya:
         return
     yol = os.path.join(calisma, CHROMIUM_KAYIT)
-    kayitlar = [g for g in _chromium_kayitlari(calisma) if os.path.realpath(str(g.get("kopya") or "")) !=
-                os.path.realpath(kopya)]
-    kayitlar.append({"kopya": kopya, "pid": int(pid), "bas": surec_baslangic(pid)})
-    gecici = yol + f".{os.getpid()}.tmp"
     try:
-        fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump(kayitlar, f)
-        os.replace(gecici, yol)
-    except OSError:
+        with _dosya_kilidi(yol + ".kilit", ne="chromium kaydı"):
+            kayitlar = [g for g in _chromium_kayitlari(calisma)
+                        if os.path.realpath(str(g.get("kopya") or "")) != os.path.realpath(kopya) and
+                        pid_dogru(int(g.get("pid") or 0), g.get("bas"), d.get("cgroup") or "")]
+            kayitlar.append({"kopya": kopya, "pid": int(pid), "bas": surec_baslangic(pid)})
+            gecici = yol + f".{os.getpid()}.tmp"
+            fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump(kayitlar, f)
+            os.replace(gecici, yol)
+    except (OSError, ValueError, Dur):
         pass
 
 
@@ -872,57 +906,252 @@ def _tarayici_pencereleri(au, d: dict, ata: int) -> list[str]:
 
 
 _TARAYICI_SINIFI = {"firefox": ("firefox", "navigator"), "chromium": ("chromium",)}
+# Ana tarayıcı penceresinin başlık sonu (diyalog / Kitaplık / indirme penceresi değil)
+_ANA_BASLIK = {"firefox": re.compile(r"(^|[-—–] )(Mozilla )?Firefox$"), "chromium": re.compile(r"(^|[-—–] )Chromium$")}
+ADRES_DOGRULA_SN = 8.0
 
 
-def ayni_surecte_ac(au, komut, kopya) -> bool:
+@dataclasses.dataclass
+class IkinciPencere:
+    """ayni_surecte_ac sonucu: Ctrl+N sonrası DOĞRULANAN tek pencere. Çağıran yalnız bu kimliği raporlar (yeni pencere
+    yeniden aranmaz). adres_dogrulandi: None = adres verilmedi; True = sayfa adresi/başlığı hedefe döndü; False =
+    adres yazıldı ama gezinme doğrulanamadı (başarı DENMEZ)."""
+    kimlik: str
+    tur: str
+    adres: str | None = None
+    adres_dogrulandi: bool | None = None
+
+
+def _ctrl_n_hedefi(au, d: dict, ata: int, tur: str, once: list[str]) -> str | None:
+    """Ctrl+N gönderilecek pencere: tarayıcının (soy doğrulanmış) ETKİN penceresi ana pencereyse o; değilse ana pencere
+    başlıklı (diyalog/Kitaplık/indirme değil) ilk pencere; ana pencere yoksa None (bu tarayıcı kullanılmaz). Arka uç
+    yığın sırasını vermediğinden "en son etkin" = şu an etkin olan; başkası etkinse ana pencerelerin ilki."""
+    def ana_mi(w):
+        try:
+            sinif, baslik = (au.sinif(w) or "").lower(), au.baslik(w) or ""
+        except Dur:
+            return False
+        return any(x in sinif for x in _TARAYICI_SINIFI[tur]) and bool(_ANA_BASLIK[tur].search(baslik))
+    try:
+        ak = au.aktif()
+    except Dur:
+        ak = None
+    if ak in once and ana_mi(ak):
+        return ak
+    return next((w for w in once if ana_mi(w)), None)
+
+
+def _adres_norm(s: str) -> tuple[str, str]:
+    """Adres karşılaştırması: (www.'suz küçük harf sunucu, sondaki / atılmış tam adres; şema küçük harf)."""
+    from urllib.parse import urlsplit
+    s = str(s or "").strip()
+    try:
+        p = urlsplit(s if "://" in s or s.startswith(("about:", "file:")) else "https://" + s)
+    except ValueError:
+        return "", s.lower()
+    host = (p.hostname or "").lower().removeprefix("www.")
+    return host, f"{p.scheme.lower()}://{host}{(':' + str(p.port)) if p.port else ''}{p.path.rstrip('/')}" + \
+        (f"?{p.query}" if p.query else "")
+
+
+def _adres_dogrula(au, w: str, adres: str, tek_mi=None) -> bool:
+    """Return'den sonra yeni pencerenin etkin sekmesi hedefe döndü mü: sayfa adresi (AT-SPI belge adresi) aynı adres ya
+    da aynı sunucu (yönlendirme), ya da pencere başlığı hedef adresi içeriyor. ADRES_DOGRULA_SN içinde olmazsa False.
+    tek_mi(): AT-SPI okuması yalnız pencerenin başlığı tarayıcıda tekse güvenilir (yoksa öbür pencere okunabilir)."""
+    from . import web
+    h_sunucu, h_tam = _adres_norm(adres)
+    bitis = time.monotonic() + ADRES_DOGRULA_SN
+    while True:
+        try:
+            s = (web.sayfa_bilgisi(w) or {}) if tek_mi is None or tek_mi() else {}
+            s_sunucu, s_tam = _adres_norm(s.get("adres") or "")
+            if s.get("adres") and (s_tam == h_tam or (h_sunucu and s_sunucu == h_sunucu)):
+                return True
+        except Exception:  # noqa: BLE001 - erişilebilirlik okunamadı: başlığa bak, sonra yeniden dene
+            pass
+        try:
+            b = au.baslik(w) or ""
+            if str(adres) in b or (h_sunucu and h_sunucu in b.lower()):
+                return True
+        except Dur:
+            pass
+        if time.monotonic() >= bitis:
+            return False
+        time.sleep(0.3)
+
+
+ODAK_BEKLE_SN = 2.5
+
+
+def _baslik_tek_mi(au, d: dict, ata: int, w: str) -> bool:
+    """w'nin başlığı tarayıcının öbür pencerelerinden farklı mı? AT-SPI çerçevesi (odak ve sayfa adresi okuması) pencere
+    PID'i + BAŞLIKLA seçilir: aynı süreçte aynı başlıklı iki çerçevede okuma öbür pencereye gidebilir → doğrulanamaz."""
+    try:
+        b = au.baslik(w) or ""
+        return bool(b) and not any((au.baslik(x) or "") == b for x in _tarayici_pencereleri(au, d, ata) if x != w)
+    except Dur:
+        return False
+
+
+def _adres_cubugu_odagi(au, w: str) -> dict | None:
+    """Ctrl+L'den sonra odaktaki öge (erisim.odak_bilgisi: rol, belge_ici, duzenlenebilir). Odak adres çubuğuna
+    (belge DIŞI, düzenlenebilir) geçene dek ODAK_BEKLE_SN beklenir; geçmezse son okunan (ya da None) döner. Görünmez
+    masaüstünde erişilebilirlik kapalıysa önce açılır (yalnız sanal arka uç: kullanıcının oturumuna dokunulmaz)."""
+    from . import erisim
+    if getattr(au, "ad", "") == "sanal":
+        try:
+            erisim.erisim_ac_garanti()
+        except Exception:  # noqa: BLE001 - açılamadı: odak bilinmiyor → adres yazılmaz
+            pass
+    bitis = time.monotonic() + ODAK_BEKLE_SN
+    odak = None
+    while True:
+        odak = erisim.odak_bilgisi(w)
+        if odak and not odak.get("belge_ici") and odak.get("duzenlenebilir"):
+            return odak
+        if time.monotonic() >= bitis:
+            return odak
+        time.sleep(0.2)
+
+
+def _kendi_penceremi_kapat(au, d: dict, ata: int, w: str) -> bool:
+    """Ctrl+N ile KENDİ açtığımız ve doğruladığımız başıboş pencereyi kapat (Dur yollarında). Kapatmadan hemen önce
+    pencere kimliği PID'i yeniden kayıtlı tarayıcının soyunda doğrulanır: başkasının penceresine dokunulmaz. DUR
+    basılıysa hiçbir şey yapılmaz. → kapatma isteği gitti mi."""
+    from .hata import dur_denetle
+    try:
+        dur_denetle()
+        if not _soyundan_mi(kimlik_pid(au, d, w), ata):
+            return False
+        au.kapat(w)
+        gunluk(f"ac | 2. pencere iptal: kendi penceremiz kapatıldı | {w}")
+        return True
+    except Dur:
+        return False
+
+
+def ayni_surecte_ac(au, komut, kopya) -> IkinciPencere | None:
     """Arka planda aynı masaüstünde Deskhand'in başlattığı, kayıtlı ve doğrulanmış aynı türden tarayıcı varsa 2. `open`
-    onun SÜRECİNDE yeni pencere açar: penceresine denetimli Ctrl+N (api.tus), yeni pencere beklenir. Pencere ↔ süreç
-    eşlemesi yalnız istemci kimliği PID'inden (kimlik_pid) ve süreç soyundan; kimlik yoksa bu yol KULLANILMAZ (False:
-    çağıran yeni örnek açar). Ctrl+N'den sonra TAM BİR yeni pencere gerekir; 0 ya da >1 → Dur 7, adres yazılmaz. Adres
-    verildiyse yazmadan önce pencerenin tarayıcı sınıfında ve ETKİN olduğu doğrulanır; yazı kimlik/sınıf kilitli
-    yoldan (api.tus/api.yaz, pencere kimliğiyle). Başarıda politikanın bu açılış için hazırladığı yeni kopya silinir;
-    kayıtlar DEĞİŞMEZ. → True | False."""
+    onun SÜRECİNDE yeni pencere açar: tarayıcının ana penceresine denetimli Ctrl+N (api.tus), yeni pencere beklenir.
+    Pencere ↔ süreç eşlemesi yalnız istemci kimliği PID'inden (kimlik_pid) ve süreç soyundan; kimlik yoksa bu yol
+    KULLANILMAZ (None: çağıran yeni örnek açar). Aynı masaüstündeki açılışlar dosya kilidiyle SIRAYA alınır.
+    Ctrl+N'den sonra TAM BİR yeni pencere gerekir; 0 ya da >1 → Dur 7, adres yazılmaz. Tarayıcı kapanıyorsa (hedef
+    pencere ya da kayıtlı süreç gitti) Dur verilmez, hemen None (yeni örnek). Adres verildiyse: yazmadan önce sınıf +
+    ETKİN + soy, Ctrl+L'den sonra odağın adres çubuğunda (AT-SPI: belge dışı, düzenlenebilir) olduğu doğrulanır;
+    değilse yazılmaz (Dur 7). Return'den sonra gezinme doğrulanır (adres_dogrulandi). Birden çok adres reddedilir
+    (Dur 1). Her Dur 7'de kendi doğrulanmış penceremiz kapatılır ve politika kopyası silinir; başarıda da kopya
+    silinir; kayıtlar DEĞİŞMEZ. → IkinciPencere (doğrulanan pencere) | None."""
     from . import api, masaustu, oturum
+    from .arka_ortak import pid_dogru
     tur = _tarayici_turu(komut)
     if not tur or not kopya:
-        return False
+        return None
     d = masaustu.durum()
     if not d or masaustu.tur(d) != "kwin":  # istemci kimliği PID'i yok: pencere doğrulanamaz → yeni örnek
-        return False
-    for ata, eski in _kayitli_tarayicilar(d, tur, kopya):
-        once_hepsi = {w for w, _b, _g in au.pencereler()}
-        once = _tarayici_pencereleri(au, d, ata)
-        if not once:
-            continue
-        api.tus(once[0], "ctrl+n")
-        bitis = time.monotonic() + YENI_PENCERE_BEKLE_SN
-        yeni: list[str] = []
-        while time.monotonic() < bitis:
-            time.sleep(0.25)
-            yeni = [w for w in _tarayici_pencereleri(au, d, ata) if w not in once]
-            if yeni:
-                time.sleep(0.5)  # aynı anda ikinci pencere (taklit/yarış) görülsün
-                break
-        diger = [w for w, _b, _g in au.pencereler() if w not in once_hepsi and w not in yeni]
-        yeni = [w for w in _tarayici_pencereleri(au, d, ata) if w not in once]
-        if len(yeni) != 1 or (diger and _belgeler(_asil_komut(komut))):
-            raise Dur(7, _("ikinci pencere doğrulanamadı: Ctrl+N sonrası {sayi} aday pencere (tam bir olmalı); "
-                           "adres yazılmadı").format(sayi=len(yeni) + (len(diger) if yeni else 0)))
-        w = yeni[0]
-        for adres in _belgeler(_asil_komut(komut))[:1]:  # tek adres: yeni pencerenin adres çubuğu
-            time.sleep(0.5)
-            sinif = (au.sinif(w) or "").lower()
-            if not any(x in sinif for x in _TARAYICI_SINIFI[tur]) or au.aktif() != w or \
-                    not _soyundan_mi(kimlik_pid(au, d, w), ata):
-                raise Dur(7, _("ikinci pencere doğrulanamadı (sınıf {sinif}, etkin değil ya da süreç eşleşmiyor); "
-                               "adres yazılmadı").format(sinif=sinif or "?"))
-            api.tus(w, "ctrl+l")
-            api.yaz(w, str(adres))
-            api.tus(w, "Return")
+        return None
+    belgeler = [str(b) for b in _belgeler(_asil_komut(komut))]
+    calisma = d.get("calisma") or ""
+    kilit = _dosya_kilidi(os.path.join(calisma, "tarayici-ac.kilit"), ne=_("tarayıcı penceresi")) \
+        if calisma and os.path.isdir(calisma) else contextlib.nullcontext()
+
+    def iptal(ileti, w=None, ata=0):
+        kapandi = bool(w) and _kendi_penceremi_kapat(au, d, ata, w)
         oturum.temizle(kopya)
-        gunluk(f"ac | 2. pencere aynı süreçte (Ctrl+N) | {tur} | {os.path.basename(eski)}")
-        return True
-    return False
+        return Dur(7, ileti + ("; " + _("açılan pencere kapatıldı") if kapandi else ""))
+
+    with kilit:
+        for ata, eski in _kayitli_tarayicilar(d, tur, kopya):
+            once_hepsi = {w for w, _b, _g in au.pencereler()}
+            once = _tarayici_pencereleri(au, d, ata)
+            hedef = _ctrl_n_hedefi(au, d, ata, tur, once) if once else None
+            if not hedef:
+                continue
+            if len(belgeler) > 1:
+                raise Dur(1, _("aynı süreçteki yeni pencerede tek adres açılır ({sayi} verildi); her adres için ayrı "
+                               "open çağır").format(sayi=len(belgeler)))
+            kayit = next((g for g in _kayit_bilgisi(d, tur) if int(g.get("pid") or 0) == ata), {})
+            api.tus(hedef, "ctrl+n")
+            bitis = time.monotonic() + YENI_PENCERE_BEKLE_SN
+            yeni: list[str] = []
+            kapaniyor = False
+            while time.monotonic() < bitis:
+                time.sleep(0.25)
+                simdi = {w for w, _b, _g in au.pencereler()}
+                yeni = [w for w in _tarayici_pencereleri(au, d, ata) if w not in once]
+                if yeni:
+                    time.sleep(0.5)  # aynı anda ikinci pencere (taklit/yarış) görülsün
+                    break
+                if hedef not in simdi or not pid_dogru(ata, kayit.get("bas"), d.get("cgroup") or ""):
+                    kapaniyor = True  # tarayıcı kapanıyor/kapandı: Dur değil, hemen yeni örnek
+                    break
+            if kapaniyor:
+                gunluk(f"ac | 2. pencere: kayıtlı {tur} kapanıyor, yeni örnek açılacak | {os.path.basename(eski)}")
+                continue
+            diger = [w for w, _b, _g in au.pencereler() if w not in once_hepsi and w not in yeni]
+            yeni = [w for w in _tarayici_pencereleri(au, d, ata) if w not in once]
+            if len(yeni) != 1 or (diger and belgeler):
+                raise iptal(_("ikinci pencere doğrulanamadı: Ctrl+N sonrası {sayi} aday pencere (tam bir olmalı); "
+                              "adres yazılmadı").format(sayi=len(yeni) + (len(diger) if yeni else 0)),
+                            yeni[0] if len(yeni) == 1 else None, ata)
+            w = yeni[0]
+            sonuc = IkinciPencere(kimlik=w, tur=tur)
+            for adres in belgeler:
+                time.sleep(0.5)
+                sinif = (au.sinif(w) or "").lower()
+                if not any(x in sinif for x in _TARAYICI_SINIFI[tur]) or au.aktif() != w or \
+                        not _soyundan_mi(kimlik_pid(au, d, w), ata):
+                    raise iptal(_("ikinci pencere doğrulanamadı (sınıf {sinif}, etkin değil ya da süreç eşleşmiyor); "
+                                  "adres yazılmadı").format(sinif=sinif or "?"), w, ata)
+                if not _baslik_tek_mi(au, d, ata, w):
+                    raise iptal(_("yeni pencereyle aynı başlıklı başka tarayıcı penceresi var: erişilebilirlik ağacı "
+                                  "bu pencereye güvenle eşlenemez (adres çubuğu doğrulanamaz); adres yazılmadı"), w, ata)
+                api.tus(w, "ctrl+l")
+                odak = _adres_cubugu_odagi(au, w)
+                if not odak or odak.get("belge_ici") or not odak.get("duzenlenebilir"):
+                    raise iptal(_("Ctrl+L sonrası odak adres çubuğunda değil (odak: {rol}); adres yazılmadı").format(
+                        rol=(odak or {}).get("rol") or _("bilinmiyor")), w, ata)
+                api.yaz(w, adres)
+                api.tus(w, "Return")
+                sonuc.adres, sonuc.adres_dogrulandi = adres, _adres_dogrula(
+                    au, w, adres, lambda a_=ata, w_=w: _baslik_tek_mi(au, d, a_, w_))
+            oturum.temizle(kopya)
+            gunluk(f"ac | 2. pencere aynı süreçte (Ctrl+N) | {tur} | {os.path.basename(eski)} | {w}"
+                   + ("" if sonuc.adres_dogrulandi is not False else " | adres doğrulanamadı"))
+            return sonuc
+    return None
+
+
+def _kayit_bilgisi(d: dict, tur: str) -> list[dict]:
+    """Kayıtlı tarayıcıların ham kayıtları (pid, bas): kapanma denetimi pid_dogru için başlangıç zamanı."""
+    if tur == "firefox":
+        from . import bellek_bekcisi
+        return bellek_bekcisi._kayitlar(d.get("calisma") or "")
+    return _chromium_kayitlari(d.get("calisma") or "")
+
+
+def ikinci_pencere_bekle(au, ip: IkinciPencere, uyar, sure: float) -> tuple[str, str] | None:
+    """Doğrulanan pencerenin başlık/sınıfı okunana (ve uyar(b, s) sağlanana) dek bekle → (b, s) | None (süre doldu).
+    Başka pencereye BAKILMAZ (doğrulamadan sonra açılan sahte pencere seçilemez)."""
+    bitis = time.monotonic() + sure
+    while True:
+        try:
+            b, s = au.baslik(ip.kimlik) or "", au.sinif(ip.kimlik) or ""
+            if (b or s) and uyar(b, s):
+                return b, s
+        except Dur as e:
+            if e.kod != 7:
+                raise
+        if time.monotonic() >= bitis:
+            return None
+        time.sleep(0.25)
+
+
+def ikinci_pencere_iletisi(ip: IkinciPencere) -> str:
+    """Adres doğrulanamadıysa dürüst ileti ("" değilse başarı denmez)."""
+    if ip.adres_dogrulandi is False:
+        return _("adres doğrulanamadı: {adres} yazıldı ama pencerenin sayfa adresi/başlığı hedefe dönmedi").format(
+            adres=ip.adres)
+    return ""
 
 
 def flatpak_tarayici_denetle(komut) -> None:
@@ -944,12 +1173,18 @@ def _baslat(au, komut, fp, env=None, kopya=None, girdi=None, ev=()):
     girdisinin özel .desktop kopyası (arka planda ad alanına salt okunur bağlanır: RUNTIME_DIR orada boştur); ev:
     politikanın uygulama başına ev dizini beyaz liste girdileri (yalnız arka plan arka uçları alır).
     Arka planda (ABM-F3): Flatpak tarayıcısı → Dur 16; Deskhand'in başlattığı aynı türden kayıtlı tarayıcı varsa yeni
-    pencere o süreçte, Ctrl+N ile (ayni_surecte_ac; uzak komut kanalı ve ad alanına giriş YOK)."""
+    pencere o süreçte, Ctrl+N ile (ayni_surecte_ac; uzak komut kanalı ve ad alanına giriş YOK) → IkinciPencere: çağıran
+    YALNIZ bu doğrulanmış pencereyi raporlar. Yerli Chromium'un boş profil kopyası karar anında değil burada, yeni örnek
+    başlamadan hemen önce oluşur (tanı komutu ve Ctrl+N yolu kopya üretmez). → Popen | IkinciPencere | None."""
     p = inspect.signature(au.baslat).parameters
     if "kopya" in p:  # arka plan arka uçları (sanal: kwin | xvfb)
         flatpak_tarayici_denetle(komut)
-        if kopya and ayni_surecte_ac(au, komut, kopya):
-            return None
+        if kopya:
+            ip = ayni_surecte_ac(au, komut, kopya)
+            if ip is not None:
+                return ip
+            from .oturum import chromium
+            chromium.bos_profil_olustur(kopya)  # bekleyen boş profil yolu değilse hiçbir şey yapmaz
     ek = {"kopya": kopya} if kopya and "kopya" in p else {}
     if girdi and "girdi" in p:
         ek["girdi"] = girdi
@@ -972,10 +1207,8 @@ def oturum_hazirla(uygulama, siteler=None, ham_komut=False):
     bekle/on → 16."""
     from . import oturum
     from .hata import OTURUM_POLITIKASI
+    # ABM-F3: Flatpak tarayıcısı → 16, yerli chromium → boş profil kararı: oturum.hazirla içinde (tek kez, on_karari)
     h = oturum.hazirla(uygulama, siteler or None, ham_komut=ham_komut)
-    if not ham_komut:  # ABM-F3: Flatpak tarayıcısı → 16 + kök neden; yerli chromium → boş profil kopyası
-        from .oturum import chromium
-        h = chromium.on_karari(h) or h
     if h.karar == "kapali":
         raise Dur(10, _("{uygulama}: oturum politikası 'kapali'").format(uygulama=uygulama)
                   + (f" ({h.aciklama})" if h.aciklama else ""))
@@ -1055,15 +1288,26 @@ def k_ac(a):
     once, onceki_aktif = tum_pencereler(), au.aktif()
     os.makedirs(yollar.cikti(), exist_ok=True)
     log = os.path.join(yollar.cikti(), f"ac-{time.strftime('%H%M%S')}-{os.getpid()}.log")
+    t0 = time.monotonic()
     with open(log, "w") as fp:
-        _baslat(au, komut, fp, env, kopya, ev=ev)
+        ip = _baslat(au, komut, fp, env, kopya, ev=ev)
     gunluk(f"ac | {ad} | {' '.join(komut)}")
     print(_("başlatıldı: {ad}").format(ad=ad), file=sys.stderr)
-    t0 = time.monotonic()
     gorulen = {}
 
     def uyar(b, s):
         return (not a.baslik or re.search(a.baslik, b, re.I)) and (not a.sinif or re.search(a.sinif, s, re.I))
+    if isinstance(ip, IkinciPencere):  # aynı süreçte 2. pencere: YALNIZ doğrulanan pencere (yeniden aranmaz)
+        bs = ikinci_pencere_bekle(au, ip, uyar, max(0.0, a.sure - (time.monotonic() - t0)))
+        if bs is None:
+            raise Dur(7, _("{sn} sn içinde uygun pencere açılmadı").format(sn=f"{a.sure:.0f}")
+                      + "; " + _("aynı süreçte açılan pencere: {pencere}").format(pencere=ip.kimlik))
+        if ip.adres_dogrulandi is False:
+            raise Dur(7, ikinci_pencere_iletisi(ip) + f" ({ip.kimlik} | {bs[0]} | {bs[1]})")
+        print(f"{ip.kimlik} | {bs[0]} | {bs[1]} | "
+              + _("açıldı ({sn} sn)").format(sn=f"{time.monotonic() - t0:.1f}"))
+        return
+    t0 = time.monotonic()  # yeni örnek: süre başlatmadan sonra sayılır
     son_kwin = None  # son yutulan geçici pencere listesi hatası (zaman aşımında iletiye eklenir)
     while time.monotonic() - t0 < a.sure:
         time.sleep(0.25)

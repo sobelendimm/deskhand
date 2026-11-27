@@ -182,8 +182,14 @@ class _SahteAu:
     def sinif(self, w):
         return "firefox"
 
+    def baslik(self, w):
+        return "Mozilla Firefox"
+
     def aktif(self):
         return self.etkin
+
+    def kapat(self, w):
+        pass
 
 
 _girdi = []
@@ -198,7 +204,7 @@ try:
     au_ = _SahteAu(["{a}"])
     sonuc = uygulama.ayni_surecte_ac(au_, ["firefox", "--profile", "/x", "--no-remote", "https://a.b/"], "/x")
     kontrol("_NET_WM_PID sahte, credentials yok → adres yazılmaz (girdi yok, yeni örnek yolu)",
-            sonuc is False and _girdi == [], str(_girdi))
+            sonuc is None and _girdi == [], str(_girdi))
     # (b) KWin: Ctrl+N sonrası İKİ yeni pencere → iptal (Dur 7), adres yazılmaz
     masaustu.durum = lambda *a, **k: {"tur": "kwin", "calisma": _yalitim.GECICI, "cgroup": ""}
     au_ = _SahteAu(["{a}"])
@@ -235,6 +241,321 @@ kopya.temizle(_kp_s)
 
 kontrol("F3 birim: 2. pencere adresi yalnız belgelerden (profil/bayrak değil)",
         uygulama._belgeler(["firefox", "--profile", "/k1", "--no-remote", "https://a.b/"]) == ["https://a.b/"])
+
+# ---------------------------------------------------------------- A3) ABM-F3-R2 birim: bağımsız inceleme bulguları
+import threading as _th  # noqa: E402
+
+from deskhand import erisim as _erisim, web as _web  # noqa: E402
+
+YABANCI = 1  # başka sürecin (kayıtlı tarayıcının soyundan OLMAYAN) penceresi: kimlik PID'i init
+
+
+class _SahteAu2:
+    """Sahte KWin arka ucu: pencere → (başlık, sınıf, pid). pid os.getpid() = kayıtlı tarayıcının soyu."""
+
+    def __init__(self, pen):
+        self.pen = dict(pen)  # w → [başlık, sınıf, pid]
+        self.etkin = next(iter(self.pen), "")
+        self.gec = {}  # w → başlık/sınıf daha kaç okumada boş (pencere yeni açılıyor)
+        self.kapatilan = []
+        self.baslatilan = []
+        self.kilit = _th.Lock()
+
+    def pencereler(self):
+        with self.kilit:
+            return [(w, v[0], (0, 0, 1, 1)) for w, v in sorted(self.pen.items())]
+
+    def pid(self, w):
+        return self.pen[w][2] if w in self.pen else None
+
+    def baslik(self, w):
+        if self.gec.get(w, 0) > 0:
+            self.gec[w] -= 1
+            return ""
+        return self.pen[w][0] if w in self.pen else ""
+
+    def sinif(self, w):
+        return "" if self.gec.get(w, 0) > 0 else (self.pen[w][1] if w in self.pen else "")
+
+    def aktif(self):
+        return self.etkin
+
+    def kapat(self, w):
+        self.kapatilan.append(w)
+        self.pen.pop(w, None)
+
+    def baslat(self, argv, env=None, cikti=None, kopya=None):
+        self.baslatilan.append((list(argv), kopya, bool(kopya) and os.path.isdir(kopya)))
+
+        class _P:
+            pid = os.getpid()
+        return _P()
+
+
+FF = ["Mozilla Firefox", "firefox", os.getpid()]
+FF2 = ["Yeni Sekme — Mozilla Firefox", "firefox", os.getpid()]  # Ctrl+N ile açılan yeni pencere (başlığı tek)
+_r2_eski = (masaustu.durum, uygulama._kayitli_tarayicilar, _api.tus, _api.yaz, _erisim.odak_bilgisi,
+            _web.sayfa_bilgisi, uygulama.YENI_PENCERE_BEKLE_SN, getattr(uygulama, "ADRES_DOGRULA_SN", None),
+            _api.arka, uygulama.tum_pencereler, _api.yasak_mi, uygulama.ayni_surecte_ac)
+_r2_calisma = tempfile.mkdtemp(dir=_yalitim.GECICI)
+_r2_kp1 = kopya.yeni_kopya_dizini("firefox")
+_r2_girdi = []
+
+
+def _r2_kur(au_, ctrl_n=None):
+    """Sahte ortam: KWin, kayıtlı tek Firefox (bu süreç), denetimli girdi kaydedilir; ctrl_n(au_, w) Ctrl+N etkisi."""
+    _r2_girdi.clear()
+    masaustu.durum = lambda *a, **k: {"tur": "kwin", "calisma": _r2_calisma, "cgroup": ""}
+    uygulama._kayitli_tarayicilar = lambda d_, tur_, h_: [(os.getpid(), _r2_kp1)]
+
+    def _tus(w, t, **k):
+        _r2_girdi.append(("tus", w, t))
+        if t == "ctrl+n" and ctrl_n:
+            with au_.kilit:
+                ctrl_n(au_, w)
+    _api.tus = _tus
+    _api.yaz = lambda w, m, **k: _r2_girdi.append(("yaz", w, m))
+
+
+def _r2_kopya():
+    return kopya.yeni_kopya_dizini("firefox")
+
+
+def _r2_dene(f):
+    try:
+        return f(), None
+    except Dur as x:
+        return None, x
+
+
+try:
+    uygulama.YENI_PENCERE_BEKLE_SN = 2.0
+    uygulama.ADRES_DOGRULA_SN = 1.0
+    ODAK_ADRES = {"rol": "entry", "belge_ici": False, "duzenlenebilir": True}
+    ODAK_SAYFA = {"rol": "document web", "belge_ici": True, "duzenlenebilir": False}
+
+    # (1) ORTA: doğrulanan pencere çağırana döner; doğrulamadan SONRA açılan sahte Firefox penceresi verilmez
+    au2 = _SahteAu2({"{a}": FF})
+
+    def _cn_yeni_b(a_, w):
+        a_.pen["{b}"] = list(FF2)
+        a_.gec["{b}"] = 3  # gerçek yeni pencerenin başlığı/sınıfı ilk okumalarda henüz boş
+        a_.etkin = "{b}"
+    _r2_kur(au2, _cn_yeni_b)
+    _ic = uygulama.ayni_surecte_ac
+
+    def _sarili(au_, komut_, kopya_):
+        s = _ic(au_, komut_, kopya_)
+        au_.pen["{0}"] = ["Mozilla Firefox", "firefox", YABANCI]  # saldırgan: doğrulamadan sonra açılan sahte pencere
+        return s
+    uygulama.ayni_surecte_ac = _sarili
+    _api.arka = lambda: au2
+    uygulama.tum_pencereler = lambda: set(au2.pen)
+    _api.yasak_mi = lambda w: None
+    r, e = _r2_dene(lambda: _api.uygulama_ac(["firefox", "--profile", _r2_kopya(), "--no-remote"], "Firefox", [],
+                                             None, None, 3.0, kopya=_r2_kopya()))
+    kontrol("R2 (1): doğrulamadan sonra açılan sahte firefox penceresi ajana opened diye verilmez (doğrulanan döner)",
+            e is None and r.get("status") == "opened" and (r.get("window") or {}).get("id") == "{b}",
+            f"{r} {e and e.mesaj}")
+    uygulama.ayni_surecte_ac = _ic
+    _api.arka, uygulama.tum_pencereler, _api.yasak_mi = _r2_eski[8], _r2_eski[9], _r2_eski[10]
+
+    # (2a) DÜŞÜK: Ctrl+L sonrası odak adres çubuğunda değilse adres YAZILMAZ, dürüst ileti (Dur 7)
+    au2 = _SahteAu2({"{a}": FF})
+    _r2_kur(au2, lambda a_, w: (a_.pen.__setitem__("{b}", list(FF2)), setattr(a_, "etkin", "{b}")))
+    _erisim.odak_bilgisi = lambda k: ODAK_SAYFA
+    kp_ = _r2_kopya()
+    s, e = _r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote", "https://a.b/"],
+                                                     kp_))
+    kontrol("R2 (2a): Ctrl+L sonrası odak sayfada (adres çubuğu değil) → adres yazılmaz, Dur 7 + 'adres çubuğu' iletisi",
+            e is not None and e.kod == 7 and "adres çubuğu" in e.mesaj and not any(g[0] == "yaz" for g in _r2_girdi),
+            f"{s} {e and e.mesaj} {_r2_girdi}")
+    # (3) Dur 7: kendi açtığımız ve doğruladığımız pencere kapatılır, politika kopyası silinir
+    kontrol("R2 (3a): Dur 7 → kendi doğrulanmış yeni penceremiz kapatıldı, politika kopyası silindi",
+            au2.kapatilan == ["{b}"] and not os.path.exists(kp_), f"kapatılan {au2.kapatilan} kopya {os.path.exists(kp_)}")
+
+    # (2b) Return sonrası sayfa adresi/başlık hedefe dönmezse "adres doğrulanamadı" (başarı denmez)
+    au2 = _SahteAu2({"{a}": FF})
+    _r2_kur(au2, lambda a_, w: (a_.pen.__setitem__("{b}", list(FF2)), setattr(a_, "etkin", "{b}")))
+    _erisim.odak_bilgisi = lambda k: ODAK_ADRES
+    _web.sayfa_bilgisi = lambda k: {"adres": "about:newtab", "baslik": "Yeni Sekme"}
+    s, e = _r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote",
+                                                           "https://a.b/yol"], _r2_kopya()))
+    kontrol("R2 (2b): Return sonrası adres hedefe dönmedi → sonuç 'adres doğrulanamadı' (adres_dogrulandi False)",
+            e is None and getattr(s, "kimlik", None) == "{b}" and getattr(s, "adres_dogrulandi", None) is False and
+            any(g[0] == "yaz" and g[2] == "https://a.b/yol" for g in _r2_girdi), f"{s} {e and e.mesaj}")
+    au2 = _SahteAu2({"{a}": FF})
+    _r2_kur(au2, lambda a_, w: (a_.pen.__setitem__("{b}", list(FF2)), setattr(a_, "etkin", "{b}")))
+    _web.sayfa_bilgisi = lambda k: {"adres": "https://a.b/yol", "baslik": "A"}
+    s, e = _r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote",
+                                                           "https://a.b/yol"], _r2_kopya()))
+    kontrol("R2 (2b kontrol): sayfa adresi hedefe döndü → adres_dogrulandi True",
+            e is None and getattr(s, "adres_dogrulandi", None) is True, f"{s} {e and e.mesaj}")
+    # (2c) yeni pencereyle AYNI başlıklı başka tarayıcı penceresi: AT-SPI çerçevesi (başlıkla seçilir) öbür pencereye
+    # gidebilir → odak/adres doğrulanamaz → yazılmaz
+    au2 = _SahteAu2({"{a}": FF})
+    _r2_kur(au2, lambda a_, w: (a_.pen.__setitem__("{b}", list(FF)), setattr(a_, "etkin", "{b}")))
+    s, e = _r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote",
+                                                           "https://a.b/yol"], _r2_kopya()))
+    kontrol("R2 (2c): aynı başlıklı öbür pencere varken adres yazılmaz (Dur 7, eşleme belirsiz), pencere kapatıldı",
+            e is not None and e.kod == 7 and "aynı başlıklı" in e.mesaj and
+            not any(g[0] == "yaz" or g[2] == "ctrl+l" for g in _r2_girdi) and au2.kapatilan == ["{b}"],
+            f"{s} {e and e.mesaj} {_r2_girdi}")
+
+    # (3b) Dur 7 (adres + yabancı ek pencere): yalnız KENDİ penceremiz kapanır, başkasınınkine dokunulmaz
+    au2 = _SahteAu2({"{a}": FF})
+
+    def _cn_yabanci(a_, w):
+        a_.pen["{b}"] = list(FF2)
+        a_.pen["{y}"] = ["Mozilla Firefox", "firefox", YABANCI]
+        a_.etkin = "{b}"
+    _r2_kur(au2, _cn_yabanci)
+    kp_ = _r2_kopya()
+    s, e = _r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote", "https://a.b/"],
+                                                     kp_))
+    kontrol("R2 (3b): yabancı ek pencere → Dur 7; yalnız kendi penceremiz kapandı, yabancıya dokunulmadı, kopya silindi",
+            e is not None and e.kod == 7 and au2.kapatilan == ["{b}"] and "{y}" in au2.pen and not os.path.exists(kp_),
+            f"{e and e.mesaj} kapatılan {au2.kapatilan} kopya {os.path.exists(kp_)}")
+
+    # (5a) Ctrl+N hedefi sıralamadaki ilk pencere (diyalog) değil, tarayıcının etkin/ana penceresi
+    au2 = _SahteAu2({"{0}": ["Kitaplık", "firefox", os.getpid()], "{a}": ["Sayfa — Mozilla Firefox", "firefox",
+                                                                           os.getpid()],
+                     "{k}": ["Belge — Kate", "kate", YABANCI]})
+    au2.etkin = "{k}"
+    _r2_kur(au2, lambda a_, w: (a_.pen.__setitem__("{b}", list(FF2)), setattr(a_, "etkin", "{b}")))
+    s, e = _r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote"], _r2_kopya()))
+    hedefler = [g[1] for g in _r2_girdi if g[2] == "ctrl+n"]
+    kontrol("R2 (5a): Ctrl+N diyalog/ilk pencereye değil tarayıcının ana penceresine gider",
+            hedefler == ["{a}"] and getattr(s, "kimlik", None) == "{b}", f"{hedefler} {s} {e and e.mesaj}")
+
+    # (5b) tarayıcı kapanmaktaysa 10 sn sonra Dur 7 değil: hemen yeni örnek yolu (None)
+    uygulama.YENI_PENCERE_BEKLE_SN = 4.0
+    au2 = _SahteAu2({"{a}": FF})
+    _r2_kur(au2, lambda a_, w: a_.pen.pop("{a}", None))  # Ctrl+N gönderildi, pencere kapandı (tarayıcı kapanıyor)
+    kp_ = _r2_kopya()
+    t0 = time.monotonic()
+    s, e = _r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote"], kp_))
+    sure_ = time.monotonic() - t0
+    kontrol("R2 (5b): kapanmakta olan tarayıcı → Dur 7 yok, hemen yeni örnek yolu (None, kopya korunur)",
+            e is None and s is None and sure_ < 2.0 and os.path.isdir(kp_), f"{s} {e and e.mesaj} {sure_:.1f} sn")
+    kopya.temizle(kp_)
+    uygulama.YENI_PENCERE_BEKLE_SN = 2.0
+
+    # (5c) aynı masaüstünde paralel iki open sıraya alınır: ikisi de kendi penceresini alır
+    au2 = _SahteAu2({"{a}": FF})
+    _say = [0]
+
+    def _cn_paralel(a_, w):
+        _say[0] += 1
+        yeni_ = "{b%d}" % _say[0]
+        a_.pen[yeni_] = list(FF)
+        a_.etkin = yeni_
+    _r2_kur(au2, _cn_paralel)
+    sonuclar = []
+
+    def _paralel():
+        sonuclar.append(_r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote"],
+                                                                  _r2_kopya())))
+    ipler = [_th.Thread(target=_paralel) for _ in range(2)]
+    for i_ in ipler:
+        i_.start()
+    for i_ in ipler:
+        i_.join(30)
+    kontrol("R2 (5c): paralel 2 open kilitle sıraya alındı: ikisi de başarılı, farklı pencere",
+            len(sonuclar) == 2 and all(x[1] is None and x[0] is not None for x in sonuclar) and
+            len({x[0].kimlik for x in sonuclar}) == 2, str([(x[0], x[1] and x[1].mesaj) for x in sonuclar]))
+
+    # (6b) birden çok adres: Ctrl+N yolunda açıkça reddedilir (hiçbir girdi gönderilmeden)
+    au2 = _SahteAu2({"{a}": FF})
+    _r2_kur(au2, lambda a_, w: (a_.pen.__setitem__("{b}", list(FF2)), setattr(a_, "etkin", "{b}")))
+    s, e = _r2_dene(lambda: uygulama.ayni_surecte_ac(au2, ["firefox", "--profile", "/x", "--no-remote", "https://a.b/",
+                                                           "https://c.d/"], _r2_kopya()))
+    kontrol("R2 (6b): birden çok adres sessizce atılmaz: açıkça reddedilir, girdi gönderilmez",
+            e is not None and e.kod == 1 and _r2_girdi == [], f"{s} {e and e.mesaj} {_r2_girdi}")
+finally:
+    (masaustu.durum, uygulama._kayitli_tarayicilar, _api.tus, _api.yaz, _erisim.odak_bilgisi, _web.sayfa_bilgisi,
+     uygulama.YENI_PENCERE_BEKLE_SN, _adres_sn, _api.arka, uygulama.tum_pencereler, _api.yasak_mi,
+     uygulama.ayni_surecte_ac) = _r2_eski
+    if _adres_sn is not None:
+        uygulama.ADRES_DOGRULA_SN = _adres_sn
+    kopya.temizle(_r2_kp1)
+
+# (4) Flatpak tespiti eşdeğer yazımlarla atlatılamaz (PoC'deki üç biçim + --branch değeri + app/ ref + kullanıcı exports)
+_fp_bicimleri = [
+    ["flatpak", "run", "com.google.Chrome/x86_64/stable", "about:blank"],
+    ["flatpak", "--verbose", "--user", "run", "com.google.Chrome"],
+    ["/var/lib/flatpak/exports/bin/com.google.Chrome"],
+    [os.path.join(_yalitim.GECICI, ".local/share/flatpak/exports/bin/com.google.Chrome"), "about:blank"],  # kullanıcı kurulumu
+    ["flatpak", "run", "--branch", "stable", "com.google.Chrome"],
+    ["flatpak", "run", "--arch=x86_64", "app/com.google.Chrome/x86_64/stable"],
+    ["flatpak", "run", "com.github.Eloston.UngoogledChromium"],
+]
+_fp_sonuc = []
+for b_ in _fp_bicimleri:
+    _s, e = _r2_dene(lambda b_=b_: uygulama.flatpak_tarayici_denetle(b_))
+    _fp_sonuc.append((b_, e and e.kod))
+kontrol("R2 (4): Flatpak Chrome eşdeğer yazımları (ref, global seçenek, exports/bin, --branch değeri) → kod 16",
+        all(k_ == 16 for _b, k_ in _fp_sonuc), str(_fp_sonuc))
+from deskhand.oturum.cozum import _flatpak_kimligi  # noqa: E402
+
+kontrol("R2 (4 kontrol): seçenek DEĞERİ kimlik sayılmaz; Firefox Flatpak'ı 16 almaz",
+        _flatpak_kimligi(["flatpak", "run", "--branch", "stable", "org.kde.kate"])[0] == "org.kde.kate" and
+        _r2_dene(lambda: uygulama.flatpak_tarayici_denetle(["flatpak", "run", "org.mozilla.firefox"]))[1] is None and
+        _flatpak_kimligi(["flatpak", "run", "--command=sh", "org.kde.kate"]) == ("org.kde.kate", "sh"))
+
+# (5d) chromium_kaydet: dosya kilidi (eşzamanlı yazıda kayıt kaybolmaz) + ölü kayıt budanır
+_d_k = {"tur": "kwin", "calisma": tempfile.mkdtemp(dir=_yalitim.GECICI), "cgroup": ""}
+with open(os.path.join(_d_k["calisma"], uygulama.CHROMIUM_KAYIT), "w") as f:
+    f.write('[{"kopya": "/olu", "pid": 999999999, "bas": 1}]')
+
+
+def _kaydet_n(n0):
+    for i_ in range(25):
+        uygulama.chromium_kaydet(_d_k, f"/kopya-{n0}-{i_}", os.getpid())
+
+
+ipler = [_th.Thread(target=_kaydet_n, args=(n_,)) for n_ in range(3)]
+for i_ in ipler:
+    i_.start()
+for i_ in ipler:
+    i_.join(30)
+_kk = uygulama._chromium_kayitlari(_d_k["calisma"])
+kontrol("R2 (5d): chromium_kaydet dosya kilidiyle: 3×25 eşzamanlı yazıda kayıt kaybolmadı, ölü kayıt budandı",
+        len(_kk) == 75 and not any(g.get("kopya") == "/olu" for g in _kk), f"{len(_kk)} kayıt")
+
+# (6a) _belgeler: seçenek DEĞERİ (-P work, --class X) adres sayılmaz
+kontrol("R2 (6a): _belgeler -P/--class değerlerini adres saymaz",
+        uygulama._belgeler(["firefox", "-P", "work", "--class", "x", "https://a"]) == ["https://a"],
+        str(uygulama._belgeler(["firefox", "-P", "work", "--class", "x", "https://a"])))
+
+# (6c) on_karari tek kez: uygulama.oturum_hazirla kendisi yeniden çağırmaz
+from deskhand import oturum as _oturum  # noqa: E402
+
+_say_on = [0]
+_eski_on, _eski_hz = chromium.on_karari, _oturum.hazirla
+try:
+    chromium.on_karari = lambda h: (_say_on.__setitem__(0, _say_on[0] + 1), None)[1]
+    _oturum.hazirla = lambda *a, **k: Hazirlik(karar="paylas", aciklama="", gerekli_keyring=False, ayrinti={})
+    uygulama.oturum_hazirla("chromium")
+finally:
+    chromium.on_karari, _oturum.hazirla = _eski_on, _eski_hz
+kontrol("R2 (6c): on_karari tek kez (oturum.hazirla içinde); uygulama.oturum_hazirla yeniden çağırmaz",
+        _say_on[0] == 0, f"{_say_on[0]} çağrı")
+
+# (6d) tanı (`oturum hazirla`) tmpfs kopyası OLUŞTURMAZ; kopya yalnız gerçek açılışta (_baslat) oluşur
+h_ = chromium.on_karari(_on(["chromium"]))
+_var_once = bool(h_ and h_.kopya_yolu and os.path.exists(h_.kopya_yolu))
+au2 = _SahteAu2({})
+_eski_d = masaustu.durum
+try:
+    masaustu.durum = lambda *a, **k: {"tur": "kwin", "calisma": tempfile.mkdtemp(dir=_yalitim.GECICI), "cgroup": ""}
+    uygulama._baslat(au2, [*h_.argv, "about:blank"], None, None, h_.kopya_yolu)
+finally:
+    masaustu.durum = _eski_d
+kontrol("R2 (6d): kararda kopya yok (tanı yan etkisiz); _baslat başlatmadan ÖNCE 0700 kopyayı oluşturur",
+        not _var_once and len(au2.baslatilan) == 1 and au2.baslatilan[0][2] and
+        oct(os.stat(h_.kopya_yolu).st_mode & 0o777) == "0o700", f"önce {_var_once} {au2.baslatilan}")
+kopya.temizle(h_.kopya_yolu)
 
 # ---------------------------------------------------------------- B) görünmez masaüstünde gerçek Chromium
 if not (shutil.which("chromium") and shutil.which("bwrap")):
@@ -379,6 +700,11 @@ try:
         srv.shutdown()
 
     # ---------------------------------------------------------------- C) ABM-F3: aynı süreçte 2. pencere
+    # Tür kapısı: Ctrl+N yolu yalnız KWin'de (istemci kimliği PID'i); Xvfb'de tasarım gereği yeni örnek açılır.
+    if masaustu.tur(d) != "kwin":
+        print("\nC) atlandı: Ctrl+N ile aynı süreçte pencere yalnız KWin türünde (Xvfb: yeni örnek, tasarım gereği)")
+        print(f"\n{gecen}/{toplam} geçti")
+        raise SystemExit(0 if gecen == toplam else 1)
     print("\nC) ABM-F3 tarayıcılar (gerçek görünmez masaüstü)")
     from deskhand import bellek_bekcisi  # noqa: E402
 
@@ -424,7 +750,22 @@ try:
         time.sleep(1)
         m0 = kafes_mb()
         k1 = kopya.yeni_kopya_dizini("firefox")
-        r1 = ac(["firefox", "--profile", k1, "--no-remote", "--new-instance", "about:blank"], "Firefox", k1)
+        class _Sayfa(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                ad_ = self.path.strip("/").upper()
+                govde = f"<html><head><title>F3R2-{ad_}</title></head><body>ok</body></html>"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(govde.encode())
+
+            def log_message(self, *a):
+                pass
+        srv_c = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Sayfa)
+        threading.Thread(target=srv_c.serve_forever, daemon=True).start()
+        atexit.register(srv_c.shutdown)
+        url_bir, url_iki = (f"http://127.0.0.1:{srv_c.server_address[1]}/{y}" for y in ("bir", "iki"))
+        r1 = ac(["firefox", "--profile", k1, "--no-remote", "--new-instance", url_bir], "Firefox", k1)
         time.sleep(5)
         m1, ana1 = kafes_mb(), ana_surecler("firefox", k1)
         kontrol("cmdline'ı tarayıcı gibi görünen sahte süreç hedef seçilmez (1. open yeni Firefox açtı)",
@@ -437,7 +778,7 @@ try:
         kayit1 = bellek_bekcisi._kayitlar(d["calisma"])
         k2 = kopya.yeni_kopya_dizini("firefox")
         t0 = time.monotonic()
-        r2 = ac(["firefox", "--profile", k2, "--no-remote", "--new-instance", "about:blank"], "Firefox", k2)
+        r2 = ac(["firefox", "--profile", k2, "--no-remote", "--new-instance", url_iki], "Firefox", k2)
         sure2 = time.monotonic() - t0
         time.sleep(5)
         m2, ana2 = kafes_mb(), ana_surecler("firefox", k1)
@@ -452,6 +793,12 @@ try:
                 len(kayit2) == 1 and kayit2 == kayit1 and os.path.realpath(kayit2[0]["kopya"]) == os.path.realpath(k1)
                 and bellek_bekcisi.firefox_ana_pidleri(d["cgroup"], k1) == ana2 and not os.path.exists(k2),
                 f"{kayit1} → {kayit2}; k2 var: {os.path.exists(k2)}")
+        with api.hedef("sanal"):
+            b1_, b2_ = au.baslik(kimlik(r1)), au.baslik(kimlik(r2))
+        kontrol("R2 KWin: 2. open firefox + URL → doğrulanan yeni pencere döndü, adres doğrulandı (sayfa F3R2-IKI), "
+                "ilk pencere değişmedi",
+                r2.get("status") == "opened" and r2.get("same_process") is True and "F3R2-IKI" in b2_ and
+                "F3R2-BIR" in b1_, f"{r2} | 1: {b1_!r} 2: {b2_!r}")
         for p_ in ana2 + ana_surecler("firefox", sahte_kp):
             os.kill(p_, 15)
         time.sleep(3)

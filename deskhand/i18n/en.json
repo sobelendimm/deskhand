@@ -1751,5 +1751,14 @@
  "beklenmedik hata": "unexpected error",
  "doğrulama tamamlanamadı": "verification could not finish",
  "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatılamadı); oturum yedeği: {yedek}": "session: copy {ad} was kept (Firefox could not be restarted); session backup: {yedek}",
- "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatması doğrulanmadan masaüstü kapandı); oturum yedeği: {yedek}": "session: copy {ad} was kept (the desktop stopped before the Firefox restart was verified); session backup: {yedek}"
+ "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatması doğrulanmadan masaüstü kapandı); oturum yedeği: {yedek}": "session: copy {ad} was kept (the desktop stopped before the Firefox restart was verified); session backup: {yedek}",
+ "Ctrl+L sonrası odak adres çubuğunda değil (odak: {rol}); adres yazılmadı": "after Ctrl+L the focus is not in the address bar (focus: {rol}); the address was not typed",
+ "adres doğrulanamadı: {adres} yazıldı ama pencerenin sayfa adresi/başlığı hedefe dönmedi": "address not verified: {adres} was typed but the window's page address/title did not change to the target",
+ "aynı süreçte açılan pencere: {pencere}": "window opened in the same process: {pencere}",
+ "aynı süreçteki yeni pencerede tek adres açılır ({sayi} verildi); her adres için ayrı open çağır": "a new window in the same process opens a single address ({sayi} given); call open once per address",
+ "açılan pencere kapatıldı": "the opened window was closed",
+ "başka bir açılış sürüyor ({ne}); {sn} sn içinde sıra gelmedi, hiçbir şey yapılmadı": "another launch is in progress ({ne}); no turn within {sn} s, nothing was done",
+ "tarayıcı penceresi": "browser window",
+ "{sn} sn içinde yeni pencere görünmedi": "no new window appeared within {sn} s",
+ "yeni pencereyle aynı başlıklı başka tarayıcı penceresi var: erişilebilirlik ağacı bu pencereye güvenle eşlenemez (adres çubuğu doğrulanamaz); adres yazılmadı": "another browser window has the same title as the new window: the accessibility tree cannot be mapped to this window safely (the address bar cannot be verified); the address was not typed"
 }

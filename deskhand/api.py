@@ -642,9 +642,28 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
         girdi = argv[2] if len(argv) > 2 and argv[:2] == ["gio", "launch"] and \
             os.path.dirname(os.path.realpath(argv[2])) == os.path.realpath(os.path.join(yollar.runtime_dir(),
                                                                                          "uygulama")) else None
-        _baslat(au, argv, fp, env, kopya, girdi, ev=ev)  # arka planda: masaustu.baslat → arka_ortak.korumali_baslat (bwrap)
+        t0 = time.monotonic()
+        ip = _baslat(au, argv, fp, env, kopya, girdi, ev=ev)  # arka planda: masaustu.baslat → korumali_baslat (bwrap)
     gunluk(f"ac | {ad} | {shlex.join(argv)}" + (f" | env {sorted(env)}" if env else ""))
-    t0 = time.monotonic()
+    from .uygulama import IkinciPencere
+    if isinstance(ip, IkinciPencere):
+        # ABM-F3: aynı süreçte 2. pencere: YALNIZ ayni_surecte_ac'in doğruladığı pencere raporlanır; yeni pencere
+        # yeniden ARANMAZ (doğrulamadan sonra açılan sahte "firefox" penceresi ajana verilemez)
+        from .uygulama import ikinci_pencere_bekle, ikinci_pencere_iletisi
+        bs = ikinci_pencere_bekle(au, ip, lambda b, s: not baslik or re.search(baslik, b, re.I),
+                                  max(0.0, sure - (time.monotonic() - t0)))
+        if bs is None:
+            return {"status": "timeout", "window": None, "seconds": round(time.monotonic() - t0, 1),
+                    "message": _("{sn} sn içinde yeni pencere görünmedi").format(sn=f"{sure:.0f}")
+                    + "; " + _("aynı süreçte açılan pencere: {pencere}").format(pencere=ip.kimlik)}
+        y = yasak_mi(ip.kimlik)
+        r = {"status": "opened", "window": {"id": ip.kimlik, "title": "(yasak pencere)" if y else bs[0],
+                                            "class": bs[1], "forbidden": bool(y)},
+             "seconds": round(time.monotonic() - t0, 1), "same_process": True}
+        if ip.adres_dogrulandi is False:
+            r["status"], r["message"] = "address_unverified", ikinci_pencere_iletisi(ip)
+        return r
+    t0 = time.monotonic()  # yeni örnek: süre başlatmadan sonra sayılır
     son_kwin = None  # son yutulan geçici pencere listesi hatası (zaman aşımında iletiye eklenir)
     while time.monotonic() - t0 < sure:
         time.sleep(0.25)
