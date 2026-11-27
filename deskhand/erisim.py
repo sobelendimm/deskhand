@@ -21,7 +21,7 @@ import time
 import types
 
 from .arka_uc import EKRAN, sec
-from . import dogrulama_sinamasi, guvenlik, ucbirim
+from . import dogrulama_sinamasi, guvenlik, maske, ucbirim
 from .eylem import (_bekleyen_onay_kapisi, _yazi_hassas, girdi_al, girdi_birak, hassas_nokta, insan_dogrulama_nokta,
                     insan_dogrulama_oge, sistem_istemi_on, sistem_istemi_onay, tikla_ic)
 from .gunluk import gunluk
@@ -571,7 +571,8 @@ def _ayrinti(Atspi, o, rol, ss, S, eylem_hepsi=False):
         except Exception:  # noqa: BLE001
             deger = None
         if deger:
-            deger = _deger_temizle(deger, *_deger_ipuclari(o))
+            ipuclari, nit = _deger_ipuclari_nit(o)
+            deger = _deger_temizle(deger, *ipuclari, ipucusuz=not maske.tanitici_var(nit))
         if deger:
             e["deger"] = deger if len(deger) <= DEGER_SINIRI else deger[:DEGER_SINIRI - 1] + "…"
     return e
@@ -590,7 +591,12 @@ _MASKE_KARAKTERI = frozenset("•●*·∗⁎")  # parola maskesi: yalnız bunla
 
 def _deger_ipuclari(o) -> tuple[str, ...]:
     """Ögenin ad/açıklama/nitelik (autocomplete, id, placeholder) metinleri (okunamayan boş)."""
-    ipucu = []
+    return _deger_ipuclari_nit(o)[0]
+
+
+def _deger_ipuclari_nit(o) -> tuple[tuple[str, ...], dict]:
+    """_deger_ipuclari + okunan nitelik sözlüğü (okunamazsa {}: ipucusuz sayılır → kısa kod kuralı sıkı)."""
+    ipucu, nit = [], {}
     for al in ("get_name", "get_description"):
         try:
             ipucu.append(getattr(o, al)() or "")
@@ -598,20 +604,24 @@ def _deger_ipuclari(o) -> tuple[str, ...]:
             pass
     try:
         nit = o.get_attributes() or {}
+        nit = nit if isinstance(nit, dict) else {}
         ipucu += [str(nit[k]) for k in _DEGER_NITELIKLERI if nit.get(k)]
         if str(nit.get("text-input-type", "")).lower() == "password":
             ipucu.append("parola")
     except Exception:  # noqa: BLE001
-        pass
-    return tuple(ipucu)
+        nit = {}
+    return tuple(ipucu), nit
 
 
-def _deger_temizle(deger: str, *ipuclari: str) -> str | None:
-    """Alan değerini döndürmeden önce: kart/parola/PIN/OTP/CVV alanıysa "***"; yalnız parola maskesi karakterlerinden
+def _deger_temizle(deger: str, *ipuclari: str, ipucusuz: bool = False) -> str | None:
+    """Alan değerini döndürmeden önce: kart/parola/PIN/OTP/CVV alanıysa "***"; değer Luhn'lu kart numarası ya da kısa
+    kod (maske.kisa_kod; ipucusuz: alanı tanıtan nitelik yok) ise "***"; yalnız parola maskesi karakterlerinden
     oluşuyorsa None (değer yok); denetim/biçim karakterleri ayıklanır (satır sonu/sekme boşluğa çevrilir)."""
     if any(c in _MASKE_KARAKTERI for c in deger) and all(c in _MASKE_KARAKTERI or c.isspace() for c in deger):
         return None
     if guvenlik.kart_alani_mi(*ipuclari) or any(_GIZLI_ALAN.search(katla(i)) for i in ipuclari if i):
+        return "***"
+    if maske.kart_var(deger) or maske.kisa_kod(deger, ipuclari, ipucusuz):
         return "***"
     deger = _DENETIM.sub("", deger.replace("\r", " ").replace("\n", " ").replace("\t", " "))
     return deger or None

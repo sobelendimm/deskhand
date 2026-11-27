@@ -259,12 +259,14 @@ def tek_alanlar(alanlar):
     return v, og, hm
 
 
-# doğrulanamaz: kararlı ama id/autocomplete/placeholder(-text)/text-input-type yok → ***
+# doğrulanamaz: kararlı ama id/autocomplete/placeholder(-text) yok → *** (text-input-type tanıtıcı DEĞİL: Firefox her
+# alana koyar, kısmi önbellekte yalnız o gelir; INCELEME-maske-R2-A bulgu 4, poc2 M); id'li alan korunur
 v9, o9, h9 = tek_alanlar([("Şehir", "Çınarlı", {"tag": "input", "display": "inline-block", "explicit-name": "true"}),
-                          ("Köy", "Akçaören", {"tag": "input", "text-input-type": "text"})])
+                          ("Köy", "Akçaören", {"tag": "input", "text-input-type": "text"}),
+                          ("Kasaba", "Akçaören", {"id": "kasaba", "tag": "input", "text-input-type": "text"})])
 web._ayrinti_ekle(SahteYol(v9), ":1.5", o9, h9)
-kontrol("maske (sahte): kararlı ama tanıtıcı niteliksiz (yalnız tag/display/explicit-name) → ***; text-input-type'lı korunur",
-        o9[0].get("deger") == "***" and o9[1].get("deger") == "Akçaören", repr(o9))
+kontrol("maske (sahte): kararlı ama tanıtıcı niteliksiz (tag/display/explicit-name/text-input-type) → ***; id'li korunur",
+        o9[0].get("deger") == "***" and o9[1].get("deger") == "***" and o9[2].get("deger") == "Akçaören", repr(o9))
 
 # ipucusuz (id/placeholder/autocomplete yok) yalnız rakam 3–8 hane → *** (yanlış pozitif kabul: adet alanı)
 v10, o10, h10 = tek_alanlar([("Üç hane", "737", {"tag": "input", "text-input-type": "tel"}),
@@ -272,11 +274,17 @@ v10, o10, h10 = tek_alanlar([("Üç hane", "737", {"tag": "input", "text-input-t
                              ("Uzun", "123456789", {"tag": "input", "text-input-type": "text"}),
                              ("Kısa", "12", {"tag": "input", "text-input-type": "number"}),
                              ("Adet", "250", {"id": "adet", "tag": "input"}),
-                             ("Yazı", "Çınar 12", {"tag": "input", "text-input-type": "text"})])
+                             ("Yazı", "Çınar 12", {"tag": "input", "text-input-type": "text"}),
+                             ("Not", "Çınarlı 12", {"id": "not", "tag": "input"}),
+                             ("Uzun2", "1234567890", {"id": "uzun", "tag": "input"}),
+                             ("Adet2", "2500", {"id": "adet2", "tag": "input"}),
+                             ("Kısa2", "12", {"id": "kisa", "tag": "input"})])
 web._ayrinti_ekle(SahteYol(v10), ":1.5", o10, h10)
 d10 = {o["ad"]: o.get("deger") for o in o10}
-kontrol("maske (sahte): ipucusuz 3–8 haneli rakam değeri ***; 9 hane, 2 hane, id'li ve harfli değer korunur",
-        d10 == {"Üç hane": "***", "Giriş": "***", "Uzun": "123456789", "Kısa": "12", "Adet": "250", "Yazı": "Çınar 12"},
+kontrol("maske (sahte): ipucusuz 3–9 hane ve text-input-type'lı (tanıtıcısız) alan ***; id'li 2 hane, id'li 3 hane, harf+rakam "
+        "metin (6–8 dışı), 10 hane, zararsız ipuçlu (adet) 4 hane korunur",
+        d10 == {"Üç hane": "***", "Giriş": "***", "Uzun": "***", "Kısa": "***", "Adet": "250", "Yazı": "***",
+                "Not": "Çınarlı 12", "Uzun2": "1234567890", "Adet2": "2500", "Kısa2": "12"},
         repr(d10))
 
 # bölünmüş kart numarası (4+4+4+4 ardışık alan, id'li): birleşimi Luhn'lu → hepsi ***; Luhn'suz birleşim korunur
