@@ -60,7 +60,7 @@ ALANLAR = [  # (ad, değer, açıklama, nitelikler, beklenen)
     ("Kutu", "abc", "", {"text-input-type": "password"}, "***"),
     ("Doğrulama kodu", "55667", "", {}, "***"),
     ("Şehir", "Çınarlı", "", {"id": "sehir"}, "Çınarlı"),
-    ("Not", "a\x1bb\nc", "", {}, "ab c"),
+    ("Not", "a\x1bb\nc", "", {"tag": "input"}, "ab c"),  # gerçek tarayıcı nitelikleri hiç boş değil (ölçüldü)
     ("Maske", "••••", "", {}, None),
 ]
 
@@ -108,6 +108,90 @@ o3 = [{"ad": "Kod", "rol": "entry"}]
 web._ayrinti_ekle(IlkBosYol(veri3), ":1.5", o3, [{"_yol": "/q", "ad": "Kod"}])
 kontrol("maske (sahte): nitelikler ilk sorguda boş (Firefox) → bir kez daha sorulur, id=otp-input maskeler",
         o3[0].get("deger") == "***", repr(o3[0]))
+
+
+class EtkinlesmeYol(SahteYol):
+    """Firefox nitelik önbelleği yarışı (ölçüldü: oturumdaki İLK Accessible.GetAttributes {} döner, önbelleği açar). AYNI
+    toplu istekteki öteki yanıtlar önbellek dolana dek EKSİK gelebilir (id/autocomplete yok; tag/placeholder-text var):
+    -j 4 yükte (kart-DHV) Kod ve Alan altı maskeli, Numara (id=cc-number) ile Üç hane (id=cvc) MASKESİZ döndü.
+    dolum: kaç toplu çağrı daha eksik yanıt verilsin (1 = yalnız ilk toplu; 99 = hiç dolmaz)."""
+
+    def __init__(self, veri, dolum=1):
+        super().__init__(veri)
+        self.ilk, self.kalan = True, dolum
+
+    def toplu(self, mesajlar, sure=10.0, yeniden=True):
+        from jeepney.low_level import HeaderFields
+        r = super().toplu(mesajlar, sure, yeniden)
+        nitelik = [i for i, m in enumerate(mesajlar) if m.header.fields[HeaderFields.member] == "GetAttributes"]
+        if nitelik and self.kalan > 0:
+            self.kalan -= 1
+            for i in nitelik:
+                if self.ilk:
+                    self.ilk, r[i] = False, ({},)
+                elif r[i]:
+                    r[i] = ({a: d for a, d in r[i][0].items() if a not in ("id", "autocomplete")},)
+        return r
+
+
+def maske_html_verisi():
+    """tests/ornek/web/maske.html alanlarının Firefox'taki (ölçülen) nitelikleriyle sahte veri."""
+    alanlar = [("Kod", "482913", {"id": "otp-input"}), ("Numara", "4111111111111111", {"id": "cc-number"}),
+               ("Üç hane", "737", {"id": "cvc"}), ("Alan altı", "gizli-deger-6", {"id": "x6", "placeholder-text": "Parola tekrar"}),
+               ("Şehir", "Çınarlı", {"id": "sehir"})]
+    v, og, hm = {}, [], []
+    for i, (ad, deger, nit) in enumerate(alanlar):
+        y = f"/e/{i}"
+        v[(y, "GetText")] = (deger,)
+        v[(y, "Description")] = (("s", ""),)
+        v[(y, "GetAttributes")] = ({**nit, "explicit-name": "true", "tag": "input", "display": "inline-block"},)
+        og.append({"ad": ad, "rol": "entry"})
+        hm.append({"_yol": y, "ad": ad})
+    return v, og, hm
+
+
+v4, o4, h4 = maske_html_verisi()
+web._ayrinti_ekle(EtkinlesmeYol(v4), ":1.5", o4, h4)
+d4 = {o["ad"]: o.get("deger") for o in o4}
+kontrol("maske (yarış): önbellek açılırken aynı toplu yanıtta id eksik → Kod/Numara/Üç hane/Alan altı yine ***",
+        all(d4[a] == "***" for a in ("Kod", "Numara", "Üç hane", "Alan altı")), repr(d4))
+kontrol("maske (yarış): sıradan alan değeri korunur (Şehir = Çınarlı)", d4["Şehir"] == "Çınarlı", repr(d4))
+kontrol("maske (yarış): kart numarası çıktıda hiç yok", "4111111111111111" not in repr(o4), repr(o4))
+
+v5, o5, h5 = maske_html_verisi()
+web._ayrinti_ekle(EtkinlesmeYol(v5, dolum=2), ":1.5", o5, h5)
+d5 = {o["ad"]: o.get("deger") for o in o5}
+kontrol("maske (yarış, önbellek bir tur geç dolar): Kod/Numara/Üç hane/Alan altı ***, Şehir korunur, sızıntı yok",
+        all(d5[a] == "***" for a in ("Kod", "Numara", "Üç hane", "Alan altı")) and d5["Şehir"] == "Çınarlı"
+        and "4111111111111111" not in repr(o5) and "737" not in repr(o5), repr(d5))
+
+# önbelleği açan {} yanıtı DEĞERSİZ (boş) bir alana düşer, dolum bir tur geç: ilk toplu yanıt kıyasa girmemeli
+v8, o8, h8 = maske_html_verisi()
+v8[("/e/bos", "GetText")], v8[("/e/bos", "Description")] = ("",), (("s", ""),)
+v8[("/e/bos", "GetAttributes")] = ({"id": "arama", "tag": "input"},)
+o8.insert(0, {"ad": "Arama", "rol": "entry"})
+h8.insert(0, {"_yol": "/e/bos", "ad": "Arama"})
+web._ayrinti_ekle(EtkinlesmeYol(v8, dolum=2), ":1.5", o8, h8)
+d8 = {o["ad"]: o.get("deger") for o in o8}
+kontrol("maske (yarış, {} değersiz alana düştü, dolum geç): Kod/Numara/Üç hane ***, Şehir korunur",
+        all(d8[a] == "***" for a in ("Kod", "Numara", "Üç hane")) and d8["Şehir"] == "Çınarlı"
+        and "4111111111111111" not in repr(o8) and "737" not in repr(o8), repr(d8))
+
+# nitelikler hiç okunamıyor (her sorguda {}): ad sıradan olsa da değer doğrulanamaz → *** (kapalı-başarısız)
+v6 = {("/r", "GetText"): ("737",), ("/r", "Description"): (("s", ""),), ("/r", "GetAttributes"): ({},),
+      ("/s", "GetText"): ("Çınarlı",), ("/s", "Description"): (("s", ""),),
+      ("/s", "GetAttributes"): ({"id": "sehir", "tag": "input"},)}
+o6 = [{"ad": "Üç hane", "rol": "entry"}, {"ad": "Şehir", "rol": "entry"}]
+web._ayrinti_ekle(SahteYol(v6), ":1.5", o6, [{"_yol": "/r", "ad": "Üç hane"}, {"_yol": "/s", "ad": "Şehir"}])
+kontrol("maske (sahte): nitelikler hep boş → değer ***; nitelikli sıradan alan etkilenmez",
+        o6[0].get("deger") == "***" and o6[1].get("deger") == "Çınarlı", repr(o6))
+
+# ipucundan bağımsız: Luhn'lu kart numarası değeri sıradan adlı/nitelikli alanda da maskeli
+v7 = {("/t", "GetText"): ("4111 1111 1111 1111",), ("/t", "Description"): (("s", ""),),
+      ("/t", "GetAttributes"): ({"id": "siparis", "tag": "input"},)}
+o7 = [{"ad": "Sipariş", "rol": "entry"}]
+web._ayrinti_ekle(SahteYol(v7), ":1.5", o7, [{"_yol": "/t", "ad": "Sipariş"}])
+kontrol("maske (sahte): sıradan alanda Luhn'lu kart numarası değeri → ***", o7[0].get("deger") == "***", repr(o7))
 
 # ---------------------------------------------------------------- 2) tarayıcı sınıf deseni (tablo)
 class SahteAU:

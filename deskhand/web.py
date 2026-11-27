@@ -444,11 +444,15 @@ def _bicimle(o, ad_siniri, bus=None) -> dict:
     return sonuc
 
 
+_NITELIK_TUR, _NITELIK_ARA = 4, 0.05  # nitelik önbelleği durulma: en çok tur, turlar arası sn (_ayrinti_ekle)
+
+
 def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> None:
     """Yalnız döndürülecek ögeler için: bağlantıların adresi (href), giriş alanlarının değeri, seçim kutusunun seçili
     seçeneği. Parola alanının değeri OKUNMAZ. Giriş alanı değeri erisim._deger_temizle ile süzülür (masaüstü yoluyla
     AYNI): ad, açıklama ve autocomplete/id/placeholder/text-input-type nitelikleri kart/parola/PIN/OTP/CVC alanı
-    gösteriyorsa değer "***"; yalnız maske karakterlerinden oluşan değer atlanır; denetim karakterleri ayıklanır."""
+    gösteriyorsa değer "***"; nitelikleri doğrulanamayan alan ve Luhn'lu kart numarası değeri de "***"; yalnız maske
+    karakterlerinden oluşan değer atlanır; denetim karakterleri ayıklanır."""
     m, hedef = [], []
     yol_of = {id(o): h["_yol"] for o, h in zip(ogeler, ham)}
     for o, h in zip(ogeler, ham):
@@ -489,13 +493,30 @@ def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> N
             o[alan] = v if len(v) <= 300 else v[:299] + "…"
     if degerler:
         from .erisim import _DEGER_NITELIKLERI, _deger_temizle
-        # Firefox, ögenin niteliklerini ilk sorguda BOŞ ({}) döndürebiliyor (ölçüldü: sayfadaki ilk giriş alanı; ikinci
-        # sorguda id/placeholder-text/text-input-type gelir) → değeri olan ve niteliği boş alanlar bir kez daha sorulur
-        bos = [t for t in degerler if t[1] and not t[3]]
-        if bos:
-            for t, v in zip(bos, yol.toplu([_m(bus, yol_of[id(t[0])], ERISIM, "GetAttributes") for t in bos])):
-                nit = _deg(v, {}) or {}
-                t[3].update(nit if isinstance(nit, dict) else {})
+        from .guvenlik import kart_numarasi
+        # Firefox nitelik önbelleği: oturumdaki İLK GetAttributes {} döner ve önbelleği açar (ölçüldü, hangi öge olursa);
+        # AYNI toplu yanıttaki öteki alanlar önbellek dolana dek id'siz gelebilir (-j 4 yükte cc-number/cvc değeri
+        # maskesiz döndü, kart-DHV). Bir boş yanıt bile → değeri olan TÜM alanların nitelikleri, iki ardışık YENİ tur
+        # aynı gelene dek yeniden sorulur (ilk toplu yanıt önbellek açılırken alındı: kıyasa girmez); boş kalan ya da
+        # durulmayan alanın değeri doğrulanamaz → "***" (kapalı-başarısız).
+        dogrulanamaz = set()
+        sor = [t for t in degerler if t[1]] if any(not t[3] for t in degerler) else []
+        if sor:
+            son, kararli = None, False
+            for tur in range(_NITELIK_TUR):
+                if tur:
+                    time.sleep(_NITELIK_ARA)
+                yeni = [_deg(v, {}) or {} for v in yol.toplu([_m(bus, yol_of[id(t[0])], ERISIM, "GetAttributes")
+                                                              for t in sor])]
+                yeni = [n if isinstance(n, dict) else {} for n in yeni]
+                kararli, son = yeni == son, yeni
+                if kararli and all(son):
+                    break
+            for t, n in zip(sor, son):
+                t[3].clear()
+                t[3].update(n)
+                if not (n and kararli):
+                    dogrulanamaz.add(id(t[0]))
         for o, v, aciklama, nit in degerler:
             if not v or not isinstance(v, str):
                 continue
@@ -504,6 +525,8 @@ def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> N
             if str(nit.get("text-input-type", "")).lower() == "password":
                 ipucu.append("parola")
             v = _deger_temizle(v, *ipucu)
+            if v and (id(o) in dogrulanamaz or kart_numarasi(v)):  # ipucundan bağımsız: kart numarası değeri de gizli
+                v = "***"
             if v:
                 o["deger"] = v if len(v) <= 300 else v[:299] + "…"
     if not secenek_m:
