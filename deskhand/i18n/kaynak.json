@@ -200,6 +200,9 @@
  " | son kopya ({saat}): {ozet}": [
   "doktor.py:183"
  ],
+ "\"{ad}\" adlı kayıtlı parola silinecek. Bu geri alınamaz.": [
+  "gui/sekmeler/gizli.py:75"
+ ],
  "# '{ad}' için {sayi} öge:": [
   "erisim.py:1391"
  ],
@@ -580,6 +583,12 @@
  "AUR paketini kur: {paket}": [
   "doktor.py:61"
  ],
+ "Ad": [
+  "gui/sekmeler/gizli.py:79"
+ ],
+ "Ad yalnız harf, rakam, nokta, tire ve alt çizgi içerebilir (en çok 64 karakter).": [
+  "gui/sekmeler/gizli.py:82"
+ ],
  "Adım dizisi çalıştırılıyor": [
   "gui/metinler.py:310"
  ],
@@ -706,7 +715,7 @@
   "gui/metinler.py:360"
  ],
  "Ayar dosyasında doğrulanmamış değer var ({deger}); uygulanmıyor. Gösterilen, geçerli değerdir.": [
-  "gui/sekmeler/ayarlar.py:32"
+  "gui/sekmeler/ayarlar.py:34"
  ],
  "Ayar klasörü salt okunur: kaydedilemedi. Klasörün yazılabilir olduğunu kontrol edin.": [
   "gui/metinler.py:362"
@@ -745,7 +754,8 @@
   "gui/metinler.py:206"
  ],
  "Açık": [
-  "gui/metinler.py:339"
+  "gui/metinler.py:339",
+  "gui/sekmeler/gizli.py:56"
  ],
  "Açık pencereler okunamadı. Biraz sonra yeniden deneyin.": [
   "gui/metinler.py:397"
@@ -755,6 +765,9 @@
  ],
  "Açık tema": [
   "gui/metinler.py:221"
+ ],
+ "Açık · girişte cüzdan kendiliğinden açılır": [
+  "gui/sekmeler/gizli.py:61"
  ],
  "Açık: {ekran} · {g}×{y}": [
   "gui/metinler.py:77"
@@ -847,6 +860,9 @@
  ],
  "Bu MCP sunucusu eski kodu çalıştırıyor ({calisan}); kurulu sürüm {kurulu}. MCP'yi yeniden bağla (/mcp).": [
   "surum.py:39"
+ ],
+ "Bu adla kayıtlı bir parola zaten var.": [
+  "gui/sekmeler/gizli.py:85"
  ],
  "Bu bir ödeme işlemi olabilir; para çekilebilir.": [
   "guvenlik.py:1522"
@@ -960,6 +976,9 @@
  "Ctrl+L sonrası odak adres çubuğunda değil (odak: {rol}); adres yazılmadı": [
   "uygulama.py:1169"
  ],
+ "Cüzdan girişte otomatik açılsın mı?": [
+  "gui/sekmeler/gizli.py:71"
+ ],
  "Cüzdan okunabildi; {ayar} panelin imzalı kaydıyla doğrulandı.": [
   "liste_koruma.py:983"
  ],
@@ -974,6 +993,12 @@
  ],
  "Cüzdan okundu; panelin imzalı kaydında kullanıcının DUR'u açık, DUR sürüyor.": [
   "gui/panel.py:333"
+ ],
+ "Cüzdan parolası": [
+  "gui/sekmeler/gizli.py:43"
+ ],
+ "Cüzdan yöneticisini aç": [
+  "gui/sekmeler/gizli.py:48"
  ],
  "Cüzdandaki imzalı kayıtla listeler doğrulanamadı ({ayarlar}; {neden}). Deskhand durdu (Dur 10). Cüzdan okununca panel imzalı kaydı geri yükler; imzalı kayıt yoksa dosya değişince ya da panel yeniden başlayınca yeniden sorulur.": [
   "liste_koruma.py:935"
@@ -1003,7 +1028,7 @@
   "arka_ortak.py:121"
  ],
  "DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı geri yükler (imzalı kayıt yoksa girişleri yeniden sorar); o zamana kadar Deskhand durdu (Dur 10).": [
-  "gui/sekmeler/ayarlar.py:30"
+  "gui/sekmeler/ayarlar.py:32"
  ],
  "DUR": [
   "gui/dil.py:71",
@@ -1127,7 +1152,8 @@
   "gui/gorev.py:32"
  ],
  "Deskhand kasası": [
-  "anahtar_deposu.py:61"
+  "anahtar_deposu.py:63",
+  "gui/sekmeler/gizli.py:37"
  ],
  "Deskhand onay/panel penceresi /{desen}/": [
   "api.py:223"
@@ -1161,6 +1187,9 @@
  ],
  "Deskhand'in kendi ayar/durum dosyalarını değiştirme (DUR, yasak listesi…)": [
   "guvenlik.py:941"
+ ],
+ "Deskhand'in sakladığı parolalar ve ayar koruma anahtarı nerede dursun? Seçimi Uygula ile kaydedin.": [
+  "gui/sekmeler/gizli.py:36"
  ],
  "Deskhand: insan doğrulaması sizi bekliyor": [
   "gui/metinler.py:334"
@@ -1223,6 +1252,9 @@
  ],
  "Durum kontrol ediliyor": [
   "gui/metinler.py:301"
+ ],
+ "Durumu bilinmiyor": [
+  "gui/sekmeler/gizli.py:58"
  ],
  "Düğme": [
   "guvenlik.py:1505"
@@ -1405,6 +1437,15 @@
  "Giriş yaptığım hesaplar görünmez masaüstünde de açık olsun (banka ve ödeme siteleri hariç)": [
   "gui/metinler.py:196"
  ],
+ "Girişte KDE Cüzdanı'nı aç": [
+  "gui/sekmeler/gizli.py:41"
+ ],
+ "Girişte açmak için cüzdan parolasını yazın.": [
+  "gui/sekmeler/gizli.py:76"
+ ],
+ "Gizli bilgiler": [
+  "gui/sekmeler/gizli.py:35"
+ ],
  "Google hesabı": [
   "gui/metinler.py:204"
  ],
@@ -1579,6 +1620,12 @@
  "Hayır": [
   "gui/metinler.py:258"
  ],
+ "Hazır · TPM ile korunuyor": [
+  "gui/sekmeler/gizli.py:52"
+ ],
+ "Hazır · bu bilgisayarın anahtarıyla korunuyor": [
+  "gui/sekmeler/gizli.py:53"
+ ],
  "Hazır. Görevi yazıp Başlat'a basın.": [
   "gui/metinler.py:275"
  ],
@@ -1589,6 +1636,9 @@
  ],
  "Henüz günlük satırı yok. Ajan bir şey yaptığında burada görünür.": [
   "gui/metinler.py:63"
+ ],
+ "Henüz kayıtlı parola yok.": [
+  "gui/sekmeler/gizli.py:45"
  ],
  "Hep arka planda yap": [
   "gui/metinler.py:138",
@@ -1632,7 +1682,11 @@
   "gui/metinler.py:270"
  ],
  "KDE Cüzdanı": [
-  "anahtar_deposu.py:61"
+  "anahtar_deposu.py:63",
+  "gui/sekmeler/gizli.py:39"
+ ],
+ "KDE Cüzdanı kilitli ya da kurulu değil. Cüzdan yöneticisinden cüzdan oluşturup açın.": [
+  "gui/sekmeler/gizli.py:49"
  ],
  "KDE Cüzdanı tuz dosyası beklenen boyda değil": [
   "cuzdan_ac.py:76"
@@ -1764,6 +1818,9 @@
  "Kalıcı oturumlar": [
   "doktor.py:213"
  ],
+ "Kapalı": [
+  "gui/sekmeler/gizli.py:62"
+ ],
  "Kapalıyken (varsayılan) bu hesapların giriş çerezleri ve kayıtlı parolaları görünmez masaüstündeki Firefox kopyasına alınmaz; her seferinde şifre gerekir. Açıkken kayıtlı parolayı Firefox kendisi doldurur (ajan parolayı görmez). Görev kipinde (Görev sekmesi) bu izin hiç uygulanmaz. Banka ve ödeme siteleri hiçbir ayarla açılmaz. Yalnız bu panelden açılabilir; ayar dosyasına elle yazılan değer geçmez.": [
   "gui/metinler.py:210"
  ],
@@ -1789,6 +1846,9 @@
  "Kaydedildi.": [
   "gui/metinler.py:186"
  ],
+ "Kaydedilemedi. Ayrıntıdaki nedene bakıp yeniden deneyin.": [
+  "gui/sekmeler/gizli.py:77"
+ ],
  "Kaydedilmemiş değişiklikler": [
   "gui/metinler.py:170"
  ],
@@ -1801,6 +1861,9 @@
  "Kayıtlı akış çalıştırılıyor": [
   "gui/metinler.py:309"
  ],
+ "Kayıtlı parolalar": [
+  "gui/sekmeler/gizli.py:44"
+ ],
  "Kayıtlı parolayı yaz": [
   "cli.py:436"
  ],
@@ -1812,6 +1875,9 @@
  ],
  "Kazara izne karşı: birkaç saniye sonra ve fareyi bu pencerenin üzerinde gezdirince etkinleşir.": [
   "gui/metinler.py:132"
+ ],
+ "Kilitli": [
+  "gui/sekmeler/gizli.py:57"
  ],
  "Klavye kısayoluyla DUR (KDE genel kısayolu)": [
   "gui/metinler.py:230"
@@ -1860,6 +1926,12 @@
  ],
  "Koyu tema": [
   "gui/metinler.py:221"
+ ],
+ "Kullanılamıyor: {neden}": [
+  "gui/sekmeler/gizli.py:55"
+ ],
+ "Kullanılmıyor": [
+  "gui/sekmeler/gizli.py:54"
  ],
  "Kurulum komutunu panoya kopyalar: {komut}": [
   "gui/metinler.py:415"
@@ -1961,6 +2033,9 @@
  "ONAY İSTEYEN RİSKLİ EYLEMLER (yasak değil, insan onayı; --approved ya da panelden): oturumu/ekranı sonlandıran\ntuşlar (ctrl+alt+delete/backspace/F1-F12, meta+l, alt+sysrq+…) ve uçbirime yıkıcı komut yazma (rm -r, sudo,\ncurl | sh, mkfs, dd of=/dev/…, git push --force…). ~/.config/deskhand/uygulama-seviyeleri.txt (varsayılan: yok)\nuygulama başına 'DESEN = goruntule | tikla | tam' ile girdiyi sınırlar (goruntule: girdi yok; tikla: klavye yok).": [
   "cli.py:47"
  ],
+ "Okunuyor…": [
+  "gui/sekmeler/gizli.py:65"
+ ],
  "Onay bekleniyor ({n}): onay penceresine bakın — Claude sizin kararınızı bekliyor.": [
   "gui/metinler.py:277"
  ],
@@ -2019,6 +2094,12 @@
  "Otomatik kaydır": [
   "gui/metinler.py:64"
  ],
+ "Oturum açılınca KDE Cüzdanı parola sormadan açılacak. Bu bilgisayarda oturumunuzu açan herkes cüzdandaki parolalara erişebilir.\n\nDevam edilsin mi?": [
+  "gui/sekmeler/gizli.py:72"
+ ],
+ "Oturum açılınca cüzdan parola sormadan açılır. Cüzdan parolası bu bilgisayara kilitli olarak saklanır.": [
+  "gui/sekmeler/gizli.py:42"
+ ],
  "Oturum kopyaları": [
   "doktor.py:438"
  ],
@@ -2066,12 +2147,39 @@
   "guvenlik.py:1489",
   "guvenlik.py:2245"
  ],
+ "Parola": [
+  "gui/sekmeler/gizli.py:80"
+ ],
+ "Parola (tekrar)": [
+  "gui/sekmeler/gizli.py:81"
+ ],
  "Parola alanına yaz": [
   "guvenlik.py:1492",
   "guvenlik.py:2528"
  ],
+ "Parola boş olamaz.": [
+  "gui/sekmeler/gizli.py:84"
+ ],
+ "Parola deposu değişsin mi?": [
+  "gui/sekmeler/gizli.py:68"
+ ],
+ "Parola ekle": [
+  "gui/sekmeler/gizli.py:78"
+ ],
+ "Parola ekle…": [
+  "gui/sekmeler/gizli.py:46"
+ ],
  "Parola hesabınıza erişim verir; yalnız siz istediyseniz izin verin.": [
   "guvenlik.py:1529"
+ ],
+ "Parola silinsin mi?": [
+  "gui/sekmeler/gizli.py:74"
+ ],
+ "Parolalar KDE Cüzdanı'nda durur. Cüzdan kilitliyse Deskhand onu açmaz; siz açana kadar bekler.": [
+  "gui/sekmeler/gizli.py:40"
+ ],
+ "Parolalar ve ayar koruma anahtarı {yeni} konumuna taşınacak. {eski} artık kullanılmayacak.\n\nDevam edilsin mi?": [
+  "gui/sekmeler/gizli.py:69"
  ],
  "Pencere": [
   "gui/metinler.py:58",
@@ -2132,10 +2240,10 @@
   "liste_koruma.py:273"
  ],
  "Secret Service yok ya da varsayılan cüzdan yok (KDE Cüzdanı)": [
-  "anahtar_deposu.py:355"
+  "anahtar_deposu.py:357"
  ],
  "Secret Service'e bağlanılamadı (oturum veri yolu yok)": [
-  "anahtar_deposu.py:350"
+  "anahtar_deposu.py:352"
  ],
  "Ses dinleniyor": [
   "gui/metinler.py:308"
@@ -2143,8 +2251,15 @@
  "Seviye": [
   "gui/metinler.py:154"
  ],
+ "Seçili · açık": [
+  "gui/sekmeler/gizli.py:59"
+ ],
+ "Seçili · kilitli": [
+  "gui/sekmeler/gizli.py:60"
+ ],
  "Sil": [
-  "gui/metinler.py:241"
+  "gui/metinler.py:241",
+  "gui/sekmeler/gizli.py:47"
  ],
  "Simge eşleme bileşeni": [
   "gui/saglik.py:38"
@@ -2281,6 +2396,9 @@
  ],
  "Uygula": [
   "gui/metinler.py:163"
+ ],
+ "Uygula'ya basınca açılacak": [
+  "gui/sekmeler/gizli.py:63"
  ],
  "Uygulama": [
   "gui/metinler.py:153",
@@ -2544,19 +2662,19 @@
   "mcp_sunucu.py:2498"
  ],
  "anahtar deposu ayarı ({ayar}) mühürlü seçimle ({secim}) uyuşmuyor; ayar dosyası panel dışında değişmiş. Ayarlar'dan depoyu yeniden seçin": [
-  "anahtar_deposu.py:555"
+  "anahtar_deposu.py:557"
  ],
  "anahtar deposu seçimi bozuk": [
-  "anahtar_deposu.py:543"
+  "anahtar_deposu.py:545"
  ],
  "anahtar deposu seçimi doğrulanamadı: {neden}": [
-  "anahtar_deposu.py:540"
+  "anahtar_deposu.py:542"
  ],
  "anahtar deposu: {neden}": [
   "cli.py:514"
  ],
  "anahtar okunamadı (Secret Service hatası)": [
-  "anahtar_deposu.py:362",
+  "anahtar_deposu.py:364",
   "oturum/kalici.py:187"
  ],
  "anahtar okunamadı (anahtar deposu hatası)": [
@@ -2570,7 +2688,7 @@
   "oturum/kalici.py:1083"
  ],
  "anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)": [
-  "anahtar_deposu.py:451",
+  "anahtar_deposu.py:453",
   "liste_koruma.py:216",
   "oturum/kalici.py:120"
  ],
@@ -2857,7 +2975,7 @@
   "ayarlar.py:123"
  ],
  "bilinmeyen depo: {tur}": [
-  "anahtar_deposu.py:621"
+  "anahtar_deposu.py:623"
  ],
  "bilinmeyen değiştirici tuş: {tus} (ctrl, shift, alt, meta)": [
   "eylem.py:199"
@@ -2958,7 +3076,7 @@
   "uygulama.py:294"
  ],
  "boş değer kaydedilmez": [
-  "anahtar_deposu.py:722",
+  "anahtar_deposu.py:724",
   "cli.py:504"
  ],
  "boş parola kaydedilmez": [
@@ -3009,6 +3127,9 @@
  ],
  "bu süreçte kapalı: yalnız okuma serbest (ekran görüntüsü, pano) (DESKHAND_GERCEK_EKRAN=salt-okuma)": [
   "doktor.py:100"
+ ],
+ "bu sürümde yok": [
+  "gui/sekmeler/gizli.py:64"
  ],
  "bu öge sayısal değer ister ({n} karakterlik metin sayı değil)": [
   "erisim.py:782"
@@ -3064,8 +3185,8 @@
   "guvenlik.py:788"
  ],
  "cüzdan kilitli": [
-  "anahtar_deposu.py:357",
-  "anahtar_deposu.py:375"
+  "anahtar_deposu.py:359",
+  "anahtar_deposu.py:377"
  ],
  "cüzdan kilitli: kayıtlı anahtar açmadı ya da cüzdan bu birimden önce başlatıldı": [
   "cuzdan_ac.py:217"
@@ -3182,7 +3303,7 @@
   "erisim.py:787"
  ],
  "değer çok büyük": [
-  "anahtar_deposu.py:258"
+  "anahtar_deposu.py:260"
  ],
  "değeri stdin'den (uçbirimde gizli giriş) kaydet": [
   "cli.py:464"
@@ -3610,7 +3731,7 @@
   "kwin_oturum.py:162"
  ],
  "geçersiz ad: harf, rakam, '.', '_' ya da '-' (en çok 64 karakter)": [
-  "anahtar_deposu.py:96"
+  "anahtar_deposu.py:98"
  ],
  "geçersiz alan adı: {alan}": [
   "oturum/cli.py:149",
@@ -3647,14 +3768,14 @@
   "arka_uc/sanal.py:115"
  ],
  "geçersiz site: {deger}": [
-  "anahtar_deposu.py:689"
+  "anahtar_deposu.py:691"
  ],
  "geçersiz uygulama sınıfı: {deger}": [
-  "anahtar_deposu.py:687"
+  "anahtar_deposu.py:689"
  ],
  "geçersiz ya da ayrılmış ad: {ad}": [
-  "anahtar_deposu.py:720",
-  "anahtar_deposu.py:729",
+  "anahtar_deposu.py:722",
+  "anahtar_deposu.py:731",
   "cli.py:483"
  ],
  "geçersiz ölçek: {deger} (1 ya da 2)": [
@@ -3792,7 +3913,7 @@
   "gui/metinler.py:351"
  ],
  "gizli bilgi kaydı bozuk": [
-  "anahtar_deposu.py:712"
+  "anahtar_deposu.py:714"
  ],
  "gizli bilgi metin değil: {ad}": [
   "cli.py:371"
@@ -4190,26 +4311,26 @@
   "doktor.py:150"
  ],
  "kasa dizini güvenli değil (dizin değil ya da başka kullanıcının)": [
-  "anahtar_deposu.py:208"
+  "anahtar_deposu.py:210"
  ],
  "kasa dizini güvenli değil (izinler düzeltilemedi)": [
-  "anahtar_deposu.py:213"
+  "anahtar_deposu.py:215"
  ],
  "kasa dizini okunamadı": [
-  "anahtar_deposu.py:206",
-  "anahtar_deposu.py:298"
+  "anahtar_deposu.py:208",
+  "anahtar_deposu.py:300"
  ],
  "kasa öğesi açılamadı ({ad}): mühür bozuk ya da başka bir makinede/kullanıcıda oluşturulmuş; Ayarlar'dan parolayı yeniden girin ya da KDE Cüzdanı'nı seçin": [
-  "anahtar_deposu.py:248"
+  "anahtar_deposu.py:250"
  ],
  "kasa öğesi güvenli değil ({ad})": [
-  "anahtar_deposu.py:234"
+  "anahtar_deposu.py:236"
  ],
  "kasa öğesi okunamadı ({ad})": [
-  "anahtar_deposu.py:230"
+  "anahtar_deposu.py:232"
  ],
  "kasa öğesi silinemedi ({ad})": [
-  "anahtar_deposu.py:289"
+  "anahtar_deposu.py:291"
  ],
  "kayboldu: '{metin}' ({sn} sn)": [
   "ocr.py:610"
@@ -4252,7 +4373,7 @@
   "cli.py:489"
  ],
  "kayıtlı gizli bilgi yok: {ad}": [
-  "anahtar_deposu.py:744"
+  "anahtar_deposu.py:746"
  ],
  "kayıtlı gizli bilgi yok: {ad} (deskhand secret set {ad})": [
   "cli.py:367"
@@ -5118,7 +5239,7 @@
   "uygulama.py:396"
  ],
  "python-secretstorage kurulu değil": [
-  "anahtar_deposu.py:342"
+  "anahtar_deposu.py:344"
  ],
  "red": [
   "mcp_sunucu.py:826",
@@ -5433,19 +5554,19 @@
   "guvenlik.py:820"
  ],
  "systemd-creds boş çıktı verdi": [
-  "anahtar_deposu.py:263"
+  "anahtar_deposu.py:265"
  ],
  "systemd-creds bulunamadı (systemd 256+ gerekir); Ayarlar'dan KDE Cüzdanı seçilebilir": [
-  "anahtar_deposu.py:177"
+  "anahtar_deposu.py:179"
  ],
  "systemd-creds hatası: {hata}": [
-  "anahtar_deposu.py:189"
+  "anahtar_deposu.py:191"
  ],
  "systemd-creds yanıt vermedi": [
-  "anahtar_deposu.py:185"
+  "anahtar_deposu.py:187"
  ],
  "systemd-creds çalıştırılamadı": [
-  "anahtar_deposu.py:187"
+  "anahtar_deposu.py:189"
  ],
  "systemd-run yok: bellek kafesi kurulamaz (bilerek kapatmak için DESKHAND_SANAL_BELLEK=0)": [
   "kwin_oturum.py:888",
@@ -5534,7 +5655,7 @@
   "eylem.py:1333"
  ],
  "taşınan öğe geri okunamadı ({ad}); depo değiştirilmedi": [
-  "anahtar_deposu.py:645"
+  "anahtar_deposu.py:647"
  ],
  "taşınmaz (politika)": [
   "oturum/denetle.py:364"
@@ -6379,6 +6500,9 @@
  "Önce görevi yazın: kutuya ne yapılmasını istediğinizi yazıp yeniden Başlat'a basın.": [
   "gui/gorev.py:33"
  ],
+ "Önerilen. Parolalar bu bilgisayara kilitli bir dosyada durur; girişte cüzdan sorusu çıkmaz.": [
+  "gui/sekmeler/gizli.py:38"
+ ],
  "Önizleme alınamadı: arka plan masaüstüne ulaşılamıyor. Masaüstü kapanmış olabilir; Durdur'a, sonra Başlat'a basın.": [
   "gui/sekmeler/arka_plan.py:42"
  ],
@@ -6606,6 +6730,9 @@
  ],
  "İNSAN ÖNCELİĞİ: kullanıcı fareyi YA DA klavyeyi kullanıyorsa (Wayland boşta bildirimi, yetkisiz) girdi\ngönderilmez: 1,5 sn sessizlik beklenir (en çok 8 sn), olmazsa 12. Basılı tutarken insan girdisi → hemen bırakır.": [
   "cli.py:45"
+ ],
+ "İki parola aynı değil.": [
+  "gui/sekmeler/gizli.py:83"
  ],
  "İmzasız çalışma kabul edildi (anahtarlık yok); panelin koyduğu DUR kaldırıldı.": [
   "gui/panel.py:297"

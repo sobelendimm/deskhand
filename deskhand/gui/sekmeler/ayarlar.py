@@ -25,6 +25,8 @@ from .. import ayar as A
 from .. import metinler as T
 from ..dil import Metinler, dil_secenekleri
 from ..kisayol import VARSAYILAN_TUS, cakismalar
+from .gizli import G_BASLIK as Y_GIZLI
+from .gizli import ArkaUc, GizliBilgiler
 from .simgeler import SimgelerSekmesi
 
 Y_DOGRULANMADI = N_("DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı "
@@ -213,8 +215,9 @@ class AyarlarSekmesi(QWidget):
     dil_degisti = pyqtSignal(str)  # yeni etkin dil kodu (i18n yeniden yüklendikten SONRA)
 
     def __init__(self, parent=None, karar: A.KararAyarlari | None = None, cakisma_f=cakismalar, pencere_f=None,
-                 simge_sor=None):
+                 simge_sor=None, gizli_arka_uc: ArkaUc | None = None):
         super().__init__(parent)
+        self._gizli_arka_uc = gizli_arka_uc
         self.aciklamalar: list[_Aciklama] = []
         self._simge_sor = simge_sor
         self.karar = karar if karar is not None else A.KararAyarlari()
@@ -260,6 +263,7 @@ class AyarlarSekmesi(QWidget):
         self._yasak_kur(self._gelismis)
         self._seviye_kur(self._gelismis)
         self._hesap_kur(self._gelismis)
+        self._gizli_kur(self._gelismis)
         self._kisayol_kur(self._gelismis)
         self._simge_kur(self._gelismis)
         g = self._grup(T.Y_IZINLER)  # ana planın P4'ü: yer tutucu (işlev yok)
@@ -474,6 +478,19 @@ class AyarlarSekmesi(QWidget):
         gl.addWidget(self._not(T.Y_HESAP_NOT))
         kok.addWidget(g)
 
+    def _gizli_kur(self, kok):
+        """Gizli bilgiler (anahtar deposu): arka uç sekme ilk görününce okunur (açılışta D-Bus/cüzdan yok)."""
+        self.gizli = GizliBilgiler(self.mt, self._gizli_arka_uc)
+        self.gizli.degisti.connect(self._degisti)
+        self.gizli.yuklendi.connect(self._gizli_yuklendi)
+        kok.addWidget(self.gizli)
+
+    def _gizli_yuklendi(self) -> None:
+        """Arka uç okundu: kayıtlı taban arka ucun değeri (bekleyen seçim yoksa ekranda da o)."""
+        if self._kayitli:
+            self._kayitli["gizli"] = self.gizli.kayitli()
+        self._degisti()
+
     def _kisayol_kur(self, kok):
         panel = A.panel_oku()
         g = self._grup(T.Y_KISAYOL)
@@ -606,6 +623,7 @@ class AyarlarSekmesi(QWidget):
     def tazele(self) -> None:
         self.mt.tazele()
         self.simgeler.tazele()
+        self.gizli.ileti("")
         self._tus_yaz()
         self.cakisma_goster()
         etiketler = [getattr(self, "l_karar", None), self.l_onay, self.l_gorev]  # eski dildeki iletiler
@@ -627,7 +645,8 @@ class AyarlarSekmesi(QWidget):
         d = {"dil": self.c_dil.currentData(), "tema": self.c_tema.currentData(), "onay": self.c_onay.currentData(),
              "hesap": frozenset(s for s, k in self.k_hesap.items() if k.isChecked()),
              "yasak": self.yasak.toPlainText(), "seviye": self.seviye.toPlainText(),
-             "kisayol": (self.k_acik.isChecked(), self.tus()), "gorev": self.k_gorev_onay.isChecked()}
+             "kisayol": (self.k_acik.isChecked(), self.tus()), "gorev": self.k_gorev_onay.isChecked(),
+             "gizli": self.gizli.anlik()}
         if self.karar.var:
             d["karar"] = self._karar_degerleri()
         return d
@@ -635,7 +654,7 @@ class AyarlarSekmesi(QWidget):
     def degisenler(self) -> list[str]:
         """Kaydedilmemiş bölümler (Uygula sırası)."""
         a = self._anlik()
-        return [k for k in ("onay", "hesap", "karar", "gorev", "yasak", "seviye", "kisayol", "tema", "dil")
+        return [k for k in ("onay", "hesap", "gizli", "karar", "gorev", "yasak", "seviye", "kisayol", "tema", "dil")
                 if k in a and a[k] != self._kayitli.get(k)]
 
     def kaydedilmemis_var(self) -> bool:
@@ -685,7 +704,7 @@ class AyarlarSekmesi(QWidget):
         Yazılamayan bölüm kayıtlı değerine döner; geçersiz giriş (bozuk satır) düzeltilsin diye ekranda kalır.
         → hepsi kaydedildi mi."""
         iletiler, tamam = [], True
-        bolum_adi = {"onay": T.Y_ONAY, "hesap": T.Y_HESAP, "karar": T.Y_MESGUL, "gorev": T.Y_GOREV, "yasak": T.Y_YASAK,
+        bolum_adi = {"onay": T.Y_ONAY, "hesap": T.Y_HESAP, "gizli": Y_GIZLI, "karar": T.Y_MESGUL, "gorev": T.Y_GOREV, "yasak": T.Y_YASAK,
                      "seviye": T.Y_SEVIYE, "kisayol": T.Y_KISAYOL, "tema": T.Y_TEMA, "dil": T.Y_DIL}
         for k in self.degisenler():
             sonuc, hata = self._bolum_uygula(k)
@@ -714,6 +733,10 @@ class AyarlarSekmesi(QWidget):
             return self._sonuc(self.onay_kapsami_sec(self.c_onay.currentData()), self.l_onay)
         if k == "hesap":
             return self.hesap_uygula()
+        if k == "gizli":
+            sonuc = self.gizli.uygula()
+            self._kayitli["gizli"] = self.gizli.kayitli()  # arka ucun değeri (kısmi yazmada da doğru taban)
+            return sonuc
         if k == "karar":
             return self._sonuc(self.karar_kaydet(), self.l_karar)
         if k == "gorev":
@@ -754,6 +777,8 @@ class AyarlarSekmesi(QWidget):
                 self._sec(self.c_onay, v)
             elif k == "hesap":
                 self._hesap_kutulari(v)
+            elif k == "gizli":
+                self.gizli.goster(v)
             elif k == "karar":
                 self._karar_goster(dict(zip(("mesgulken", "sor_sure", "cevapsiz", "tam_ekranda_sor"), v, strict=True)))
             elif k == "yasak":
@@ -781,6 +806,8 @@ class AyarlarSekmesi(QWidget):
             self._sec(self.c_tema, A.tema_tercihi())
             self._sec(self.c_onay, A.onay_kapsami_oku())
             self._hesap_kutulari()
+            self.gizli.goster(self.gizli.kayitli())
+            self.gizli.ileti("")
             if self.karar.var:
                 self._karar_goster(self.karar.oku())
             self.k_gorev_onay.setChecked(self._gorev_onay_oku())

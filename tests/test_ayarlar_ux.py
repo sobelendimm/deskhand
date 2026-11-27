@@ -71,8 +71,8 @@ def gruplar(i):
 
 kontrol("Temel: Dil (üstte), Onay soruları, Meşgulken", gruplar(0) == ["Dil", "Onay soruları", "Meşgulken davranış", "Görev"],
         str(gruplar(0)))
-kontrol("Gelişmiş: Yasaklar, Seviyeler, Hesap oturumları, Kısayol, İzinler (yer tutucu)", gruplar(1) == [
-    "Yasak pencereler", "Uygulama erişim seviyeleri", "Hesap oturumları", "Genel kısayol", "Kayıtlı simgeler", "İzinler"],
+kontrol("Gelişmiş: Yasaklar, Seviyeler, Hesap oturumları, Gizli bilgiler, Kısayol, İzinler (yer tutucu)", gruplar(1) == [
+    "Yasak pencereler", "Uygulama erişim seviyeleri", "Hesap oturumları", "Gizli bilgiler", "Genel kısayol", "Kayıtlı simgeler", "İzinler"],
     str(gruplar(1)))
 
 # ---------------------------------------------------------------- tek kaydetme modeli
