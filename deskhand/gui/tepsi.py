@@ -11,10 +11,28 @@ from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
-from ..i18n import _
+from ..i18n import N_, _
 from . import metinler as T
 from .dil import Metinler
 from .durum import RENK, Durum
+
+BILDIRIM_SINIR = 200
+TB_TAMAMI = N_("(tamamı onay penceresinde)")
+
+
+def bildirim_govdesi(istek: dict) -> str:
+    """Tepsi bildirimi gövdesi (UX-C-R1c): devirde isteğin nedeni, diğerlerinde onay iletisinin içerik satırı (temiz,
+    gizli yazı/başlık kuralıyla); BILDIRIM_SINIR'ı aşarsa "…" + görünür "(tamamı onay penceresinde)". Bildirimden
+    izin VERİLEMEZ (tık yalnız diyaloğu açar), tam metin diyalogda."""
+    from .. import guvenlik
+    if istek.get("tur") == "devir":
+        metin = guvenlik.onay_tek_satir(str(istek.get("ayrinti") or istek.get("eylem") or ""), None)
+    else:
+        ileti = guvenlik.onay_iletisi(istek)
+        metin = ileti["icerik"] or ileti["baslik"]
+    if len(metin) > BILDIRIM_SINIR:
+        metin = metin[:BILDIRIM_SINIR - 1].rstrip() + "… " + _(TB_TAMAMI)
+    return _(T.TB_ONAY_GOVDE).format(neden=metin)
 
 
 def durum_pixmap(d: Durum, boyut: int = 64) -> QPixmap:
@@ -152,7 +170,7 @@ class Tepsi(QObject):
         self._bildirilen = k
         devir = istek.get("tur") == "devir"
         baslik = _(T.TB_DEVIR_BASLIK if devir else T.TB_ONAY_BASLIK)
-        govde = _(T.TB_ONAY_GOVDE).format(neden=(istek.get("ayrinti") or istek.get("eylem") or "")[:200])
+        govde = bildirim_govdesi(istek)
         try:
             self.ikon.showMessage(baslik, govde, QSystemTrayIcon.MessageIcon.Warning, 60000)
         except Exception:  # noqa: BLE001 - bildirim isteğe bağlı: diyalog ve panel listesi asıl kanal

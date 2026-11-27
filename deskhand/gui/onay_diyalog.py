@@ -8,9 +8,11 @@ Kazara izne karşı:
   Qt tıklamayı yalnız basma + bırakma ikisi de etkin düğmedeyse sayar (devre dışıyken başlayan basış izin olmaz).
 - Diyalog etkinleştirilmeden gösterilir (WA_ShowWithoutActivating): kullanıcının klavyesini çalmaz.
 - Süre dolunca otomatik red; istek geri çekilirse (isteyen vazgeçti) diyalog kendiliğinden kapanır.
-Sunum (UX-C): üstte tek cümle "ne olacak" + tek satır risk (guvenlik.onay_iletisi, eylem türüne göre); ham eylem,
-ham ayrıntı ve PID yalnız katlanır "Ayrıntılar"da (varsayılan kapalı); geri sayım Reddet düğmesinde; izin düğmesinin
-güvenlik beklemesi düğme metninde görünür; not normal renkte.
+Sunum (UX-C, R1): üstte türün sabit cümlesi + NEYE izin verildiği (düğme/komut/tuş; tek satır, temiz, tırnaklı)
++ tek satır risk (guvenlik.onay_iletisi; tür isteğin yapısal "konu" alanından); isteyen süreç (ad + PID), pencere ve
+masaüstü görünür satırlarda; ham eylem ve ham ayrıntı katlanır "Ayrıntılar"da (varsayılan kapalı; tür bilinmiyorsa
+açık); tüm etiketler düz metin; geri sayım Reddet düğmesinde; izin düğmesinin güvenlik beklemesi düğme metninde
+görünür; not normal renkte.
 Pencere başlığı sabit: onay.ONAY_BASLIK; uygulama sınıfı onay.PANEL_SINIF (yasak pencere listesine eklenir).
 """
 from __future__ import annotations
@@ -19,8 +21,9 @@ import os
 import time
 
 from PyQt6.QtCore import QEvent, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QPixmap
-from PyQt6.QtWidgets import (QDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton,
+from PyQt6.QtGui import QFont, QFontDatabase, QKeyEvent, QPixmap, QTextOption
+from PyQt6.QtWidgets import (QDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QPlainTextEdit, QProgressBar,
+                             QPushButton,
                              QSizePolicy, QStyle, QToolButton, QVBoxLayout, QWidget)
 
 from .. import guvenlik, onay
@@ -36,10 +39,16 @@ DUGME_EN = 150
 EN_AZ_EN = 460
 
 D_PENCERE = N_("Pencere")
+D_KAYDIR = N_("Komutun tamamını görmek için kaydırın.")
+KUTU_SATIR = 6  # komut/tuş kutusu en çok bu kadar satır yüksekliğinde; taşarsa kaydırma çubuğu + D_KAYDIR
+D_ISTEYEN = N_("İsteyen")
 D_AYRINTILAR = N_("Ayrıntılar")
 D_DUGME_SURE = N_("{dugme} ({sure})")                      # Reddet (1:58): geri sayım düğmede
 D_IZIN_BEKLE = N_("{dugme} ({sn} sn…)")                     # güvenlik beklemesi görünür (kazara izne karşı)
 D_IZIN_FARE = N_("{dugme} (fareyi oynatın)")               # bekleme bitti: fare bu pencerede hareket edince açılır
+D_IZIN_KAYDIR = N_("{dugme} (önce sona kaydırın)")          # taşan komut kutusu sona kaydırılmadan izin yok (UX-C-R1c)
+D_SON_KISIM = N_("Son kısım: {metin}")
+SON_KISIM = 60  # taşan kutunun altında ayrıca görünen son karakter sayısı
 
 
 def sure_metni(sn: float) -> str:
@@ -103,9 +112,41 @@ class OnayDiyalog(QDialog):
         f = self.l_baslik.font()
         f.setPointSizeF(f.pointSizeF() * 1.25)
         self.l_baslik.setFont(f)
+        self.l_icerik = deger(kalin=True)  # NEYE izin verildiği: düğme / komut / tuş (katlı değil; YÜKSEK 1)
+        self.l_icerik.setObjectName("icerik")
         self.l_risk = deger()
         self.l_risk.setObjectName("risk")
         metin_kutu.addWidget(self.l_baslik)
+        metin_kutu.addWidget(self.l_icerik)
+        # komut / tuş: TAMAMI (asla kesilmez; UX-C-R1b), eş aralıklı, salt okunur, satır kaydıran kutu
+        self.k_icerik = QPlainTextEdit()
+        self.k_icerik.setObjectName("icerikKutu")
+        self.k_icerik.setReadOnly(True)
+        self.k_icerik.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # odak Reddet'te kalır
+        self.k_icerik.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.k_icerik.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.k_icerik.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        ef = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        ef.setStyleHint(QFont.StyleHint.TypeWriter)
+        ef.setFixedPitch(True)  # eş aralıklı istenir (sistemde yoksa Qt en yakınını seçer)
+        self.k_icerik.setFont(ef)
+        self.k_icerik.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.k_icerik.setVisible(False)
+        metin_kutu.addWidget(self.k_icerik)
+        self.l_kaydir = deger()
+        self.l_kaydir.setObjectName("kaydir")
+        self.mt(self.l_kaydir.setText, D_KAYDIR)
+        self.l_kaydir.setVisible(False)
+        metin_kutu.addWidget(self.l_kaydir)
+        self.l_son = deger(kalin=True)  # taşan kutu: tehlikeli SON kısım kaydırmadan da görünür
+        self.l_son.setObjectName("sonKisim")
+        self.l_son.setVisible(False)
+        metin_kutu.addWidget(self.l_son)
+        self._tasiyor = False
+        self._sona_kaydirildi = False
+        self._bekleme_tamam = False
+        self.k_icerik.verticalScrollBar().valueChanged.connect(lambda _v: self._kaydirma_denetle())
+        self.k_icerik.verticalScrollBar().rangeChanged.connect(lambda *_a: self._kaydirma_denetle())
         metin_kutu.addWidget(self.l_risk)
         ust.addLayout(metin_kutu, 1)
         kok.addLayout(ust)
@@ -123,12 +164,15 @@ class OnayDiyalog(QDialog):
 
         def satir(msgid: str, alan: QLabel):
             e = QLabel()
+            e.setTextFormat(Qt.TextFormat.PlainText)
             self.mt(e.setText, msgid)
             form.addRow(e, alan)
             return e
 
+        self.l_isteyen = deger()
         self._hedef_satiri = satir(D_PENCERE, self.l_hedef)
         satir(T.D_MASAUSTU, self.l_masaustu)
+        self._isteyen_satiri = satir(D_ISTEYEN, self.l_isteyen)
         kok.addLayout(form)
 
         # Ayrıntılar (ham eylem dizgisi, pencere, ham ayrıntı, PID): katlanır, varsayılan KAPALI
@@ -150,6 +194,8 @@ class OnayDiyalog(QDialog):
         self.w_ayrinti.setVisible(False)
         kok.addWidget(self.w_ayrinti)
         self.mt.fn(self._iletiyi_yaz)
+        if self.ileti["tur"] == "bilinmeyen":  # türü doğrulanamayan istek: ham eylem ve ayrıntı baştan görünür
+            self.ayrinti_ac(True)
 
         self.l_goruntu = None
         g = istek.get("goruntu")
@@ -177,9 +223,11 @@ class OnayDiyalog(QDialog):
         self.cubuk.setRange(0, 1000)
         kok.addWidget(self.cubuk)
         self.l_kalan = QLabel()
+        self.l_kalan.setTextFormat(Qt.TextFormat.PlainText)
         self.l_kalan.setWordWrap(True)
         kok.addWidget(self.l_kalan)
         self.l_not = QLabel()
+        self.l_not.setTextFormat(Qt.TextFormat.PlainText)
         self.mt(self.l_not.setText, T.D_DEVIR_NOT if self.devir else T.D_NOT)
         self.l_not.setWordWrap(True)  # normal metin rengi (soluk değil): kontrast ≥ tokens kontrast_min
         kok.addWidget(self.l_not)
@@ -194,8 +242,9 @@ class OnayDiyalog(QDialog):
         self.b_izin.setAutoDefault(False)
         self.b_izin.setDefault(False)
         self.b_izin.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # yalnız fareyle: Enter/boşluk izne dönüşmez
-        self.b_izin.setEnabled(kurma_ms <= 0)  # kurma_ms <= 0: koruma yok (yalnız testler)
+        self._bekleme_tamam = kurma_ms <= 0  # kurma_ms <= 0: bekleme koruması yok (yalnız testler)
         self._kurma_bitti = kurma_ms <= 0
+        self.b_izin.setEnabled(self._izin_acilabilir())
         self._kurma_son = time.monotonic() + max(0, kurma_ms) / 1000.0
         self._hareket_px = max(0, int(hareket_px)) if kurma_ms > 0 else 0
         self._ilk_konum = None
@@ -240,11 +289,67 @@ class OnayDiyalog(QDialog):
         ileti = guvenlik.onay_iletisi(self.istek)
         self.ileti = ileti
         self.l_baslik.setText(ileti["baslik"])
+        kutu = bool(ileti.get("icerik_kutu"))
+        self.l_icerik.setText(ileti["icerik_etiket"] + ":" if kutu else ileti["icerik"])
+        self.l_icerik.setVisible(bool(ileti["icerik"]))
+        self.k_icerik.setPlainText(ileti["icerik_deger"] if kutu else "")
+        self.k_icerik.setVisible(kutu)
+        self._kutu_boyu()
         self.l_risk.setText(ileti["risk"])
+        self.l_isteyen.setText(ileti["isteyen"])
+        self.l_isteyen.setVisible(bool(ileti["isteyen"]))
+        self._isteyen_satiri.setVisible(bool(ileti["isteyen"]))
         self.l_hedef.setText(ileti["hedef"])
         self.l_hedef.setVisible(bool(ileti["hedef"].strip()))
         self._hedef_satiri.setVisible(bool(ileti["hedef"].strip()))
         self.l_ayrinti.setText(ileti["ayrinti"])
+
+    def _kutu_boyu(self):
+        """Komut kutusu: içeriğe göre 1..KUTU_SATIR satır yüksekliği; taşarsa kaydırma notu görünür."""
+        if not self.k_icerik.isVisible() and not self.k_icerik.toPlainText():
+            self.l_kaydir.setVisible(False)
+            return
+        fm = self.k_icerik.fontMetrics()
+        en = max(1, self.k_icerik.viewport().width() or (EN_AZ_EN - 120))
+        sutun = max(1, en // max(1, fm.horizontalAdvance("M")))
+        satir = sum(max(1, -(-len(p) // sutun)) for p in self.k_icerik.toPlainText().split("\n"))
+        ic = 2 * (self.k_icerik.frameWidth() + int(self.k_icerik.document().documentMargin()))
+        self.k_icerik.setFixedHeight(min(satir, KUTU_SATIR) * fm.lineSpacing() + ic + 2)
+        self._kaydirma_denetle(satir > KUTU_SATIR)
+
+    def _kaydirma_denetle(self, tahmin_tasar: bool = False):
+        """Kutu taşıyor mu (görünürken kaydırma çubuğundan, görünmeden önce satır tahmininden): taşıyorsa kaydırma notu +
+        "Son kısım" satırı görünür ve izin düğmesi kutu bir kez sona kaydırılana dek pasif (Reddet hep etkin)."""
+        k = self.k_icerik
+        if not k.isVisibleTo(self) or not k.toPlainText():
+            self._tasiyor = False
+        else:
+            sb = k.verticalScrollBar()
+            self._tasiyor = sb.maximum() > 0 if k.isVisible() else (tahmin_tasar or sb.maximum() > 0)
+            if self._tasiyor and k.isVisible() and sb.value() >= sb.maximum():
+                self._sona_kaydirildi = True
+        self.l_kaydir.setVisible(self._tasiyor)
+        if self._tasiyor:
+            metin = k.toPlainText()
+            son = metin if len(metin) <= SON_KISIM else "…" + metin[-SON_KISIM:]
+            self.l_son.setText(_(D_SON_KISIM).format(metin=son))
+        self.l_son.setVisible(self._tasiyor)
+        if hasattr(self, "_kurma_son"):  # düğmeler kurulduysa
+            self.b_izin.setEnabled(self._izin_acilabilir())
+            self._dugme_metinleri()
+
+    def _izin_acilabilir(self) -> bool:
+        """İzin düğmesi: güvenlik beklemesi (kurma + fare hareketi) bitti VE taşan komut kutusu sona kaydırıldı."""
+        return (self._bekleme_tamam and not self.bitti and (not self._tasiyor or self._sona_kaydirildi)
+                and (not hasattr(self, "toplam") or self.kalan() > 0))
+
+    def resizeEvent(self, e):  # noqa: N802 - Qt API
+        super().resizeEvent(e)
+        self._kutu_boyu()
+
+    def showEvent(self, e):  # noqa: N802 - Qt API
+        super().showEvent(e)
+        self._kutu_boyu()
 
     def ayrinti_ac(self, acik: bool = True):
         """Ayrıntılar alanını aç/kapat (varsayılan kapalı)."""
@@ -264,6 +369,8 @@ class OnayDiyalog(QDialog):
         izin = _(T.D_DEVIR_BITTI if self.devir else T.D_IZIN)
         if self.b_izin.isEnabled() or self.bitti:
             self.b_izin.setText(izin)
+        elif self._bekleme_tamam and self._tasiyor and not self._sona_kaydirildi:
+            self.b_izin.setText(_(D_IZIN_KAYDIR).format(dugme=izin))
         elif not self._kurma_bitti:
             sn = max(1, int(self._kurma_son - time.monotonic() + 0.999))
             self.b_izin.setText(_(D_IZIN_BEKLE).format(dugme=izin, sn=sn))
@@ -279,17 +386,19 @@ class OnayDiyalog(QDialog):
         self._kurma_bitti = True
         self._ilk_konum = None  # süre içindeki hareket sayılmaz
         if self._hareket_px <= 0:
-            self.b_izin.setEnabled(True)
+            self._bekleme_tamam = True
+            self.b_izin.setEnabled(self._izin_acilabilir())
         self._dugme_metinleri()
 
     def eventFilter(self, nesne, olay):  # noqa: N802 - Qt API
         if (olay.type() == QEvent.Type.MouseMove and self._kurma_bitti and not self.bitti
-                and not self.b_izin.isEnabled()):
+                and not self._bekleme_tamam):
             p = olay.globalPosition()
             if self._ilk_konum is None:  # pencere imlecin altında açılınca gelen yapay hareket (aynı nokta) sayılmaz
                 self._ilk_konum = p
             elif abs(p.x() - self._ilk_konum.x()) + abs(p.y() - self._ilk_konum.y()) >= self._hareket_px:
-                self.b_izin.setEnabled(True)
+                self._bekleme_tamam = True
+                self.b_izin.setEnabled(self._izin_acilabilir())
                 self._dugme_metinleri()
         return False  # olay yutulmaz
 

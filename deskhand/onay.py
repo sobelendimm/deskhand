@@ -46,6 +46,7 @@ YOKLAMA = 0.1                # isteyen tarafın yanıt yoklama aralığı (sn)
 CANLILIK_ARALIK = 1.0        # isteyen, beklerken paneli bu sıklıkta doğrular
 ESKI_PAY = 5.0               # süresi geçen isteği panel bu kadar sonra siler (isteyen kendi siler; çökmeye karşı)
 AYRINTI_SINIR = 4000
+EYLEM_SINIR = 16000  # eylem (komut tam metin taşır, UX-C-R1b): aşan istek YAZILMAZ ve OKUNMAZ → red "cok-uzun"
 
 # Onay diyaloğu ve panel pencerelerinin SABİT kimliği: yasak pencere listesine (guvenlik) eklenmeli; hiçbir ajan
 # girdisi bunlara gitmez (ajan kendi onay düğmesine basamaz).
@@ -69,7 +70,20 @@ MESAJLAR = {  # gösterirken _(): OnaySonucu.mesaj
     "kosul": N_("beklenen koşul gerçekleşti (insan doğrulaması sayfadan kalktı)"),
     "iptal": N_("isteyen vazgeçti (çağrı iptal edildi) → red"),
     "silindi": N_("onay isteği beklerken silindi → red"),
+    "cok-uzun": N_("onay isteği çok uzun, onaylanamaz → red"),
 }
+D_AYRINTI_KISA = N_("… (kısaltıldı: {n} karakter daha; komutun tamamı yukarıda)")
+
+
+def ayrinti_sinirla(ayrinti: str) -> str:
+    """Ayrıntı AYRINTI_SINIR'a sığmıyorsa görünür işaretle kesilir (sessiz kesme yok; UX-C-R1c). Komut/eylem kesilmez:
+    eylem alanında tamamı durur (EYLEM_SINIR'ı aşan istek hiç yazılmaz)."""
+    ayrinti = str(ayrinti or "")
+    if len(ayrinti) <= AYRINTI_SINIR:
+        return ayrinti
+    isaret = "\n" + _(D_AYRINTI_KISA).format(n=len(ayrinti))
+    kes = AYRINTI_SINIR - len(isaret) - 8  # n hanesi değişse de sığar
+    return ayrinti[:kes] + "\n" + _(D_AYRINTI_KISA).format(n=len(ayrinti) - kes)
 TUR_DEVIR = "devir"           # istek türü: insan doğrulaması devri (panelde "Devral / Bitti / Vazgeç"; izin = Bitti)
 TUR_DUR = "dur"               # request type: remove DUR; fixed panel text, on Yes the PANEL removes it (yanitla)
 DEVIR_EN_COK = 3600.0         # insan devri isteğinin en uzun ömrü (request_human timeout_s üst sınırı): bekleme boyunca BAŞKA
@@ -760,7 +774,7 @@ def _kaydet_gunluk(sonuc: OnaySonucu, eylem: str, hedef: str, masaustu: str, tur
 
 def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran", sure: float = VARSAYILAN_SURE,
                goruntu=None, gunluge_yaz: bool = True, tur: str = "", kontrol=None, iptal=None,
-               dur_kaldirma: bool = False) -> OnaySonucu:
+               dur_kaldirma: bool = False, konu: str = "") -> OnaySonucu:
     """Paneldeki insandan bir kez izin iste ve bekle (en çok `sure` sn). → OnaySonucu.
     masaustu: "ekran" (kullanıcının ekranı) | "arka" (görünmez masaüstü).
     tur: "" (hassas eylem onayı) | "devir" (insan doğrulaması devri: panel "Devral/Bitti/Vazgeç" gösterir; izin = Bitti).
@@ -770,6 +784,8 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
     goruntu: hedefin küçük görüntüsü: PIL.Image (onay dizinine kaydedilir, sonra silinir) ya da var olan dosya yolu.
     iptal: isteğe bağlı işlev; True dönerse (ör. MCP çağrısı istemcide iptal edildi) bekleme HEMEN biter, istek silinir,
     OnaySonucu(False, "iptal") — red; yalnız isteyenin kendi beklemesini bitirir (izin üretemez).
+    konu: the request's kind (guvenlik.ONAY_KONULARI) written as the structural field "konu" (covered by the request's
+    sha256); the panel takes the kind ONLY from it (guvenlik.onay_iletisi), never from the free-text action.
     dur_kaldirma: the question IS "remove the STOP switch?" (guvenlik.dur_kaldir_iste): an open DUR does not refuse
     it (every other request is refused while DUR is on); unattended mode and no panel still refuse."""
     masaustu = "arka" if masaustu in ("arka", "sanal", "background") else "ekran"
@@ -784,6 +800,9 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
         if gunluge_yaz:
             _kaydet_gunluk(s, eylem, hedef, masaustu, tur)
         return s
+
+    if len(str(eylem)) > EYLEM_SINIR:  # kesilmiş bir istek onaylanamaz: kapalı-başarısız, görünür neden
+        return bitir(OnaySonucu(False, "cok-uzun"))
 
     if gozetimsiz():  # başında insan yok: panel diyaloğu açılmaz, beklenmez (tek nokta: CLI, MCP, akış hep buradan)
         return bitir(OnaySonucu(False, "gozetimsiz"))
@@ -814,9 +833,11 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
             g_yol = os.path.abspath(goruntu)
         from . import masalar
         istek = {"id": istek_id, "eylem": str(eylem), "hedef": str(hedef),
-                 "ayrinti": str(ayrinti or "")[:AYRINTI_SINIR], "masaustu": masaustu, "zaman": simdi,
+                 "ayrinti": ayrinti_sinirla(ayrinti), "masaustu": masaustu, "zaman": simdi,
                  "son_zaman": simdi + sure, "pid": os.getpid(), "pid_bas": _baslangic(os.getpid()), "goruntu": g_yol,
                  "masa": masalar.secili() if masaustu == "arka" else ""}
+        if konu and isinstance(konu, str):
+            istek["konu"] = konu[:32]
         if tur == TUR_DEVIR:
             istek["tur"] = TUR_DEVIR
         if dur_kaldirma:
@@ -937,7 +958,9 @@ def istek_oku(yol: str) -> dict | None:
         return None
     for alan in ("eylem", "hedef", "ayrinti"):
         d[alan] = str(d.get(alan) or "")
-    d["ayrinti"] = d["ayrinti"][:AYRINTI_SINIR]
+    if len(d["eylem"]) > EYLEM_SINIR:  # isteyen bunu yazmaz (iste_sonuc reddeder): kesip göstermek yerine geçersiz
+        return None
+    d["ayrinti"] = ayrinti_sinirla(d["ayrinti"])
     d["masaustu"] = "arka" if d.get("masaustu") == "arka" else "ekran"
     from . import masalar
     m = d.get("masa")

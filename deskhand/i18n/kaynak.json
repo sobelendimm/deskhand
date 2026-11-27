@@ -383,8 +383,8 @@
   "arka_uc/kwin.py:810",
   "arka_uc/sanal.py:1234",
   "guvenlik.py:1276",
-  "guvenlik.py:1600",
-  "guvenlik.py:1849"
+  "guvenlik.py:1697",
+  "guvenlik.py:1966"
  ],
  "(başlıksız)": [
   "web.py:769"
@@ -405,14 +405,21 @@
  "(görünmüyor)": [
   "web.py:630"
  ],
+ "(kısaltıldı)": [
+  "guvenlik.py:1560",
+  "guvenlik.py:1718"
+ ],
  "(okunamadı)": [
-  "guvenlik.py:1660"
+  "guvenlik.py:1775"
  ],
  "(satır okunamadı)": [
   "ucbirim.py:367"
  ],
  "(sayfa adresi değişti: sınamanın kalkması çözüm sayılmadı)": [
   "mcp_sunucu.py:3068"
+ ],
+ "(tamamı onay penceresinde)": [
+  "gui/tepsi.py:20"
  ],
  "(varsayılan)": [
   "masaustu.py:556",
@@ -558,7 +565,7 @@
   "erisim.py:345"
  ],
  "AJANIN KENDİ İSTEMCİSİ: {baslik} (sınıf {sinif}): {neden}; ajan kendi izin istemini onaylayamasın diye bu pencereye hiçbir girdi gönderilmez (okuma serbest)": [
-  "guvenlik.py:1968"
+  "guvenlik.py:2085"
  ],
  "AT-SPI kullanılamıyor (python-gobject + at-spi2-core): {hata}": [
   "erisim.py:193"
@@ -573,13 +580,13 @@
   "gui/metinler.py:271"
  ],
  "Ajan bir kart bilgisi yazmak istiyor ({ne}).": [
-  "guvenlik.py:2377"
+  "guvenlik.py:2495"
  ],
  "Ajan bir parola alanına {n} karakter yazmak istiyor ({ne}).": [
-  "guvenlik.py:2396"
+  "guvenlik.py:2514"
  ],
  "Ajan kullanıcının panosundaki metni ({n} karakter) bu pencereye yapıştırmak istiyor ({ne}).": [
-  "guvenlik.py:2125"
+  "guvenlik.py:2242"
  ],
  "Ajan panonun metnini okumak istiyor ({n} karakter)": [
   "mcp_sunucu.py:2149"
@@ -694,10 +701,10 @@
   "gui/metinler.py:357",
   "gui/sekmeler/arka_plan.py:45",
   "gui/sekmeler/etkinlik.py:20",
-  "guvenlik.py:1620"
+  "guvenlik.py:1733"
  ],
  "Ayrıntılar": [
-  "gui/onay_diyalog.py:39"
+  "gui/onay_diyalog.py:45"
  ],
  "AÇIK": [
   "masaustu.py:1423",
@@ -758,6 +765,9 @@
  "Bileşen": [
   "gui/metinler.py:248"
  ],
+ "Bilinmeyen istek: Claude'un ne yapmak istediği doğrulanamadı.": [
+  "guvenlik.py:1516"
+ ],
  "Bir daha sorma": [
   "gui/gorev.py:34"
  ],
@@ -771,11 +781,11 @@
   "gui/metinler.py:123"
  ],
  "Bir komut DUR anahtarını kaldırmak istiyor.": [
-  "guvenlik.py:1490"
+  "guvenlik.py:1514"
  ],
  "Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin.": [
-  "guvenlik.py:2642",
-  "onay.py:952"
+  "guvenlik.py:2760",
+  "onay.py:975"
  ],
  "Bir masaüstü seçin: önizleme onu gösterir (yalnız izleme).": [
   "gui/metinler.py:342"
@@ -808,31 +818,31 @@
   "surum.py:39"
  ],
  "Bu bir ödeme işlemi olabilir; para çekilebilir.": [
-  "guvenlik.py:1494"
+  "guvenlik.py:1519"
  ],
  "Bu desenlere (regex, büyük/küçük harf duyarsız) uyan pencere başlığı ya da sınıfına hiçbir girdi gönderilmez ve bu uygulamalar başlatılmaz. # ile başlayan satırlar açıklamadır.": [
   "gui/metinler.py:177"
  ],
  "Bu düğme yetki verme ya da hesap silme gibi geri alınamaz bir iş yapabilir.": [
-  "guvenlik.py:1495"
+  "guvenlik.py:1520"
  ],
  "Bu komut dosyaları silebilir ya da sistemi değiştirebilir.": [
-  "guvenlik.py:1497"
+  "guvenlik.py:1522"
  ],
  "Bu kısayol pencereyi ya da oturumu kapatabilir; kaydedilmemiş iş kaybolabilir.": [
-  "guvenlik.py:1496"
+  "guvenlik.py:1521"
  ],
  "Bu pencere bilgisayarınızda yönetici yetkisi verebilir.": [
-  "guvenlik.py:1500"
+  "guvenlik.py:1525"
  ],
  "Bu pencere bir sistem yetki/parola/izin istemi ({ad}). Ajan ona {ne} göndermek istiyor.": [
-  "guvenlik.py:2038"
+  "guvenlik.py:2155"
  ],
  "Bu uygulamaların pencerelerine Deskhand hiçbir girdi göndermez ve bu uygulamaları başlatmaz.": [
   "gui/metinler.py:149"
  ],
  "Bu uygulamanın ne yapacağı doğrulanamadı; tanımıyorsanız reddedin.": [
-  "guvenlik.py:1502"
+  "guvenlik.py:1527"
  ],
  "Bu, bir ajanın kendi masaüstü: burada yalnız izlersiniz. «Kontrolü al» varsayılan masaüstünde ya da bir onay devrinde açılır.": [
   "gui/metinler.py:351"
@@ -866,81 +876,43 @@
   "gui/metinler.py:115"
  ],
  "Claude bir işlem için izninizi istiyor.": [
-  "guvenlik.py:1491"
+  "guvenlik.py:1515"
  ],
  "Claude doğrulamayı çözmez; siz çözmezseniz iş burada durur.": [
-  "guvenlik.py:1499"
+  "guvenlik.py:1524"
  ],
  "Claude izleme ve yönetme paneli": [
   "gui/metinler.py:15"
  ],
  "Claude sizi bekliyor: bir insan doğrulamasını (CAPTCHA) sizin çözmeniz gerekiyor.": [
-  "guvenlik.py:1486"
+  "guvenlik.py:1510"
  ],
  "Claude sizi bekliyor: insan doğrulaması gerekiyor": [
   "gui/metinler.py:127"
  ],
- "Claude, bir kart bilgisi yazmak istiyor.": [
-  "guvenlik.py:1460"
- ],
  "Claude, bir parola alanına yazmak istiyor.": [
-  "guvenlik.py:1469",
-  "guvenlik.py:1488"
- ],
- "Claude, bir sistem izin/parola penceresine ({ad}) girdi göndermek istiyor.": [
-  "guvenlik.py:1468"
+  "guvenlik.py:1512"
  ],
  "Claude, bir sistem izin/parola penceresine girdi göndermek istiyor.": [
-  "guvenlik.py:1487"
- ],
- "Claude, bir ödeme ya da onay sayfasında işlem yapmak istiyor ({eylem}).": [
-  "guvenlik.py:1459"
+  "guvenlik.py:1511"
  ],
  "Claude, doğrulanmamış bir uygulamayı başlatmak istiyor.": [
-  "guvenlik.py:1489"
- ],
- "Claude, doğrulanmamış bir uygulamayı başlatmak istiyor: {ad}": [
-  "guvenlik.py:1470"
+  "guvenlik.py:1513"
  ],
  "Claude, geri alınamaz olabilecek bir düğmeye basmak istiyor.": [
-  "guvenlik.py:1482"
- ],
- "Claude, panonuzdaki metni bu pencereye yapıştırmak istiyor.": [
-  "guvenlik.py:1465"
+  "guvenlik.py:1506"
  ],
  "Claude, panonuzdaki metni kullanmak istiyor.": [
-  "guvenlik.py:1485"
- ],
- "Claude, panonuzdaki metni okumak istiyor.": [
-  "guvenlik.py:1466",
-  "guvenlik.py:1473"
+  "guvenlik.py:1509"
  ],
  "Claude, riskli bir tuş kısayoluna basmak istiyor.": [
-  "guvenlik.py:1483"
+  "guvenlik.py:1507"
  ],
  "Claude, uçbirimde bir komut çalıştırmak istiyor.": [
-  "guvenlik.py:1484"
- ],
- "Claude, uçbirimde şu komutu çalıştırmak istiyor: {satir}": [
-  "guvenlik.py:1463"
- ],
- "Claude, uçbirime şu komutu yazmak istiyor: {komut}": [
-  "guvenlik.py:1462"
- ],
- "Claude, {kombinasyon} tuşlarına basmak istiyor.": [
-  "guvenlik.py:1461"
+  "guvenlik.py:1508"
  ],
  "Claude, ödeme yapabilecek bir işlem için izin istiyor.": [
-  "guvenlik.py:1481"
- ],
- "Claude, önceden onaylanmış adımlar içeren bir akışı çalıştırmak istiyor.": [
-  "guvenlik.py:1474"
- ],
- "Claude, şu komutu çalıştırmak istiyor: {komut}": [
-  "guvenlik.py:1464"
- ],
- "Claude, “{dugme}” düğmesine basmak istiyor.": [
-  "guvenlik.py:1458"
+  "guvenlik.py:1505"
  ],
  "Ctrl+Alt+Backspace: grafik oturumunu sonlandırır": [
   "guvenlik.py:205"
@@ -1040,26 +1012,26 @@
   "gui/metinler.py:46"
  ],
  "DUR dosyası okunamıyor (kaynağı bilinmiyor); yalnız kullanıcı Deskhand panelinden kaldırabilir": [
-  "guvenlik.py:2702"
+  "guvenlik.py:2820"
  ],
  "DUR kaldırma isteği (kullanıcı panelde onaylar)": [
   "cli.py:215"
  ],
  "DUR kaldırılsın mı?": [
-  "guvenlik.py:2641",
-  "onay.py:951"
+  "guvenlik.py:2759",
+  "onay.py:974"
  ],
  "DUR kaldırılsın mı? Ajan yeniden girdi gönderebilir.": [
   "gui/metinler.py:45"
  ],
  "DUR kalkınca Claude yeniden girdi gönderebilir; siz istemediyseniz reddedin.": [
-  "guvenlik.py:1503"
+  "guvenlik.py:1528"
  ],
  "DUR nedeniyle red": [
   "gui/metinler.py:104"
  ],
  "DUR yalnız kullanıcı tarafından kaldırılır: Deskhand panelinden ya da DUR kısayoluyla.": [
-  "guvenlik.py:2631"
+  "guvenlik.py:2749"
  ],
  "DUR — tüm girdileri durdur": [
   "gui/metinler.py:31"
@@ -1071,10 +1043,10 @@
   "gui/metinler.py:43"
  ],
  "DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir": [
-  "guvenlik.py:2704"
+  "guvenlik.py:2822"
  ],
  "DUR'u panel koydu (imzalı kayıt okunamıyor); yalnız kullanıcı Deskhand panelinden kaldırabilir": [
-  "guvenlik.py:2699"
+  "guvenlik.py:2817"
  ],
  "DUR: açık ({yol}); hiçbir girdi gönderilmez. {kaldirma}": [
   "cli.py:306"
@@ -1124,10 +1096,10 @@
   "mcp_sunucu.py:2896"
  ],
  "Deskhand paneli beklerken kapandı → red": [
-  "onay.py:64"
+  "onay.py:65"
  ],
  "Deskhand paneli kapalı, onay alınamadı": [
-  "onay.py:58"
+  "onay.py:59"
  ],
  "Deskhand paneli kapalı: kullanıcıya devredilemedi": [
   "mcp_sunucu.py:2895"
@@ -1209,9 +1181,12 @@
  "Durum kontrol ediliyor": [
   "gui/metinler.py:300"
  ],
+ "Düğme": [
+  "guvenlik.py:1502"
+ ],
  "Düğmeye tıkla: “{dugme}”": [
-  "guvenlik.py:1458",
-  "guvenlik.py:1790"
+  "guvenlik.py:1479",
+  "guvenlik.py:1905"
  ],
  "Düşünüyor…": [
   "gui/metinler.py:283"
@@ -1302,7 +1277,8 @@
   "gui/metinler.py:99",
   "gui/metinler.py:100",
   "gui/metinler.py:116",
-  "guvenlik.py:1616"
+  "guvenlik.py:1708",
+  "guvenlik.py:1729"
  ],
  "Fare ve klavye bileşeni": [
   "gui/saglik.py:32"
@@ -1518,29 +1494,29 @@
   "web.py:631"
  ],
  "HASSAS düğme ('{eslesen}' ← {yakin}): ödeme/yetki/hesap silme kullanıcının kararı ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1793"
+  "guvenlik.py:1908"
  ],
  "HASSAS pano okuma: panonun içeriği kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
   "cli.py:295"
  ],
  "HASSAS pano: {ne} kullanıcının panosunu ajanın görebileceği yere taşır; kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:2128"
+  "guvenlik.py:2246"
  ],
  "HASSAS sayfa ({eslesen} ← {baslik}): bu sayfada {eylem} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1731"
+  "guvenlik.py:1846"
  ],
  "HASSAS: kart bilgisi yazmak ({ne}) kullanıcının onayını ister ({neden}); bu onay yalnız panelden verilir": [
-  "guvenlik.py:2382"
+  "guvenlik.py:2500"
  ],
  "HASSAS: parola alanına {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:2399"
+  "guvenlik.py:2517"
  ],
  "Hassas düğme: “{dugme}”": [
-  "guvenlik.py:1724"
+  "guvenlik.py:1839"
  ],
  "Hassas sayfada {eylem}": [
-  "guvenlik.py:1459",
-  "guvenlik.py:1729"
+  "guvenlik.py:1480",
+  "guvenlik.py:1844"
  ],
  "Hata: {ozet}": [
   "gui/metinler.py:284"
@@ -1737,8 +1713,8 @@
   "gui/metinler.py:323"
  ],
  "Kart bilgisi yaz": [
-  "guvenlik.py:1460",
-  "guvenlik.py:2380"
+  "guvenlik.py:1481",
+  "guvenlik.py:2498"
  ],
  "Kaydedildi ✓": [
   "gui/metinler.py:167"
@@ -1770,12 +1746,18 @@
  "Klavye kısayoluyla DUR (KDE genel kısayolu)": [
   "gui/metinler.py:229"
  ],
+ "Komut": [
+  "guvenlik.py:1502"
+ ],
  "Komut başlat: {komut}": [
-  "guvenlik.py:1464",
-  "guvenlik.py:1870"
+  "guvenlik.py:1485",
+  "guvenlik.py:1987"
  ],
  "Komutlar (koordinatlar pencereye göre, piksel; <kimlik> yerine tek pencereye uyan ad da verilebilir;\n<kimlik> = \"ekran\" (masaüstü kipi): tüm ekran — panel, masaüstü, menüler, başlatıcı; okuma odağı çalmaz,\nklavye o an etkin pencereye gider ve ona kilitlenir, fare imlecin altındaki pencereyi denetler).\nParantezdeki Türkçe komut adları ve Türkçe seçenekler (--baslik, --bolge, --sure …) de çalışır:": [
   "cli.py:55"
+ ],
+ "Komutun tamamını görmek için kaydırın.": [
+  "gui/onay_diyalog.py:42"
  ],
  "Kontrol alınamadı: geçici dosya yazılamadı (disk dolu olabilir). Biraz sonra yeniden deneyin.": [
   "gui/sekmeler/arka_plan.py:32"
@@ -1885,8 +1867,8 @@
  "Ne oldu": [
   "gui/sekmeler/etkinlik.py:20"
  ],
- "Ne yapılacağı Ayrıntılar bölümünde; emin değilseniz reddedin.": [
-  "guvenlik.py:1504"
+ "Ne yapılacağı yukarıda yazıyor; emin değilseniz reddedin.": [
+  "guvenlik.py:1529"
  ],
  "Ne yapılmasını istediğinizi yazın.": [
   "gorev.py:424"
@@ -1910,13 +1892,13 @@
   "gui/metinler.py:276"
  ],
  "Onay isteği gösterildikten sonra değişti; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1036"
+  "onay.py:1059"
  ],
  "Onay isteği isteyenin yazdığı hâliyle aynı değil (dosya panel okumadan önce değişti ya da aynı istek için farklı bir karma geldi); istek reddedildi.": [
-  "onay.py:1041"
+  "onay.py:1064"
  ],
  "Onay isteğinin panelde gösterilen hâli bilinmiyor; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1044"
+  "onay.py:1067"
  ],
  "Onay kapsamı": [
   "doktor.py:149",
@@ -1977,7 +1959,7 @@
   "gui/metinler.py:312"
  ],
  "PID'i bilinmeyen uçbirim penceresi, ajanın uçbirimiyle aynı türde": [
-  "guvenlik.py:1967"
+  "guvenlik.py:2084"
  ],
  "Panel": [
   "doktor.py:111",
@@ -2001,28 +1983,28 @@
   "gui/metinler.py:306"
  ],
  "Panoda parola ya da özel bilgi olabilir; Claude bu metni görebilir.": [
-  "guvenlik.py:1498"
+  "guvenlik.py:1523"
  ],
  "Panoyu oku": [
   "cli.py:293",
-  "guvenlik.py:1466"
+  "guvenlik.py:1487"
  ],
  "Panoyu yapıştır": [
-  "guvenlik.py:1465",
-  "guvenlik.py:2125"
+  "guvenlik.py:1486",
+  "guvenlik.py:2242"
  ],
  "Parola alanına yaz": [
-  "guvenlik.py:1469",
-  "guvenlik.py:2396"
+  "guvenlik.py:1489",
+  "guvenlik.py:2514"
  ],
  "Parola hesabınıza erişim verir; yalnız siz istediyseniz izin verin.": [
-  "guvenlik.py:1501"
+  "guvenlik.py:1526"
  ],
  "Pencere": [
   "gui/metinler.py:58",
-  "gui/onay_diyalog.py:38",
+  "gui/onay_diyalog.py:41",
   "gui/sekmeler/etkinlik.py:20",
-  "guvenlik.py:1618"
+  "guvenlik.py:1731"
  ],
  "Pencere bulma bileşeni": [
   "gui/saglik.py:32"
@@ -2049,14 +2031,14 @@
   "gui/metinler.py:124"
  ],
  "Riskli tuş: {kombinasyon}": [
-  "guvenlik.py:1461",
-  "guvenlik.py:1815"
+  "guvenlik.py:1482",
+  "guvenlik.py:1931"
  ],
  "RİSKLİ KOMUT BAŞLATMA ({neden}): yıkıcı olabilecek komutu başlatmak kullanıcının onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1874"
+  "guvenlik.py:1991"
  ],
  "RİSKLİ TUŞ ({kombinasyon}): {neden}; kullanıcının onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1818"
+  "guvenlik.py:1935"
  ],
  "Saat": [
   "gui/sekmeler/etkinlik.py:20"
@@ -2065,7 +2047,7 @@
   "gui/metinler.py:79"
  ],
  "Sayfa başlığı ödeme/onay sayfası gibi: {eslesen}": [
-  "guvenlik.py:1720"
+  "guvenlik.py:1835"
  ],
  "Sayfa kaydırılıyor": [
   "gui/metinler.py:292"
@@ -2107,11 +2089,14 @@
   "gui/saglik.py:38"
  ],
  "Sistem istemine girdi: {ad}": [
-  "guvenlik.py:1467",
-  "guvenlik.py:2037"
+  "guvenlik.py:1488",
+  "guvenlik.py:2154"
  ],
  "Son etkinlik": [
   "gui/metinler.py:338"
+ ],
+ "Son kısım: {metin}": [
+  "gui/onay_diyalog.py:50"
  ],
  "Sonra": [
   "mesgul.py:48"
@@ -2135,10 +2120,10 @@
   "gui/metinler.py:60"
  ],
  "SİSTEM İSTEMİ ({ad} ← {baslik}): yetki/parola/izin istemine {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:2041"
+  "guvenlik.py:2158"
  ],
  "SİSTEM İSTEMİ: {baslik} ({ad}) bir yetki/parola/izin istemi; girdi kullanıcının onayını ister (bu eylem için onay alınmadı)": [
-  "guvenlik.py:2018"
+  "guvenlik.py:2135"
  ],
  "Sıfırla": [
   "gui/metinler.py:165"
@@ -2169,7 +2154,8 @@
   "gorev.py:611"
  ],
  "Tuş": [
-  "gui/metinler.py:230"
+  "gui/metinler.py:230",
+  "guvenlik.py:1502"
  ],
  "Tuşa basılıyor: {keys}": [
   "gui/metinler.py:291"
@@ -2182,6 +2168,9 @@
  ],
  "Türkçe ekran okuma": [
   "gui/saglik.py:35"
+ ],
+ "Türü doğrulanamayan bu istek geri alınamaz bir iş yapabilir; tanımıyorsanız reddedin.": [
+  "guvenlik.py:1530"
  ],
  "UYARI: '{duzen}' düzeninde olmayan karakterler değiştirildi: {liste}": [
   "eylem.py:88"
@@ -2212,10 +2201,11 @@
   "gui/metinler.py:164"
  ],
  "Uygulama": [
-  "gui/metinler.py:154"
+  "gui/metinler.py:154",
+  "guvenlik.py:1503"
  ],
  "Uygulama başlat: {ad}": [
-  "guvenlik.py:1470",
+  "guvenlik.py:1490",
   "uygulama.py:579"
  ],
  "Uygulama başına ayrıntılı izinler yakında burada olacak.": [
@@ -2237,21 +2227,21 @@
   "ucbirim.py:392"
  ],
  "UÇBİRİM KOMUTU ({neden} ← {baslik}): yıkıcı olabilecek komutu uçbirime yazmak kullanıcının onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": [
-  "guvenlik.py:1853"
+  "guvenlik.py:1970"
  ],
  "Uçbirimde komut çalıştır (Enter)": [
   "ucbirim.py:381"
  ],
  "Uçbirimde komut çalıştır: {satir}": [
-  "guvenlik.py:1463",
+  "guvenlik.py:1484",
   "ucbirim.py:379"
  ],
  "Uçbirimde komut çalıştırılacak (Enter).": [
   "ucbirim.py:369"
  ],
  "Uçbirime komut yaz: {komut}": [
-  "guvenlik.py:1462",
-  "guvenlik.py:1848"
+  "guvenlik.py:1483",
+  "guvenlik.py:1965"
  ],
  "Varsayılan kapalıdır. Açınca kısayol KDE'ye bu uygulama adına kaydedilir; kapatınca kaydı silinir. Çalışmazsa tepsi simgesindeki DUR yeterlidir.": [
   "gui/metinler.py:231"
@@ -2677,10 +2667,10 @@
   "eylem.py:1171"
  ],
  "beklenen koşul gerçekleşti (insan doğrulaması sayfadan kalktı)": [
-  "onay.py:69"
+  "onay.py:70"
  ],
  "bekleniyor: kullanıcı bilgisayarı kullanıyor…": [
-  "guvenlik.py:2418"
+  "guvenlik.py:2536"
  ],
  "bekleniyor: kullanıcı fareyi kullanıyor…": [
   "insan.py:283"
@@ -2884,7 +2874,7 @@
   "mcp_sunucu.py:924"
  ],
  "bu eylem için zaten onaylandı": [
-  "guvenlik.py:1433"
+  "guvenlik.py:1435"
  ],
  "bu kimlik arka plan masaüstüne ait değil: {kimlik} (kimlikler '{onek}{{…}}')": [
   "arka_uc/kwin.py:153"
@@ -3789,7 +3779,7 @@
   "gui/metinler.py:105"
  ],
  "gözetimsiz çalışmada hassas eylem yapılmaz": [
-  "onay.py:67"
+  "onay.py:68"
  ],
  "gözetimsiz çalışmada insana devredilemez": [
   "mcp_sunucu.py:2897"
@@ -3914,7 +3904,7 @@
   "gui/metinler.py:336"
  ],
  "isteyen vazgeçti (çağrı iptal edildi) → red": [
-  "onay.py:70"
+  "onay.py:71"
  ],
  "isteğe bağlı: yalnız listen aracı için": [
   "doktor.py:481"
@@ -4027,10 +4017,10 @@
   "kwin_oturum.py:658"
  ],
  "kart bilgisi alanı, {n} karakter": [
-  "guvenlik.py:2379"
+  "guvenlik.py:2497"
  ],
  "kart numarası: **** {son4}": [
-  "guvenlik.py:2378"
+  "guvenlik.py:2496"
  ],
  "kart: yalnız kartla ödeme (para düğmesi/ödeme sayfası, kart bilgisi yazma) onay ister; diğer onaylar kapalı": [
   "doktor.py:150"
@@ -4116,7 +4106,7 @@
  ],
  "komut: {komut}": [
   "akis.py:181",
-  "guvenlik.py:1871"
+  "guvenlik.py:1988"
  ],
  "konum girdisinin değeri yazılan yolla aynı değil (okunan: {okunan}); Enter'a basılmadı, dosya seçilmedi. Diyaloğu `tree` ile denetleyip yeniden deneyin": [
   "dosya_sec.py:103"
@@ -4173,7 +4163,7 @@
   "hata.py:102"
  ],
  "kullanıcı DUR dedi → red": [
-  "onay.py:65"
+  "onay.py:66"
  ],
  "kullanıcı DUR dedi; kullanıcı devam diyene dek hiçbir girdi gönderme": [
   "mcp_sunucu.py:143"
@@ -4188,7 +4178,7 @@
   "mcp_sunucu.py:142"
  ],
  "kullanıcı bir kez izin verdi": [
-  "onay.py:60"
+  "onay.py:61"
  ],
  "kullanıcı bu hassas tıklamayı AÇIKÇA onayladı": [
   "cli.py:483",
@@ -4234,7 +4224,7 @@
   "mcp_sunucu.py:145"
  ],
  "kullanıcı reddetti": [
-  "onay.py:61"
+  "onay.py:62"
  ],
  "kullanıcı sanal masaüstünü devraldı (Devral)": [
   "arka_uc/kwin.py:793",
@@ -4265,7 +4255,7 @@
   "arka_uc/kde.py:386"
  ],
  "kullanıcı {sn} sn boyunca bilgisayarı kullandı (insan önceliği); {ne} yapılmadı": [
-  "guvenlik.py:2421"
+  "guvenlik.py:2539"
  ],
  "kullanıcı {sn} sn boyunca fareyi kullandı (insan önceliği); girdi gönderilmedi": [
   "insan.py:294"
@@ -4451,22 +4441,25 @@
   "mcp_sunucu.py:677"
  ],
  "onay gerekçesi: {eylem} — {neden}": [
-  "guvenlik.py:1442"
+  "guvenlik.py:1447"
  ],
  "onay iletişim kutusu": [
-  "onay.py:781"
+  "onay.py:797"
  ],
  "onay isteği başarısız ({hata})": [
   "mcp_sunucu.py:701"
  ],
  "onay isteği beklerken silindi → red": [
-  "onay.py:71"
+  "onay.py:72"
  ],
  "onay isteği yazılamadı → red": [
-  "onay.py:66"
+  "onay.py:67"
+ ],
+ "onay isteği çok uzun, onaylanamaz → red": [
+  "onay.py:73"
  ],
  "onay kanalı doğrulanamadı (yanıtın Deskhand panelinden geldiği kanıtlanamadı) → red": [
-  "onay.py:68"
+  "onay.py:69"
  ],
  "onay kapsamı": [
   "liste_koruma.py:92"
@@ -4477,7 +4470,7 @@
   "mcp_sunucu.py:2993"
  ],
  "onay modülü yüklenemedi: {hata}": [
-  "guvenlik.py:1437"
+  "guvenlik.py:1439"
  ],
  "onay sorusu: {karar}": [
   "gui/insan_metni.py:79"
@@ -4486,7 +4479,7 @@
   "gui/insan_metni.py:78"
  ],
  "onay süresi doldu (yanıt yok → red)": [
-  "onay.py:62"
+  "onay.py:63"
  ],
  "onay verilen hedef değişti: noktadaki yazı artık {simdi} (onaylanan: {onaylanan}); tıklanmadı": [
   "eylem.py:794"
@@ -4519,7 +4512,7 @@
   "gui/insan_metni.py:29"
  ],
  "orta tıkla seçimi yapıştırma": [
-  "guvenlik.py:2124"
+  "guvenlik.py:2241"
  ],
  "oturum dizini yolu çok uzun (soket yolu 108 bayt sınırı)": [
   "ses.py:556"
@@ -4627,10 +4620,10 @@
   "gui/metinler.py:104"
  ],
  "panel kaydı eski ({alanlar} uymuyor): panel en çok {sn} sn içinde kendiliğinden tazeler, düzelmezse paneli yeniden başlatın": [
-  "onay.py:360"
+  "onay.py:374"
  ],
  "panel kaydı eski: panel çalışırken Python/kurulum güncellenmiş (exe: {exe}); panel kaydını en çok {sn} sn içinde kendiliğinden tazeler, düzelmezse paneli yeniden başlatın": [
-  "onay.py:357"
+  "onay.py:371"
  ],
  "panel soketi açılamadı ({dizin})": [
   "gui/__main__.py:42"
@@ -4684,13 +4677,13 @@
   "api.py:566",
   "arka_uc/kde.py:795",
   "cli.py:280",
-  "guvenlik.py:2361"
+  "guvenlik.py:2479"
  ],
  "pano: {islem}": [
   "mcp_sunucu.py:2131"
  ],
  "panodan yapıştırma": [
-  "guvenlik.py:2124"
+  "guvenlik.py:2241"
  ],
  "panoya yazı kondu": [
   "gui/insan_metni.py:64"
@@ -4849,7 +4842,7 @@
   "cli.py:185"
  ],
  "pencerenin sahibi süreç ({pid}) bu ajanı çalıştıran süreç zincirinde": [
-  "guvenlik.py:1965"
+  "guvenlik.py:2082"
  ],
  "pencerenin süreç kimliği (PID) bilinmiyor: erişilebilirlik çerçevesi güvenle eşlenemez ({baslik})": [
   "erisim.py:277"
@@ -5318,7 +5311,7 @@
  "tuş: {kombinasyon}": [
   "eylem.py:904",
   "eylem.py:961",
-  "guvenlik.py:1816",
+  "guvenlik.py:1932",
   "mcp_sunucu.py:2189"
  ],
  "tuşlara basıldı {gizli}": [
@@ -5402,7 +5395,7 @@
   "arka_uc/kde.py:1011"
  ],
  "uygulama başlatma": [
-  "guvenlik.py:1871"
+  "guvenlik.py:1988"
  ],
  "uygulama durumları": [
   "oturum/cli.py:70"
@@ -5426,10 +5419,10 @@
   "gui/insan_metni.py:73"
  ],
  "uçbirim çoklayıcısı (tmux/screen/zellij) çözülemedi: tüm uçbirim pencereleri korunur": [
-  "guvenlik.py:1966"
+  "guvenlik.py:2083"
  ],
  "uçbirim: {sinif}": [
-  "guvenlik.py:1844",
+  "guvenlik.py:1961",
   "ucbirim.py:375"
  ],
  "value gerekli (stable dışındaki koşullar)": [
@@ -5566,7 +5559,7 @@
  ],
  "yazılacak: {metin}": [
   "eylem.py:309",
-  "guvenlik.py:1845"
+  "guvenlik.py:1962"
  ],
  "yazılamayan karakter {karakter} (U+{kod}): '{duzen}' düzeninde yok, yedeği yok; hiçbir şey yazılmadı": [
   "eylem.py:83"
@@ -5744,13 +5737,16 @@
   "liste_koruma.py:1049"
  ],
  "{dugme} (fareyi oynatın)": [
-  "gui/onay_diyalog.py:42"
+  "gui/onay_diyalog.py:48"
  ],
  "{dugme} ({sn} sn…)": [
-  "gui/onay_diyalog.py:41"
+  "gui/onay_diyalog.py:47"
  ],
  "{dugme} ({sure})": [
-  "gui/onay_diyalog.py:40"
+  "gui/onay_diyalog.py:46"
+ ],
+ "{dugme} (önce sona kaydırın)": [
+  "gui/onay_diyalog.py:49"
  ],
  "{durum}: kullanıcı bölünmedi, sorulmadı (tam_ekranda_sor=false)": [
   "mesgul.py:568"
@@ -6038,7 +6034,7 @@
   "uygulama.py:1284"
  ],
  "{x},{y} noktasındaki yazı: {yazi}": [
-  "guvenlik.py:1661"
+  "guvenlik.py:1776"
  ],
  "{yol} (0700)": [
   "doktor.py:407"
@@ -6092,7 +6088,7 @@
   "cli.py:154"
  ],
  "Ödeme/yetki/hesap silme gibi hassas bir düğme": [
-  "guvenlik.py:1788"
+  "guvenlik.py:1903"
  ],
  "Önce görevi yazın: kutuya ne yapılmasını istediğinizi yazıp yeniden Başlat'a basın.": [
   "gui/gorev.py:30"
@@ -6345,14 +6341,20 @@
   "web.py:670"
  ],
  "İstek onaylanmadı ({neden}).": [
-  "guvenlik.py:2647"
+  "guvenlik.py:2765"
+ ],
+ "İstem": [
+  "guvenlik.py:1503"
+ ],
+ "İsteyen": [
+  "gui/onay_diyalog.py:44"
  ],
  "İsteyen süreç": [
   "gui/metinler.py:120",
-  "guvenlik.py:1622"
+  "guvenlik.py:1735"
  ],
  "İsteyenin yazdığı isteğin karması onay kanalından gelmedi; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1038"
+  "onay.py:1061"
  ],
  "İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.": [
   "gui/metinler.py:125"
@@ -6360,11 +6362,17 @@
  "İzinler": [
   "gui/metinler.py:175"
  ],
+ "İşlem": [
+  "guvenlik.py:1503"
+ ],
  "—": [
   "gui/metinler.py:347"
  ],
  "‘{hedef}’ tıklanıyor": [
   "gui/metinler.py:288"
+ ],
+ "… (kısaltıldı: {n} karakter daha; komutun tamamı yukarıda)": [
+  "onay.py:75"
  ],
  "⚠ {bolum} kaydedilemedi. {hata} Kayıtlı değer geri yüklendi.": [
   "gui/metinler.py:168"
