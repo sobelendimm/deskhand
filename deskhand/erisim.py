@@ -409,7 +409,7 @@ def cerceve_geometri_denetle(geo, ekran, pencere, kardes, baslik="", olcek=1) ->
             if r != 1:
                 ekran = tuple(round(v / r) for v in ekran) if ekran else None
                 pencere = tuple(round(v / r) for v in pencere) if pencere else None
-            ok = konum_coz(geo, ekran, pencere) is not None
+            ok = konum_coz(geo, ekran, pencere) is not None or _dekorlu_sarar(geo, ekran, pencere)
     except (TypeError, ValueError):
         ok = False
     if not ok:
@@ -417,6 +417,23 @@ def cerceve_geometri_denetle(geo, ekran, pencere, kardes, baslik="", olcek=1) ->
                        "konumu pencerenin ({baslik}) konumuyla eşleşmiyor ya da okunamadı (başlıklar değişiyor "
                        "olabilir); başka pencerenin sayfası okunmasın diye durduruldu, kısa süre sonra yeniden dene"
                        ).format(baslik=baslik_goster(baslik)), tur=SAYFA_BELIRSIZ)
+
+
+def _dekorlu_sarar(geo, ekran, pencere) -> bool:
+    """X11/XWayland GTK penceresi (ör. Firefox'un GTK dosya seçicisi; kardeşi tarayıcının ana penceresi): AT-SPI çerçevesi
+    pencere yöneticisinin dekorasyonunu (başlık çubuğu + kenarlık) da kapsar, geo yalnız istemci alanıdır (web.konum_coz
+    bu durumu tanımaz). Eşleşme ancak İKİ ölçüm birbirini doğrularsa: SCREEN sınırı geo'yu sol = sağ payla (≤ 16 px), üst
+    pay ≤ 64 px ve alt pay ≤ 16 px ile sarar VE WINDOW sınırı tam ters köken (-sol, -üst) ile aynı boyuttadır. Biri
+    okunamazsa eşleşme yok (bilinmiyor = güvensiz; Dur 6)."""
+    if not (ekran and pencere and len(ekran) == 4 and len(pencere) == 4):
+        return False
+    from .web import KONUM_TOLERANS as t
+    X, Y, W, H = geo
+    sx, sy, sw, sh = ekran
+    sol, ust, alt = X - sx, Y - sy, (sy + sh) - (Y + H)
+    return (0 <= sol <= 16 and 0 <= ust <= 64 and -t <= alt <= 16 and abs((sw - W) - 2 * sol) <= t
+            and abs(pencere[0] + sol) <= t and abs(pencere[1] + ust) <= t
+            and abs(pencere[2] - sw) <= t and abs(pencere[3] - sh) <= t)
 
 
 def _cerceve_kutusu(cerceve, tur):

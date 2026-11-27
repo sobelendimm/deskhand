@@ -52,6 +52,21 @@ kontrol("pencere-yerel sınır (Wayland: 0,0 + boyut) hedefle tutarlı → geçe
 kontrol("ölçek 2: XWayland fiziksel piksel (2×) hedefle tutarlı → geçer",
         sonuc(lambda: den(A_GEO, (0, 0, 2560, 1600), (0, 0, 2560, 1600), ["X"], olcek=2)) is None)
 
+# X11/XWayland GTK diyaloğu (ölçülen: Firefox GTK dosya seçicisi, KWin dekorlu): çerçeve dekorasyonu da kapsar
+DEK_GEO = (345, 107, 1231, 902)
+kontrol("dekorlu çerçeve (SCREEN istemci alanını sarar + WINDOW ters köken) hedefle tutarlı → geçer",
+        sonuc(lambda: den(DEK_GEO, (344, 89, 1233, 925), (-1, -18, 1233, 925), ["X"])) is None)
+kontrol("dekorlu çerçeve ama WINDOW sınırı okunamadı → Dur 6",
+        sonuc(lambda: den(DEK_GEO, (344, 89, 1233, 925), None, ["X"])) == f"DUR 6 {erisim.SAYFA_BELIRSIZ}")
+kontrol("dekorlu çerçeve ama WINDOW kökeni SCREEN payıyla çelişiyor → Dur 6",
+        sonuc(lambda: den(DEK_GEO, (344, 89, 1233, 925), (0, 0, 1233, 925), ["X"])) == f"DUR 6 {erisim.SAYFA_BELIRSIZ}")
+kontrol("sarar ama sol/sağ payı eşit değil (başka pencere) → Dur 6",
+        sonuc(lambda: den(DEK_GEO, (330, 89, 1248, 925), (-15, -18, 1248, 925), ["X"])) == f"DUR 6 {erisim.SAYFA_BELIRSIZ}")
+kontrol("kardeşin (B) dekorlu çerçevesi hedefe (A) karşı → Dur 6",
+        sonuc(lambda: den(A_GEO, (199, 102, 642, 543), (-1, -18, 642, 543), ["X"])) == f"DUR 6 {erisim.SAYFA_BELIRSIZ}")
+kontrol("hedefi saran ama üst payı başlık çubuğundan büyük (çok daha büyük pencere) → Dur 6",
+        sonuc(lambda: den(DEK_GEO, (344, 0, 1233, 1014), (-1, -107, 1233, 1014), ["X"])) == f"DUR 6 {erisim.SAYFA_BELIRSIZ}")
+
 print("== erisim yolu (AT-SPI yardımcısı): poc_takas senaryoları")
 
 
