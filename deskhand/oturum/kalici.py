@@ -200,11 +200,12 @@ def _ret_disi(pol, konak: str, bilinen=()) -> bool:
 
 
 def ayar_siteleri() -> set[str]:
-    """The `[oturum] kalici` setting as a set of domain names (invalid entries, `*`, bare public suffixes dropped)."""
-    from .. import ayarlar, gorev_kipi
+    """The persistent-session sites the user approved in the panel (liste_koruma.kalici_siteleri: panel-authoritative,
+    the settings file alone does not count; panel closed → empty, nothing is saved or applied)."""
+    from .. import liste_koruma
     try:
-        return set(gorev_kipi.site_ayristir(str(ayarlar.al("oturum", "kalici") or "")))
-    except Exception:  # noqa: BLE001 - unreadable setting: nothing is persistent
+        return set(liste_koruma.kalici_siteleri())
+    except Exception:  # noqa: BLE001 - not verifiable: nothing is persistent
         return set()
 
 
@@ -269,7 +270,7 @@ def _sn(deger, ms: bool) -> float | None:
     return v / 1000 if ms else v
 
 
-def _kopya_cerezleri(kopya: Path) -> tuple[list[dict], set[str]] | None:
+def _kopya_cerezleri(kopya: Path, kullanim: float | None = None) -> tuple[list[dict], set[str]] | None:
     """Cookies of the copy (cookies.sqlite read from a consistent temporary 0700 copy, plus the copy's own
     sessionstore recovery file when Firefox wrote one) and the hosts known in the copy. None = unreadable.
     `expiry` is None for a session-only cookie."""
@@ -304,7 +305,7 @@ def _kopya_cerezleri(kopya: Path) -> tuple[list[dict], set[str]] | None:
     except (sqlite3.Error, OSError, ValueError, OverflowError):
         return None
     rec = firefox._recovery_oku(str(kopya / "sessionstore-backups" / "recovery.jsonlz4"))
-    mikro = int(time.time() * 1e6)
+    mikro = int((kullanim if kullanim is not None else time.time()) * 1e6)  # session cookies: last use of the copy
     for c in rec.get("cookies") or ():
         if not isinstance(c, dict):
             continue
@@ -340,6 +341,99 @@ def _gecerli_cerez(c) -> bool:
 
 def _anahtar_demeti(c: dict) -> tuple:
     return (c["name"], c["host"], c["path"], c["originAttributes"])
+
+
+def _anahtar_metni(anahtar: tuple) -> str:
+    return json.dumps(list(anahtar), ensure_ascii=False)
+
+
+def _oz(deger) -> str:
+    """Digest of a cookie value (kept only inside the encrypted record or the copy itself; never printed)."""
+    import hashlib
+    return hashlib.sha256(str(deger).encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _tamsayi(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _ayni(a: dict, b: dict) -> bool:
+    """Same cookies (key, value, expiry) in two {key: cookie} maps."""
+    return a.keys() == b.keys() and all(a[k]["value"] == b[k]["value"] and a[k]["expiry"] == b[k]["expiry"] for k in a)
+
+
+def _canli_silinenler(kayit: dict | None, simdi: float) -> dict:
+    """Live tombstones of a record: {key text: {oz, bitis}} for cookies logged out in some copy; one lives as long as
+    the dropped cookie would have (after that a stale copy's cookie is expired as well)."""
+    sonuc = {}
+    for km, t in ((kayit or {}).get("silinen") or {}).items():
+        if isinstance(km, str) and isinstance(t, dict) and isinstance(t.get("oz"), str) and _sayi(t.get("bitis")) \
+                and float(t["bitis"]) > simdi:
+            sonuc[km] = {"oz": t["oz"], "bitis": float(t["bitis"])}
+    return sonuc
+
+
+def _bolum_sitesi(oa: str):
+    """Top-level site of a partitioned cookie (originAttributes `^…partitionKey=%28https%2Cexample.com%29`): the
+    site, None when not partitioned, "" when the key is malformed."""
+    from urllib.parse import unquote
+    if not oa or not oa.startswith("^"):
+        return None
+    for parca in oa[1:].split("&"):
+        ad, _e, deger = parca.partition("=")
+        if ad != "partitionKey":
+            continue
+        m = re.fullmatch(r"\((?:https?|[a-z][a-z0-9+.-]*),([^,()]+)(?:,\d+)?(?:,.*)?\)", unquote(deger.replace("+", " ")))
+        return _konak(m.group(1)).lstrip(".") if m else ""
+    return None
+
+
+_KOPYA_ISARETI = ".deskhand-kalici.json"  # in the copy: the stored versions it received (key text → value digest)
+
+
+def _kopya_isareti_oku(kopya: Path) -> dict:
+    try:
+        fd = os.open(kopya / _KOPYA_ISARETI, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as f:
+            d = json.loads(f.read(_DOSYA_AZAMI).decode("utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(d, dict):
+        return {}
+    return {s: {k: v for k, v in m.items() if isinstance(k, str) and isinstance(v, str)}
+            for s, m in d.items() if isinstance(s, str) and isinstance(m, dict)}
+
+
+def _kopya_isareti_yaz(kopya: Path, d: dict) -> None:
+    try:
+        fd, gecici = tempfile.mkstemp(prefix=".kalici-", suffix=".tmp", dir=str(kopya))
+    except OSError:
+        return
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            os.fchmod(f.fileno(), 0o600)
+            json.dump(d, f)
+        os.replace(gecici, kopya / _KOPYA_ISARETI)
+    except OSError:
+        try:
+            os.unlink(gecici)
+        except OSError:
+            pass
+
+
+def _son_kullanim(kopya: Path, simdi: float) -> float:
+    """When the copy was last used: the newest mtime of its cookie / session files (never later than now)."""
+    zamanlar = []
+    for ad in ("cookies.sqlite", "cookies.sqlite-wal", "sessionstore-backups/recovery.jsonlz4",
+               "sessionstore-backups/recovery.baklz4", "sessionstore.jsonlz4"):
+        try:
+            zamanlar.append(os.lstat(kopya / ad).st_mtime)
+        except OSError:
+            pass
+    return min(simdi, max(zamanlar)) if zamanlar else simdi
 
 
 def _guvenli_sil(yol: str) -> None:
@@ -567,7 +661,8 @@ class Depo:
         siteler = _siteler(siteler)
         if not siteler or gorev_kipi.etkin() or _gorev_kopyasi(kopya):
             return 0
-        okunan = _kopya_cerezleri(kopya)
+        kullanim = _son_kullanim(kopya, time.time())  # before reading: reading must not count as a use
+        okunan = _kopya_cerezleri(kopya, kullanim)
         if okunan is None:
             return 0
         k = _anahtar(True)
@@ -576,39 +671,82 @@ class Depo:
         cerezler, bilinen = okunan
         pol = politika or _politika()
         simdi = time.time()
-        oturumluk_bitis = simdi + sure_gun() * 86400
+        # a session-only cookie's deadline counts from the copy's last use (a dead copy may be swept days later)
+        oturumluk_bitis = kullanim + sure_gun() * 86400
+        alinan_hepsi = _kopya_isareti_oku(kopya)
         toplam = 0
         for site in siteler:
             if not self.kabul(pol, site, ()):
                 self.sil(site)
                 continue
-            onceki = self._oku(site, k) or {}
-            onceki_oturumluk = {_anahtar_demeti(c): float(c["expiry"]) for c in onceki.get("cerezler", ())
-                                if _gecerli_cerez(c) and c.get("oturumluk")}
-            secilen = {}
+            onceki = self._oku(site, k)
+            P = {_anahtar_demeti(c): c for c in (onceki or {}).get("cerezler", ())
+                 if _gecerli_cerez(c) and float(c["expiry"]) > simdi}
+            T0 = _canli_silinenler(onceki, simdi)
+            Tm = dict(T0)
+            alinan = alinan_hepsi.get(site) or {}
+            C = {}
             for c in cerezler:
                 if not _site_konagi(c["host"], site) or not self.kabul(pol, c["host"], bilinen):
                     continue
                 if c["originAttributes"] and not c["originAttributes"].startswith("^"):
                     continue
+                if not self._bolum_kabul(pol, c["originAttributes"]):
+                    continue
                 anahtar = _anahtar_demeti(c)
                 bitis = c["expiry"]
-                eski = onceki_oturumluk.get(anahtar)
-                if bitis is None:  # session-only: the first deadline is kept, otherwise save + N days
+                p = P.get(anahtar)
+                eski = float(p["expiry"]) if p is not None and p.get("oturumluk") else None
+                if bitis is None:  # session-only: the first deadline is kept, otherwise last use + N days
                     bitis, oturumluk = (eski if eski is not None else oturumluk_bitis), True
                 elif eski is not None and abs(bitis - eski) <= _ESIT_PAYI:
                     oturumluk = True  # a stored session-only cookie that came back through cookies.sqlite
                 else:
                     oturumluk = False
-                if bitis <= simdi or not _sayi(bitis):
+                if not _sayi(bitis) or bitis <= simdi:
                     continue
-                secilen[anahtar] = {**c, "expiry": bitis, "oturumluk": oturumluk}
-            if not secilen:
-                self.sil(site)  # logged out / nothing left: the old record must not bring the session back
+                C[anahtar] = {**c, "expiry": bitis, "oturumluk": oturumluk}
+            # merge per cookie (security review items 1, 2): the newer use wins; a cookie this copy received from
+            # the store and then dropped is a logout → tombstone (its value digest), which a stale copy cannot undo;
+            # a cookie this copy never received (apply failed, record changed meanwhile, site not visited) stays
+            sonuc = {}
+            for anahtar, c in C.items():
+                km, oz = _anahtar_metni(anahtar), _oz(c["value"])
+                t = Tm.get(km)
+                if t is not None and t["oz"] == oz:
+                    continue  # the session that was logged out in another copy
+                p = P.get(anahtar)
+                if p is not None and p["value"] != c["value"] and \
+                        _tamsayi(p.get("lastAccessed")) > _tamsayi(c.get("lastAccessed")):
+                    sonuc[anahtar] = p
+                else:
+                    sonuc[anahtar] = c
+                    Tm.pop(km, None)
+            for anahtar, p in P.items():
+                if anahtar in sonuc:
+                    continue
+                km, oz = _anahtar_metni(anahtar), _oz(p["value"])
+                if anahtar not in C and alinan.get(km) == oz:
+                    Tm[km] = {"oz": oz, "bitis": float(p["expiry"])}  # received exactly this and dropped it
+                else:
+                    sonuc[anahtar] = p
+            if not sonuc and not Tm:
+                self.sil(site)
                 continue
-            if self._yaz(site, {"surum": SURUM, "site": site, "kayit": simdi, "cerezler": list(secilen.values())}, k):
-                toplam += len(secilen)
+            if onceki is not None and Tm == T0 and _ayni(sonuc, P):
+                continue  # nothing changed: the record (and its save time) stays as it is
+            if self._yaz(site, {"surum": SURUM, "site": site, "kayit": simdi, "cerezler": list(sonuc.values()),
+                                "silinen": Tm}, k):
+                toplam += len(sonuc)
         return toplam
+
+    def _bolum_kabul(self, pol, oa: str) -> bool:
+        """A partitioned cookie (originAttributes partitionKey) is accepted only when its top-level site passes the
+        same rule (a bank page embedding the site must not leave a session here); a malformed key is refused."""
+        s = _bolum_sitesi(oa)
+        if s is None:
+            return True
+        return bool(s) and self.kabul(pol, s, ())
 
     def uygula(self, kopya, siteler, politika=None, gorev_siteleri=None, bilinen_konaklar=()) -> int:
         """Put the stored cookies of the listed sites into the copy's cookies.sqlite (not in task mode). Expired
@@ -631,6 +769,7 @@ class Depo:
         pol = politika or _politika()
         simdi = time.time()
         yazilan = 0
+        alinan: dict[str, dict[str, str]] = {}
         con = sqlite3.connect(str(db))
         try:
             sutunlar = {r[1] for r in con.execute("PRAGMA table_info(moz_cookies)")}
@@ -647,7 +786,8 @@ class Depo:
                     continue
                 canli = self._canli_cerezler(kayit, simdi)
                 if not canli:
-                    self.sil(site)
+                    if not _canli_silinenler(kayit, simdi) or float(kayit["kayit"]) > simdi + _GELECEK_PAYI:
+                        self.sil(site)  # dead (a record that only keeps live tombstones stays)
                     continue
                 kayit_bilinen = bilinen | {_konak(c["host"]).lstrip(".") for c in canli}
                 for c in canli:
@@ -655,15 +795,22 @@ class Depo:
                     alan = _konak(host).lstrip(".")
                     if not _site_konagi(host, site) or not self.kabul(pol, host, kayit_bilinen):
                         continue
-                    if not pol.site_izinli(alan, gorev_siteleri):
+                    if not self._bolum_kabul(pol, c["originAttributes"]) or not pol.site_izinli(alan, gorev_siteleri):
                         continue
-                    yazilan += self._satir_yaz(con, c, sutunlar, carpan, simdi)
+                    if self._satir_yaz(con, c, sutunlar, carpan, simdi):
+                        yazilan += 1
+                        alinan.setdefault(site, {})[_anahtar_metni(_anahtar_demeti(c))] = _oz(c["value"])
             con.commit()
         except (sqlite3.Error, OverflowError):
             con.rollback()
-            yazilan = 0
+            yazilan, alinan = 0, {}
         finally:
             con.close()
+        if alinan:  # which versions this copy received: its close may then tell a logout from "never had it"
+            onceki_isaret = _kopya_isareti_oku(kopya)
+            for s, m in alinan.items():
+                onceki_isaret.setdefault(s, {}).update(m)
+            _kopya_isareti_yaz(kopya, onceki_isaret)
         return yazilan
 
     @staticmethod
@@ -723,7 +870,7 @@ class Depo:
         d["kayit"] = zaman
         bilinen = {_konak(c.get("host")).lstrip(".") for c in kayit["cerezler"] if isinstance(c, dict)}
         for c in kayit["cerezler"]:
-            if not _gecerli_cerez(c) or not _site_konagi(c["host"], s) or not self.kabul(pol, c["host"], bilinen):
+            if not _gecerli_cerez(c) or not _site_konagi(c["host"], s) or not self.kabul(pol, c["host"], bilinen) or not self._bolum_kabul(pol, c["originAttributes"]):
                 continue
             h = _konak(c["host"])
             dh = h.lstrip(".")

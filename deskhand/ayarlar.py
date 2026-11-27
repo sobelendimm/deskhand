@@ -178,6 +178,14 @@ def oku() -> dict:
             if anahtar not in VARSAYILAN[bolum]:
                 _uyar(_("bilinmeyen ayar yok sayıldı: {ayar}").format(ayar=f"{bolum}.{anahtar}"))
                 continue
+            if (bolum, anahtar) == ("oturum", "kalici") and isinstance(deger, str):
+                # one invalid entry must not empty the whole list (security review item 8): keep the valid ones
+                from .gorev_kipi import site_ayristir_ayrintili
+                siteler, ret = site_ayristir_ayrintili(deger)
+                if ret:
+                    _uyar(f"{bolum}.{anahtar}: " + "; ".join(ret))
+                sonuc[bolum][anahtar] = ",".join(siteler)
+                continue
             try:
                 sonuc[bolum][anahtar] = dogrula(bolum, anahtar, deger)
             except ValueError as e:

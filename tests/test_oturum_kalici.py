@@ -24,7 +24,7 @@ from pathlib import Path
 
 import _yalitim  # noqa: F401  (DESKHAND_* geçici; Deskhand'den ÖNCE)
 
-from deskhand import ayarlar, gorev_kipi, yollar
+from deskhand import ayarlar, gorev_kipi, liste_koruma, yollar
 from deskhand.oturum import firefox, kopya, kopya_bekcisi, politika
 
 try:
@@ -218,6 +218,20 @@ def ayar_yaz(metin, sure=None):
         f.write(f'[oturum]\nkalici = "{metin}"\n' + (f"kalici_sure_gun = {sure}\n" if sure else ""))
 
 
+def panel_ac():
+    """This process acts as the panel (liste_koruma) and the user approves the sites written in the file."""
+    try:
+        liste_koruma.panel_durdur()
+        return liste_koruma.panel_baslat(onayla=lambda siteler: True)
+    except TypeError:  # before the list was panel-authoritative (b72755f, 37d25b7): the file was read directly
+        return None
+
+
+def panel_tazele():
+    if liste_koruma.AKTIF is not None:
+        liste_koruma.AKTIF.denetle()
+
+
 def yeni_kopya():
     b = firefox.hazirla(politika.coz("firefox"))
     if b.get("durum") or not b.get("kopya_yolu"):
@@ -272,6 +286,7 @@ def main():
         pdir = sahte_profil(fx_kok)
         izler = {y: sha1(y) for y in (os.path.join(fx_kok, "profiles.ini"), os.path.join(pdir, "cookies.sqlite"))}
         ayar_yaz(f"dukkan.test, ornekbank.test, {ACE_BANKA}, isbank.com.tr, panel.test")
+        panel_ac()  # the list is panel-authoritative: this process is the panel, the user approves the file's sites
 
         # ---- a background session: the agent logs in inside the copy, then the browser exits
         k1 = yeni_kopya()
@@ -595,6 +610,7 @@ def main():
 
         def sure_ayari():
             ayar_yaz("panel.test", sure=7)
+            panel_tazele()
             k = yeni_kopya()
             mozlz4_yaz(os.path.join(k, "sessionstore-backups", "recovery.jsonlz4"), {"cookies": [
                 {"host": "panel.test", "name": "PHPSESSID", "value": "YEDI", "path": "/", "originAttributes": {}}]})
@@ -610,6 +626,7 @@ def main():
         dene("1h: gerçek profil dosyaları (profiles.ini, cookies.sqlite) sha1 aynı",
              lambda: all(sha1(y) == s for y, s in izler.items()))
     finally:
+        sessiz(liste_koruma.panel_durdur)
         if eski_home:
             os.environ["HOME"] = eski_home
         if eski_xdg is not None:

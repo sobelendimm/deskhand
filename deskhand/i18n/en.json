@@ -1700,5 +1700,11 @@
  "{site}: banka/ödeme/devlet/kimlik alanı, alınmaz": "{site}: bank/payment/government/identity domain, never kept",
  "{site}: kayıt yok": "{site}: no record",
  "{site}: okunamadı": "{site}: unreadable",
- "{site}: {gun} gün önce kaydedildi, son kullanma {bitis}": "{site}: saved {gun} days ago, expires {bitis}"
+ "{site}: {gun} gün önce kaydedildi, son kullanma {bitis}": "{site}: saved {gun} days ago, expires {bitis}",
+ "(ayar dosyasında geçersiz girdi atlandı: {girdiler})": "(invalid entry skipped in the settings file: {girdiler})",
+ "(ayar dosyasında var ama panelde onaylı değil, kullanılmıyor: {siteler})": "(in the settings file but not approved in the panel, not used: {siteler})",
+ "Görünmez masaüstündeki tarayıcının şu sitelerdeki oturumu kalıcı saklansın mı (şifreli, KDE Cüzdanı anahtarıyla; banka/ödeme siteleri hiçbir zaman)?\n\n{siteler}\n\nBu isteği siz yapmadıysanız Hayır deyin.": "Keep the invisible desktop browser's session on these sites persistently (encrypted, with a KDE Wallet key; never bank/payment sites)?\n\n{siteler}\n\nIf you did not ask for this, answer No.",
+ "Kalıcı oturum listesinden ayar dosyasında site çıkarıldı; kabul edildi.": "A site was removed from the persistent session list in the settings file; accepted.",
+ "Kalıcı oturum listesine panel dışında site eklenmek istendi ({siteler}); onaylanmadı, panelin listesi korundu ve dosya geri yazıldı.": "A site was added to the persistent session list outside the panel ({siteler}); not approved, the panel's list was kept and the file rewritten.",
+ "Kalıcı oturum sitesi ({siteler}) panel dışında eklenmiş ve onaylanmadı; kullanılmıyor.": "Persistent session site ({siteler}) was added outside the panel and not approved; not used."
 }

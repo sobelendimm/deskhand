@@ -210,7 +210,10 @@ def denetle(alan: str, desenler=None, kopya_yolu: str | None = None, simdi: floa
              "kopya_zaman": None, "cerezler": [], "kod": 1, "neden": ""}
     profil = tespit.firefox_profil_dizini()
     if not profil or not os.path.isdir(profil):
+        # the persistent store is still reported (security review item 4); the exit code stays 1: with no Firefox
+        # profile no copy can be prepared (firefox.hazirla), so the stored session cannot be used either
         sonuc["neden"] = "profil_yok"
+        sonuc["kalici"] = _kalici_durum(alan, desenler, simdi, set())
         return sonuc
     sonuc["profil"] = profil
     tasinir = _aktarim_suzgeci(_bilinen_konaklar(profil))
@@ -350,7 +353,7 @@ def metin(d: dict) -> list[str]:
                  "oturumsuz": _("oturum yok (süresi geçmiş ya da eksik)"),
                  "yok": _("yok (sonraki `deskhand open firefox` profildeki oturumu alır)")}
     if d.get("neden") == "profil_yok":
-        return [_("Firefox profili bulunamadı (profiles.ini)"), _("sonuç: oturum YOK")]
+        return [_("Firefox profili bulunamadı (profiles.ini)"), *_kalici_satiri(d), _("sonuç: oturum YOK")]
     satirlar = [_("site: {alan}").format(alan=d["alan"]),
                 _("profil: {durum}").format(durum=durum_adi.get(d["profil_durum"], d["profil_durum"]))]
     for c in d["cerezler"]:
@@ -366,22 +369,29 @@ def metin(d: dict) -> list[str]:
             durum=kopya_adi.get(d["kopya_durum"], d["kopya_durum"]), ad=os.path.basename(d["kopya"]), zaman=zaman))
     else:
         satirlar.append(_("kopya: {durum}").format(durum=kopya_adi["yok"]))
-    k = d.get("kalici") or {}
-    if k.get("listede"):
-        kalici_adi = {"var": _("oturum var ({sayi} giriş çerezi)").format(sayi=k.get("cerez", 0)),
-                      "suresi_gecmis": _("giriş çerezlerinin süresi geçmiş (giriş gerekir)"),
-                      "yok": _("kayıt yok (giriş gerekir)"),
-                      "politika_disi": _("banka/ödeme/devlet/kimlik alanı: kalıcı depoya alınmaz"),
-                      "gorev": _("görev kipinde kullanılmaz"),
-                      "okunamadi": _("kullanılamıyor: {neden}").format(neden=k.get("neden") or "?")}
-        metin_ = kalici_adi.get(k.get("durum"), str(k.get("durum")))
-        if k.get("kalan_sn") is not None:
-            metin_ += ", " + _sure_metni(k["kalan_sn"])
-        if k.get("kayit"):
-            metin_ += "; " + _("kaydedildi: {zaman}").format(zaman=_tarih(k["kayit"]))
-        if k.get("bitis"):
-            metin_ += "; " + _("son kullanma: {zaman}").format(zaman=_tarih(k["bitis"]))
-        satirlar.append(_("kalıcı depo: {durum}").format(durum=metin_))
+    satirlar += _kalici_satiri(d)
     satirlar.append(_("sonuç: oturum VAR") if d["kod"] == 0 else _("sonuç: oturum YOK"))
     return satirlar
+
+
+def _kalici_satiri(d: dict) -> list[str]:
+    """The "kalıcı depo:" line (only for a site in the approved list; never a value)."""
+    from ..i18n import _
+    k = d.get("kalici") or {}
+    if not k.get("listede"):
+        return []
+    kalici_adi = {"var": _("oturum var ({sayi} giriş çerezi)").format(sayi=k.get("cerez", 0)),
+                  "suresi_gecmis": _("giriş çerezlerinin süresi geçmiş (giriş gerekir)"),
+                  "yok": _("kayıt yok (giriş gerekir)"),
+                  "politika_disi": _("banka/ödeme/devlet/kimlik alanı: kalıcı depoya alınmaz"),
+                  "gorev": _("görev kipinde kullanılmaz"),
+                  "okunamadi": _("kullanılamıyor: {neden}").format(neden=k.get("neden") or "?")}
+    metin_ = kalici_adi.get(k.get("durum"), str(k.get("durum")))
+    if k.get("kalan_sn") is not None:
+        metin_ += ", " + _sure_metni(k["kalan_sn"])
+    if k.get("kayit"):
+        metin_ += "; " + _("kaydedildi: {zaman}").format(zaman=_tarih(k["kayit"]))
+    if k.get("bitis"):
+        metin_ += "; " + _("son kullanma: {zaman}").format(zaman=_tarih(k["bitis"]))
+    return [_("kalıcı depo: {durum}").format(durum=metin_)]
 

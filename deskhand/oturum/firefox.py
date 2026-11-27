@@ -341,8 +341,11 @@ def hazirla(politika: Politika, gorev_siteleri=None) -> dict:
         try:
             bilgi["kalici_uygulandi"] = kalici.uygula(Path(hedef), kalici.ayar_siteleri(), politika=orijinal,
                                                       gorev_siteleri=gorev_siteleri, bilinen_konaklar=bilinen)
-        except Exception:  # noqa: BLE001 - the store must not stop the browser from opening
+        except Exception as e:  # noqa: BLE001 - the store must not stop the browser from opening, but stays visible
             bilgi["kalici_uygulandi"] = 0
+            bilgi["kalici_hata"] = f"{type(e).__name__}: {e}"
+            from ..gunluk import gunluk
+            gunluk(f"oturum: kalıcı depo uygulanamadı: {bilgi['kalici_hata']}")
     # 5a) the copy keeps only the allowed rows: rebuilt so that no removed value survives in the file bytes
     if os.path.isfile(kopya_cookies) and not _cookies_yeniden_kur(kopya_cookies):
         bilgi["cerez_sayisi"] = 0

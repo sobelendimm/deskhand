@@ -33,6 +33,13 @@ kopyasına o kimlik sağlayıcının oturum çerezleri girer), aynı tek yönlü
 - CLI/MCP (Firefox kopyasını hazırlayan süreç) değeri dosyadan OKUMAZ: panelden kanalla alır (`liste kimlik`). Panel
   kapalı / kanal doğrulanamıyor / eski panel → izin YOK (kimlik çerezleri süzülür).
 
+Persistent background session sites (`ayarlar.toml` [oturum] kalici; KALICI; oturum/kalici.py, docs/SESSIONS.md §3.8)
+are panel-authoritative too (security review of H3, item 6: the stored sessions live 30–365 days): loosening = adding
+a site, so the same one-way model, except that a site added in the file is not silently dropped: the panel ASKS the
+user (`onayla` callback, a Qt dialog in gui/panel.py); approved → accepted (mark written), refused / no UI → not used
+and the file is rewritten. Removing a site is accepted without asking. Clients (copy watchdog, MCP, CLI) get the list
+only from the panel channel (`liste kalici`); panel closed → empty list (nothing is saved or applied).
+
 Qt'siz (CLI/MCP hafif kalsın); panel tarafının Qt izleyicisi deskhand/gui/panel.py'de.
 """
 from __future__ import annotations
@@ -52,6 +59,7 @@ KAPSAM = "onaylar"  # kanal türü + işaret adı (liste-onaylar.isaret); dosya:
 KAPSAMLAR = ("hepsi", "kart")
 KIMLIK = "kimlik"  # kanal türü + işaret adı (liste-kimlik.isaret); dosya: ayarlar.toml [guvenlik] hesap_oturumlari
 KIMLIK_SAGLAYICILARI = ("microsoft", "google", "edevlet")  # sıra = kanonik yazım sırası (ayarlar.KUME ile aynı)
+KALICI = "kalici"  # kanal türü + işaret adı (liste-kalici.isaret); dosya: ayarlar.toml [oturum] kalici (site listesi)
 ONBELLEK_SN = 0.3  # istemci: panelden alınan listeyi bu kadar süre yeniden sormaz (pencere listesinde her pencere
 #                   için denetim); panelin Kaydet'i en geç bu kadar sonra geçerli. Dosya yolu önbelleksiz.
 MESAJ_KAYIP = N_("Deskhand ayar dosyası ({dosya}) kayıp ya da panel dışında değişti; güvenli tarafta hiçbir girdi "
@@ -113,14 +121,19 @@ def _isaret_yaz(tur: str, metin: str | None) -> None:
 class Koruyucu:
     """Panel sürecindeki yetkili kopya. uyari(metin) her geri yüklemede çağrılır (panel: günlük + bildirim)."""
 
-    def __init__(self, uyari=None):
+    def __init__(self, uyari=None, onayla=None):
         self.uyari = uyari or (lambda m: None)
+        # onayla(siteler: list[str]) -> bool: the panel asks the user (Qt dialog) before a site listed in the file
+        # outside the panel becomes a persistent-session site; None (no UI) = never approved
+        self.onayla = onayla
+        self._soruyor = False
         self._kilit = threading.Lock()
         self.bellek: dict[str, str | None] = {}
         for tur in TURLER:
             self._ac(tur)
         self._kapsam_ac()
         self._kimlik_ac()
+        self._kalici_ac()
 
     def _ac(self, tur: str) -> None:
         mevcut = _oku(dosya(tur))
@@ -206,6 +219,76 @@ class Koruyucu:
             self.bellek[KIMLIK] = kimlik_metni(k)
             self._kimlik_dosyaya()
 
+    # ---- persistent background session sites ([oturum] kalici): same one-way model, adding asks the user
+    def _sor(self, siteler: frozenset) -> bool:
+        """Ask the user (panel dialog) whether these sites may keep their background session. No UI → no."""
+        if not siteler or self.onayla is None or self._soruyor:
+            return False
+        self._soruyor = True  # the dialog runs a nested event loop: the poll timer must not ask again meanwhile
+        try:
+            return bool(self.onayla(sorted(siteler)))
+        except Exception:  # noqa: BLE001 - the dialog failed: not approved
+            return False
+        finally:
+            self._soruyor = False
+
+    def _kalici_ac(self) -> None:
+        d = kalici_ayristir(_kalici_dosyadan())
+        isaret = isaret_oku(KALICI)
+        onayli = (kalici_ayristir(isaret.get("icerik")) if isaret is not None and isinstance(isaret.get("icerik"), str)
+                  and isaret["sha256"] == _ozet(isaret["icerik"]) else frozenset())
+        kabul = d & onayli
+        yeni = d - onayli
+        if yeni and self._sor(yeni):
+            kabul = d
+        self.bellek[KALICI] = kalici_metni(kabul)
+        if kabul != d:
+            self._kalici_dosyaya()
+            self.uyari(_("Kalıcı oturum sitesi ({siteler}) panel dışında eklenmiş ve onaylanmadı; kullanılmıyor.").format(
+                siteler=", ".join(sorted(d - kabul))))
+            return
+        _isaret_yaz(KALICI, self.bellek[KALICI])
+
+    def _kalici_dosyaya(self) -> None:
+        from . import ayarlar
+        try:
+            ayarlar.ayarla("oturum", "kalici", self.bellek[KALICI])
+        except Exception:  # noqa: BLE001 - dosya yazılamadı: yetkili değer bellekte (istemciler panelden alır)
+            pass
+        _isaret_yaz(KALICI, self.bellek[KALICI])
+
+    def kalici_kaydet(self, deger: str) -> None:
+        """Panel (user-approved): the persistent-session site list (single authoritative writer)."""
+        k = kalici_ayristir(deger, kati=True)
+        with self._kilit:
+            self.bellek[KALICI] = kalici_metni(k)
+            self._kalici_dosyaya()
+
+    def _kalici_denetle(self) -> list[str]:
+        """File vs memory for [oturum] kalici. Removing a site is accepted; an added site is asked (outside the lock:
+        the dialog must not block the channel that serves the lists)."""
+        if self._soruyor:
+            return []
+        dosyada = kalici_ayristir(_kalici_dosyadan())
+        with self._kilit:
+            bellekte = kalici_ayristir(self.bellek.get(KALICI))
+        if dosyada == bellekte:
+            return []
+        if dosyada < bellekte:  # removed in the file / file deleted: stricter, accepted
+            with self._kilit:
+                self.bellek[KALICI] = kalici_metni(dosyada)
+                _isaret_yaz(KALICI, self.bellek[KALICI])
+            return [_("Kalıcı oturum listesinden ayar dosyasında site çıkarıldı; kabul edildi.")]
+        if self._sor(dosyada - bellekte):
+            with self._kilit:
+                self.bellek[KALICI] = kalici_metni(dosyada)
+                self._kalici_dosyaya()
+            return []
+        with self._kilit:
+            self._kalici_dosyaya()
+        return [_("Kalıcı oturum listesine panel dışında site eklenmek istendi ({siteler}); onaylanmadı, panelin "
+                  "listesi korundu ve dosya geri yazıldı.").format(siteler=", ".join(sorted(dosyada - bellekte)))]
+
     def _dosyaya(self, tur: str) -> None:
         icerik = self.bellek.get(tur)
         if icerik is None:
@@ -261,6 +344,7 @@ class Koruyucu:
                     uyarilar.append(_("Hesap oturumu izni ayar dosyasında panel dışında açılmaya çalışıldı; geçerli "
                                       "sayılmadı, panelin değeri korundu ve dosya geri yazıldı (açmak için panelde "
                                       "Ayarlar → Hesap oturumları)."))
+        uyarilar += self._kalici_denetle()
         for u in uyarilar:
             self.uyari(u)
         return uyarilar
@@ -269,9 +353,9 @@ class Koruyucu:
 AKTIF: Koruyucu | None = None  # panel sürecinde etkin koruyucu (onay kanalı `liste` isteğini buradan yanıtlar)
 
 
-def panel_baslat(uyari=None) -> Koruyucu:
+def panel_baslat(uyari=None, onayla=None) -> Koruyucu:
     global AKTIF
-    AKTIF = Koruyucu(uyari)
+    AKTIF = Koruyucu(uyari, onayla)
     from . import onay
     onay.liste_saglayici = AKTIF.metin
     return AKTIF
@@ -355,6 +439,60 @@ def kimlik_izinleri() -> frozenset:
         return kimlik_ayristir(AKTIF.metin(KIMLIK))
     d = _panelden(KIMLIK)
     return kimlik_ayristir(d) if isinstance(d, str) else frozenset()
+
+
+def panel_kalici_kaydet(deger: str) -> None:
+    """Panel (after the user approved): the persistent-session site list (koruyucu if any, else file + mark)."""
+    if AKTIF is not None:
+        AKTIF.kalici_kaydet(deger)
+        return
+    metin_ = kalici_metni(kalici_ayristir(deger, kati=True))
+    from . import ayarlar
+    ayarlar.ayarla("oturum", "kalici", metin_)
+    _isaret_yaz(KALICI, metin_)
+
+
+def kalici_ayristir(deger, kati: bool = False) -> frozenset:
+    """"shopier.com, https://x.test/a" → {"shopier.com", "x.test"} (gorev_kipi.site_ayristir rules). Invalid entries
+    are dropped (kati=True: ValueError)."""
+    if not isinstance(deger, str):
+        if kati:
+            raise ValueError(repr(deger))
+        return frozenset()
+    from .gorev_kipi import site_ayristir_ayrintili
+    siteler, ret = site_ayristir_ayrintili(deger)
+    if kati and ret:
+        raise ValueError("; ".join(ret))
+    return frozenset(siteler)
+
+
+def kalici_metni(siteler) -> str:
+    return ",".join(sorted(set(siteler)))
+
+
+def _kalici_dosyadan() -> str:
+    """The raw file value (the lenient reader keeps the valid entries; ayarlar.oku)."""
+    from . import ayarlar
+    try:
+        d = ayarlar.al("oturum", "kalici")
+    except Exception:  # noqa: BLE001 - unreadable: nothing persistent
+        return ""
+    return d if isinstance(d, str) else ""
+
+
+def kalici_dosyada() -> frozenset:
+    """Sites WRITTEN in the settings file (not verified): information only (doctor); decisions use kalici_siteleri()."""
+    return kalici_ayristir(_kalici_dosyadan())
+
+
+def kalici_siteleri() -> frozenset:
+    """The persistent-background-session sites the user approved in the panel. Panel process: its memory; any other
+    process ONLY through the panel's verified channel (`liste kalici`). Panel closed / channel not verified / old panel
+    → empty (nothing persistent). The file is not read: a process that can write it (an agent) cannot add a site."""
+    if AKTIF is not None:
+        return kalici_ayristir(AKTIF.metin(KALICI))
+    d = _panelden(KALICI)
+    return kalici_ayristir(d) if isinstance(d, str) else frozenset()
 
 
 def _kapsam_dosyadan() -> str:

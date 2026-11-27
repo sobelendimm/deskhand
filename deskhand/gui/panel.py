@@ -202,7 +202,7 @@ class Panel(QObject):
 
         from .. import liste_koruma
         self.liste_uyarilari: list[str] = []
-        self.koruyucu = liste_koruma.panel_baslat(self._liste_uyari)
+        self.koruyucu = liste_koruma.panel_baslat(self._liste_uyari, self._kalici_onayla)
         self._liste_izci = QFileSystemWatcher(self)
         self._liste_izle()
         self._liste_izci.fileChanged.connect(self._liste_degisti)
@@ -226,6 +226,20 @@ class Panel(QObject):
             return
         k.denetle()
         self._liste_izle()  # geri yazılan dosya yeni inode: yeniden izle
+
+    def _kalici_onayla(self, siteler: list[str]) -> bool:
+        """A site was added to [oturum] kalici outside the panel (the user editing ayarlar.toml, or an agent): only
+        the user can let it keep its background session (encrypted, 30–365 days). Default answer: No."""
+        from PyQt6.QtWidgets import QMessageBox
+        metin = _("Görünmez masaüstündeki tarayıcının şu sitelerdeki oturumu kalıcı saklansın mı (şifreli, KDE "
+                  "Cüzdanı anahtarıyla; banka/ödeme siteleri hiçbir zaman)?\n\n{siteler}\n\nBu isteği siz "
+                  "yapmadıysanız Hayır deyin.").format(siteler="\n".join(siteler))
+        cevap = QMessageBox.question(None, "Deskhand — Onay", metin,
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                     QMessageBox.StandardButton.No)
+        evet = cevap == QMessageBox.StandardButton.Yes
+        gunluk(f"kalıcı oturum sitesi onayı: {'evet' if evet else 'hayır'}: {', '.join(siteler)}")
+        return evet
 
     def _liste_uyari(self, metin: str):
         """Ayar dosyası panel dışında değişti/silindi ve geri yüklendi: günlük satırı (panel penceresinde görünür) +

@@ -208,10 +208,25 @@ def satir_kalici_oturum():
     (locked wallet, no Secret Service). Reads the key ring, never creates a key."""
     import time
     from .oturum import kalici
+    from . import ayarlar, liste_koruma
+    from .gorev_kipi import site_ayristir_ayrintili
     ad = _("Kalıcı oturumlar")
-    siteler = sorted(kalici.ayar_siteleri())
+    siteler = sorted(kalici.ayar_siteleri())  # panel-authoritative (liste_koruma.kalici_siteleri)
+    ham = (ayarlar.ham_oku().get("oturum") or {}).get("kalici")
+    gecersiz = site_ayristir_ayrintili(ham)[1] if isinstance(ham, str) else []
+    try:
+        onaysiz = sorted(liste_koruma.kalici_dosyada() - set(siteler))
+    except Exception:  # noqa: BLE001 - information only
+        onaysiz = []
+    ek = ""
+    if gecersiz:
+        ek += " " + _("(ayar dosyasında geçersiz girdi atlandı: {girdiler})").format(girdiler="; ".join(gecersiz))
+    if onaysiz:
+        ek += " " + _("(ayar dosyasında var ama panelde onaylı değil, kullanılmıyor: {siteler})").format(
+            siteler=", ".join(onaysiz))
     if not siteler:
-        return _satir(ad, "tamam", _("kapalı ([oturum] kalici boş)"))
+        return _satir(ad, "uyari" if ek else "tamam", _("kapalı ([oturum] kalici boş)") + ek,
+                      "deskhand panel" if onaysiz else "")
     parcalar, neden = [], None
     for s in siteler:
         d = kalici.durum(s, siteler=siteler)
@@ -230,8 +245,8 @@ def satir_kalici_oturum():
     metin = "; ".join(parcalar)
     if neden:
         return _satir(ad, "uyari", _("{neden}: kalıcı oturum bu açılışta kullanılmadı").format(neden=neden) +
-                      f" ({metin})", _("KDE Cüzdanı'nı açın (kilidi açık olmalı)"))
-    return _satir(ad, "tamam", metin)
+                      f" ({metin})" + ek, _("KDE Cüzdanı'nı açın (kilidi açık olmalı)"))
+    return _satir(ad, "uyari" if ek else "tamam", metin + ek)
 
 
 def satir_girdi_merkezi():

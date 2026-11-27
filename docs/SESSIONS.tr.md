@@ -455,7 +455,13 @@ Sorun: her arka plan Firefox'u gerçek profilin atılacak bir kopyasıdır. Kull
 site (satıcı paneli) kopya silinince oturumu kaybediyordu; her yeni kopya yeniden giriş istiyordu.
 
 Ayar (`ayarlar.toml`): `[oturum] kalici = "shopier.com, ornek.test"` (virgüllü alan adları; adres verilirse konağı alınır;
-`*` ve tek başına genel son ek reddedilir). Kod: `deskhand/oturum/kalici.py`.
+`*` ve tek başına genel son ek atlanır, geçerliler kalır, `deskhand doctor` atlananı söyler). Kod: `deskhand/oturum/kalici.py`.
+
+**Liste panel yetkilidir** (`hesap_oturumlari` gibi; `deskhand/liste_koruma.py`): panel dışında (kullanıcı ya da ajan
+tarafından) dosyaya yazılan site, ancak kullanıcı panelin diyaloğunda ("Deskhand — Onay", varsayılan Hayır) **Evet**
+derse kullanılır; red → dosya o site olmadan geri yazılır. Site çıkarmak soru gerektirmez. Diğer süreçler (kopya bekçisi,
+MCP sunucusu, CLI) listeyi yalnız panelin doğrulanmış kanalından alır; panel kapalıysa liste boş, hiçbir şey kaydedilmez
+ya da uygulanmaz.
 
 - **Kaydetme:** kopya silinmeden hemen önce (bekçi, süpürme, masaüstü kapanışı) kopyanın `cookies.sqlite`'ındaki (ve
   Firefox yazdıysa kopyanın `sessionstore-backups/recovery.jsonlz4`'ündeki) listedeki sitelere ait çerezler ŞİFRELİ
@@ -471,7 +477,12 @@ Ayar (`ayarlar.toml`): `[oturum] kalici = "shopier.com, ornek.test"` (virgüllü
   check` nedeni tek satırda söyler. Okunabilen anahtarla çözülmeyen kayıt (oynanmış, yeniden adlandırılmış, eski
   anahtar) silinir. İlk sürümün düz JSON kayıtları ilk görüldüklerinde üzerine yazılıp silinir (göç yok).
 - **Uygulama:** yeni Firefox kopyası hazırlanırken kayıt kopyanın `cookies.sqlite`'ına konur. Kopyada aynı anahtarda
-  geçerli ve daha SONRA kullanılmış bir satır varsa (kullanıcı gerçek profilde yeniden girdi) o kalır.
+  geçerli ve daha SONRA kullanılmış bir satır varsa (kullanıcı gerçek profilde yeniden girdi) o kalır. Kopya, depodan
+  hangi sürümleri aldığını not eder (`.deskhand-kalici.json`, yalnız değer özetleri).
+- **Birden çok kopya:** kayıt çerez başına birleştirilir: daha yakın zamanda kullanılan değer kazanır, sonradan kapanan
+  bayat kopya daha yeni girişi ezmez. Kopyanın depodan alıp sonra düşürdüğü çerez çıkıştır: kayıtta bir silinme izi
+  (değer özeti, o çerezin süresi dolana dek) kalır, bayat kopya çıkış yapılmış oturumu geri yazamaz; yeni giriş (başka
+  değer) kaydedilir. Kaydı hiç almamış kopya (anahtarlık kilitliydi, siteye girilmedi) kayda dokunmaz.
 - **Ömür:** kalıcı çerez kendi son kullanma tarihini korur. Süresiz (oturumluk) çerez ilk kaydından itibaren
   `[oturum] kalici_sure_gun` gün tutulur (varsayılan 30, 1..365); sonraki kopyalarda geri gelince ilk tarihini korur.
   Bütün çerezlerinin süresi geçmiş (ya da gelecekte "kaydedilmiş") kayıt okunurken silinir.
