@@ -1210,11 +1210,51 @@ def girdi_seviye_denetle(k, satirlar):
 
 # ---------------------------------------------------------------- pencere / başlık / sınıf kilidi
 
+class GonderilmediDur(Dur):
+    """Girdi öncesi ret: ileti "<neden>; girdi gönderilmedi". Eksiz neden `.neden`'de: yazı ORTASINDA (önceki harfler
+    gitmişken) çağıran eki atar ve "N karakter gönderildi" der (eylem._harf_harf_yaz kesik; ABM-F2 R2-1)."""
+
+    def __init__(self, kod, neden, tur=None):
+        super().__init__(kod, _("{neden}; girdi gönderilmedi").format(neden=neden), tur)
+        self.neden = neden
+
+
+# Gizli yazı (secret=true) sırasında durma iletileri pencere BAŞLIĞINI taşımaz: düzenleyiciler başlığa içerik önizlemesi
+# yazar (KWrite "Başlıksız (j) *"), yoklama ile tuş arasındaki yarışta sızan gizli harf başlıktan iletiye/günlüğe/MCP
+# sonucuna geçerdi (ABM-F2 inceleme P3). İş parçacığına özgü (denetle/odak yoklaması yazı iş parçacığında); gözcüler
+# kendi iş parçacığında koşar, Girdi.gizli'ye kendileri bakar (kwin) ya da eylem kesintiyi yeniden kurar (kde/sanal).
+_BASLIK_GIZLI = threading.local()
+
+
+class baslik_gizle:  # noqa: N801 - bağlam yöneticisi, işlev gibi kullanılır
+    """`with baslik_gizle(acik):` boyunca (acik doğruysa) bu iş parçacığındaki durma iletileri başlık yerine
+    "(başlık gizlendi)" yazar (baslik_goster). İç içe kullanılabilir; açık olan kapanmaz."""
+
+    def __init__(self, acik=True):
+        self.acik = bool(acik)
+
+    def __enter__(self):
+        self.onceki = getattr(_BASLIK_GIZLI, "acik", False)
+        _BASLIK_GIZLI.acik = self.onceki or self.acik
+        return self
+
+    def __exit__(self, *_a):
+        _BASLIK_GIZLI.acik = self.onceki
+        return False
+
+
+def baslik_goster(b, baska=False) -> str:
+    """Durma iletisinde başlık: normalde repr(b); baslik_gizle altında gizli yer tutucu (baska: odağı çalan pencere)."""
+    if getattr(_BASLIK_GIZLI, "acik", False):
+        return _("başka bir pencere (başlık gizlendi)") if baska else _("(başlık gizlendi)")
+    return repr(b)
+
+
 def sinif_denetle(k):
     if SINIF_DESEN:
         sinif = sec().sinif(k)
         if not re.search(SINIF_DESEN, sinif, re.I):
-            raise Dur(4, _("pencere sınıfı uymadı: {sinif} (beklenen /{desen}/); girdi gönderilmedi").format(
+            raise GonderilmediDur(4, _("pencere sınıfı uymadı: {sinif} (beklenen /{desen}/)").format(
                 sinif=repr(sinif), desen=SINIF_DESEN))
 
 
@@ -1233,30 +1273,33 @@ def denetle(k, desen):
     if k == EKRAN:  # masaüstü kipi: etkin pencere yasak olmasın; -b verildiyse etkin pencerenin başlığı uysun
         a = au.aktif()
         if not a:  # boşsa yasak denetimi atlanırdı (yasak pencere öndeyken bile) → doğrulanamadı = dur
-            raise Dur(3, _("etkin pencere belirlenemedi; girdi gönderilmedi"))
+            raise GonderilmediDur(3, _("etkin pencere belirlenemedi"))
         yasak_denetle(a)
         if desen and not re.search(desen, au.baslik(a), re.I):
             raise Dur(4, _("etkin pencere başlığı uymadı: {baslik} (beklenen /{desen}/)").format(
-                baslik=repr(au.baslik(a)), desen=desen))
+                baslik=baslik_goster(au.baslik(a)), desen=desen))
         sinif_denetle(a)
         return
     a = au.aktif()  # boşsa doğrulanamadı → a != k → durur (güvenli taraf)
     if a != k:
         e = hedef_kayip_hatasi(k, a)
-        raise Dur(e.kod, _("{neden}; girdi gönderilmedi").format(neden=e.mesaj))
+        raise GonderilmediDur(e.kod, e.mesaj)
     pencere_denetle(k, desen)
 
 
 def hedef_kayip_hatasi(k, a) -> Dur:
     """Hedef `k` etkin değil (etkin: `a`): pencere kapandıysa 8 "hedef pencere kapandı" (aynı başlıklı kardeşin öne
-    geçmesi "aktif değişti" diye yanıltmasın), yoksa 3 "aktif pencere değişti → başlık". İleti "girdi gönderilmedi"
-    EKİ TAŞIMAZ: çağıran ekler (yazı ortasında önceki harfler gitmiştir). Yalnız ret yolunda ek sorgu yapar."""
+    geçmesi "aktif değişti" diye yanıltmasın), yoksa 3 "aktif pencere değişti → başlık" (baslik_gizle altında başlık
+    yerine "başka bir pencere (başlık gizlendi)"). İleti "girdi gönderilmedi" EKİ TAŞIMAZ: çağıran ekler (yazı ortasında
+    önceki harfler gitmiştir). Yalnız ret yolunda ek sorgu yapar."""
     au = sec()
     try:
         au.geometri(k)
     except Dur as e:
         if e.kod == 8:
             return Dur(8, _("hedef pencere kapandı"))
+    if getattr(_BASLIK_GIZLI, "acik", False):
+        return Dur(3, _("aktif pencere değişti → {baslik}").format(baslik=baslik_goster(None, baska=True)))
     try:
         b = au.baslik(a) if a else ""
     except Dur:
@@ -1272,7 +1315,9 @@ _KIMLIK_KILIDI = threading.local()
 
 class sinif_kilidi:  # noqa: N801 - bağlam yöneticisi, işlev gibi kullanılır
     """`with sinif_kilidi(k):` boyunca pencere_denetle(k, …) pencerenin sınıfının eylem başındakiyle aynı olduğunu da
-    denetler (değiştiyse 4). Sınıf okunamaz/boşsa kilit kurulmaz (kimlik + etkin pencere denetimi sürer)."""
+    denetler (değiştiyse 4). AÇIK-BAŞARISIZ (bilerek): sınıf okunamaz ya da boşsa kilit KURULMAZ ve eylem durdurulmaz;
+    koruma kimlik + etkin pencere denetimiyle sürer (KWin'de kimlik UUID, yeniden kullanılmaz). Sınıfı hiç bildirmeyen
+    pencereye eylem bu yüzden reddedilmez; kilit yalnız X kimliği yeniden kullanımına (sanal/Xvfb) karşı ek katmandır."""
 
     def __init__(self, k):
         self.k = k
@@ -1299,8 +1344,8 @@ def _sinif_kilidi_denetle(k):
         return
     simdi = sec().sinif(k)
     if simdi != kilit[1]:
-        raise Dur(4, _("pencere sınıfı değişti: {once} → {simdi} (aynı kimlik başka uygulamanın); girdi "
-                       "gönderilmedi").format(once=repr(kilit[1]), simdi=repr(simdi)))
+        raise GonderilmediDur(4, _("pencere sınıfı değişti: {once} → {simdi} (aynı kimlik başka uygulamanın)").format(
+            once=repr(kilit[1]), simdi=repr(simdi)))
 
 
 def pencere_denetle(k, desen):
@@ -1312,8 +1357,8 @@ def pencere_denetle(k, desen):
     if desen:
         b = au.baslik(k)
         if not re.search(desen, b, re.I):
-            raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); girdi gönderilmedi").format(
-                baslik=repr(b), desen=desen))
+            raise GonderilmediDur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/)").format(
+                baslik=baslik_goster(b), desen=desen))
     sinif_denetle(k)
     _sinif_kilidi_denetle(k)
 

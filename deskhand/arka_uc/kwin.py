@@ -779,6 +779,8 @@ class KwinGirdi:
         self._izle_dur = threading.Event()
         u = None if k == EKRAN else kimlik_coz(k)
         d = self.arka._d()
+        # gizli yazı: başlık iletiye girmez (önizleme sızan harfi gösterebilir; guvenlik.baslik_gizle ile aynı metin)
+        gizli = bool(getattr(self, "gizli", False))
 
         def dongu():
             try:
@@ -795,13 +797,16 @@ class KwinGirdi:
                             if not any(w["i"] == u for w in self.arka._liste(d)):  # yalnız kesilme yolunda tek liste
                                 neden = (PENCERE_YOK, _("hedef pencere kapandı"))
                             else:
-                                b = self.arka._kd("getwindowname", a, d=d) if UUID.fullmatch(a) else ""
-                                neden = (AKTIF_DEGIL, _("aktif pencere değişti → {baslik}").format(baslik=repr(b)))
+                                if gizli:
+                                    b = _("başka bir pencere (başlık gizlendi)")
+                                else:
+                                    b = repr(self.arka._kd("getwindowname", a, d=d) if UUID.fullmatch(a) else "")
+                                neden = (AKTIF_DEGIL, _("aktif pencere değişti → {baslik}").format(baslik=b))
                         elif desen:
                             b = self.arka._kd("getwindowname", u, d=d)
                             if not re.search(desen, b, re.I):
                                 neden = (BASLIK_SINIF, _("başlık değişti: {baslik} (beklenen /{desen}/)").format(
-                                    baslik=repr(b), desen=desen))
+                                    baslik=_("(başlık gizlendi)") if gizli else repr(b), desen=desen))
                     if neden:
                         self.kesildi = Dur(*neden)
                         if neden[0] == KULLANICI_DUR:

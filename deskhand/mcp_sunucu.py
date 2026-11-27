@@ -2042,7 +2042,12 @@ def type_text(
 ) -> dict[str, Any]:
     """Type text into a window: into the focused field, or into the field given by ref (clicked first). element= sets
     the named field's value through the accessibility tree instead (no keyboard; submit not available). Not for
-    shortcuts (press_key); a label and its input sharing a name resolve to the writable one, else pass role/nth. Stops if the window/title changes or the user starts typing. Enter on a payment page,
+    shortcuts (press_key); a label and its input sharing a name resolve to the writable one, else pass role/nth. With a
+    window id or ref, typing is locked to that window (and its app class), not to its title: it stops if another
+    window takes the focus, the window closes or changes app, or the user starts typing; a tab/page switch inside the
+    same window is not detected. A title pattern also stops it when the title stops matching. A stop mid-text says how
+    many characters were sent (sent=maybe_partial); with secret=true window titles are left out of the message and
+    Enter (submit) closing the dialog counts as success. Enter on a payment page,
     typing into a password field and destructive shell commands in a terminal (rm -r, sudo, curl | sh, mkfs...) need
     the user's approval. Returns effect (confirmed = the typed text is visible where the window changed)."""
     if ref and element:
@@ -2418,7 +2423,7 @@ def manage_window(
             raise ToolError("[10] " + _("yasak/hassas: yapılmadı: {neden}").format(neden=y_))
         desen = baslik_kilidi(window, k)
         if action == "close":
-            with kilitli(girdi=True):
+            with kilitli(girdi=True), guvenlik.sinif_kilidi(k):  # kimlik kilidi: sınıf da (onayla_ve_yap ile aynı)
                 gonderim.artir()  # kapatma isteği gönderilmek üzere
                 mesaj = api.pencere_kapat(k, desen)
             return {**bilgi, "status": "closed", "message": mesaj, "window_closed": True, "effect": "confirmed"}
@@ -2428,7 +2433,7 @@ def manage_window(
             raise ToolError("[1] " + _("move için x ve y gerekli"))
         if action == "resize" and (width is None or height is None):
             raise ToolError("[1] " + _("resize için width ve height gerekli"))
-        with kilitli(girdi=True):
+        with kilitli(girdi=True), guvenlik.sinif_kilidi(k):
             r = api.pencere_yonet(k, islem, x, y, width, height, desen)
         s = {**bilgi, "status": {"move": "moved", "resize": "resized", "minimize": "minimized",
                                  "maximize": "maximized", "restore": "restored"}[action],
@@ -2474,7 +2479,7 @@ def run_flow(
                 raise ToolError("[10] " + _("kullanıcı onayı alınamadı: {neden}. Akış çalıştırılmadı; kullanıcıya "
                                             "bildir.").format(neden=neden or _("red")))
             onaylandi = True
-        with kilitli(girdi=True):
+        with kilitli(girdi=True), guvenlik.sinif_kilidi(k):  # akış boyunca pencere sınıfı da kilitli (kimlik kilidi)
             # onaylanmadıysa çalışırken --onayli adım reddedilir (ön taramadan sonra dosya değişmiş olsa bile)
             mesaj = api.akis_calistir(k, name, timeout_s, baslik_kilidi(window, k), onayli_izin=onaylandi)
         return {**bilgi, "status": "done", "message": mesaj[-3000:], "approved_by_user": onaylandi,
