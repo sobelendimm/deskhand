@@ -777,36 +777,63 @@ def _belgeler(argv) -> list:
     return out
 
 
+CHROMIUM_KAYIT = "tarayicilar-chromium.json"  # çalışma dizininde (0700; uygulamaların ad alanına bağlanmaz)
+
+
+def chromium_kaydet(d: dict, kopya: str, pid: int) -> None:
+    """Kopyalı yerli Chromium'un yetkili başlatma kaydı (Firefox F1 kaydıyla aynı düzen: çalışma dizini, atomik, 0600).
+    Profil kopyasındaki sahip dosyası (uygulamanın yazabildiği yer) hedef seçiminde KULLANILMAZ."""
+    import json
+    from .arka_ortak import surec_baslangic
+    calisma = d.get("calisma") or ""
+    if not calisma or not os.path.isdir(calisma) or not kopya:
+        return
+    yol = os.path.join(calisma, CHROMIUM_KAYIT)
+    kayitlar = [g for g in _chromium_kayitlari(calisma) if os.path.realpath(str(g.get("kopya") or "")) !=
+                os.path.realpath(kopya)]
+    kayitlar.append({"kopya": kopya, "pid": int(pid), "bas": surec_baslangic(pid)})
+    gecici = yol + f".{os.getpid()}.tmp"
+    try:
+        fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(kayitlar, f)
+        os.replace(gecici, yol)
+    except OSError:
+        pass
+
+
+def _chromium_kayitlari(calisma: str) -> list[dict]:
+    import json
+    try:
+        with open(os.path.join(calisma, CHROMIUM_KAYIT)) as f:
+            v = json.load(f)
+        return [g for g in v if isinstance(g, dict)] if isinstance(v, list) else []
+    except (OSError, ValueError):
+        return []
+
+
 def _kayitli_tarayicilar(d: dict, tur: str, haric: str | None) -> list[tuple[int, str]]:
     """Deskhand'in KENDİ başlatma kaydındaki, doğrulanmış (pid_dogru: canlı + başlangıç zamanı + kafes) tarayıcılar →
-    [(kayıtlı pid, kopya)]. Firefox: F1 kaydı (çalışma dizini; uygulamalara bağlanmaz). Chromium: kopya kökündeki
-    kopyaların sahip kaydı (kopya.sahip_kaydet; korumali_baslat yazar)."""
+    [(kayıtlı pid, kopya)]. İki kayıt da çalışma dizininde (sandbox dışı): Firefox F1 kaydı, Chromium CHROMIUM_KAYIT.
+    Profil kopyasındaki sahip dosyası OKUNMAZ (uygulama oraya yazabilir)."""
     from .arka_ortak import pid_dogru
     from .oturum import politika
     kok = os.path.realpath(politika.kopya_dizini())
     haric_g = os.path.realpath(haric) if haric else None
-    adaylar: list[tuple[int, object, str]] = []
+    calisma = d.get("calisma") or ""
     if tur == "firefox":
         from . import bellek_bekcisi
-        for g in bellek_bekcisi._kayitlar(d.get("calisma") or ""):
-            adaylar.append((int(g.get("pid") or 0), g.get("bas"), str(g.get("kopya") or "")))
+        kayitlar = bellek_bekcisi._kayitlar(calisma)
     else:
-        from .oturum import kopya_bekcisi
-        try:
-            adlar = sorted(os.listdir(kok))
-        except OSError:
-            adlar = []
-        for ad in adlar:
-            if not ad.startswith(tur + "-"):
-                continue
-            s = kopya_bekcisi.sahip_oku(os.path.join(kok, ad))
-            adaylar.append((int(s.get("pid") or 0), s.get("bas"), os.path.join(kok, ad)))
+        kayitlar = _chromium_kayitlari(calisma)
     out = []
-    for pid, bas, kp in adaylar:
-        g = os.path.realpath(kp) if kp else ""
-        if not g or g == haric_g or os.path.dirname(g) != kok or os.path.islink(kp) or not os.path.isdir(g):
+    for g in kayitlar:
+        kp = str(g.get("kopya") or "")
+        r = os.path.realpath(kp) if kp else ""
+        if not r or r == haric_g or os.path.dirname(r) != kok or os.path.islink(kp) or not os.path.isdir(r):
             continue
-        if pid_dogru(pid, bas, d.get("cgroup") or ""):
+        pid = int(g.get("pid") or 0)
+        if pid_dogru(pid, g.get("bas"), d.get("cgroup") or ""):
             out.append((pid, kp))
     return out
 
@@ -826,41 +853,72 @@ def _soyundan_mi(pid: int | None, ata: int) -> bool:
     return False
 
 
-def _tarayici_pencereleri(au, ata: int) -> list[str]:
-    return [w for w, _b, _g in au.pencereler() if _soyundan_mi(au.pid(w), ata)]
+def kimlik_pid(au, d: dict, w: str) -> int | None:
+    """Pencerenin İSTEMCİ KİMLİĞİNDEN (bağlantı credentials) gelen PID'i; yoksa None (kapalı-başarısız). Yalnız KWin
+    türünde güvenilir: KWin pencere PID'ini istemci bağlantısından alır (ölçüldü: _NET_WM_PID=4242 yazan sahte X
+    penceresinde KWin gerçek PID'i verdi). Xvfb türünde arka uç X-Resource yoksa istemcinin yazdığı _NET_WM_PID'e düşer
+    → güvenilmez sayılır, None."""
+    from . import masaustu
+    if masaustu.tur(d) != "kwin":
+        return None
+    try:
+        return au.pid(w)
+    except Dur:
+        return None
+
+
+def _tarayici_pencereleri(au, d: dict, ata: int) -> list[str]:
+    return [w for w, _b, _g in au.pencereler() if _soyundan_mi(kimlik_pid(au, d, w), ata)]
+
+
+_TARAYICI_SINIFI = {"firefox": ("firefox", "navigator"), "chromium": ("chromium",)}
 
 
 def ayni_surecte_ac(au, komut, kopya) -> bool:
     """Arka planda aynı masaüstünde Deskhand'in başlattığı, kayıtlı ve doğrulanmış aynı türden tarayıcı varsa 2. `open`
-    onun SÜRECİNDE yeni pencere açar: penceresine denetimli Ctrl+N (api.tus), yeni pencere (aynı süreç soyu) beklenir,
-    adres verildiyse adres çubuğuna denetimli yazı + Enter. Başarıda politikanın bu açılış için hazırladığı yeni kopya
-    silinir; F1 kaydı ve kopya sahibi DEĞİŞMEZ. → True | False (kayıtlı tarayıcı yok / pencere gelmedi: çağıran
-    yeni örnek başlatır)."""
+    onun SÜRECİNDE yeni pencere açar: penceresine denetimli Ctrl+N (api.tus), yeni pencere beklenir. Pencere ↔ süreç
+    eşlemesi yalnız istemci kimliği PID'inden (kimlik_pid) ve süreç soyundan; kimlik yoksa bu yol KULLANILMAZ (False:
+    çağıran yeni örnek açar). Ctrl+N'den sonra TAM BİR yeni pencere gerekir; 0 ya da >1 → Dur 7, adres yazılmaz. Adres
+    verildiyse yazmadan önce pencerenin tarayıcı sınıfında ve ETKİN olduğu doğrulanır; yazı kimlik/sınıf kilitli
+    yoldan (api.tus/api.yaz, pencere kimliğiyle). Başarıda politikanın bu açılış için hazırladığı yeni kopya silinir;
+    kayıtlar DEĞİŞMEZ. → True | False."""
     from . import api, masaustu, oturum
     tur = _tarayici_turu(komut)
     if not tur or not kopya:
         return False
     d = masaustu.durum()
-    if not d:
+    if not d or masaustu.tur(d) != "kwin":  # istemci kimliği PID'i yok: pencere doğrulanamaz → yeni örnek
         return False
     for ata, eski in _kayitli_tarayicilar(d, tur, kopya):
-        once = _tarayici_pencereleri(au, ata)
+        once_hepsi = {w for w, _b, _g in au.pencereler()}
+        once = _tarayici_pencereleri(au, d, ata)
         if not once:
             continue
         api.tus(once[0], "ctrl+n")
         bitis = time.monotonic() + YENI_PENCERE_BEKLE_SN
-        yeni = []
-        while time.monotonic() < bitis and not yeni:
+        yeni: list[str] = []
+        while time.monotonic() < bitis:
             time.sleep(0.25)
-            yeni = [w for w in _tarayici_pencereleri(au, ata) if w not in once]
-        if not yeni:
-            gunluk(f"ac | 2. pencere: Ctrl+N sonrası yeni pencere yok ({tur}); yeni örnek açılıyor")
-            return False
-        for adres in _belgeler(_asil_komut(komut))[:1]:  # tek adres: adres çubuğu (yeni pencerede odakta)
+            yeni = [w for w in _tarayici_pencereleri(au, d, ata) if w not in once]
+            if yeni:
+                time.sleep(0.5)  # aynı anda ikinci pencere (taklit/yarış) görülsün
+                break
+        diger = [w for w, _b, _g in au.pencereler() if w not in once_hepsi and w not in yeni]
+        yeni = [w for w in _tarayici_pencereleri(au, d, ata) if w not in once]
+        if len(yeni) != 1 or (diger and _belgeler(_asil_komut(komut))):
+            raise Dur(7, _("ikinci pencere doğrulanamadı: Ctrl+N sonrası {sayi} aday pencere (tam bir olmalı); "
+                           "adres yazılmadı").format(sayi=len(yeni) + (len(diger) if yeni else 0)))
+        w = yeni[0]
+        for adres in _belgeler(_asil_komut(komut))[:1]:  # tek adres: yeni pencerenin adres çubuğu
             time.sleep(0.5)
-            api.tus(yeni[0], "ctrl+l")
-            api.yaz(yeni[0], str(adres))
-            api.tus(yeni[0], "Return")
+            sinif = (au.sinif(w) or "").lower()
+            if not any(x in sinif for x in _TARAYICI_SINIFI[tur]) or au.aktif() != w or \
+                    not _soyundan_mi(kimlik_pid(au, d, w), ata):
+                raise Dur(7, _("ikinci pencere doğrulanamadı (sınıf {sinif}, etkin değil ya da süreç eşleşmiyor); "
+                               "adres yazılmadı").format(sinif=sinif or "?"))
+            api.tus(w, "ctrl+l")
+            api.yaz(w, str(adres))
+            api.tus(w, "Return")
         oturum.temizle(kopya)
         gunluk(f"ac | 2. pencere aynı süreçte (Ctrl+N) | {tur} | {os.path.basename(eski)}")
         return True
@@ -897,9 +955,13 @@ def _baslat(au, komut, fp, env=None, kopya=None, girdi=None, ev=()):
         ek["girdi"] = girdi
     if ev and "ev" in p:
         ek["ev"] = tuple(ev)
-    if "cikti" in p:
-        return au.baslat(komut, env=env, cikti=fp, **ek)
-    return au.baslat(komut, env=env, **ek)
+    pr = au.baslat(komut, env=env, cikti=fp, **ek) if "cikti" in p else au.baslat(komut, env=env, **ek)
+    if "kopya" in p and kopya and _tarayici_turu(komut) == "chromium" and getattr(pr, "pid", None):
+        from . import masaustu
+        d = masaustu.durum()
+        if d:
+            chromium_kaydet(d, kopya, pr.pid)
+    return pr
 
 
 def oturum_hazirla(uygulama, siteler=None, ham_komut=False):

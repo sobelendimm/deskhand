@@ -164,6 +164,75 @@ kontrol("F3 birim: başka 'on' uygulaması (vivaldi, brave, Flatpak olmayan chro
         chromium.on_karari(_on(["vivaldi"])) is None and chromium.on_karari(_on(["chrome"])) is None)
 kontrol("F3 birim: uzak komut/ad alanı yolu YOK (uzak_acik, kumda_baslat kaldırıldı)",
         not hasattr(uygulama, "uzak_acik") and not hasattr(arka_ortak, "kumda_baslat"))
+# EK-2: istemci kimliği PID'i, tam bir yeni pencere, yetkili kayıt sandbox dışında
+from deskhand import api as _api  # noqa: E402
+from deskhand.oturum import kopya_bekcisi, politika  # noqa: E402
+
+
+class _SahteAu:
+    def __init__(self, pen):
+        self.pen, self.etkin = list(pen), (pen[0] if pen else "")
+
+    def pencereler(self):
+        return [(w, "t", (0, 0, 1, 1)) for w in self.pen]
+
+    def pid(self, w):
+        return os.getpid()  # _NET_WM_PID taklidi: her pencere "tarayıcının" PID'ini söylüyor
+
+    def sinif(self, w):
+        return "firefox"
+
+    def aktif(self):
+        return self.etkin
+
+
+_girdi = []
+_eski = (masaustu.durum, uygulama._kayitli_tarayicilar, _api.tus, _api.yaz)
+_kp_e2 = kopya.yeni_kopya_dizini("firefox")
+try:
+    uygulama._kayitli_tarayicilar = lambda d_, tur_, h_: [(os.getpid(), _kp_e2)]
+    _api.yaz = lambda w, m, **k: _girdi.append(("yaz", w, m))
+    # (a) Xvfb türü: istemci kimliği PID'i yok → bu yol kullanılmaz, HİÇBİR girdi gönderilmez
+    masaustu.durum = lambda *a, **k: {"tur": "xvfb", "calisma": _yalitim.GECICI, "cgroup": ""}
+    _api.tus = lambda w, t, **k: _girdi.append(("tus", w, t))
+    au_ = _SahteAu(["{a}"])
+    sonuc = uygulama.ayni_surecte_ac(au_, ["firefox", "--profile", "/x", "--no-remote", "https://a.b/"], "/x")
+    kontrol("_NET_WM_PID sahte, credentials yok → adres yazılmaz (girdi yok, yeni örnek yolu)",
+            sonuc is False and _girdi == [], str(_girdi))
+    # (b) KWin: Ctrl+N sonrası İKİ yeni pencere → iptal (Dur 7), adres yazılmaz
+    masaustu.durum = lambda *a, **k: {"tur": "kwin", "calisma": _yalitim.GECICI, "cgroup": ""}
+    au_ = _SahteAu(["{a}"])
+
+    def _tus(w, t, **k):
+        _girdi.append(("tus", w, t))
+        if t == "ctrl+n":
+            au_.pen += ["{b}", "{c}"]
+    _api.tus = _tus
+    _girdi.clear()
+    try:
+        uygulama.ayni_surecte_ac(au_, ["firefox", "--profile", "/x", "--no-remote", "https://a.b/"], "/x")
+        e = None
+    except Dur as x:
+        e = x
+    kontrol("iki yeni pencere → iptal (Dur 7), adres yazılmaz",
+            e is not None and e.kod == 7 and not any(g[0] == "yaz" or g[2] == "ctrl+l" for g in _girdi),
+            f"{e and e.mesaj} {_girdi}")
+finally:
+    masaustu.durum, uygulama._kayitli_tarayicilar, _api.tus, _api.yaz = _eski
+    kopya.temizle(_kp_e2)
+
+_kp_s = kopya.yeni_kopya_dizini("chromium")
+kopya_bekcisi.sahip_yaz(_kp_s, {"pid": os.getpid(), "bas": kopya_bekcisi.baslangic(os.getpid())})
+_d_s = {"tur": "kwin", "calisma": tempfile.mkdtemp(dir=_yalitim.GECICI), "cgroup": ""}
+kontrol("profil dizinine yazılan sahte sahip kaydı hedef seçilmez",
+        uygulama._kayitli_tarayicilar(_d_s, "chromium", None) == [] and
+        os.path.dirname(os.path.realpath(_kp_s)) == os.path.realpath(politika.kopya_dizini()))
+uygulama.chromium_kaydet(_d_s, _kp_s, os.getpid())
+kontrol("F3 birim: çalışma dizinindeki yetkili Chromium kaydı (pid_dogru) seçilir (kontrol)",
+        uygulama._kayitli_tarayicilar(_d_s, "chromium", None) == [(os.getpid(), _kp_s)] and
+        oct(os.stat(os.path.join(_d_s["calisma"], uygulama.CHROMIUM_KAYIT)).st_mode & 0o777) == "0o600")
+kopya.temizle(_kp_s)
+
 kontrol("F3 birim: 2. pencere adresi yalnız belgelerden (profil/bayrak değil)",
         uygulama._belgeler(["firefox", "--profile", "/k1", "--no-remote", "https://a.b/"]) == ["https://a.b/"])
 

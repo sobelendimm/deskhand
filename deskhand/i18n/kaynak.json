@@ -446,7 +446,7 @@
   "eylem.py:765"
  ],
  "--komut ile adres verilemez: uygulama adıyla aç (open firefox --url https://…)": [
-  "uygulama.py:943"
+  "uygulama.py:1005"
  ],
  "--komut yıkıcı bir kalıba uyuyorsa: kullanıcı AÇIKÇA onayladı": [
   "cli.py:531"
@@ -487,7 +487,7 @@
   "guvenlik.py:1005"
  ],
  "; açılan başka pencereler: {pencereler}": [
-  "uygulama.py:1033"
+  "uygulama.py:1095"
  ],
  "; en yakın aday benzerliği {benzerlik}": [
   "eylem.py:1337"
@@ -505,7 +505,7 @@
   "ocr.py:601"
  ],
  "; çıktı: {log}": [
-  "uygulama.py:1034"
+  "uygulama.py:1096"
  ],
  "> /dev/diskaygıtı: diskin üzerine yazar": [
   "guvenlik.py:867",
@@ -1322,7 +1322,7 @@
  ],
  "KWin pencere listesi alınamadı: {hata}": [
   "api.py:667",
-  "uygulama.py:1035"
+  "uygulama.py:1097"
  ],
  "KWin süreci doğrulanamadı (pid {pid})": [
   "kwin_oturum.py:1019"
@@ -1881,7 +1881,7 @@
   "uygulama.py:342"
  ],
  "adres iki kez ve farklı verildi (--url ile konumsal adres)": [
-  "uygulama.py:940"
+  "uygulama.py:1002"
  ],
  "adres reddedildi {adres}: {neden}": [
   "uygulama.py:348"
@@ -2032,7 +2032,7 @@
   "cli.py:528"
  ],
  "açıldı ({sn} sn)": [
-  "uygulama.py:1018"
+  "uygulama.py:1080"
  ],
  "banka/ödeme/devlet/kimlik alanı: kalıcı depoya alınmaz": [
   "oturum/denetle.py:386"
@@ -2080,7 +2080,7 @@
   "masaustu.py:1320"
  ],
  "başlatıldı: {ad}": [
-  "uygulama.py:999"
+  "uygulama.py:1061"
  ],
  "başlık değişti (otomatik tam başlık kilidi): sayfa başlığı değişen akışlarda -b ile esnek desen ver ya da --no-title-lock kullan": [
   "cli.py:756"
@@ -3057,7 +3057,7 @@
   "gorev_kipi.py:425"
  ],
  "görev kipi: ham komut açılmaz; uygulama adıyla aç": [
-  "uygulama.py:947"
+  "uygulama.py:1009"
  ],
  "görev kipi: yalnız görev tarayıcısının pencereleri kullanılır; bu pencere ({sinif}/{ikili}) kapatıldı, işlem yapılmadı": [
   "gorev_kipi.py:534"
@@ -3070,7 +3070,7 @@
  ],
  "görev kipi: {uygulama} açılmadı: {neden}": [
   "mcp_sunucu.py:2335",
-  "uygulama.py:957"
+  "uygulama.py:1019"
  ],
  "görev kipinde Flatpak tarayıcı açılmaz (tarayıcı ilkesi bağlanamaz)": [
   "gorev_kipi.py:283"
@@ -3111,7 +3111,7 @@
  ],
  "görünmez masaüstü başlatıldı": [
   "mcp_sunucu.py:2351",
-  "uygulama.py:970"
+  "uygulama.py:1032"
  ],
  "görünmez masaüstü bellek sınırının %{yuzde} kadarını kullanıyor ({cur} / {max} MB)": [
   "bellek_bekcisi.py:92"
@@ -3245,6 +3245,12 @@
  ],
  "ikinci argüman yön olmalı (down|up|left|right); nokta için: scroll KİMLİK X Y [yön] ya da --point X,Y; adım için: scroll KİMLİK down {adim}": [
   "cli.py:682"
+ ],
+ "ikinci pencere doğrulanamadı (sınıf {sinif}, etkin değil ya da süreç eşleşmiyor); adres yazılmadı": [
+  "uygulama.py:917"
+ ],
+ "ikinci pencere doğrulanamadı: Ctrl+N sonrası {sayi} aday pencere (tam bir olmalı); adres yazılmadı": [
+  "uygulama.py:909"
  ],
  "imlecin altında başka pencere var: {baslik}; tıklanmadı": [
   "guvenlik.py:1340"
@@ -3928,16 +3934,16 @@
   "arka_uc/kwin.py:140"
  ],
  "oturum: Flatpak örnekleri kapatılırken uyarı (ayrıntı günlükte)": [
-  "oturum/__init__.py:270"
+  "oturum/__init__.py:272"
  ],
  "oturum: {ad} kopyasında kimlik oturumu çerezleri yenilendi ({siteler}); asıl profil değiştirilmedi, ama sağlayıcı eski oturumu kapattıysa asıl tarayıcıda yeniden giriş gerekebilir": [
-  "oturum/__init__.py:288"
+  "oturum/__init__.py:290"
  ],
  "oturum: {karar}": [
-  "uygulama.py:926"
+  "uygulama.py:988"
  ],
  "oturum: {sayi} Flatpak örneği kapatılamadı ({uygulamalar}); kopyaları silinmedi": [
-  "oturum/__init__.py:267"
+  "oturum/__init__.py:269"
  ],
  "oyun sınıfı ({sinif})": [
   "mesgul.py:226"
@@ -4652,7 +4658,7 @@
   "uygulama.py:84"
  ],
  "uygulama adı ya da --komut gerekli": [
-  "uygulama.py:960"
+  "uygulama.py:1022"
  ],
  "uygulama adı yerine bu komutu başlat": [
   "cli.py:530"
@@ -4882,7 +4888,7 @@
   "masaustu.py:1459"
  ],
  "zaten açıktı, öne geldi ({sn} sn)": [
-  "uygulama.py:1024"
+  "uygulama.py:1086"
  ],
  "zip -TT: komut çalıştırır": [
   "guvenlik.py:841"
@@ -4903,7 +4909,7 @@
   "oturum/__init__.py:44"
  ],
  "{ad} kopyası hazır": [
-  "oturum/__init__.py:149"
+  "oturum/__init__.py:151"
  ],
  "{ad} süzüldü (görev kipinde aktarılmaz)": [
   "oturum/firefox.py:498"
@@ -4921,7 +4927,7 @@
   "oturum/__init__.py:43"
  ],
  "{ad}: birden çok Flatpak uygulamasına uyuyor; tam adını verin": [
-  "oturum/__init__.py:125"
+  "oturum/__init__.py:127"
  ],
  "{ad}: ham komutla oturum kopyası kullanılamaz; uygulama adıyla açın (ac {ad})": [
   "oturum/__init__.py:113"
@@ -4930,7 +4936,7 @@
   "guvenlik.py:854"
  ],
  "{ad}: kopya yöntemi tanımlı değil": [
-  "oturum/__init__.py:141"
+  "oturum/__init__.py:143"
  ],
  "{ad}: kullanıcının ekranında açık olup olmadığı bilinemiyor; tek örnek kilidi pencereyi kullanıcının ekranına devredebilir. Kapalı olduğu kesinleşince arka planda yapabilirim ya da Ekranımda yap.": [
   "oturum/__init__.py:115"
@@ -5164,7 +5170,7 @@
   "akis.py:259"
  ],
  "{sn} sn içinde uygun pencere açılmadı": [
-  "uygulama.py:1032"
+  "uygulama.py:1094"
  ],
  "{sn} sn içinde yanıt yok": [
   "mesgul.py:505"
@@ -5191,7 +5197,7 @@
   "guvenlik.py:197"
  ],
  "{uygulama} arka planda açılamaz ({karar})": [
-  "uygulama.py:921"
+  "uygulama.py:983"
  ],
  "{uygulama} görünmez masaüstünde açılamaz (şifre deposu ya da kasa gerektiriyor); kullanıcı meşgul değilse desktop='foreground'.": [
   "mcp_sunucu.py:2369"
@@ -5209,7 +5215,7 @@
   "oturum/chromium.py:133"
  ],
  "{uygulama}: oturum politikası 'kapali'": [
-  "uygulama.py:918"
+  "uygulama.py:980"
  ],
  "{x},{y} noktasındaki yazı: {yazi}": [
   "guvenlik.py:1411"

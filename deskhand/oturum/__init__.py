@@ -115,7 +115,9 @@ def hazirla(uygulama: str, gorev_siteleri=None, ham_komut: bool = False) -> Hazi
             aciklama = _("{ad}: kullanıcının ekranında açık olup olmadığı bilinemiyor; tek örnek kilidi pencereyi "
                          "kullanıcının ekranına devredebilir. Kapalı olduğu kesinleşince arka planda yapabilirim ya da "
                          "Ekranımda yap.").format(ad=ad)
-        return Hazirlik(karar=karar, aciklama=aciklama, gerekli_keyring=pol.keyring, ayrinti=ayrinti)
+        h = Hazirlik(karar=karar, aciklama=aciklama, gerekli_keyring=pol.keyring, ayrinti=ayrinti)
+        # ABM-F3: Flatpak tarayıcısı → Dur 16 + kök neden; yerli chromium → boş profil kopyası (MCP open_app da)
+        return (chromium.on_karari(h) or h) if karar == "on" and not ham_komut else h
 
     if karar == "paylas":
         argv: list = []

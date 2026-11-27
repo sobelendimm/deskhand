@@ -452,10 +452,13 @@ def test_tespit_soyut_soket():
 
 
 def test_hazirla_kararlar():
-    # chromium → on (keyring, röle yok)
+    # chromium → ABM-F3: keyring rölesi yok; BOŞ profil kopyası (--password-store=basic, kayıtlı girişler yok)
     h = oturum.hazirla("chromium")
-    kontrol("chromium hazirla on", h.karar == "on" and not h.argv, h.karar)
-    kontrol("chromium açıklama var", "arka planda açıl" in h.aciklama)
+    kontrol("chromium hazirla kopya (boş profil, anahtarlıksız)", h.karar == "kopya" and h.kopya_yolu and
+            "--password-store=basic" in h.argv and not any("kwallet" in a for a in h.argv), h.karar)
+    kontrol("chromium açıklama 'kayıtlı girişler yok'", "kayıtlı girişler yok" in h.aciklama)
+    if h.kopya_yolu:
+        oturum.temizle(h.kopya_yolu)
     # telegram → bekle
     kontrol("telegram hazirla bekle", oturum.hazirla("telegram").karar == "bekle")
     # bilinmeyen + ikilisi bulunamıyor → "açık mı" bilinemez → bekle (Y2)
