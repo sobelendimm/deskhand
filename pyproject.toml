@@ -54,7 +54,7 @@ include = ["deskhand", "deskhand.*"]
 
 [tool.setuptools.package-data]
 # the Wayland activity helper is C: shipped as source, built by install.sh (make -C deskhand/yardimci)
-deskhand = ["yardimci/*.c", "yardimci/*.h", "yardimci/Makefile", "data/*", "i18n/*.json"]
+deskhand = ["yardimci/*.c", "yardimci/*.h", "yardimci/Makefile", "data/*", "i18n/*.json", "gui/tema/*.json"]
 
 [tool.ruff]
 line-length = 140
