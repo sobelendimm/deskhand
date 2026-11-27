@@ -440,6 +440,12 @@ def bosta_neden(ad: str | None = None, simdi: float | None = None) -> str | None
             return "onay"
     except Exception:  # noqa: BLE001 - karar verilemedi: kapatma
         return "onay?"
+    try:  # bellek bekçisinin doğrulaması süren Firefox yeniden başlatması: kapanış onu "başarısız" gösterirdi
+        from . import bellek_bekcisi
+        if bellek_bekcisi.bekleyen_var(ad, d):
+            return "bellek-yeniden"
+    except Exception:  # noqa: BLE001 - karar verilemedi: kapatma
+        return "bellek?"
     son = son_kullanim(ad)
     simdi = time.time() if simdi is None else simdi
     if son is None or simdi - son < dk * 60:
@@ -453,8 +459,9 @@ def bosta_kapat(ad: str | None = None, simdi: float | None = None) -> bool:
     try:  # bellek bakımı (boşta: memory.reclaim / Firefox geri dönüşümü); masaüstünü kapatmaz, hatası kapanışı durdurmaz
         from . import bellek_bekcisi
         bellek_bekcisi.bakim(ad, simdi)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as e:  # noqa: BLE001 - yutulmaz: günlüğe (yeniden başlatma hataları bakim içinde uyarıya da yazılır)
+        from .gunluk import gunluk
+        gunluk(f"bellek | {ad or 'varsayılan'} bakım hatası: {type(e).__name__}: {getattr(e, 'mesaj', None) or e}")
     if bosta_neden(ad, simdi) is not None:
         return False
     son = son_kullanim(ad) or 0
@@ -1290,6 +1297,8 @@ def masaustu_durdur(ad: str | None = None) -> tuple[bool, list[str]]:
                 os.remove(durum_yolu(ad))
             except OSError:
                 pass
+            from . import bellek_bekcisi
+            bellek_bekcisi.durum_temizle(ad)  # varsayılan masaüstünde RUNTIME_DIR'da kalır: yeni masaüstü devralmasın
         # adlı masaüstünün dizini (masa/<ad>: kilit, devral, oturum/…) kalmasın; canlı MCP sahibi varsa (oturum boyunca
         # bağlı) sahip kaydı korunur, dizini MCP kapanışı siler (mcp_sunucu.masa_birak)
         s = masalar.sahip_oku(ad)

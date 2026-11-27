@@ -750,11 +750,16 @@ try:
 except (ValueError, KeyError):
     pass
 cg = d["cgroup"]
+from deskhand import bellek_bekcisi  # noqa: E402
+bellek_bekcisi._durum_yaz(None, {"son_yeniden_olay": {"zaman": time.time(), "kimlik": d.get("kimlik")}})
+bb_durum_vardi = os.path.exists(bellek_bekcisi._durum_yolu(None))
 t = time.monotonic()
 ok, notlar = masaustu.masaustu_durdur()
 olcum["masaüstü kapanış"] = f"{(time.monotonic() - t) * 1000:.0f} ms"
 kontrol("durdur: kapatıldı, not yok", ok and not notlar, str(notlar))
 kontrol("durdur: durum yok", masaustu.durum() is None and not os.path.exists(masaustu.durum_yolu()))
+kontrol("durdur: bellek bekçisi durum dosyası (varsayılan masaüstü, RUNTIME_DIR) temizlendi (ABM-F1-R2 B5)",
+        bb_durum_vardi and not os.path.exists(bellek_bekcisi._durum_yolu(None)))
 kontrol("durdur: test penceresi süreci öldü", bekle(lambda: p1.poll() is not None, 3))
 if KW:
     kontrol("durdur: XWayland soketleri + kilitleri ve Wayland soketi kalktı",

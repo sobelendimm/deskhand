@@ -256,6 +256,25 @@ with dogrulama_sinamasi._depo() as d:
     d["boot"] = "sonra"
 kontrol("ENOSPC sonrası normal yazım çalışır", True)
 
+# ------------------------------------------------------------------ koruma işareti (ABM-F1-R2 B1)
+
+korunan = sahte_kopya(KOK, sahip={"pid": olu_pid(), "bas": "1", "zaman": time.time() - 50})
+kopya_bekcisi.koru_isaretle(korunan, "bellek-yeniden")
+kontrol("koruma işareti: bekleyen/başarısız yeniden başlatmanın kopyası süpürmede SİLİNMEZ",
+        kopya_bekcisi.korunuyor(korunan) and not kopya_bekcisi.silinebilir_yol(korunan, KOK)
+        and korunan not in kopya.supur() and var(korunan))
+kontrol("koruma işareti: bekçi (sahip ölü) kopyayı silmez",
+        kopya_bekcisi.bekle_ve_sil(KOK, korunan, olu_pid(), "1", aralik=0.05, azami=2, son_pay=0) is False
+        and var(korunan))
+with open(os.path.join(korunan, kopya_bekcisi.KORU_DOSYA), "w") as f:
+    json.dump({"neden": "x", "zaman": time.time() - kopya_bekcisi.KORU_AZAMI - 10}, f)
+kontrol("koruma işareti KORU_AZAMI sonra geçersiz (tmpfs dolmasın): süpürülür",
+        not kopya_bekcisi.korunuyor(korunan) and korunan in kopya.supur() and not var(korunan))
+korunan2 = sahte_kopya(KOK, sahip={"pid": olu_pid(), "bas": "1"})
+kopya_bekcisi.koru_isaretle(korunan2, "x")
+kopya_bekcisi.koru_kaldir(korunan2)
+kontrol("koru_kaldir: işaret kalkınca kopya yine süpürülür", korunan2 in kopya.supur() and not var(korunan2))
+
 # ------------------------------------------------------------------ doctor satırı
 
 olu3 = sahte_kopya(KOK, bayt=2 * 1024 * 1024, sahip={"pid": olu_pid(), "bas": "1"})

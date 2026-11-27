@@ -1740,5 +1740,16 @@
  "{ad} boş profille açıldı: kayıtlı girişler yok (şifre deposu rölesi yok, anahtarlığa dokunulmaz)": "{ad} opened with an empty profile: no saved logins (no password store relay; the keyring is not touched)",
  "{kimlik} (Flatpak) görünmez masaüstünde açılmaz: kök neden, ad alanındaki boş ev dizininde ~/.var/app/{kimlik} yok ve Flatpak başlatıcısının X yetkisi yok; başlatıcı iç içe bwrap'ten önce çıkıyor (ölçüldü). Öneri: yerli chromium kullanın (open chromium; boş profil, kayıtlı girişler yok) ya da Ekranımda yap.": "{kimlik} (Flatpak) does not open on the background desktop: root cause, the empty home directory in the namespace has no ~/.var/app/{kimlik} and the Flatpak launcher has no X authorization; the launcher exits before the nested bwrap (measured). Suggestion: use native chromium (open chromium; empty profile, no saved logins) or Do it on my screen.",
  "ikinci pencere doğrulanamadı: Ctrl+N sonrası {sayi} aday pencere (tam bir olmalı); adres yazılmadı": "second window could not be verified: {sayi} candidate windows after Ctrl+N (exactly one required); address not typed",
- "ikinci pencere doğrulanamadı (sınıf {sinif}, etkin değil ya da süreç eşleşmiyor); adres yazılmadı": "second window could not be verified (class {sinif}, not active or process mismatch); address not typed"
+ "ikinci pencere doğrulanamadı (sınıf {sinif}, etkin değil ya da süreç eşleşmiyor); adres yazılmadı": "second window could not be verified (class {sinif}, not active or process mismatch); address not typed",
+ "Firefox açıldıktan hemen sonra kapandı": "Firefox exited right after starting",
+ "Firefox bellek için yeniden başlatılmadı: oturum kurtarma dosyası yok ya da bayat ({yol}); sekmeler kaybolmasın diye Firefox'a dokunulmadı": "Firefox was not restarted to free memory: the session recovery file is missing or stale ({yol}); Firefox was left running so no tabs are lost",
+ "Firefox bellek için yeniden başlıyor; birkaç saniye bekleyip yeniden gözlem yapın (pencere kimlikleri değişecek)": "Firefox is restarting to free memory; wait a few seconds, then observe again (window ids will change)",
+ "Firefox yeniden açılmadı": "Firefox did not start again",
+ "Firefox yeniden başlatması belleği yeterince azaltmadı ({once} → {sonra} MB); sonraki yeniden başlatma {dk} dk ertelendi": "restarting Firefox did not free enough memory ({once} → {sonra} MB); the next restart is postponed by {dk} min",
+ "Firefox yeniden başlatılamadı: {neden}; oturum yedeği: {yedek}": "Firefox could not be restarted: {neden}; session backup: {yedek}",
+ "başlatma reddedildi": "start was refused",
+ "beklenmedik hata": "unexpected error",
+ "doğrulama tamamlanamadı": "verification could not finish",
+ "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatılamadı); oturum yedeği: {yedek}": "session: copy {ad} was kept (Firefox could not be restarted); session backup: {yedek}",
+ "oturum: {ad} kopyası silinmedi (Firefox yeniden başlatması doğrulanmadan masaüstü kapandı); oturum yedeği: {yedek}": "session: copy {ad} was kept (the desktop stopped before the Firefox restart was verified); session backup: {yedek}"
 }
