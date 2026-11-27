@@ -3,7 +3,7 @@
 # exits non-zero if any failed. tests/ekranli/ is never run (it touches a real screen).
 # Usage: tests/ci_kos.sh   (from anywhere; the caller sets up DISPLAY / session bus)
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 basarisiz=()
 gecen=0
 for t in tests/test_*.py; do
