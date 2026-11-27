@@ -371,20 +371,41 @@ def _sir_ve_hedef(ad: str) -> tuple[str, dict]:
         raise Dur(1, _("gizli bilgi metin değil: {ad}").format(ad=ad)) from None
 
 
-def _guncel_konak(k) -> str:
-    """The host of the page the browser window `k` shows NOW, read from the accessibility tree at this moment (the
-    document's own URL, not the page title and not a cached scan). '' = not a browser / not readable."""
+def _konak(adres: str) -> str:
     from urllib.parse import urlsplit
-    from . import web
     try:
-        if not web.tarayici_mi(k):
-            return ""
-        web.hazirla(k)
-        with web.tarama_siniri(5.0):
-            s = web.oku(k, roller=["password text"], gorunur=True, en_cok=1, ad_siniri=0, ayrinti=False)
-        return (urlsplit(str(s["sayfa"].get("adres") or "")).hostname or "").lower().rstrip(".")
-    except Exception:  # noqa: BLE001 - unknown (Dur included): the caller fails closed where it matters
+        return (urlsplit(str(adres or "")).hostname or "").lower().rstrip(".")
+    except ValueError:
         return ""
+
+
+def _alan_konagi(bilgi: dict | None, tarayici: bool) -> str:
+    """The origin host of the FOCUSED PASSWORD FIELD's own document (security review R3: not the top page: a login
+    iframe of another site must not pass as the top site). Browser window: the field must sit in a document whose
+    host is known and equal to the top document's host, and the chain must reach the window; otherwise Dur 10.
+    Not a browser (a native password dialog): '' (no web origin; only a window-class binding can apply)."""
+    if not tarayici:
+        return ""
+    if not bilgi or not bilgi.get("parola"):
+        raise Dur(10, _("kayıtlı parola yazılmadı: odaklı alan parola alanı değil ya da okunamadı"))
+    alan, ust = _konak(bilgi.get("belge") or ""), _konak(bilgi.get("ust") or "")
+    if not bilgi.get("tam") or not alan or not ust:
+        raise Dur(10, _("kayıtlı parola yazılmadı: parola alanının sayfa kökeni belirlenemedi"))
+    if alan != ust:
+        raise Dur(10, _("kayıtlı parola yazılmadı: parola alanı başka bir sitenin iç çerçevesinde ({alan}; sayfa "
+                        "{ust})").format(alan=alan, ust=ust))
+    return alan
+
+
+def _guncel_konak(k) -> str:
+    """The host of the focused password field's own document in window `k`, read NOW from the accessibility tree
+    (not the page title, not a cached scan): _alan_konagi. '' = not a browser window."""
+    from . import erisim, web
+    try:
+        tarayici = bool(web.tarayici_mi(k))
+    except Exception:  # noqa: BLE001 - unknown: treat as a browser (the stricter path)
+        tarayici = True
+    return _alan_konagi(erisim.odak_parola_belgesi(k) if tarayici else None, tarayici)
 
 
 def _pencere_bilgisi(k) -> tuple[str, str]:
@@ -399,7 +420,7 @@ def _pencere_bilgisi(k) -> tuple[str, str]:
 
 def _sir_hedef_denetle(ad: str, h: dict, sinif: str, konak: str) -> None:
     """The secret's binding: window class (from the window manager) must be equal; site: the host read NOW from the
-    window's accessibility tree (_guncel_konak) must be the site or a subdomain of it. Unknown → refused."""
+    focused password field's own document (_guncel_konak / _alan_konagi) must be the site or a subdomain of it. Unknown → refused."""
     if h.get("uygulama") and h["uygulama"] != sinif:
         raise Dur(10, _("kayıtlı parola ({ad}) yalnız {uygulama} penceresine yazılır (hedef: {sinif})").format(
             ad=ad, uygulama=h["uygulama"], sinif=sinif or "?"))
@@ -426,7 +447,7 @@ def k_yaz_sir(a):
                         "belirlenemedi (erişilebilirlik: deskhand a11y on)"))
     deger, hedef = _sir_ve_hedef(ad)  # exists + readable before anything is asked
     _baslik, sinif = _pencere_bilgisi(a.kimlik)
-    konak = _guncel_konak(a.kimlik)  # read NOW (review R2 finding 1: no cached address)
+    konak = _guncel_konak(a.kimlik)  # the field's own document, read NOW (R2/R3: no cache, no top-page origin)
     _sir_hedef_denetle(ad, hedef, sinif, konak)
     # ALWAYS the user's approval in the panel, whatever the approval scope and --onayli say (a stored password may
     # leave the machine only with the user's Yes). The dialog shows the VERIFIED target (window class from the window

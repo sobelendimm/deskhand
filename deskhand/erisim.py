@@ -837,6 +837,8 @@ def _atspi_is(istek):
         return _odakli_parola(Atspi, cerceve)
     if islem == "odak_kart":
         return _odakli_kart(Atspi, cerceve)
+    if islem == "odak_parola_belge":
+        return _odak_parola_belge(Atspi, cerceve)
     if islem == "odak_bilgi":
         return _odak_bilgi(Atspi, cerceve)
 
@@ -928,6 +930,58 @@ def _odakli_parola(Atspi, cerceve):
         return bool(o is not None and o.get_role_name() == "password text")
     except Exception:  # noqa: BLE001
         return False
+
+
+def _belge_adresi(belge) -> str:
+    """The URL of an AT-SPI document node (Firefox "DocURL", Chromium "URI"); '' when it cannot be read."""
+    try:
+        oz = belge.get_document_attributes() or {}
+        return str(dict(oz).get("DocURL") or dict(oz).get("URI") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _odak_parola_belge(Atspi, cerceve):
+    """The focused password field and the documents it sits in (its value is NOT read): {"parola": bool,
+    "belge": URL of the NEAREST enclosing document (an iframe's own document), "ust": URL of the outermost document,
+    "katman": number of documents on the way up, "tam": the chain reached the frame}. A chain that breaks off is
+    "tam": False (the caller refuses: origin unknown)."""
+    o = _uclar(Atspi, cerceve, lambda o, rol, ss, S: ss.contains(S.FOCUSED) and rol in ("password text", "text",
+                                                                                          "entry", "terminal"))
+    try:
+        if o is None or o.get_role_name() != "password text":
+            return {"parola": False, "belge": "", "ust": "", "katman": 0, "tam": False}
+    except Exception:  # noqa: BLE001
+        return {"parola": False, "belge": "", "ust": "", "katman": 0, "tam": False}
+    adresler, x, tam = [], o, False
+    for _i in range(120):
+        try:
+            x = x.get_parent()
+        except Exception:  # noqa: BLE001
+            break
+        if x is None:
+            break
+        if x == cerceve:
+            tam = True
+            break
+        try:
+            if x.get_role_name() in ("document web", "document frame"):
+                adresler.append(_belge_adresi(x))
+        except Exception:  # noqa: BLE001
+            break
+    return {"parola": True, "belge": adresler[0] if adresler else "", "ust": adresler[-1] if adresler else "",
+            "katman": len(adresler), "tam": tam}
+
+
+def odak_parola_belgesi(k) -> dict | None:
+    """Window `k`: _odak_parola_belge through the AT-SPI helper (None: not readable / accessibility off)."""
+    try:
+        if not erisim_acik():
+            return None
+        r = _atspi_calistir(_pencere_istegi(k, "odak_parola_belge"))
+        return r if isinstance(r, dict) else None
+    except Exception:  # noqa: BLE001 - unknown: the caller refuses
+        return None
 
 
 _DUZENLENEBILIR_ROLLER = ("entry", "text", "password text", "terminal", "spin button", "combo box")

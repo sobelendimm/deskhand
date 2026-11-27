@@ -426,6 +426,37 @@ try:
     liste_koruma._anahtar_unut()
     kontrol("R2-3: bozuk çapa → kapalı-başarısız (denetim kapanmaz)",
             liste_koruma.panel_dur_ayrinti() == (None, liste_koruma.DUR_NEDEN_OKUNAMADI))
+    # R3-2: çapa silinirse, sahte çapa konursa ya da çapa yazılamazsa kapalı-başarısız
+    liste_koruma.panel_dur_sakla(True)
+    liste_koruma._anahtar_unut()
+    kontrol("R3-2: çapa yerindeyken DUR kaydı okunur", liste_koruma.panel_dur_ayrinti() == (True, None))
+    AD.ornek("kasa").sil("panel-nesil")
+    liste_koruma._EN_YUKSEK_NESIL = 0
+    liste_koruma._anahtar_unut()
+    kontrol("R3-2: nesilli durum + çapa SİLİNMİŞ → kapalı-başarısız",
+            liste_koruma.panel_dur_ayrinti() == (None, liste_koruma.DUR_NEDEN_OKUNAMADI) and
+            liste_koruma.onayli_deger(liste_koruma.KAPSAM) == (False, None))
+    AD.ornek("kasa").yaz("panel-nesil", b"1:" + b"0" * 64)  # biçimi doğru ama HMAC'i yanlış çapa
+    liste_koruma._EN_YUKSEK_NESIL = 0
+    liste_koruma._anahtar_unut()
+    kontrol("R3-2: HMAC'i tutmayan çapa → kapalı-başarısız",
+            liste_koruma.panel_dur_ayrinti() == (None, liste_koruma.DUR_NEDEN_OKUNAMADI))
+    kontrol("R3-2: kullanıcının DUR eylemi durumu ve çapayı yeniden yazar", liste_koruma.panel_dur_sakla(True) and
+            (liste_koruma._anahtar_unut() or liste_koruma.panel_dur_ayrinti() == (True, None)))
+    kasa_n = liste_koruma._kasa_nesnesi()
+    eski_nyaz = kasa_n.nesil_yaz
+
+    def _cyaz(v):
+        raise AD.DepoHatasi("disk dolu")
+
+    kasa_n.nesil_yaz = _cyaz
+    try:
+        liste_koruma._anahtar_unut()
+        kontrol("R3-2: çapa yazılamazsa imza başarısız sayılır (yutulmaz) + neden",
+                liste_koruma.panel_dur_sakla(False) is False and "çapası yazılamadı" in (liste_koruma.kasa_nedeni() or ""),
+                liste_koruma.kasa_nedeni())
+    finally:
+        kasa_n.nesil_yaz = eski_nyaz
 finally:
     os.environ["DESKHAND_ANAHTARLIK"] = "kapali"
     AD.ornek_ayarla("cuzdan", None)
@@ -648,6 +679,45 @@ finally:
     cli.k_yaz = eski_k_yaz
     eylem._parola_alani_mi = eski_parola
     AD.ornek_ayarla("kasa", None)
+
+# R3-1: site bağı odaktaki parola alanının KENDİ belgesiyle denetlenir (üst sayfayla değil)
+def _dur_kodu(f):
+    try:
+        f()
+        return None
+    except Dur as e:
+        return e.kod
+
+
+kontrol("R3-1: tarayıcı değil → konak '' (yalnız uygulama bağı uygulanır)", cli._alan_konagi(None, False) == "")
+kontrol("R3-1: aynı kökenli belge → alanın konağı",
+        cli._alan_konagi({"parola": True, "belge": "https://giris.banka.com.tr/x", "ust": "https://giris.banka.com.tr/",
+                          "katman": 1, "tam": True}, True) == "giris.banka.com.tr")
+kontrol("R3-1: başka sitenin iç çerçevesindeki parola alanı → Dur 10", _dur_kodu(lambda: cli._alan_konagi(
+    {"parola": True, "belge": "https://kotu.example/f", "ust": "https://giris.banka.com.tr/", "katman": 2,
+     "tam": True}, True)) == 10)
+kontrol("R3-1: üst sayfa bağlı sitede ama alan başka kökende (ters iframe) → Dur 10", _dur_kodu(lambda: cli._alan_konagi(
+    {"parola": True, "belge": "https://giris.banka.com.tr/", "ust": "https://kotu.example/", "katman": 2,
+     "tam": True}, True)) == 10)
+kontrol("R3-1: köken okunamadı (boş adres / kopuk zincir) → Dur 10",
+        _dur_kodu(lambda: cli._alan_konagi({"parola": True, "belge": "", "ust": "", "katman": 0, "tam": True}, True)) == 10
+        and _dur_kodu(lambda: cli._alan_konagi({"parola": True, "belge": "https://a.com", "ust": "https://a.com",
+                                                "katman": 1, "tam": False}, True)) == 10)
+kontrol("R3-1: tarayıcıda bilgi yok / parola alanı değil → Dur 10",
+        _dur_kodu(lambda: cli._alan_konagi(None, True)) == 10 and
+        _dur_kodu(lambda: cli._alan_konagi({"parola": False}, True)) == 10)
+from deskhand import erisim as _er, web as _web  # noqa: E402
+eski_ob, eski_tm = _er.odak_parola_belgesi, _web.tarayici_mi
+try:
+    _web.tarayici_mi = lambda k: True
+    _er.odak_parola_belgesi = lambda k: {"parola": True, "belge": "https://kotu.example/i", "ust": "https://banka.com",
+                                         "katman": 2, "tam": True}
+    kontrol("R3-1: _guncel_konak alanın belgesini sorar (iframe → Dur 10)", _dur_kodu(lambda: cli._guncel_konak("p")) == 10)
+    _er.odak_parola_belgesi = lambda k: {"parola": True, "belge": "https://banka.com/l", "ust": "https://banka.com",
+                                         "katman": 1, "tam": True}
+    kontrol("R3-1: _guncel_konak aynı köken → konak", cli._guncel_konak("p") == "banka.com")
+finally:
+    _er.odak_parola_belgesi, _web.tarayici_mi = eski_ob, eski_tm
 
 # MCP type_text: secret_ref parametresi var, text ile birlikte reddedilir (masaüstüne dokunmadan)
 import inspect  # noqa: E402

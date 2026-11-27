@@ -2157,5 +2157,9 @@
  "Yalnız bu uygulama (isteğe bağlı)": "Only this application (optional)",
  "pencere sınıfı, ör. firefox": "window class, e.g. firefox",
  "{ad} · yalnız {hedef}": "{ad} · only {hedef}",
- "ör. ornekbanka.com.tr; alt alan adları dahil": "e.g. examplebank.com; subdomains included"
+ "ör. ornekbanka.com.tr; alt alan adları dahil": "e.g. examplebank.com; subdomains included",
+ "kayıtlı parola yazılmadı: odaklı alan parola alanı değil ya da okunamadı": "the saved password was not typed: the focused field is not a password field or could not be read",
+ "kayıtlı parola yazılmadı: parola alanı başka bir sitenin iç çerçevesinde ({alan}; sayfa {ust})": "the saved password was not typed: the password field is in another site's inner frame ({alan}; page {ust})",
+ "kayıtlı parola yazılmadı: parola alanının sayfa kökeni belirlenemedi": "the saved password was not typed: the password field's page origin could not be determined",
+ "panelin nesil çapası yazılamadı: {neden}": "the panel's generation anchor could not be written: {neden}"
 }
