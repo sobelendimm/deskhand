@@ -134,8 +134,9 @@ YARDIM_KOMUTLAR = (
     N_("  ekran doctor (doktor) [--json]          kurulum ve oturum sağlığı: bağımlılıklar, oturum, panel, yardımcılar "
        "(salt okunur;\n"
        "                                          zorunlu bağımlılık eksikse çıkış kodu 9)"),
-    N_("  ekran install-desktop (masaustu-kur) [--remove] [--no-autostart]   pip/pipx kurulumunda menü girdisi, simge ve\n"
-       "                                          oturum açılışında panel (install.sh kurulumunda gerekmez)"),
+    N_("  ekran install-desktop (masaustu-kur) [--remove] [--no-autostart | --autostart]\n"
+       "                                          pip/pipx kurulumunda menü girdisi, simge ve oturum açılışında panel\n"
+       "                                          (install.sh kurulumunda gerekmez; --no-autostart tercihi kalıcı)"),
     N_("  ekran help (yardım)                     bu metin"),
 )
 YARDIM_ORTAK = (

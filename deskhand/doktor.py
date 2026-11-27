@@ -639,10 +639,33 @@ def _yardimci_satiri(satir: dict) -> dict:
     return satir
 
 
+def _sanal_ortam() -> bool:
+    """Sanal ortamda mı: pyvenv.cfg (venv/virtualenv ≥ 20, uv), eski virtualenv'in sys.real_prefix'i ya da gerçek yolu
+    farklı base_prefix. Yalnız metin karşılaştırması yanılır: pyenv/uv sürüm bağı prefix ile base_prefix'i aynı Python
+    için farklı yazabilir."""
+    import sys
+    if os.path.isfile(os.path.join(sys.prefix, "pyvenv.cfg")) or hasattr(sys, "real_prefix"):
+        return True
+    return os.path.realpath(sys.prefix) != os.path.realpath(sys.base_prefix)
+
+
+def _sistem_python() -> str:
+    """GPU OCR venv'inin tabanı: dağıtımın python3'ü (install.sh'nin PY'si gibi; dağıtımın torch'unu yalnız o görür).
+    Arama kullanıcının PATH'i değil sistemin öntanımlı yolu (os.defpath): pyenv/uv kabukları ve base_prefix
+    (pyenv/uv Python'u) dağıtım paketlerini görmez. Bulunamazsa base_prefix'in python3'ü, o da yoksa python3."""
+    import shutil
+    import sys
+    bulunan = shutil.which("python3", path=os.defpath)
+    if bulunan:
+        return bulunan
+    py = os.path.join(sys.base_prefix, "bin", "python3")
+    return py if os.path.isfile(py) else "python3"
+
+
 def _pipx_venv() -> bool:
     """pipx kurulumu mu: pipx her uygulamayı <PIPX_HOME>/venvs/<ad> sanal ortamına kurar."""
     import sys
-    return sys.prefix != sys.base_prefix and os.path.basename(os.path.dirname(sys.prefix)) == "venvs"
+    return _sanal_ortam() and os.path.basename(os.path.dirname(sys.prefix)) == "venvs"
 
 
 def _modul_onerisi(d: dict, dagitim_onerisi: str) -> str:
@@ -650,7 +673,7 @@ def _modul_onerisi(d: dict, dagitim_onerisi: str) -> str:
     kurulumu) modül deskhand'in pip bağımlılığıdır, sistem paketi venv'e görünmez → bağımlılıkları geri getiren komut."""
     import shlex
     import sys
-    if d.get("tur") != "modul" or _kaynak_kurulumu() or sys.prefix == sys.base_prefix:
+    if d.get("tur") != "modul" or _kaynak_kurulumu() or not _sanal_ortam():
         return dagitim_onerisi
     if _pipx_venv():
         return shlex.join(["pipx", "reinstall", os.path.basename(sys.prefix)])
@@ -659,16 +682,16 @@ def _modul_onerisi(d: dict, dagitim_onerisi: str) -> str:
 
 def _gpu_ocr_satiri(satir: dict, eksik: list[str]) -> dict:
     """GPU OCR outside a source checkout (pip/pipx): install.sh's ocr-venv steps as commands (there is no
-    ./install.sh): a venv on the system Python that sees the distribution's torch, EasyOCR into it, then the models
-    (run with the package's parent directory as the current directory, like install.sh does in the source folder)."""
+    ./install.sh): a venv on the system Python that sees the distribution's torch, EasyOCR into it, then the models.
+    The download runs the venv interpreter with -I (no current directory, PYTHON* or user site on sys.path) and loads
+    only THIS deskhand package from its folder: putting the pipx site-packages on sys.path (install.sh's `cd` into
+    the source folder) would let that venv's packages shadow the system ones the OCR venv must use."""
     import shlex
-    import sys
 
     from . import ocr_gpu
     if _kaynak_kurulumu():
         return satir
-    py = os.path.join(sys.base_prefix, "bin", "python3")
-    py = py if os.path.isfile(py) else "python3"
+    py = _sistem_python()
     venv_py = os.path.join(ocr_gpu.venv_dizin(), "bin", "python")
     adimlar = []
     if "python" in eksik:
@@ -679,8 +702,14 @@ def _gpu_ocr_satiri(satir: dict, eksik: list[str]) -> dict:
                                       "python-torchvision, python-opencv, python-scikit-image, python-shapely, "
                                       "python-pyclipper, python-scipy)")
     if "model" in eksik:
-        adimlar.append(shlex.join(["cd", os.path.dirname(yollar.PAKET_DIZIN)]) + " && " +
-                       shlex.join([venv_py, "-m", "deskhand.ocr_gpu", "indir", ocr_gpu.model_dizin()]))
+        paket = yollar.PAKET_DIZIN
+        kod = ("import importlib.util as u, sys\n"
+               f"s = u.spec_from_file_location('deskhand', {os.path.join(paket, '__init__.py')!r}, "
+               f"submodule_search_locations=[{paket!r}])\n"
+               "m = u.module_from_spec(s); sys.modules['deskhand'] = m; s.loader.exec_module(m)\n"
+               "from deskhand import ocr_gpu\n"
+               "ocr_gpu.indir(sys.argv[1])")
+        adimlar.append(shlex.join([venv_py, "-I", "-c", kod, ocr_gpu.model_dizin()]))
     satir["oneri"] = " && ".join(adimlar) if adimlar else _("günlüğe bakın: {yol}").format(yol=ocr_gpu.gunluk_yolu())
     return satir
 
@@ -694,6 +723,9 @@ def satir_masaustu():
     ad = _("Masaüstü girdileri")
     h = masaustu_kur.hedefler()
     menu, acilis = os.path.isfile(h["menu"]), os.path.isfile(h["acilis"])
+    if menu and acilis and masaustu_kur.acilis_kapali(h["acilis"]):
+        return _satir(ad, "tamam", _("menü girdisi var; oturum açılışında panel kapalı (tercih; açmak için: "
+                                     "deskhand install-desktop --autostart)"))
     if menu and acilis:
         return _satir(ad, "tamam", _("menü girdisi ve oturum açılışında panel var"))
     if not menu:

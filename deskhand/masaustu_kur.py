@@ -1,8 +1,9 @@
 """`deskhand install-desktop` (`masaustu-kur`): the desktop integration install.sh writes, for a pip/pipx install.
 
 Writes (XDG paths, atomically, 0644): the application menu entry (`panel`), the "Give a task" entry (`panel --gorev`),
-the login entry that starts the panel in the tray (`panel --tepsi`; `--no-autostart`: not written, ours removed), the
-icon, and for KWin before 6.8 (or an unknown version) the desktop entry that grants the screenshot helper ScreenShot2.
+the login entry that starts the panel in the tray (`panel --tepsi`; `--no-autostart`: our entry with Hidden=true, so
+the choice persists: a later run without an option keeps it, `--autostart` turns it back on), the icon (not over a
+different deskhand.svg of the user), and for KWin before 6.8 (or an unknown version) the desktop entry that grants the screenshot helper ScreenShot2.
 
 Exec lines are ABSOLUTE: the running interpreter + `-I -m deskhand …` (no PATH lookup of `deskhand`; ~/.local/bin is
 writable by any user process), quoted like install.sh's desktop_exec. A package in the user site-packages (pip --user)
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -86,6 +88,7 @@ def hedefler() -> dict[str, str]:
 
 
 GIRDILER = ("menu", "gorev", "goruntu", "acilis")
+GIZLI = "Hidden=true"  # XDG autostart: the entry is disabled (--no-autostart, KDE's autostart settings)
 
 
 def exec_kacis(s: str) -> str:
@@ -93,6 +96,10 @@ def exec_kacis(s: str) -> str:
     the word is double-quoted with \\ " ` $ backslash-escaped, and that backslash escaped again (string value)."""
     if any(ord(c) < 32 or ord(c) == 127 for c in s):
         raise KurulumHatasi(_("yol denetim karakteri içeriyor, masaüstü girdisine yazılamaz: {yol}").format(yol=repr(s)))
+    try:
+        s.encode("utf-8")
+    except UnicodeEncodeError:
+        raise KurulumHatasi(_("yol geçerli UTF-8 değil, masaüstü girdisine yazılamaz: {yol}").format(yol=repr(s))) from None
     s = s.replace("%", "%%")
     if all(c in GUVENLI for c in s):
         return s
@@ -122,8 +129,9 @@ def _ice_aktarilabilir() -> bool:
     return r.returncode == 0 and os.path.realpath(r.stdout.strip()) == os.path.realpath(yollar.PAKET_DIZIN)
 
 
-def _sablon(ad: str, arg: str) -> str:
-    """deskhand/data/<ad> with an absolute Exec, without the template comments, plus our markers."""
+def _sablon(ad: str, arg: str, gizli: bool = False) -> str:
+    """deskhand/data/<ad> with an absolute Exec, without the template comments, plus our markers; gizli: Hidden=true
+    after Exec (the template has one group: [Desktop Entry]), the autostart way to say "do not start"."""
     satirlar = []
     with open(os.path.join(yollar.PAKET_DIZIN, "data", ad), encoding="utf-8") as f:
         for satir in f.read().splitlines():
@@ -131,6 +139,9 @@ def _sablon(ad: str, arg: str) -> str:
                 continue
             if satir.startswith("Exec="):
                 satir = "Exec=" + exec_satiri(arg)
+                if gizli:
+                    satirlar.append(satir)
+                    satir = GIZLI
             satirlar.append(satir)
     return "\n".join(satirlar + [ISARET, IMZA]) + "\n"
 
@@ -143,12 +154,38 @@ def _goruntu_metni() -> str:
             f"X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2\n{ISARET}\n{IMZA}\n")
 
 
-def _icerik(yol: str) -> str | None:
+def _oku(yol: str) -> bytes | None:
+    """Contents of a REGULAR file (a symlink is followed), else None: a FIFO or device must not block or be read."""
     try:
-        with open(yol, encoding="utf-8", errors="replace") as f:
+        fd = os.open(yol, os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        with os.fdopen(fd, "rb") as f:
+            fd = -1
             return f.read()
     except OSError:
         return None
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def _icerik(yol: str) -> str | None:
+    veri = _oku(yol)
+    return None if veri is None else veri.decode("utf-8", errors="replace")
+
+
+def acilis_kapali(yol: str) -> bool:
+    """Is the login entry disabled (Hidden=true: our --no-autostart, or the user's choice in KDE settings)?"""
+    return GIZLI in (_icerik(yol) or "").splitlines()
+
+
+def _paket_simgesi() -> bytes:
+    with open(os.path.join(yollar.PAKET_DIZIN, "data", "deskhand.svg"), "rb") as f:
+        return f.read()
 
 
 def durum(yol: str) -> str:
@@ -204,7 +241,8 @@ def _installsh_engeli(h: dict[str, str]) -> str | None:
     return None
 
 
-def kur(acilis: bool = True) -> int:
+def kur(acilis: bool | None = None) -> int:
+    """acilis: True (--autostart) / False (--no-autostart) / None: keep the choice in our login entry (default on)."""
     h = hedefler()
     engel = _installsh_engeli(h)
     if engel:
@@ -216,16 +254,18 @@ def kur(acilis: bool = True) -> int:
                 "çalıştırın.").format(py=sys.executable, paket=yollar.PAKET_DIZIN), file=sys.stderr)
         return 1
     # every text first: a path that cannot be written safely stops the command before any file changes
+    if acilis is None:
+        acilis = not (durum(h["acilis"]) == "bizim" and acilis_kapali(h["acilis"]))
     metinler = {"menu": _sablon("deskhand.desktop", "panel"),
-                "gorev": _sablon("deskhand-gorev.desktop", "panel --gorev")}
-    if acilis:
-        metinler["acilis"] = _sablon("deskhand.desktop", "panel --tepsi")
+                "gorev": _sablon("deskhand-gorev.desktop", "panel --gorev"),
+                "acilis": _sablon("deskhand.desktop", "panel --tepsi", gizli=not acilis)}
     if _eski_kwin():
         metinler["goruntu"] = _goruntu_metni()
-    with open(os.path.join(yollar.PAKET_DIZIN, "data", "deskhand.svg"), "rb") as f:
-        svg = f.read()
+    svg = _paket_simgesi()
     adlar = {"menu": _("Uygulama menüsü"), "gorev": _("Görev ver kısayolu"),
-             "acilis": _("Oturum açılışında panel (tepsi)"), "goruntu": _("Ekran görüntüsü izni (KWin < 6.8)")}
+             "acilis": _("Oturum açılışında panel (tepsi)") if acilis else
+             _("Oturum açılışında panel: kapalı (--no-autostart)"),
+             "goruntu": _("Ekran görüntüsü izni (KWin < 6.8)")}
     for a in ("menu", "gorev", "acilis", "goruntu"):
         if a not in metinler:
             continue
@@ -235,12 +275,13 @@ def kur(acilis: bool = True) -> int:
         _yaz(h[a], metinler[a].encode("utf-8"))
         _say(f"{adlar[a]}: {h[a]}")
     if not acilis:
-        if durum(h["acilis"]) == "bizim":
-            os.unlink(h["acilis"])
-        _say(_("Oturum açılışında panel kapalı (--no-autostart). Onay istekleri için panel açık olmalı: "
-               "deskhand panel --tepsi"))
-    _yaz(h["simge"], svg)
-    _say(_("Simge: {yol}").format(yol=h["simge"]))
+        _say(_("Oturum açılışında panel kapalı (açmak için: deskhand install-desktop --autostart). Onay istekleri "
+               "için panel açık olmalı: deskhand panel --tepsi"))
+    if os.path.lexists(h["simge"]) and _oku(h["simge"]) != svg:
+        _uyar(_("{yol} paketteki simgeden farklı, dokunulmadı").format(yol=h["simge"]))
+    else:
+        _yaz(h["simge"], svg)
+        _say(_("Simge: {yol}").format(yol=h["simge"]))
     _sycoca()
     _say(_("Bitti. Kaldırmak için: deskhand install-desktop --remove"))
     return 0
@@ -255,11 +296,7 @@ def kaldir() -> int:
             _say(_("Kaldırıldı: {yol}").format(yol=h[a]))
         elif d != "yok":
             _uyar(_("{yol} bizim değil, dokunulmadı").format(yol=h[a]))
-    try:
-        with open(h["simge"], "rb") as a_, open(os.path.join(yollar.PAKET_DIZIN, "data", "deskhand.svg"), "rb") as b:
-            ayni = a_.read() == b.read()
-    except OSError:
-        ayni = None
+    ayni = None if not os.path.lexists(h["simge"]) else _oku(h["simge"]) == _paket_simgesi()
     if ayni:
         os.unlink(h["simge"])
         _say(_("Kaldırıldı: {yol}").format(yol=h["simge"]))
@@ -270,21 +307,25 @@ def kaldir() -> int:
 
 
 def main(argv: list[str]) -> int:
-    """`deskhand install-desktop [--remove] [--no-autostart]` (Turkish: masaustu-kur [--kaldir] [--acilissiz])."""
+    """`deskhand install-desktop [--remove] [--no-autostart | --autostart]` (Turkish: masaustu-kur [--kaldir]
+    [--acilissiz | --acilisli])."""
     from .cli import _Ayristirici, prog_adi
     p = _Ayristirici(prog=f"{prog_adi()} install-desktop", allow_abbrev=False,
                      description=_("pip/pipx kurulumunda menü girdisi, simge ve oturum açılışında panel (install.sh "
                                    "kurulumunda gerekmez)."))
     p.add_argument("--remove", "--kaldir", dest="kaldir", action="store_true",
                    help=_("yalnız bu komutun yazdığı dosyaları sil"))
-    p.add_argument("--no-autostart", "--acilissiz", dest="acilissiz", action="store_true",
-                   help=_("panel oturum açılışında başlamasın"))
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--no-autostart", "--acilissiz", dest="acilis", action="store_false", default=None,
+                   help=_("panel oturum açılışında başlamasın (tercih kalıcı)"))
+    g.add_argument("--autostart", "--acilisli", dest="acilis", action="store_true", default=None,
+                   help=_("panel oturum açılışında başlasın (--no-autostart tercihini kaldırır)"))
     a = p.parse_args(argv)
     if os.geteuid() == 0:
         print(_("root olarak çalıştırma: masaüstü girdileri kullanıcı başınadır"), file=sys.stderr)
         return 1
     try:
-        return kaldir() if a.kaldir else kur(acilis=not a.acilissiz)
-    except (KurulumHatasi, OSError) as e:
+        return kaldir() if a.kaldir else kur(acilis=a.acilis)
+    except (KurulumHatasi, OSError, UnicodeError) as e:
         print(_("HATA: {hata}").format(hata=e), file=sys.stderr)
         return 1
