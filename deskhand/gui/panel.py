@@ -155,6 +155,12 @@ class Panel(QObject):
         self.kisayol = kisayol or GenelKisayol(self)
         self.diyaloglar: dict[str, OnayDiyalog] = {}
         self._sir_istekleri: set[str] = set()  # açılmış "parola kaydet" istekleri (aynısı ikinci kez açılmaz)
+        # "Parola kayıtlı değil" istekleri onay dosyaları DEĞİL: anahtar_deposu.sir_istekleri() (RUNTIME_DIR/sir-istek,
+        # değersiz) düşük sıklıkta yoklanır → Ayarlar › Gizli bilgiler'de Ekle formu
+        self._sir_zaman = QTimer(self)
+        self._sir_zaman.setInterval(self.SIR_YOKLA_MS)
+        self._sir_zaman.timeout.connect(self._sir_istek_yokla)
+        self._sir_zaman.start()
         self.diyalog_kurma_ms = diyalog_kurma_ms
         self.sunucu = sunucu
         if sunucu is not None:
@@ -488,12 +494,6 @@ class Panel(QObject):
 
     # -------- onaylar
     def _onaylar(self, bekleyen: list[dict]):
-        # "Parola kayıtlı değil" isteği (değersiz; B1): onay diyaloğu değil, Ayarlar › Gizli bilgiler'de Ekle formu
-        for b in [b for b in bekleyen if b.get("tur") == "sir_kaydet"]:
-            if b["id"] not in self._sir_istekleri:
-                self._sir_istekleri.add(b["id"])
-                QTimer.singleShot(0, lambda b=b: self._sir_kaydet_ac(b))
-        bekleyen = [b for b in bekleyen if b.get("tur") != "sir_kaydet"]
         kimlikler = {b["id"] for b in bekleyen}
         for k, dlg in list(self.diyaloglar.items()):
             if k not in kimlikler:
@@ -566,6 +566,23 @@ class Panel(QObject):
         self.pencere.showNormal() if self.pencere.isMinimized() else None
         self.pencere.raise_()
         self.pencere.activateWindow()
+
+    SIR_YOKLA_MS = 3000
+
+    def _sir_istek_yokla(self) -> list[str]:
+        """Yeni sir_kaydet isteklerini bir kez aç (aynı kimlik ikinci kez açılmaz). → açılan kimlikler."""
+        try:
+            istekler = self.pencere.ayarlar.gizli.au.sir_istekleri()
+        except Exception:  # noqa: BLE001 - kanal yok/okunamadı: bu tur boş
+            return []
+        acilan = []
+        for b in istekler:
+            k = b.get("id")
+            if isinstance(k, str) and k not in self._sir_istekleri:
+                self._sir_istekleri.add(k)
+                acilan.append(k)
+                QTimer.singleShot(0, lambda b=b: self._sir_kaydet_ac(b))
+        return acilan
 
     def _sir_kaydet_ac(self, istek: dict) -> None:
         """Ajan kayıtlı olmayan bir parola istedi (istek DEĞER taşımaz): paneli öne getir, Ayarlar > Gelişmiş >

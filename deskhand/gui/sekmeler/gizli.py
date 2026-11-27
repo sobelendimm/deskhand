@@ -130,6 +130,10 @@ H_KAYIT = N_("Kaydedilemedi. Ayrıntıdaki nedene bakıp yeniden deneyin.")
 H_SIR_ISTEGI = N_("Bir görev \"{ad}\" parolasını istedi ama kayıtlı değil. Parolayı buraya kaydedin; görev sonra "
                   "yeniden deneyebilir.")
 E_BASLIK = N_("Parola ekle")
+E_ONERI = N_("Ajanın önerdiği site (doğrulayın)")
+E_ONERI_KULLAN = N_("Bu siteyi kullan")
+E_BAG_ZORUNLU = N_("Bu istek için parola bir siteye ya da uygulamaya bağlanmalı: önerilen siteyi doğrulayıp işaretleyin "
+                   "ya da siteyi kendiniz yazın.")
 E_AD = N_("Ad")
 E_PAROLA = N_("Parola")
 E_TEKRAR = N_("Parola (tekrar)")
@@ -154,6 +158,17 @@ _AD_IZINLI = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789
 # yardımcı GUI programına (Cüzdan Yöneticisi) temiz ortama EK olarak geçen ekran/oturum değişkenleri (PATH asla)
 _GUI_ORTAM = ("HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY",
               "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "LANG", "LANGUAGE")
+
+
+def site_goster(site: str) -> str:
+    """Punycode (xn--) etiketli alan adını çözülmüş + ham hâliyle göster: "gíthub.com (xn--gthub-2qa.com)"."""
+    if not site:
+        return ""
+    try:
+        cozulmus = site.encode("ascii").decode("idna") if "xn--" in site.lower() else site
+    except (UnicodeError, ValueError):
+        cozulmus = site
+    return f"{cozulmus} ({site})" if cozulmus != site else site
 
 
 def ad_gecerli(ad: str) -> bool:
@@ -253,12 +268,24 @@ class ArkaUc:
     def sil(self, ad: str) -> None:
         self.depo().sil(ad)
 
-    def sir_istegi_kapat(self, istek: dict) -> bool:
-        f = self._islev("depo", "sir_istegi_kapat")
+    def sir_istekleri(self) -> list[dict]:
+        """anahtar_deposu.sir_istekleri(): [{"id","tur","ad","site","zaman"}] (değersiz; RUNTIME_DIR/sir-istek)."""
+        f = self._islev("depo", "sir_istekleri")
         if f is None:
+            return []
+        try:
+            return [dict(i) for i in f() if isinstance(i, dict)]
+        except Exception:  # noqa: BLE001 - istek kanalı okunamadı: bu tur boş
+            return []
+
+    def sir_istegi_kapat(self, istek: dict) -> bool:
+        """anahtar_deposu.sir_istegi_kapat(id): YALNIZ kimlik gider (sözlük verilirse arka uç False döner)."""
+        f = self._islev("depo", "sir_istegi_kapat")
+        kimlik = istek.get("id") if isinstance(istek, dict) else None
+        if f is None or not isinstance(kimlik, str):
             return False
         try:
-            return bool(f(istek))
+            return bool(f(kimlik))
         except Exception:  # noqa: BLE001 - the request expires on its own
             return False
 
@@ -485,7 +512,9 @@ class CuzdanKarti(QFrame):
 class EkleDiyalog(QDialog):
     """Ad + parola + tekrar. Değer yalnız parola() ile bir kez alınır; temizle() iki alanı da boşaltır."""
 
-    def __init__(self, mevcut: list[str], parent=None, ad: str = "", site: str = ""):
+    def __init__(self, mevcut: list[str], parent=None, ad: str = "", oneri_site: str = ""):
+        """oneri_site: ajanın isteğindeki site — ASLA kendiliğinden bağlanmaz; salt okunur gösterilir (punycode
+        çözülmüş + ham), kullanıcı "Bu siteyi kullan"ı işaretlerse bağ olur. Öneri varken bağ zorunludur."""
         super().__init__(parent)
         self.setWindowTitle(_(E_BASLIK))
         self._mevcut = set(mevcut)
@@ -513,11 +542,19 @@ class EkleDiyalog(QDialog):
         form.addRow(_(E_AD), self.e_ad)
         form.addRow(_(E_PAROLA), self.e_p1)
         form.addRow(_(E_TEKRAR), self.e_p2)
+        self._oneri = oneri_site
+        self.l_oneri = QLabel(site_goster(oneri_site))
+        self.l_oneri.setTextFormat(Qt.TextFormat.PlainText)
+        self.l_oneri.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.c_oneri = QCheckBox(_(E_ONERI_KULLAN))
+        self.c_oneri.setMinimumHeight(_HEDEF)
+        if oneri_site:
+            form.addRow(_(E_ONERI), self.l_oneri)
+            form.addRow("", self.c_oneri)
         form.addRow(_(E_SITE), self.e_site)
         form.addRow(_(E_UYGULAMA), self.e_uyg)
         lay.addLayout(form)
         self.e_ad.setText(ad)
-        self.e_site.setText(site)
         if ad:
             self.e_p1.setFocus()
         self.l_hata = QLabel("")
@@ -540,6 +577,8 @@ class EkleDiyalog(QDialog):
             return _(E_BOS)
         if self.e_p1.text() != self.e_p2.text():
             return _(E_UYUSMUYOR)
+        if self._oneri and not (self.site() or self.uygulama()):
+            return _(E_BAG_ZORUNLU)
         return ""
 
     def _tamam(self) -> None:
@@ -556,7 +595,8 @@ class EkleDiyalog(QDialog):
         return self.e_p1.text()
 
     def site(self) -> str | None:
-        return self.e_site.text().strip() or None
+        """Kullanıcının yazdığı site; boşsa YALNIZ işaretlendiyse ajanın önerisi."""
+        return self.e_site.text().strip() or (self._oneri if self._oneri and self.c_oneri.isChecked() else None)
 
     def uygulama(self) -> str | None:
         return self.e_uyg.text().strip() or None
@@ -1060,9 +1100,9 @@ class GizliBilgiler(QGroupBox):
         k.exec()
         return k.clickedButton() is evet
 
-    def ekle_diyalogu(self, ad: str = "", site: str = "") -> EkleDiyalog | None:
+    def ekle_diyalogu(self, ad: str = "", oneri_site: str = "") -> EkleDiyalog | None:
         """Ekle diyaloğu; kabul → diyalog (değer içinde), iptal → None. Testler değiştirir."""
-        d = EkleDiyalog(self._liste, self, ad=ad, site=site)
+        d = EkleDiyalog(self._liste, self, ad=ad, oneri_site=oneri_site)
         return d if d.exec() == QDialog.DialogCode.Accepted else None
 
     def degistir_diyalogu(self, ad: str) -> DegistirDiyalog | None:
@@ -1281,8 +1321,9 @@ class GizliBilgiler(QGroupBox):
         return d is not None and self._ekle_kaydet(d)
 
     def sir_kaydet_istegi(self, istek: dict) -> bool:
-        """Panel isteği {"tur":"sir_kaydet","ad","site"} (değersiz): ileti + Ekle formu ad/site ön dolu açılır;
-        kaydedilince istek kapatılır. Geçersiz ad → hiçbir şey açılmaz."""
+        """anahtar_deposu.sir_istekleri() öğesi {"id","tur":"sir_kaydet","ad","site"} (değersiz): ileti + Ekle formu
+        yalnız AD ön dolu; istekteki site yalnız ÖNERİ (salt okunur; kullanıcı işaretlemezse bağlanmaz; bağ zorunlu).
+        Kaydedilince ya da kullanıcı vazgeçince istek kapatılır (sir_istegi_kapat(id)). Geçersiz ad → açılmaz."""
         ad = str(istek.get("ad") or "")
         site = str(istek.get("site") or "")[:128]
         if istek.get("tur") != "sir_kaydet" or not ad_gecerli(ad):
@@ -1292,8 +1333,11 @@ class GizliBilgiler(QGroupBox):
         self.ileti(_(H_SIR_ISTEGI).format(ad=ad))
         if not self._depo.get("hazir"):
             return False
-        d = self.ekle_diyalogu(ad=ad, site=site)
-        if d is None or not self._ekle_kaydet(d):
+        d = self.ekle_diyalogu(ad=ad, oneri_site=site)
+        if d is None:
+            self.au.sir_istegi_kapat(istek)   # kullanıcı vazgeçti: istek 24 sa asılı kalmasın
+            return False
+        if not self._ekle_kaydet(d):
             return False
         self.au.sir_istegi_kapat(istek)
         return True

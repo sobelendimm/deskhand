@@ -114,8 +114,10 @@ class SahteDepoMod:
         self.cagri.append(("sir_degistir", ad))
         self.ogeler[ad] = deger
 
-    def sir_istegi_kapat(self, istek):
-        self.cagri.append(("istek_kapat", istek.get("id")))
+    def sir_istegi_kapat(self, istek_id):  # arka uç: yalnız kimlik (str)
+        if not isinstance(istek_id, str):
+            return False
+        self.cagri.append(("istek_kapat", istek_id))
         return True
 
     def yardimci_arac(self, ad, zorunlu=True):
@@ -630,32 +632,43 @@ kontrol("Değiştir: sir_yaz ÇAĞRILMAZ (bağ yeniden yazılmaz)",
         not any(isinstance(x, tuple) and x[0] == "sir_yaz" for x in d.cagri))
 
 acilan: list = []
+onayla = {"v": False}
 
 
-def ekle_sahte(ad="", site=""):
-    acilan.append((ad, site))
-    e = G.EkleDiyalog(s.gizli._liste, ad=ad, site=site)
+def ekle_sahte(ad="", oneri_site=""):
+    e = G.EkleDiyalog(s.gizli._liste, ad=ad, oneri_site=oneri_site)
+    acilan.append((e.e_ad.text(), e.e_site.text(), e.l_oneri.text()))
     e.e_p1.setText(GIZLI_DEGER)
     e.e_p2.setText(GIZLI_DEGER)
+    kontrol("istek formu: önerilen site bağ alanına GİRMEZ; işaret kapalı; bağsız kayıt reddedilir",
+            e.site() is None and not e.c_oneri.isChecked() and e.hata() == _(G.E_BAG_ZORUNLU), e.hata())
+    if onayla["v"]:
+        e.c_oneri.setChecked(True)
     return e if e.hata() == "" else None
 
 
 s.gizli.ekle_diyalogu = ekle_sahte
-istek = {"id": "ab12cd34", "tur": "sir_kaydet", "ad": "penpot", "site": "penpot.example"}
-kontrol("sir_kaydet isteği → Ekle formu ad/site ön dolu açılır, kaydedilir, istek kapanır",
-        s.gizli.sir_kaydet_istegi(istek) and acilan == [("penpot", "penpot.example")]
-        and ("sir_yaz", "penpot", None, "penpot.example") in d.cagri and ("istek_kapat", "ab12cd34") in d.cagri,
-        str(d.cagri))
-kontrol("sir_kaydet isteği: ileti adı söyler, değer içermez",
-        "penpot" in s.gizli.l_ileti.text() or s.gizli.l_ileti.text() == "")
+K1 = "1" * 32
+istek = {"id": K1, "tur": "sir_kaydet", "ad": "penpot", "site": "penpot.example"}
+kontrol("sir_kaydet: kullanıcı öneriyi onaylamazsa kaydedilmez (bağsız 'her yerde' yok), istek kapatılır (vazgeç)",
+        not s.gizli.sir_kaydet_istegi(istek) and "penpot" not in d.ogeler and ("istek_kapat", K1) in d.cagri
+        and acilan[0] == ("penpot", "", "penpot.example"), str(acilan))
+onayla["v"] = True
+acilan.clear()
+K2 = "2" * 32
+kontrol("sir_kaydet: 'Bu siteyi kullan' işaretlenince site bağlanır, istek KİMLİKLE kapatılır",
+        s.gizli.sir_kaydet_istegi(dict(istek, id=K2)) and ("sir_yaz", "penpot", None, "penpot.example") in d.cagri
+        and ("istek_kapat", K2) in d.cagri, str(d.cagri))
+kontrol("punycode öneri: çözülmüş + ham birlikte gösterilir",
+        G.site_goster("xn--gthub-zsa.com") == "gíthub.com (xn--gthub-zsa.com)"
+        and G.site_goster("github.com") == "github.com", G.site_goster("xn--gthub-zsa.com"))
 acilan.clear()
 kontrol("sir_kaydet: geçersiz ad / başka tür → form açılmaz",
         not s.gizli.sir_kaydet_istegi({"tur": "sir_kaydet", "ad": "../x"})
         and not s.gizli.sir_kaydet_istegi({"tur": "onay", "ad": "x"}) and acilan == [])
-s.gizli.ekle_diyalogu = lambda **k: None
-kontrol("sir_kaydet: vazgeç → istek kapatılmaz",
-        not s.gizli.sir_kaydet_istegi({"id": "ff00ff00", "tur": "sir_kaydet", "ad": "yeni1"})
-        and ("istek_kapat", "ff00ff00") not in d.cagri)
+kontrol("ArkaUc.sir_istegi_kapat arka uca yalnız kimlik (str) verir",
+        G.ArkaUc(depo=d).sir_istegi_kapat({"id": "3" * 32, "ad": "x"}) and ("istek_kapat", "3" * 32) in d.cagri
+        and not G.ArkaUc(depo=d).sir_istegi_kapat({"ad": "x"}))
 butun = metinler(s.gizli) + gunluk.getvalue()
 kontrol("G1: parola değeri ekranda/günlükte yok", GIZLI_DEGER not in butun)
 

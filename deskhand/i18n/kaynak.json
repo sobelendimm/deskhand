@@ -204,7 +204,7 @@
   "gui/sekmeler/gizli.py:127"
  ],
  "\"{ad}\" için yeni parolayı yazın. Bağlı olduğu site ya da uygulama değişmez.": [
-  "gui/sekmeler/gizli.py:149"
+  "gui/sekmeler/gizli.py:153"
  ],
  "# '{ad}' için {sayi} öge:": [
   "erisim.py:1445"
@@ -597,10 +597,10 @@
  ],
  "Ad": [
   "gui/sekmeler/gizli.py:62",
-  "gui/sekmeler/gizli.py:133"
+  "gui/sekmeler/gizli.py:137"
  ],
  "Ad yalnız harf, rakam, nokta, tire ve alt çizgi içerebilir (en çok 64 karakter).": [
-  "gui/sekmeler/gizli.py:144"
+  "gui/sekmeler/gizli.py:148"
  ],
  "Adım dizisi çalıştırılıyor": [
   "gui/metinler.py:310"
@@ -638,6 +638,9 @@
  "Ajanın tüm girdilerini hemen durdurur (basılı tuşlar bırakılır).": [
   "gui/metinler.py:42"
  ],
+ "Ajanın önerdiği site (doğrulayın)": [
+  "gui/sekmeler/gizli.py:133"
+ ],
  "Alt+SysRq+tuş: çekirdek müdahale (SysRq) kısayolu; sistemi yeniden başlatabilir/kapatabilir": [
   "guvenlik.py:214"
  ],
@@ -648,13 +651,13 @@
   "cli.py:483"
  ],
  "Anahtarlık (Secret Service) bulunamadı; güvenli tarafta DUR açık. İmzasız çalışma sorulacak (gözetimsiz kipte sorulmaz).": [
-  "gui/panel.py:707"
+  "gui/panel.py:724"
  ],
  "Anahtarlık (Secret Service) bulunamadı; korumalar imzasız çalışacak: kullanıcının DUR kaydı ve ayar onayları cüzdanda saklanamaz, panel kapatılınca doğrulanamaz. Kabul ediyor musunuz? Hayır derseniz DUR açık kalır; Devam ile yalnız siz kaldırırsınız. Bunu siz başlatmadıysanız Hayır deyin.": [
-  "gui/panel.py:679"
+  "gui/panel.py:696"
  ],
  "Anahtarlık (Secret Service) bulunamadı; panel burada daha önce çalıştığı için kullanıcının DUR kaydı doğrulanamıyor. Güvenli tarafta DUR açık; yalnız siz Devam ile kaldırabilirsiniz.": [
-  "gui/panel.py:704"
+  "gui/panel.py:721"
  ],
  "Arayüz bileşeni": [
   "gui/saglik.py:37"
@@ -881,7 +884,7 @@
   "surum.py:39"
  ],
  "Bu adla kayıtlı bir parola zaten var.": [
-  "gui/sekmeler/gizli.py:147"
+  "gui/sekmeler/gizli.py:151"
  ],
  "Bu bir ödeme işlemi olabilir; para çekilebilir.": [
   "guvenlik.py:1522"
@@ -891,6 +894,9 @@
  ],
  "Bu düğme yetki verme ya da hesap silme gibi geri alınamaz bir iş yapabilir.": [
   "guvenlik.py:1523"
+ ],
+ "Bu istek için parola bir siteye ya da uygulamaya bağlanmalı: önerilen siteyi doğrulayıp işaretleyin ya da siteyi kendiniz yazın.": [
+  "gui/sekmeler/gizli.py:135"
  ],
  "Bu komut dosyaları silebilir ya da sistemi değiştirebilir.": [
   "guvenlik.py:1525"
@@ -903,6 +909,9 @@
  ],
  "Bu pencere bir sistem yetki/parola/izin istemi ({ad}). Ajan ona {ne} göndermek istiyor.": [
   "guvenlik.py:2158"
+ ],
+ "Bu siteyi kullan": [
+  "gui/sekmeler/gizli.py:134"
  ],
  "Bu uygulamaların pencerelerine Deskhand hiçbir girdi göndermez ve bu uygulamaları başlatmaz.": [
   "gui/metinler.py:148"
@@ -1011,16 +1020,16 @@
   "liste_koruma.py:1003"
  ],
  "Cüzdan okunamıyor; kullanıcının DUR kaydı doğrulanamadı. Güvenli tarafta DUR açık; cüzdan okununca panel imzalı kaydı uygular (kapalıysa DUR kalkar).": [
-  "gui/panel.py:709"
+  "gui/panel.py:726"
  ],
  "Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Cüzdan okunamadığı için açılan DUR kaldırıldı.": [
-  "gui/panel.py:342"
+  "gui/panel.py:348"
  ],
  "Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Panelin koyduğu DUR kaynağı kaldırıldı; başka bir kaynağın DUR'u sürüyor.": [
-  "gui/panel.py:339"
+  "gui/panel.py:345"
  ],
  "Cüzdan okundu; panelin imzalı kaydında kullanıcının DUR'u açık, DUR sürüyor.": [
-  "gui/panel.py:334"
+  "gui/panel.py:340"
  ],
  "Cüzdan parolamı bilmiyorum": [
   "gui/sekmeler/gizli.py:85"
@@ -1047,7 +1056,7 @@
   "liste_koruma.py:955"
  ],
  "Cüzdandaki panel kaydında DUR alanı yok (eski sürüm kaydı; bir kez Devam'a basın). Güvenli tarafta DUR açık; anahtar ve onaylar korunur.": [
-  "gui/panel.py:701"
+  "gui/panel.py:718"
  ],
  "Cüzdanları görmek ya da KDE'nin kendi ayarlarını değiştirmek için Cüzdan Yöneticisi'ni açın.": [
   "gui/sekmeler/gizli.py:95"
@@ -1102,7 +1111,7 @@
   "gui/metinler.py:72"
  ],
  "DUR anahtarı panel dışında kaldırıldı; geri konuldu (yalnız kullanıcı kaldırır).": [
-  "gui/panel.py:374"
+  "gui/panel.py:380"
  ],
  "DUR anahtarını aç (hiçbir girdi gönderilmez)": [
   "cli.py:214"
@@ -2029,10 +2038,10 @@
   "gui/sekmeler/gizli.py:103"
  ],
  "Kuruldu · bu oturumda cüzdan Deskhand'den önce başlatıldı ve kilitli; sonraki girişte yeniden denenecek": [
-  "gui/sekmeler/gizli.py:142"
+  "gui/sekmeler/gizli.py:146"
  ],
  "Kuruldu · sonraki girişte denenecek": [
-  "gui/sekmeler/gizli.py:141"
+  "gui/sekmeler/gizli.py:145"
  ],
  "Kurulum komutunu panoya kopyalar: {komut}": [
   "gui/metinler.py:415"
@@ -2249,17 +2258,17 @@
   "guvenlik.py:2245"
  ],
  "Parola": [
-  "gui/sekmeler/gizli.py:134"
+  "gui/sekmeler/gizli.py:138"
  ],
  "Parola (tekrar)": [
-  "gui/sekmeler/gizli.py:135"
+  "gui/sekmeler/gizli.py:139"
  ],
  "Parola alanına yaz": [
   "guvenlik.py:1492",
   "guvenlik.py:2528"
  ],
  "Parola boş olamaz.": [
-  "gui/sekmeler/gizli.py:146"
+  "gui/sekmeler/gizli.py:150"
  ],
  "Parola deposu değişsin mi?": [
   "gui/sekmeler/gizli.py:120"
@@ -2286,7 +2295,7 @@
   "gui/sekmeler/gizli.py:73"
  ],
  "Parolayı değiştir": [
-  "gui/sekmeler/gizli.py:148"
+  "gui/sekmeler/gizli.py:152"
  ],
  "Pencere": [
   "gui/metinler.py:58",
@@ -2636,13 +2645,13 @@
   "gui/metinler.py:61"
  ],
  "Yalnız bu site (isteğe bağlı)": [
-  "gui/sekmeler/gizli.py:136"
+  "gui/sekmeler/gizli.py:140"
  ],
  "Yalnız bu sitelerin çerezleri (girişleri) görev tarayıcısına kopyalanır; boşsa tarayıcı hiçbir oturum olmadan açılır. Kayıtlı parolalar HİÇ kopyalanmaz. Bu sitelerde ajan sizin adınıza işlem yapabilir (ayar değiştirme, gönderi, silme); güvenilmeyen sayfa içeriği ajanı kandırabilir.": [
   "gui/metinler.py:315"
  ],
  "Yalnız bu uygulama (isteğe bağlı)": [
-  "gui/sekmeler/gizli.py:138"
+  "gui/sekmeler/gizli.py:142"
  ],
  "Yalnız fare": [
   "gui/metinler.py:152"
@@ -2669,7 +2678,7 @@
   "cli.py:42"
  ],
  "Yeni parola": [
-  "gui/sekmeler/gizli.py:150"
+  "gui/sekmeler/gizli.py:154"
  ],
  "Yeniden denetle": [
   "gui/metinler.py:248"
@@ -5273,7 +5282,7 @@
   "guvenlik.py:1287"
  ],
  "pencere sınıfı, ör. firefox": [
-  "gui/sekmeler/gizli.py:139"
+  "gui/sekmeler/gizli.py:143"
  ],
  "pencere taşıma": [
   "arka_uc/kde.py:930"
@@ -6208,7 +6217,7 @@
   "oturum/firefox.py:503"
  ],
  "{ad} · yalnız {hedef}": [
-  "gui/sekmeler/gizli.py:140"
+  "gui/sekmeler/gizli.py:144"
  ],
  "{ad} · {g}×{y}": [
   "gui/metinler.py:245"
@@ -6819,7 +6828,7 @@
   "arka_ortak.py:1234"
  ],
  "ör. ornekbanka.com.tr; alt alan adları dahil": [
-  "gui/sekmeler/gizli.py:137"
+  "gui/sekmeler/gizli.py:141"
  ],
  "özel D-Bus (dbus-daemon) açılmadı": [
   "masaustu.py:1178"
@@ -6884,10 +6893,10 @@
   "cli.py:45"
  ],
  "İki parola aynı değil.": [
-  "gui/sekmeler/gizli.py:145"
+  "gui/sekmeler/gizli.py:149"
  ],
  "İmzasız çalışma kabul edildi (anahtarlık yok); panelin koyduğu DUR kaldırıldı.": [
-  "gui/panel.py:298"
+  "gui/panel.py:304"
  ],
  "İndirilen dosyalar: {dosyalar} (klasör: {klasor})": [
   "gui/metinler.py:331"

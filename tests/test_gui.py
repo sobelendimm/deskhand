@@ -283,19 +283,25 @@ kontrol("ilk günlük satırları Etkinlik'te", w.etkinlik.model.rowCount() == 2
 w.show()
 bekle(lambda: w.isVisible())
 
-# ---- G1: "parola kayıtlı değil" isteği (sir_kaydet, değersiz) onay diyaloğu açmaz; Gizli bilgiler'e yönlenir, bir kez
+# ---- G1: "parola kayıtlı değil" istekleri anahtar_deposu.sir_istekleri()'nden (onay dosyası değil) bir kez açılır
+from deskhand.gui.sekmeler import gizli as _GZ  # noqa: E402
+
+
+class _SirDepo:
+    def sir_istekleri(self):
+        return [{"id": "a" * 32, "tur": "sir_kaydet", "ad": "penpot", "site": "penpot.example", "zaman": 1.0}]
+
+
 _sir_acilan: list = []
-_eski_sir = p._sir_kaydet_ac
+_eski_sir, _eski_au = p._sir_kaydet_ac, p.pencere.ayarlar.gizli.au
 p._sir_kaydet_ac = lambda b: _sir_acilan.append(b["id"])
-_eski_guncelle = p.pencere.onaylar.guncelle
-p.pencere.onaylar.guncelle = lambda bek: None
-_sk = {"id": "sk000001", "tur": "sir_kaydet", "ad": "penpot", "site": "penpot.example"}
-p._onaylar([_sk])
-p._onaylar([_sk])
+p.pencere.ayarlar.gizli.au = _GZ.ArkaUc(depo=_SirDepo())
+p._sir_istek_yokla()
+p._sir_istek_yokla()
 app.processEvents()
-kontrol("sir_kaydet isteği: onay diyaloğu açılmaz, Gizli bilgiler formu bir kez istenir",
-        "sk000001" not in p.diyaloglar and _sir_acilan == ["sk000001"], str(_sir_acilan))
-p._sir_kaydet_ac, p.pencere.onaylar.guncelle = _eski_sir, _eski_guncelle
+kontrol("sir_kaydet: sir_istekleri() yoklanır, onay diyaloğu açılmaz, form bir kez istenir",
+        _sir_acilan == ["a" * 32] and ("a" * 32) not in p.diyaloglar, str(_sir_acilan))
+p._sir_kaydet_ac, p.pencere.ayarlar.gizli.au = _eski_sir, _eski_au
 
 # ---- çoklu masaüstü: onay devrindeki Devral, Arka plan sekmesini isteğin masaüstüne çevirir; karar → varsayılan
 from deskhand import masalar as _ml  # noqa: E402
