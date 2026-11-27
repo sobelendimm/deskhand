@@ -699,6 +699,41 @@ def erisim_bayragi_ekle(argv):
     return [*argv, ERISIM_BAYRAGI] if chromium_ailesi_mi(argv) else argv
 
 
+# Firefox (Gecko) ailesi: erişilebilirlik ağacını yalnız açılışta GNOME_ACCESSIBILITY=1 görürse (ya da veri yolu
+# IsEnabled açıksa) kurar. Ortam değişkeni yalnız Deskhand'in başlattığı sürece verilir; kullanıcının ortam/profil
+# dosyalarına hiçbir şey yazılmaz (kalıcı çözüm önerisi: deskhand doctor).
+ERISIM_ORTAMI = {"GNOME_ACCESSIBILITY": "1"}
+FIREFOX_IKILILERI = {"firefox", "firefox-bin", "firefox-esr", "firefox-developer-edition", "firefox-nightly",
+                     "librewolf", "waterfox", "floorp", "zen", "zen-browser", "zen-bin"}
+FIREFOX_FLATPAKLARI = {"org.mozilla.firefox", "io.gitlab.librewolf-community", "one.ablaze.floorp",
+                       "app.zen_browser.zen", "net.waterfox.waterfox"}
+
+
+def firefox_ailesi_mi(argv):
+    """Komut Firefox/Gecko tarayıcı ailesinden mi? (ilk program ya da Flatpak kimliği; `gio launch X.desktop` ise Exec)"""
+    from .oturum.cozum import _flatpak_kimligi
+    argv = list(argv)
+    if len(argv) >= 3 and os.path.basename(argv[0]) == "gio" and argv[1] == "launch" and argv[2].endswith(".desktop"):
+        argv = _desktop_exec(argv[2])
+    asil = _asil_komut(argv)
+    if not asil:
+        return False
+    kimlik = _flatpak_kimligi(asil)[0]
+    if kimlik:
+        return kimlik in FIREFOX_FLATPAKLARI
+    return os.path.basename(asil[0]).lower() in FIREFOX_IKILILERI
+
+
+def erisim_hazirla(argv, env=None):
+    """Tarayıcıyı erişilebilirlik ağacı AÇIK başlat (ön plan ve arka plan aynı): Chromium/Electron → bayrak
+    (erisim_bayragi_ekle), Firefox ailesi → ortama GNOME_ACCESSIBILITY=1. → (argv, env | None). env verilen sözlük
+    değiştirilmez; ilgisiz komutta ikisi de aynen döner."""
+    argv = erisim_bayragi_ekle(argv)
+    if firefox_ailesi_mi(argv):
+        env = {**(env or {}), **ERISIM_ORTAMI}
+    return argv, env
+
+
 def tum_pencereler():
     au = sec()
     kimlikler = getattr(au, "kimlikler", None)  # ucuz liste (kde); yoksa tam liste
@@ -804,8 +839,8 @@ def k_ac(a):
             from . import oturum
             komut = oturum._flatpak_sarmala(komut, fk, None)
         print(notu, file=sys.stderr)
-    if au.ad == "sanal":  # Chromium/Electron ağaca yalnız bu bayrakla girer (agac / ogeye-tikla arka planda çalışsın)
-        komut = erisim_bayragi_ekle(komut)
+    # Chromium/Electron bayrakla, Firefox GNOME_ACCESSIBILITY=1 ile ağaca girer: ön planda da (agac / ogeye-tikla)
+    komut, env = erisim_hazirla(komut, env)
     once, onceki_aktif = tum_pencereler(), au.aktif()
     os.makedirs(yollar.cikti(), exist_ok=True)
     log = os.path.join(yollar.cikti(), f"ac-{time.strftime('%H%M%S')}-{os.getpid()}.log")

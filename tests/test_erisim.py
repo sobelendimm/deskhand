@@ -762,13 +762,13 @@ class BaslatAU(SahteAU):
         raise Dur(7, "yeni pencere beklenmiyor (test)")
 
 
-for ad_, beklenen_bayrak in (("sanal", True), ("kde", False)):
+for ad_, beklenen_bayrak in (("sanal", True), ("kde", True)):  # H2: ön planda da (tests/test_tarayici_erisim.py)
     bau = BaslatAU()
     bau.ad = ad_
     arka_uc._ORNEKLER[ad_] = bau
     with arka_uc.hedef_sabit(ad_):
         kod = kod_al(api.uygulama_ac, ["/usr/bin/chromium"], "Chromium", [])
-    kontrol(f"api.uygulama_ac ({ad_}): Chromium komutuna bayrak {'EKLENİR' if beklenen_bayrak else 'eklenmez (kullanıcının ekranı)'}",
+    kontrol(f"api.uygulama_ac ({ad_}): Chromium komutuna bayrak {'EKLENİR' if beklenen_bayrak else 'eklenmez'}",
             bool(bau.baslatilan) and (B in bau.baslatilan[0]) is beklenen_bayrak, str(bau.baslatilan))
 arka_uc._ORNEKLER.pop("sanal", None)
 

@@ -256,6 +256,82 @@ def satir_erisim():
     return _satir(ad, "uyari", _("kapalı: uygulama düğmeleri ad ile bulunamaz (OCR yedekte)"), "deskhand a11y on")
 
 
+# Tarayıcı ana süreç adları (comm, 15 karakter). Alt süreçler (Firefox "Isolated Web Co", Chromium zygote) ana sürecin
+# torunu olarak sayılır: ana süreç = adı listede olup atası listede olmayan.
+TARAYICI_SURECLERI = {"firefox", "firefox-bin", "firefox-esr", "librewolf", "floorp", "waterfox", "zen", "zen-bin",
+                      "chromium", "chrome", "brave", "vivaldi-bin", "msedge", "opera", "thorium"}
+
+
+def _a11y_bagli_pidler() -> set[int] | None:
+    """Kullanıcı oturumunun erişilebilirlik veri yolundaki bağlantıların PID'leri; veri yolu çalışmıyorsa None.
+    Salt okunur: org.a11y.Bus sahibi yoksa hiçbir şey sorulmaz (sorgu hizmeti BAŞLATIRDI)."""
+    if _komut_ciktisi("busctl", "--user", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
+                      "org.freedesktop.DBus", "NameHasOwner", "s", "org.a11y.Bus") != "b true":
+        return None
+    cikti = _komut_ciktisi("busctl", "--user", "call", "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress")
+    m = re.fullmatch(r's "([^"]+)"', cikti)
+    if not m:
+        return None
+    try:
+        r = subprocess.run(["busctl", f"--address={m.group(1)}", "list", "--json=short", "--no-pager"],
+                           capture_output=True, text=True, timeout=3.0)
+        return {int(x["pid"]) for x in json.loads(r.stdout or "[]") if isinstance(x, dict) and x.get("pid")}
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError):
+        return None
+
+
+def _calisan_tarayicilar(proc: str) -> list[tuple[int, str]]:
+    """Kullanıcının GERÇEK oturumunda çalışan tarayıcı ana süreçleri [(pid, ad)]. Görünmez masaüstündekiler (cgroup
+    deskhand-sanal-* / deskhand-kwin-*) sayılmaz. Yalnız /proc okunur."""
+    from . import kendi
+    sonuc = []
+    try:
+        adlar = [a for a in os.listdir(proc) if a.isdigit()]
+    except OSError:
+        return []
+    for a in adlar:
+        st = kendi._stat(a, proc)
+        if not st or st[3] not in TARAYICI_SURECLERI:
+            continue
+        ata = kendi._stat(st[0], proc) if st[0] > 1 else None
+        if ata and ata[3] in TARAYICI_SURECLERI:
+            continue
+        try:
+            if os.stat(os.path.join(proc, a)).st_uid != os.getuid():
+                continue
+            with open(os.path.join(proc, a, "cgroup")) as f:
+                if re.search(r"/deskhand-(sanal|kwin)-[^/]*\.scope", f.read()):
+                    continue
+        except OSError:
+            continue
+        sonuc.append((int(a), st[3]))
+    return sorted(sonuc)
+
+
+def satir_tarayici_erisim(proc: str | None = None, bagli_pidler=None):
+    """Çalışan tarayıcı erişilebilirlik ağacına bağlı mı (web.py _cerceve_bul ile aynı PID kalıbı: bağlantının PID'i
+    tarayıcının kendisi ya da torunu). Bağlı değilse kalıcı çözüm ÖNERİLİR; Deskhand ortam/profil dosyası YAZMAZ."""
+    from . import kendi
+    ad = _("Tarayıcı erişilebilirliği")
+    proc = proc or kendi.PROC
+    tarayicilar = _calisan_tarayicilar(proc)
+    if not tarayicilar:
+        return _satir(ad, "tamam", _("çalışan tarayıcı yok"))
+    bagli = (bagli_pidler or _a11y_bagli_pidler)() or set()
+
+    def agacta(pid):
+        return any(p == pid or any(a_ == pid for a_, _c in kendi.atalar(p, proc)[1:]) for p in bagli)
+    eksik = [(p, a) for p, a in tarayicilar if not agacta(p)]
+    if not eksik:
+        return _satir(ad, "tamam", _("çalışan tarayıcılar erişilebilirlik ağacında"))
+    liste = ", ".join(f"{a} (pid {p})" for p, a in eksik)
+    return _satir(ad, "uyari", _("erişilebilirlik ağacında olmayan tarayıcı: {liste} (sayfa ögeleri ad ile bulunamaz, "
+                                 "OCR yedekte)").format(liste=liste),
+                  _("kalıcı çözüm: oturum ortamına GNOME_ACCESSIBILITY=1 ekle (ör. ~/.config/environment.d/"
+                    "a11y.conf dosyasına GNOME_ACCESSIBILITY=1 satırı; Chromium için --force-renderer-accessibility) "
+                    "ve tarayıcıyı yeniden başlat; Deskhand bu dosyayı kendisi yazmaz"))
+
+
 def satir_arka_plan():
     from . import masaustu
     ad = _("Arka plan masaüstü")
@@ -361,7 +437,7 @@ def satir_dinleme():
 
 
 SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_mcp_surecleri, satir_onay_kapsami, satir_hesap_oturumlari, satir_girdi_merkezi, satir_yardimcilar,
-            satir_erisim, satir_arka_plan, satir_calisma_dizini, satir_oturum_kopyalari, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
+            satir_erisim, satir_tarayici_erisim, satir_arka_plan, satir_calisma_dizini, satir_oturum_kopyalari, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
 
 
 def topla() -> list[dict]:

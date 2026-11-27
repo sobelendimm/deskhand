@@ -666,9 +666,10 @@ def tarayici_mi(k) -> bool:
     return tarayici_sinifi_mi(sinif)
 
 
-IPUCU_ERISIM = _("İpucu: tarayıcı erişilebilirlik açıkken başlamamış olabilir; kapatıp arka planda yeniden aç "
-                 "(ac --arka / open_app desktop=background: erişilebilirlik kendiliğinden açılır) ya da Firefox'u "
-                 "GNOME_ACCESSIBILITY=1, Chromium'u --force-renderer-accessibility ile başlat")
+IPUCU_ERISIM = _("İpucu: tarayıcı erişilebilirlik açıkken başlamamış olabilir; kapatıp Deskhand ile yeniden aç "
+                 "(ac / open_app: Firefox GNOME_ACCESSIBILITY=1, Chromium --force-renderer-accessibility ile başlatılır; "
+                 "ön planda tarayıcı zaten açıksa yeni açılış çalışan sürece katılır, önce onu kapat). Kalıcı çözüm: "
+                 "deskhand doctor")
 
 
 def hazirla(k) -> None:
