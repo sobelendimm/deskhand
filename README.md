@@ -331,8 +331,10 @@ dotool, tesseract with English/Turkish data, Xvfb, openbox, bubblewrap). To buil
 helpers, install a C compiler, make, pkg-config and the wayland-client, libsystemd, libei
 (>= 1.3.901) and xkbcommon development files, then run the `make -C …` command that
 `deskhand doctor` prints (run it again after `pipx upgrade`). Without libei the background
-desktop uses Xvfb. The menu entry and autostart come only from `./install.sh`; with pipx,
-start the panel yourself with `deskhand panel --tepsi`, because approvals need it.
+desktop uses Xvfb. For the menu entry, the icon and the panel at login (approvals need the
+panel running), run `deskhand install-desktop` (`--no-autostart` to skip the login entry,
+`--remove` to take back only what it wrote). With a graphics card, `deskhand doctor` also
+prints the commands for GPU text recognition (its own venv and models).
 
 ## Quick start
 
