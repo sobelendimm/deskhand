@@ -617,7 +617,9 @@ class SanalArkaUc(ArkaUc):
             time.sleep(0.05)  # öne gelen pencere yeniden çizilsin
             return
         a = self.aktif()
-        raise Dur(AKTIF_DEGIL, _("hedef pencere aktif olmadı (aktif: {baslik})").format(baslik=repr(self.baslik(a))))
+        from ..guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
+        raise Dur(AKTIF_DEGIL, _("hedef pencere aktif olmadı (aktif: {baslik})").format(
+            baslik=baslik_goster(self.baslik(a))))
 
     def kapat(self, k: str) -> None:
         """Kibar kapatma: _NET_CLOSE_WINDOW (pencere yöneticisi) ya da WM_DELETE_WINDOW."""

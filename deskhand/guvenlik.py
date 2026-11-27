@@ -725,19 +725,19 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
     for h in _yaz_hedefleri(komut, arg, kom):
         if _HASSAS_DOSYA.fullmatch(h.rstrip("/")) or _HASSAS_DOSYA.fullmatch(h):
             n.append(_("kabuk/oturum başlangıç, otomatik başlatma ya da güvenlik dosyasına yazma ({hedef})").format(
-                hedef=h))
+                hedef=_ic(h)))
             break
     # yıkıcı komut metnini (sonra çalıştırılabilecek) bir dosyaya yazma: printf 'sudo reboot' > /tmp/a
     if komut in ("echo", "printf", "cat", "tee", "print") and derinlik < 3:
         for op, h in kom.yon:
             if ">" in op and (_GECICI_DIZIN.match(h) or not _GUVENLI_UZANTI.search(h)) and \
                     any(_metin_riskleri(a, derinlik + 1) for a in duz):
-                n.append(_("yıkıcı komutu çalıştırılabilecek bir dosyaya yazma ({hedef})").format(hedef=h))
+                n.append(_("yıkıcı komutu çalıştırılabilecek bir dosyaya yazma ({hedef})").format(hedef=_ic(h)))
                 break
     if komut == "eval":
         n.append(_("eval: metni komut olarak çalıştırır (dolaylı yürütme)"))
     if komut in ("source", "."):
-        n.append(_("{komut}: dosyadaki komutları bu kabukta çalıştırır (içeriği denetlenemez)").format(komut=komut))
+        n.append(_("{komut}: dosyadaki komutları bu kabukta çalıştırır (içeriği denetlenemez)").format(komut=_ic(komut)))
     if komut in _KABUK:
         c_var = any(re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a) for a in arg)
         dosya = next((a for a in arg if not a.startswith(("-", "+"))), None)
@@ -745,7 +745,7 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
             n.append(_("kabuğa yönlendirilmiş girdi (<, <<, <<<): komut metni görünmeden çalışır"))
         elif not c_var and dosya is not None and (_GECICI_DIZIN.match(dosya) or "." not in _yol_adi(dosya) or
                                                   _ISARET in dosya):
-            n.append(_("{komut} geçici/uzantısız betiği çalıştırır ({dosya})").format(komut=komut, dosya=dosya))
+            n.append(_("{komut} geçici/uzantısız betiği çalıştırır ({dosya})").format(komut=_ic(komut), dosya=_ic(dosya)))
         elif not c_var and dosya is None:
             kom.stdin_kabuk = True
     if _YORUMLAYICI.fullmatch(komut):
@@ -755,17 +755,17 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
             if a in ("-m", "-c", "-e", "-E", "-r", "-p", "-W", "-X", "-I", "-x") or re.fullmatch(r"-[a-zA-Z]*[ceEpr]", a):
                 break  # modül / satır içi kod (ayrıca denetlenir)
             if not a.startswith("-") or a == "-":
-                n.append(_("{komut} betik dosyasını çalıştırır ({dosya}): içeriği denetlenemez").format(komut=komut, dosya=a))
+                n.append(_("{komut} betik dosyasını çalıştırır ({dosya}): içeriği denetlenemez").format(komut=_ic(komut), dosya=_ic(a)))
                 break
             j += 1
     if komut in ("awk", "gawk", "mawk", "nawk", "busybox-awk") and any(
             re.search(r"\bsystem\s*\(|\|\s*getline|\|\s*[\"']|\bprint\b[^;]*\|", a) for a in arg):
-        n.append(_("{komut} programı kabuk komutu çalıştırır (system / boru)").format(komut=komut))
+        n.append(_("{komut} programı kabuk komutu çalıştırır (system / boru)").format(komut=_ic(komut)))
     if _GECMIS.fullmatch(komut) or (komut in ("fc", "r")) or (komut == "history" and "-s" in arg) or \
             (komut == "print" and "-s" in arg):
-        n.append(_("geçmişten komut çalıştırma/ekleme ({komut}): çalışacak komut görünmez").format(komut=komut))
+        n.append(_("geçmişten komut çalıştırma/ekleme ({komut}): çalışacak komut görünmez").format(komut=_ic(komut)))
     if komut in ("alias", "trap") and arg:
-        n.append(_("{komut}: sonradan (görünmeden) çalışacak komut tanımlar").format(komut=komut))
+        n.append(_("{komut}: sonradan (görünmeden) çalışacak komut tanımlar").format(komut=_ic(komut)))
     if komut in ("ln",) and any(_yol_adi(a) in _YETKI | _KABUK for a in duz[:-1]):
         n.append(_("yetki/kabuk programına bağlantı (adını gizler)"))
     if re.match(r"(?:/tmp|/var/tmp|/dev/shm)/", kom.kelimeler[0] if kom.kelimeler else "") or \
@@ -774,7 +774,7 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
     if komut == "kill" and ("-1" in arg[1:] or ("--" in arg and "-1" in arg[arg.index("--"):])):
         n.append(_("kill -1: kullanıcının TÜM süreçlerini sonlandırır"))
     if komut in ("pkill", "killall") and ("-u" in arg or any(a.startswith("--user") for a in arg)):
-        n.append(_("{komut} -u: kullanıcının tüm süreçlerini sonlandırır").format(komut=komut))
+        n.append(_("{komut} -u: kullanıcının tüm süreçlerini sonlandırır").format(komut=_ic(komut)))
     if komut == "killall5":
         n.append(_("killall5: tüm süreçlere sinyal gönderir"))
     if komut in ("mv", "cp", "rsync") and any(_KOK_HEDEF.fullmatch(a) for a in duz[:-1]) and komut == "mv":
@@ -792,7 +792,7 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
     if komut == "truncate" and any(re.fullmatch(r"(?:-s|--size=?)0|0", a) for a in arg):
         n.append(_("truncate -s 0: dosyanın içeriğini siler"))
     if komut in _AYRIK_BASLATICI:
-        n.append(_("{komut}: komutu uçbirimin dışında/ayrık başlatır (denetlenemez)").format(komut=komut))
+        n.append(_("{komut}: komutu uçbirimin dışında/ayrık başlatır (denetlenemez)").format(komut=_ic(komut)))
     if komut == "tmux" and any(a in _TMUX_KOMUT for a in arg) and len(duz) > 1:
         n.append(_("tmux ile ayrık oturumda komut çalıştırma"))
     if komut == "screen" and any(re.fullmatch(r"-[a-zA-Z]*[dD][a-zA-Z]*m?|-X", a) for a in arg):
@@ -817,18 +817,18 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
         n.append(_("systemctl ile masaüstü/oturum hizmetini durdurma"))
     if derinlik < 3 and komut not in _KABUK and (t0 := (kom.kelimeler[0] if kom.kelimeler else "")) and \
             not _ATAMA.fullmatch(t0) and re.match(r"(?:\./|\.\./|~/|\$HOME/)", t0):
-        n.append(_("betik/program dosyasını çalıştırma ({dosya}): içeriği denetlenemez").format(dosya=t0))
+        n.append(_("betik/program dosyasını çalıştırma ({dosya}): içeriği denetlenemez").format(dosya=_ic(t0)))
     if komut in _KABUK and not any(re.fullmatch(r"-[a-zA-Z]*c[a-zA-Z]*", a) for a in arg):
         dosya = next((a for a in arg if not a.startswith(("-", "+"))), None)
         if dosya is not None and not n:
-            n.append(_("{komut} betiği çalıştırır ({dosya}): içeriği denetlenemez").format(komut=komut, dosya=dosya))
+            n.append(_("{komut} betiği çalıştırır ({dosya}): içeriği denetlenemez").format(komut=_ic(komut), dosya=_ic(dosya)))
     # GTFOBins: seçenekle kabuk komutu çalıştırma
     if any(a.startswith("--checkpoint-action") or a.startswith("--to-command") or a.startswith("--use-compress-program")
            or a.startswith("--rsh-command") for a in arg):
-        n.append(_("{komut}: seçenekle kabuk komutu çalıştırır").format(komut=komut))
+        n.append(_("{komut}: seçenekle kabuk komutu çalıştırır").format(komut=_ic(komut)))
     if komut in ("ssh", "scp", "sftp", "rsync") and re.search(r"(?i)proxycommand|localcommand|permitlocalcommand",
                                                                " ".join(arg)):
-        n.append(_("{komut}: ProxyCommand/LocalCommand ile yerel komut").format(komut=komut))
+        n.append(_("{komut}: ProxyCommand/LocalCommand ile yerel komut").format(komut=_ic(komut)))
     if komut == "rsync" and any(a in ("-e", "--rsh") or a.startswith("--rsh=") for a in arg):
         n.append(_("rsync -e: uzak kabuk yerine yerel komut çalıştırabilir"))
     if komut == "sed" and any(re.search(r"(?:^|[;\s\d/}])e(?:\s|$)|/e\b|s(.).*\1.*\1[gpiI0-9]*e", a)
@@ -840,18 +840,18 @@ def _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik):
     if komut == "zip" and any(a in ("-TT", "--unzip-command") or a.startswith("--unzip-command=") for a in arg):
         n.append(_("zip -TT: komut çalıştırır"))
     if komut in ("vim", "vi", "nvim", "view", "ex") and any(re.search(r"^[-+]c?\s*:?\s*!|^\+:?!|:\s*!", a) for a in arg):
-        n.append(_("{komut} içinden kabuk komutu").format(komut=komut))
+        n.append(_("{komut} içinden kabuk komutu").format(komut=_ic(komut)))
     if komut in ("make", "ninja", "cmake") and any(_GECICI_DIZIN.match(a) for a in arg):
-        n.append(_("{komut}: geçici dizindeki derleme dosyası komut çalıştırır").format(komut=komut))
+        n.append(_("{komut}: geçici dizindeki derleme dosyası komut çalıştırır").format(komut=_ic(komut)))
     if komut == "at" or (komut == "watch" and duz):
-        n.append(_("{komut}: komutu sonra/ayrık çalıştırır").format(komut=komut))
+        n.append(_("{komut}: komutu sonra/ayrık çalıştırır").format(komut=_ic(komut)))
     return n
 
 
 def _atama_riski(ad, deger):
     if ad in _KABUK_BASLANGIC_DEGISKEN or (ad in ("PS1", "PS2", "PS4", "RPROMPT", "PROMPT") and
                                           re.search(r"\$\(|`", deger or "")):
-        return [_("{ad}: kabuk her istemde/başlangıçta bu kodu çalıştırır").format(ad=ad)]
+        return [_("{ad}: kabuk her istemde/başlangıçta bu kodu çalıştırır").format(ad=_ic(ad))]
     return []
 
 
@@ -879,7 +879,7 @@ def _komut_riski(kom, degiskenler, derinlik):
             i += 1
             continue
         if _GECMIS.fullmatch(w):  # !!, !-2, ^a^b: geçmişteki (görünmeyen) komutu çalıştırır
-            nedenler.append(_("geçmişten komut çalıştırma/ekleme ({komut}): çalışacak komut görünmez").format(komut=w))
+            nedenler.append(_("geçmişten komut çalıştırma/ekleme ({komut}): çalışacak komut görünmez").format(komut=_ic(w)))
             return nedenler, ""
         if "${" in w or _ISARET in w:  # komut adı parametre açılımı / komut ikamesiyle gizlenmiş: ${0:0:0}reboot
             nedenler.append(_("komut adı açılımla gizlenmiş (${{…}} / $(…)): çalışacak komut görünmez"))
@@ -918,7 +918,7 @@ def _komut_riski(kom, degiskenler, derinlik):
         for op, h in kom.yon:  # yalnız yönlendirme: `> ~/.bashrc`, `: > dosya`
             if ">" in op and _HASSAS_DOSYA.fullmatch(h):
                 nedenler.append(_("kabuk/oturum başlangıç, otomatik başlatma ya da güvenlik dosyasına yazma ({hedef})"
-                                  ).format(hedef=h))
+                                  ).format(hedef=_ic(h)))
         return nedenler, ""
     komut, arg = _yol_adi(t[i]), t[i + 1:]
     if komut in _ATAMA_KOMUT:
@@ -931,18 +931,18 @@ def _komut_riski(kom, degiskenler, derinlik):
         return nedenler, komut
     nedenler += _dolayli_riskler(komut, arg, kom, degiskenler, sarmalayicilar, derinlik)
     if sarmalayicilar and re.match(r"(?:\./|\.\./|~/|\$HOME/)", t[i]):  # nohup ./k, time ~/x.sh
-        nedenler.append(_("betik/program dosyasını çalıştırma ({dosya}): içeriği denetlenemez").format(dosya=t[i]))
+        nedenler.append(_("betik/program dosyasını çalıştırma ({dosya}): içeriği denetlenemez").format(dosya=_ic(t[i])))
     if komut in ("rm", "mv", "cp", "ln", "chmod", "chown", "truncate", "shred", "tee", "install", "rsync", "unlink") \
             and any(re.search(r"(?:\.config|\.local/state|\.local/share|RUNTIME_DIR|run/user/\d+)/deskhand\b", a)
                     for a in arg):
         nedenler.append(_("Deskhand'in kendi ayar/durum dosyalarını değiştirme (DUR, yasak listesi…)"))
     if komut in _YETKI:
-        nedenler.append(_("{komut} ile yetki yükseltme").format(komut=komut))
+        nedenler.append(_("{komut} ile yetki yükseltme").format(komut=_ic(komut)))
     if komut in _GUC or (komut in ("init", "telinit") and any(a in ("0", "6") for a in arg)):
-        nedenler.append(_("sistemi kapatma/yeniden başlatma ({komut})").format(komut=komut))
+        nedenler.append(_("sistemi kapatma/yeniden başlatma ({komut})").format(komut=_ic(komut)))
     if komut in ("systemctl", "loginctl") and (any(a in _SISTEMD_GUC for a in arg) or (
             komut == "loginctl" and any(a.startswith(("terminate-", "kill-")) for a in arg))):
-        nedenler.append(_("{komut} ile kapatma/yeniden başlatma/askıya alma/oturum sonlandırma").format(komut=komut))
+        nedenler.append(_("{komut} ile kapatma/yeniden başlatma/askıya alma/oturum sonlandırma").format(komut=_ic(komut)))
     if re.fullmatch(r"mkfs(\.\w+)?", komut):
         nedenler.append(_("mkfs: disk bölümünü biçimlendirir (veri siler)"))
     if komut == "dd" and any(a.startswith("of=/dev/") and not _ZARARSIZ_AYGIT.match(a[3:]) for a in arg):
@@ -953,7 +953,7 @@ def _komut_riski(kom, degiskenler, derinlik):
         elif any(a.startswith("+") and len(a) > 1 for a in arg):
             nedenler.append(_("git push +ref: zorla itme (uzak geçmişi ezer)"))
     if komut in ("chmod", "chown", "chgrp") and _ozyinelemeli(arg) and any(_KOK_HEDEF.fullmatch(a) for a in arg):
-        nedenler.append(_("{komut} -R kök/ev/sistem dizininde: tüm dosyaların izin/sahipliğini değiştirir").format(komut=komut))
+        nedenler.append(_("{komut} -R kök/ev/sistem dizininde: tüm dosyaların izin/sahipliğini değiştirir").format(komut=_ic(komut)))
     if derinlik < 3:
         if komut in _KABUK | {"eval"}:  # sh -c "sudo …" / bash -lc … / eval "rm -rf /": gömülü komut da denetlenir
             for j, a in enumerate(arg):
@@ -967,7 +967,7 @@ def _komut_riski(kom, degiskenler, derinlik):
             for j, a in enumerate(arg):
                 if re.fullmatch(r"-[a-zA-Z]*[ceEpr]", a) and j + 1 < len(arg) and _YORUMLAYICI_KOD.search(arg[j + 1]):
                     nedenler.append(_("{komut} ile satır içi kod: dosya silme / komut çalıştırma / dinamik kod").format(
-                        komut=komut))
+                        komut=_ic(komut)))
                     break
     if komut == "find":
         if "-delete" in arg:
@@ -1029,8 +1029,21 @@ def _metin_riskleri(metin, derinlik=0):
     return nedenler
 
 
-def riskli_komut(metin):
-    """Metin yıkıcı bir kabuk komutu kalıbına uyuyor mu? → neden metni | None. Yalnız METNE bakar; hedef pencerenin
+# Gizli yazının (secret=true, parola/kart alanı) riskli komut nedeni METİNDEN parça taşımaz: nedenler komut/dosya/geçmiş
+# sözcüğünü alıntılar ("geçmişten komut çalıştırma (!Passw0rdZ)"), neden de ret iletisine, onay paneline ve (kart
+# kipinde) günlüğe gider (ABM-F2 inceleme-2 P5/P5b). İş parçacığına özgü; yalnız riskli_komut(gizli=True) açar.
+_RISK_GIZLI = threading.local()
+
+
+def _ic(deger):
+    """Neden metnine metinden gelen parça: gizli metinde "…" (kalıp adı kalır, içerik gitmez)."""
+    return "…" if getattr(_RISK_GIZLI, "acik", False) else deger
+
+
+def riskli_komut(metin, gizli=False):
+    """Metin yıkıcı bir kabuk komutu kalıbına uyuyor mu? → neden metni | None. gizli=True: nedenler yalnız kalıp adını
+    taşır (metinden gelen komut/dosya/sözcük "…" olur) ve "(gizli metin; içerik gösterilmiyor)" eki alır; ileti, panel
+    ve günlük için güvenlidir. Yalnız METNE bakar; hedef pencerenin
     uçbirim olup olmadığı (ucbirim_mi) çağıranda denetlenir. Metin kabuk kurallarıyla sözcüklere ayrılır (tırnak/ters
     bölü kaldırılır, $'…' açılır, komut ikamesinin içi ayrıca denetlenir); kabuk anahtar sözcükleri ({ } ! if then do…),
     değişken atamaları ve bilinmeyen $DEĞİŞKEN komut adı atlanır, aynı metindeki atama çözülür (S=sudo; $S reboot);
@@ -1040,8 +1053,16 @@ def riskli_komut(metin):
     izin/sahiplik değişikliği, kapatma/yeniden başlatma/askıya alma, zorla git push, :w !sudo."""
     if not metin or not metin.strip():
         return None
-    nedenler = list(dict.fromkeys(_metin_riskleri(metin)))
-    return "; ".join(nedenler[:3]) if nedenler else None
+    onceki = getattr(_RISK_GIZLI, "acik", False)
+    _RISK_GIZLI.acik = onceki or bool(gizli)
+    try:
+        nedenler = list(dict.fromkeys(_metin_riskleri(metin)))
+    finally:
+        _RISK_GIZLI.acik = onceki
+    if not nedenler:
+        return None
+    neden = "; ".join(nedenler[:3])
+    return _("{neden} (gizli metin; içerik gösterilmiyor)").format(neden=neden) if gizli else neden
 
 
 # ---------------------------------------------------------------- yasak pencereler
@@ -1629,7 +1650,8 @@ def ucbirim_komut_engel(k, onayli, metin, gizli=False, goruntu_al=True):
     ister (ucbirim.enter_kapisi) ve bu uyarıyı taşır — iki diyalog açılmasın. → uçbirimde riskli komut mu (onaylandı)."""
     if "\n" in metin:
         return False
-    neden = riskli_komut(metin)  # ucuz ön eleme: sınıf sorgusu (kde: kdotool) yalnız eşleşince
+    neden = riskli_komut(metin, gizli=gizli)  # ucuz ön eleme: sınıf sorgusu (kde: kdotool) yalnız eşleşince; gizli:
+    # neden yalnız kalıp adı (ileti, panel ve kart kipinde günlük metinden parça taşımaz)
     if not neden:
         return False
     au = sec()
@@ -1647,9 +1669,11 @@ def ucbirim_komut_engel(k, onayli, metin, gizli=False, goruntu_al=True):
         izin, onay_neden = _panelden_onay(_("Uçbirime komut yaz: {komut}").format(komut=_yazilacak(metin, gizli)), b,
                                           ayrinti, goruntu)
         if not izin:
+            with baslik_gizle(gizli):  # CLI yolu da: gizli yazının iletisinde başlık (önizleme) yok
+                bg = baslik_goster(b)
             raise Dur(10, _("UÇBİRİM KOMUTU ({neden} ← {baslik}): yıkıcı olabilecek komutu uçbirime yazmak kullanıcının "
                             "onayını ister ({onay_neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile "
-                            "tekrarla").format(neden=neden, baslik=baslik_goster(b), onay_neden=onay_neden), tur="hassas")
+                            "tekrarla").format(neden=neden, baslik=bg, onay_neden=onay_neden), tur="hassas")
     return True
 
 

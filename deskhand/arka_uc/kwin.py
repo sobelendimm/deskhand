@@ -351,8 +351,9 @@ class KwinArkaUc(ArkaUc):
                 return
             time.sleep(0.025)
         a = self.aktif()
+        from ..guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
         raise Dur(AKTIF_DEGIL, _("hedef pencere aktif olmadı (aktif: {baslik})").format(
-            baslik=repr(self.baslik(a) if a else "")))
+            baslik=baslik_goster(self.baslik(a) if a else "")))
 
     def etkinlestir(self, k: str) -> None:
         if k and k != EKRAN:

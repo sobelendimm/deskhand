@@ -79,7 +79,9 @@ def dogrula(h: OnayHedefi | None) -> str | None:
     if ad != h.masaustu:
         return _("hedef masaüstü değişti")
     if baslik != h.baslik:
-        return _("pencere başlığı değişti ({once} → {sonra})").format(once=repr(h.baslik)[:80], sonra=repr(baslik)[:80])
+        from .guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
+        return _("pencere başlığı değişti ({once} → {sonra})").format(once=baslik_goster(h.baslik)[:80],
+                                                                      sonra=baslik_goster(baslik)[:80])
     if geo != h.geometri:
         return _("pencere taşındı ya da boyutu değişti")
     if h.ozet is not None:

@@ -344,7 +344,8 @@ def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True, olabilir=False,
         return False
     if guvenlik.onay_kapsami() == "kart":  # Enter kapısı onay istemez; satır uyarısı yalnız günlüğe (ucuz: OCR yok)
         t = {"metin": "", "kirli": False} if yalniz_ek else tampon_oku(au, k)
-        uyari = next((r for r in (guvenlik.riskli_komut(a) for a in (t.get("metin", "") + ek, ek)) if r), None)
+        uyari = next((r for r in (guvenlik.riskli_komut(a, gizli=gizli) for a in (t.get("metin", "") + ek, ek)) if r),
+                     None)  # gizli: neden yalnız kalıp adı (günlüğe metin parçası gitmez)
         guvenlik.onaysiz_serbest("uçbirim Enter", f"YIKICI OLABİLİR: {uyari}" if uyari else "")
         return False
     if guvenlik.onayli_gecerli(onayli):
@@ -356,7 +357,7 @@ def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True, olabilir=False,
         aday.append(tampon.get("metin", "") + ek)
     elif ek:
         aday.append(ek)
-    uyari = next((r for r in (guvenlik.riskli_komut(a) for a in aday) if r), None)
+    uyari = next((r for r in (guvenlik.riskli_komut(a, gizli=gizli) for a in aday) if r), None)  # gizli: kalıp adı
     genel_uyari = False  # uyarı metni okunan satırdan sözcük taşımıyor (ajana olduğu gibi gidebilir)
     if uyari is None and any(_GECMIS_ACILIMI.search(a) for a in aday):
         genel_uyari = True
@@ -383,12 +384,14 @@ def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True, olabilir=False,
         # pencerenin sözcükleri (dosya/komut adı) taşınabilir (SINIF-MASKE). Ayrıntı yalnız insan panelinde. Ajanın
         # kendi bildiği metinden (yazdığı tampon + ek) çıkan neden olduğu gibi kalır.
         bilinen = ([tampon.get("metin", "") + ek] if not tampon.get("kirli") else []) + ([ek] if ek else [])
-        uyari_ajan = next((r for r in (guvenlik.riskli_komut(a) for a in bilinen) if r), None)
+        uyari_ajan = next((r for r in (guvenlik.riskli_komut(a, gizli=gizli) for a in bilinen) if r), None)
         if uyari and not uyari_ajan:
             uyari_ajan = uyari if genel_uyari else _("ekrandan okunan satır (ayrıntı yalnız onay panelinde)")
+        with guvenlik.baslik_gizle(gizli):  # gizli yazı: başlık (önizleme) iletiye girmez (CLI yolu dahil)
+            bg = guvenlik.baslik_goster(b)
         raise Dur(10, _("UÇBİRİM ENTER KAPISI ({baslik}): uçbirimde komut çalıştırmak (Enter) her zaman kullanıcının "
                         "onayını ister ({onay_neden}){uyari}; kullanıcı sohbette açıkça onayladıysa --onayli ile "
-                        "tekrarla").format(baslik=repr(b), onay_neden=onay_neden,
+                        "tekrarla").format(baslik=bg, onay_neden=onay_neden,
                                            uyari=("; " + _("YIKICI OLABİLİR: {neden}").format(neden=uyari_ajan))
                                            if uyari_ajan else ""), tur="hassas")
     return True

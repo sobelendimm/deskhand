@@ -1735,5 +1735,8 @@
  "Önceki onaylı ayarlar doğrulanamadı (cüzdan kilitli/yok); dosyadaki değer kullanılıyor.": "The previously approved settings could not be verified (wallet locked/missing); the value in the file is used.",
  "(başlık gizlendi)": "(title hidden)",
  "başka bir pencere (başlık gizlendi)": "another window (title hidden)",
- "(gizli yazı: gizlendi)": "(secret text: hidden)"
+ "(gizli yazı: gizlendi)": "(secret text: hidden)",
+ "{neden} (gizli metin; içerik gösterilmiyor)": "{neden} (secret text; content not shown)",
+ "Enter gönderilmedi": "Enter was not sent",
+ "{neden}; bu ret anından önce {yazilan}/{toplam} karakter gönderilmişti; yazma kesildi": "{neden}; {yazilan}/{toplam} characters had been sent before this refusal; typing stopped"
 }

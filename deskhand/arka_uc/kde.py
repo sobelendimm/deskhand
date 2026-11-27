@@ -272,7 +272,8 @@ def one_getir(k):
             time.sleep(0.15)  # öne gelen pencerenin yeniden çizilmesi için
             return
         time.sleep(0.05)
-    raise Dur(3, _("hedef pencere aktif olmadı (aktif: {baslik})").format(baslik=repr(baslik(aktif()))))
+    from ..guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
+    raise Dur(3, _("hedef pencere aktif olmadı (aktif: {baslik})").format(baslik=baslik_goster(baslik(aktif()))))
 
 
 def ekran_goruntusu():

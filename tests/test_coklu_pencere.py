@@ -293,15 +293,256 @@ async def r2_testleri(c, sm):
     kontrol("R2-4: eylem bitince sınıf kilidi kalkar", getattr(guvenlik._KIMLIK_KILIDI, "sinif", None) is None)
 
     await ek1_testleri(c, sm)
+    await f2r3_testleri(c, sm)
 
 
 def _gunluk_metni():
     from deskhand import yollar
     d = yollar.gunluk_dizin()
+    parcalar = []
     try:
-        return "".join(open(os.path.join(d, f)).read() for f in sorted(os.listdir(d)) if f.startswith("gunluk-"))
+        for f in sorted(os.listdir(d)):
+            if f.startswith("gunluk-"):
+                with open(os.path.join(d, f), encoding="utf-8") as dosya:
+                    parcalar.append(dosya.read())
     except OSError:
         return ""
+    return "".join(parcalar)
+
+
+async def f2r3_testleri(c, sm):
+    """ABM-F2 R3: gizli metin riskli komut nedeninde / MCP iletisinde / onay panelinde / günlükte alıntılanmaz (P5,
+    P5b); etkin gizli (otomatik parola alanı) bütün redaksiyonda; Enter'dan hemen önce odak yoklaması; batch'te gizli
+    adımdan sonra aynı pencerenin new_text alanı."""
+    from deskhand import eylem, guvenlik
+    konsole = "kullanici@makine: ~ — Konsole"
+
+    def ucbirim_kur():
+        au = sm.sifirla(baslik=konsole, sinif="org.kde.konsole")
+        au.pen[B] = ["Diğer — Kate", "kate", (950, 100, 800, 600)]
+        return au
+
+    def cikti(r, g0):
+        return metin(r) + str(r.structured_content) + str(sm.ISTEKLER) + _gunluk_metni()[len(g0):]
+
+    # P5: '!' ile başlayan parola uçbirime secret + submit → Enter kapısı reddi
+    for kip in ("hepsi", "kart"):
+        eski_kapsam = guvenlik.onay_kapsami
+        if kip == "kart":
+            guvenlik.onay_kapsami = lambda taze=False: "kart"
+        try:
+            for sir, submit in (("!Passw0rdZ", True), ("./Gizli-Anahtar-77", False)):
+                ucbirim_kur()
+                g0 = _gunluk_metni()
+                r = await c.call_tool("type_text", {"window": A, "text": sir, "submit": submit, "secret": True, **F})
+                tum = cikti(r, g0)
+                cekirdek = sir.strip("!./")[:8]
+                ok = cekirdek not in tum and sir not in tum
+                if kip == "hepsi":
+                    ok = ok and r.is_error and "gizli metin; içerik gösterilmiyor" in metin(r) and "kullanici@makine" not in metin(r)
+                kontrol(f"R3-1 P5 ({kip}, {sir[:2]}…, submit={submit}): gizli dizge iletide/panelde/günlükte yok, "
+                        "kalıp adı var, başlık yok", ok, tum[:600])
+        finally:
+            guvenlik.onay_kapsami = eski_kapsam
+    # P5 kalıp adı panelde de görünür (karar verilebilsin), içerik yok
+    ucbirim_kur()
+    await c.call_tool("type_text", {"window": A, "text": "./Gizli-Anahtar-77", "secret": True, **F})
+    panel = str(sm.ISTEKLER)
+    kontrol("R3-1 panel: kalıp adı ('betik/program dosyasını çalıştırma') var, içerik yok",
+            "betik/program dosyasını çalıştırma" in panel and "Gizli-Anahtar" not in panel, panel[:400])
+    # gizli olmayan yazıda neden içeriği alıntılamaya devam eder (gerileme)
+    ucbirim_kur()
+    r = await c.call_tool("type_text", {"window": A, "text": "./acik-betik", **F})
+    kontrol("R3-1 gerileme: gizli olmayan yazıda neden komutu alıntılar", "./acik-betik" in metin(r), metin(r)[:300])
+    # gizli yazı uçbirim tamponuna girmez: sonraki (gizli olmayan) Enter iletiye/panele parolayı taşımaz
+    ucbirim_kur()
+    sm.YANIT["izin"] = True
+    await c.call_tool("type_text", {"window": A, "text": "!Passw0rdZ", "secret": True, **F})
+    sm.YANIT["izin"] = False
+    sm.ISTEKLER.clear()
+    g0 = _gunluk_metni()
+    r = await c.call_tool("press_key", {"window": A, "keys": "enter", **F})
+    tum = cikti(r, g0)
+    kontrol("R3-1 tampon: gizli yazıdan sonraki Enter kapısında parola yok", "Passw0rd" not in tum, tum[:500])
+
+    # DÜŞÜK 4: secret verilmeden parola alanı otomatik algılanır → sonuç/batch/günlük etkin gizliye bakar
+    sir = "qzxjkw"
+    eski_parola, eski_sonra = eylem._parola_alani_mi, s._sonra
+    eylem._parola_alani_mi = lambda k: True
+
+    def sonra(k, once, bekle=0.35):
+        return {"title": sm.AU[0].baslik(k), "changed": True, "changed_region": [1, 2, 3, 4],
+                "new_text": f"{sir} görünür" if k == A else "B metni"}
+    s._sonra = sonra
+    try:
+        au = iki_pencere(sm, baslik="Başlıksız — KWrite")
+        au.pen[B][0] = "Öteki — Kate"
+        yazilan = []
+
+        def onizleme(x):
+            if x.startswith("type "):
+                yazilan.append(x[5:])
+                au.pen[A][0] = f"Başlıksız ({''.join(yazilan)}) * — KWrite"
+        au.kanca_satir = onizleme
+        sm.YANIT["izin"] = True  # parola alanı onayı
+        g0 = _gunluk_metni()
+        r = await c.call_tool("type_text", {"window": A, "text": sir, **F})
+        tum = metin(r) + str(r.structured_content) + _gunluk_metni()[len(g0):]
+        kontrol("R3-2 otomatik parola alanı: sonuç ve günlükte gizli harf yok (after.title/new_text yer tutucu)",
+                not r.is_error and not _sizinti(tum, sir) and "(gizli yazı: gizlendi)" in metin(r), tum[:500])
+        # batch: otomatik gizli adım → observe_after atlanır; aynı pencerenin sonraki adımında new_text yer tutucu
+        yazilan.clear()
+        au.pen[A][0] = "Başlıksız — KWrite"
+        # MCP'ye giden batch sonucu yalnız metindir; çekirdek (yapılandırılmış adım özeti) doğrudan çağrılır
+        r = await asyncio.to_thread(s.batch, steps=[
+            s.Adim(tool="type_text", args={"window": A, "text": sir}),
+            s.Adim(tool="press_key", args={"window": A, "keys": "shift"}),
+            s.Adim(tool="press_key", args={"window": B, "keys": "shift"})], observe_after=True, **F)
+        tum = metin(r) + str(r.structured_content)
+        adimlar = (r.structured_content or {}).get("steps", [])
+        kontrol("R3-2/R3-5 batch: otomatik gizli → gözlem atlandı, aynı pencerenin new_text'i yer tutucu, "
+                "öteki pencereninki kalır",
+                not _sizinti(tum, sir) and "observe_after skipped" in metin(r) and len(adimlar) == 3
+                and adimlar[1].get("new_text") == "(gizli yazı: gizlendi)" and adimlar[2].get("new_text") == "B metni",
+                tum[:700])
+        # açık secret ile de: sonraki aynı pencere adımının new_text'i yer tutucu
+        eylem._parola_alani_mi = eski_parola
+        r = await asyncio.to_thread(s.batch, steps=[
+            s.Adim(tool="type_text", args={"window": A, "text": sir, "secret": True}),
+            s.Adim(tool="press_key", args={"window": A, "keys": "shift"})], **F)
+        tum = metin(r) + str(r.structured_content)
+        kontrol("R3-5 batch secret=true: sonraki aynı pencere adımının new_text'i yer tutucu",
+                not r.is_error and not _sizinti(tum, sir) and "(gizli yazı: gizlendi)" in tum, tum[:400])
+    finally:
+        eylem._parola_alani_mi, s._sonra = eski_parola, eski_sonra
+        sm.YANIT["izin"] = False
+
+    # DÜŞÜK 1: Enter gönderilmeden HEMEN önce odak yoklaması (gizli olsun olmasın)
+    eski_enter = eylem._enter_oncesi
+    for gizli in (False, True):
+        au = iki_pencere(sm)
+
+        def enter_oncesi(g, k, desen, onayli, au=au):
+            eski_enter(g, k, desen, onayli)
+            au.aktif_ = B  # onay/odak işinden sonra, Enter'dan hemen önce odak kaçar
+        eylem._enter_oncesi = enter_oncesi
+        try:
+            r = await c.call_tool("type_text", {"window": A, "text": "ab", "submit": True, "secret": gizli, **F})
+        finally:
+            eylem._enter_oncesi = eski_enter
+        m = metin(r)
+        kontrol(f"R3-3 Enter öncesi yoklama (secret={gizli}): Enter gönderilmez, ileti dürüst",
+                r.is_error and "key enter" not in au.satirlar and "Enter gönderilmedi" in m and "2/3" in m, m[:300])
+
+
+def f2r3_birim_testleri():
+    """ABM-F2 R3: başlık gizleme sınıfı (onay_hedef, one_getir), kod 10 ileti çelişkisi, gozcu_gizle sorgusuz."""
+    import sahte_masaustu as sm
+    from deskhand import eylem, guvenlik, onay_hedef
+    from deskhand.arka_uc import kde, kwin, sanal
+    from deskhand.hata import Dur
+    onizleme = "Başlıksız (qzx) * — KWrite"
+
+    # onay_hedef.dogrula: başlık değişti iletisi
+    h = onay_hedef.OnayHedefi(k="{x}", masaustu="kde", baslik="Başlıksız — KWrite", geometri=(0, 0, 1, 1))
+    eski = onay_hedef._durum
+    onay_hedef._durum = lambda k: ("kde", onizleme, (0, 0, 1, 1))
+    try:
+        with guvenlik.baslik_gizle(True):
+            gizli = onay_hedef.dogrula(h)
+        acik = onay_hedef.dogrula(h)
+    finally:
+        onay_hedef._durum = eski
+    kontrol("R3-4 onay_hedef: gizli yazıda başlık değişti iletisinde başlık yok (açıkta var)",
+            gizli and "(qzx)" not in gizli and "başlık gizlendi" in gizli and "(qzx)" in (acik or ""), f"{gizli} | {acik}")
+
+    # one_getir "aktif: …" iletileri (kde modül işlevi, sanal, kwin)
+    def dene(f):
+        try:
+            with guvenlik.baslik_gizle(True):
+                f()
+            return "(durmadı)"
+        except Dur as e:
+            return e.mesaj
+    eski_kde = kde.aktif, kde.baslik, kde.kd, kde.time.sleep
+    kde.aktif, kde.baslik, kde.kd = (lambda: "{diger}"), (lambda k: onizleme), (lambda *a, **k: "")
+    kde.time.sleep = lambda s: None
+    try:
+        m_kde = dene(lambda: kde.one_getir("{hedef}"))
+    finally:
+        kde.aktif, kde.baslik, kde.kd, kde.time.sleep = eski_kde
+    s_au = sanal.SanalArkaUc.__new__(sanal.SanalArkaUc)
+    s_au._cagir = lambda f: False
+    s_au.aktif = lambda: "{diger}"
+    s_au.baslik = lambda k: onizleme
+    m_sanal = dene(lambda: s_au.one_getir(sanal.kimlik_yap(0x42)))
+    k_au = kwin.KwinArkaUc.__new__(kwin.KwinArkaUc) if hasattr(kwin, "KwinArkaUc") else None
+    m_kwin = "(sınıf yok)"
+    if k_au is not None:
+        u = "{11111111-1111-1111-1111-111111111111}"
+        k_au.aktif = lambda: ""
+        k_au.geometri = lambda k: (0, 0, 1, 1)
+        k_au._kd = lambda *a, **k: ""
+        k_au.baslik = lambda k: onizleme
+        eski_uyku = kwin.time.sleep
+        kwin.time.sleep = lambda s: None
+        try:
+            m_kwin = dene(lambda: k_au.one_getir(kwin.kimlik_yap(u)))
+        finally:
+            kwin.time.sleep = eski_uyku
+    for ad, m in (("kde", m_kde), ("sanal", m_sanal), ("kwin", m_kwin)):
+        kontrol(f"R3-4 one_getir ({ad}): gizli yazıda 'aktif: …' başlığı yok", "(qzx)" not in m and "gizlendi" in m, m)
+
+    # NIT 1: kod 10 (yasak) iletisi çelişkisiz
+    for kanca_satiri, beklenen in (("typehold 6", 0), ("type c", 4)):
+        au = iki_pencere(sm)
+        g = sm.SahteGirdi(au, gizli=False, denetle=guvenlik.denetle)
+        eski_yasak = guvenlik.yasak_desenler
+        durum = {"yasak": False}
+        guvenlik.yasak_desenler = lambda durum=durum: [r"KWrite"] if durum["yasak"] else []
+
+        def kanca(x, kanca_satiri=kanca_satiri, durum=durum):
+            if x == kanca_satiri:
+                durum["yasak"] = True
+        au.kanca_satir = kanca
+        try:
+            eylem._harf_harf_yaz(g, A, None, "abc defg", False)
+            m = "(durmadı)"
+        except Dur as e:
+            m = e.mesaj
+        finally:
+            guvenlik.yasak_desenler = eski_yasak
+        if beklenen == 0:
+            ok = "YASAK" in m and "girdi gönderilmedi" not in m
+        else:
+            ok = "YASAK" in m and f"{beklenen}/8" in m and not re.search(r"\d+/\d+ karakter gönderildi", m)
+        kontrol(f"R3-6 nit kod 10 (yazilan={beklenen}): ileti çelişkisiz", ok, m)
+
+    # NIT 2: gozcu_gizle etkin pencereyi yeniden sorgulamaz (aktif() Dur fırlatsa bile gözcünün 3'ü döner)
+    au = iki_pencere(sm)
+    g = sm.SahteGirdi(au, gizli=True, denetle=guvenlik.denetle)
+    durum = {"kes": False, "sonra": 0}
+
+    def aktif():
+        if durum["kes"]:
+            durum["sonra"] += 1
+            if durum["sonra"] > 1:  # harf sonrası yoklama geçer; sonraki sorgu (gozcu_gizle) olmamalı
+                raise Dur(6, "aktif sorgulanamadı")
+        return au.aktif_
+    au.aktif = aktif
+
+    def kanca2(x):
+        if x == "type z":
+            g.kesildi = Dur(3, f"aktif pencere değişti → {onizleme!r}")
+            durum["kes"] = True
+    au.kanca_satir = kanca2
+    try:
+        eylem._harf_harf_yaz(g, A, None, "qzxjkw", False)
+        m, kod = "(durmadı)", None
+    except Dur as e:
+        m, kod = e.mesaj, e.kod
+    kontrol("R3-6 nit gozcu_gizle: gözcünün 3'ü sorgusuz başlıksız döner", kod == 3 and "(qzx)" not in m
+            and "başlık gizlendi" in m, f"{kod} {m}")
 
 
 def _sizinti(metin_, sir):
@@ -515,6 +756,7 @@ def main():
     asyncio.run(sahte_testler())
     gozcu_kesintisi_testleri()
     kwin_gozcu_testleri()
+    f2r3_birim_testleri()
     print(f"\n{gecen}/{toplam} çok pencere testi geçti ({time.monotonic() - t0:.1f} sn)")
     sys.exit(0 if gecen == toplam else 1)
 
