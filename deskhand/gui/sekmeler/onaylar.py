@@ -8,6 +8,7 @@ from PyQt6.QtCore import (QTimer,
 from PyQt6.QtWidgets import (QAbstractItemView, QHBoxLayout,
                              QHeaderView, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
+from ... import guvenlik
 from ...i18n import _
 from .. import metinler as T
 from ..dil import Metinler
@@ -80,10 +81,17 @@ class OnaylarSekmesi(QWidget):
         t = self.t_bekleyen
         t.setRowCount(len(self.bekleyen))
         for i, d in enumerate(self.bekleyen):
-            vals = (time.strftime("%H:%M:%S", time.localtime(d["zaman"])), d["eylem"], d["hedef"],
+            hedef = guvenlik.onay_iletisi(d)["hedef"]  # yasak/gizli pencere başlığı diyalogdaki gibi gizli
+            vals = (time.strftime("%H:%M:%S", time.localtime(d["zaman"])), d["eylem"], hedef,
                     _masaustu_adi(d["masaustu"]), "")
             for j, v in enumerate(vals):
-                t.setItem(i, j, QTableWidgetItem(v))
+                # yalnız görüntü (izin yalnız diyalogdan): metin tam ama temiz (yön/sıfır genişlik yok, tek satır);
+                # Qt dar sütunda "…" ile kısaltırsa tamamı ipucunda ve diyalogda (UX-C-R1c)
+                v = guvenlik.onay_tek_satir(v, None) if j in (1, 2) else v
+                it = QTableWidgetItem(v)
+                if j in (1, 2):
+                    it.setToolTip(v)
+                t.setItem(i, j, it)
         self._kalanlari_yaz()
         self.l_bos.setVisible(not self.bekleyen)
         self.b_ac.setEnabled(bool(self.bekleyen))

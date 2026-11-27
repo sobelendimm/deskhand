@@ -1974,5 +1974,10 @@
  "İsteyen": "Requested by",
  "İşlem": "Operation",
  "(kısaltıldı)": "(shortened)",
- "Komutun tamamını görmek için kaydırın.": "Scroll to see the whole command."
+ "Komutun tamamını görmek için kaydırın.": "Scroll to see the whole command.",
+ "(tamamı onay penceresinde)": "(full text in the approval window)",
+ "Son kısım: {metin}": "End: {metin}",
+ "onay isteği çok uzun, onaylanamaz → red": "approval request too long, cannot be approved → denied",
+ "{dugme} (önce sona kaydırın)": "{dugme} (scroll to the end first)",
+ "… (kısaltıldı: {n} karakter daha; komutun tamamı yukarıda)": "… (shortened: {n} more characters; the whole command is shown above)"
 }

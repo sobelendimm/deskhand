@@ -418,6 +418,9 @@
  "(sayfa adresi değişti: sınamanın kalkması çözüm sayılmadı)": [
   "mcp_sunucu.py:3068"
  ],
+ "(tamamı onay penceresinde)": [
+  "gui/tepsi.py:20"
+ ],
  "(varsayılan)": [
   "masaustu.py:556",
   "masaustu.py:1423"
@@ -747,7 +750,7 @@
  ],
  "Bir komut DUR anahtarını kaldırmak istiyor. Siz istemediyseniz Hayır deyin.": [
   "guvenlik.py:2760",
-  "onay.py:956"
+  "onay.py:975"
  ],
  "Bir masaüstü seçin: önizleme onu gösterir (yalnız izleme).": [
   "gui/metinler.py:350"
@@ -976,7 +979,7 @@
  ],
  "DUR kaldırılsın mı?": [
   "guvenlik.py:2759",
-  "onay.py:955"
+  "onay.py:974"
  ],
  "DUR kaldırılsın mı? Ajan yeniden girdi gönderebilir.": [
   "gui/metinler.py:45"
@@ -1050,10 +1053,10 @@
   "mcp_sunucu.py:2896"
  ],
  "Deskhand paneli beklerken kapandı → red": [
-  "onay.py:64"
+  "onay.py:65"
  ],
  "Deskhand paneli kapalı, onay alınamadı": [
-  "onay.py:58"
+  "onay.py:59"
  ],
  "Deskhand paneli kapalı: kullanıcıya devredilemedi": [
   "mcp_sunucu.py:2895"
@@ -1800,13 +1803,13 @@
   "gui/metinler.py:283"
  ],
  "Onay isteği gösterildikten sonra değişti; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1040"
+  "onay.py:1059"
  ],
  "Onay isteği isteyenin yazdığı hâliyle aynı değil (dosya panel okumadan önce değişti ya da aynı istek için farklı bir karma geldi); istek reddedildi.": [
-  "onay.py:1045"
+  "onay.py:1064"
  ],
  "Onay isteğinin panelde gösterilen hâli bilinmiyor; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1048"
+  "onay.py:1067"
  ],
  "Onay kapsamı": [
   "doktor.py:149",
@@ -1999,6 +2002,9 @@
  ],
  "Son etkinlik": [
   "gui/metinler.py:346"
+ ],
+ "Son kısım: {metin}": [
+  "gui/onay_diyalog.py:50"
  ],
  "Sonnet (dengeli)": [
   "gui/metinler.py:276"
@@ -2563,7 +2569,7 @@
   "eylem.py:1171"
  ],
  "beklenen koşul gerçekleşti (insan doğrulaması sayfadan kalktı)": [
-  "onay.py:69"
+  "onay.py:70"
  ],
  "bekleniyor: kullanıcı bilgisayarı kullanıyor…": [
   "guvenlik.py:2536"
@@ -3669,7 +3675,7 @@
   "gui/metinler.py:106"
  ],
  "gözetimsiz çalışmada hassas eylem yapılmaz": [
-  "onay.py:67"
+  "onay.py:68"
  ],
  "gözetimsiz çalışmada insana devredilemez": [
   "mcp_sunucu.py:2897"
@@ -3791,7 +3797,7 @@
   "gui/metinler.py:344"
  ],
  "isteyen vazgeçti (çağrı iptal edildi) → red": [
-  "onay.py:70"
+  "onay.py:71"
  ],
  "isteğe bağlı: yalnız listen aracı için": [
   "doktor.py:481"
@@ -4050,7 +4056,7 @@
   "hata.py:102"
  ],
  "kullanıcı DUR dedi → red": [
-  "onay.py:65"
+  "onay.py:66"
  ],
  "kullanıcı DUR dedi; kullanıcı devam diyene dek hiçbir girdi gönderme": [
   "mcp_sunucu.py:143"
@@ -4065,7 +4071,7 @@
   "mcp_sunucu.py:142"
  ],
  "kullanıcı bir kez izin verdi": [
-  "onay.py:60"
+  "onay.py:61"
  ],
  "kullanıcı bu hassas tıklamayı AÇIKÇA onayladı": [
   "cli.py:483",
@@ -4111,7 +4117,7 @@
   "mcp_sunucu.py:145"
  ],
  "kullanıcı reddetti": [
-  "onay.py:61"
+  "onay.py:62"
  ],
  "kullanıcı sanal masaüstünü devraldı (Devral)": [
   "arka_uc/kwin.py:793",
@@ -4334,19 +4340,22 @@
   "guvenlik.py:1447"
  ],
  "onay iletişim kutusu": [
-  "onay.py:783"
+  "onay.py:797"
  ],
  "onay isteği başarısız ({hata})": [
   "mcp_sunucu.py:701"
  ],
  "onay isteği beklerken silindi → red": [
-  "onay.py:71"
+  "onay.py:72"
  ],
  "onay isteği yazılamadı → red": [
-  "onay.py:66"
+  "onay.py:67"
+ ],
+ "onay isteği çok uzun, onaylanamaz → red": [
+  "onay.py:73"
  ],
  "onay kanalı doğrulanamadı (yanıtın Deskhand panelinden geldiği kanıtlanamadı) → red": [
-  "onay.py:68"
+  "onay.py:69"
  ],
  "onay kapsamı": [
   "liste_koruma.py:92"
@@ -4366,7 +4375,7 @@
   "gui/insan_metni.py:78"
  ],
  "onay süresi doldu (yanıt yok → red)": [
-  "onay.py:62"
+  "onay.py:63"
  ],
  "onay verilen hedef değişti: noktadaki yazı artık {simdi} (onaylanan: {onaylanan}); tıklanmadı": [
   "eylem.py:794"
@@ -4507,10 +4516,10 @@
   "gui/metinler.py:105"
  ],
  "panel kaydı eski ({alanlar} uymuyor): panel en çok {sn} sn içinde kendiliğinden tazeler, düzelmezse paneli yeniden başlatın": [
-  "onay.py:360"
+  "onay.py:374"
  ],
  "panel kaydı eski: panel çalışırken Python/kurulum güncellenmiş (exe: {exe}); panel kaydını en çok {sn} sn içinde kendiliğinden tazeler, düzelmezse paneli yeniden başlatın": [
-  "onay.py:357"
+  "onay.py:371"
  ],
  "panel soketi açılamadı ({dizin})": [
   "gui/__main__.py:42"
@@ -5632,6 +5641,9 @@
  "{dugme} ({sure})": [
   "gui/onay_diyalog.py:46"
  ],
+ "{dugme} (önce sona kaydırın)": [
+  "gui/onay_diyalog.py:49"
+ ],
  "{durum}: kullanıcı bölünmedi, sorulmadı (tam_ekranda_sor=false)": [
   "mesgul.py:568"
  ],
@@ -6232,7 +6244,7 @@
   "guvenlik.py:1735"
  ],
  "İsteyenin yazdığı isteğin karması onay kanalından gelmedi; Evet uygulanmadı. İstek yeniden sorulur.": [
-  "onay.py:1042"
+  "onay.py:1061"
  ],
  "İzin yalnız bu tek işlem içindir. Emin değilseniz reddedin.": [
   "gui/metinler.py:126"
@@ -6248,6 +6260,9 @@
  ],
  "‘{hedef}’ tıklanıyor": [
   "gui/metinler.py:296"
+ ],
+ "… (kısaltıldı: {n} karakter daha; komutun tamamı yukarıda)": [
+  "onay.py:75"
  ],
  "⚠ {bolum} kaydedilemedi: {hata}. Kayıtlı değer geri yüklendi; yeniden deneyin.": [
   "gui/metinler.py:170"

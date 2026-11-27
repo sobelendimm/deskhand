@@ -46,6 +46,9 @@ D_AYRINTILAR = N_("Ayrıntılar")
 D_DUGME_SURE = N_("{dugme} ({sure})")                      # Reddet (1:58): geri sayım düğmede
 D_IZIN_BEKLE = N_("{dugme} ({sn} sn…)")                     # güvenlik beklemesi görünür (kazara izne karşı)
 D_IZIN_FARE = N_("{dugme} (fareyi oynatın)")               # bekleme bitti: fare bu pencerede hareket edince açılır
+D_IZIN_KAYDIR = N_("{dugme} (önce sona kaydırın)")          # taşan komut kutusu sona kaydırılmadan izin yok (UX-C-R1c)
+D_SON_KISIM = N_("Son kısım: {metin}")
+SON_KISIM = 60  # taşan kutunun altında ayrıca görünen son karakter sayısı
 
 
 def sure_metni(sn: float) -> str:
@@ -135,6 +138,15 @@ class OnayDiyalog(QDialog):
         self.mt(self.l_kaydir.setText, D_KAYDIR)
         self.l_kaydir.setVisible(False)
         metin_kutu.addWidget(self.l_kaydir)
+        self.l_son = deger(kalin=True)  # taşan kutu: tehlikeli SON kısım kaydırmadan da görünür
+        self.l_son.setObjectName("sonKisim")
+        self.l_son.setVisible(False)
+        metin_kutu.addWidget(self.l_son)
+        self._tasiyor = False
+        self._sona_kaydirildi = False
+        self._bekleme_tamam = False
+        self.k_icerik.verticalScrollBar().valueChanged.connect(lambda _v: self._kaydirma_denetle())
+        self.k_icerik.verticalScrollBar().rangeChanged.connect(lambda *_a: self._kaydirma_denetle())
         metin_kutu.addWidget(self.l_risk)
         ust.addLayout(metin_kutu, 1)
         kok.addLayout(ust)
@@ -230,8 +242,9 @@ class OnayDiyalog(QDialog):
         self.b_izin.setAutoDefault(False)
         self.b_izin.setDefault(False)
         self.b_izin.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # yalnız fareyle: Enter/boşluk izne dönüşmez
-        self.b_izin.setEnabled(kurma_ms <= 0)  # kurma_ms <= 0: koruma yok (yalnız testler)
+        self._bekleme_tamam = kurma_ms <= 0  # kurma_ms <= 0: bekleme koruması yok (yalnız testler)
         self._kurma_bitti = kurma_ms <= 0
+        self.b_izin.setEnabled(self._izin_acilabilir())
         self._kurma_son = time.monotonic() + max(0, kurma_ms) / 1000.0
         self._hareket_px = max(0, int(hareket_px)) if kurma_ms > 0 else 0
         self._ilk_konum = None
@@ -302,8 +315,33 @@ class OnayDiyalog(QDialog):
         satir = sum(max(1, -(-len(p) // sutun)) for p in self.k_icerik.toPlainText().split("\n"))
         ic = 2 * (self.k_icerik.frameWidth() + int(self.k_icerik.document().documentMargin()))
         self.k_icerik.setFixedHeight(min(satir, KUTU_SATIR) * fm.lineSpacing() + ic + 2)
-        self.l_kaydir.setVisible(self.k_icerik.isVisibleTo(self) and
-                                 (satir > KUTU_SATIR or self.k_icerik.verticalScrollBar().maximum() > 0))
+        self._kaydirma_denetle(satir > KUTU_SATIR)
+
+    def _kaydirma_denetle(self, tahmin_tasar: bool = False):
+        """Kutu taşıyor mu (görünürken kaydırma çubuğundan, görünmeden önce satır tahmininden): taşıyorsa kaydırma notu +
+        "Son kısım" satırı görünür ve izin düğmesi kutu bir kez sona kaydırılana dek pasif (Reddet hep etkin)."""
+        k = self.k_icerik
+        if not k.isVisibleTo(self) or not k.toPlainText():
+            self._tasiyor = False
+        else:
+            sb = k.verticalScrollBar()
+            self._tasiyor = sb.maximum() > 0 if k.isVisible() else (tahmin_tasar or sb.maximum() > 0)
+            if self._tasiyor and k.isVisible() and sb.value() >= sb.maximum():
+                self._sona_kaydirildi = True
+        self.l_kaydir.setVisible(self._tasiyor)
+        if self._tasiyor:
+            metin = k.toPlainText()
+            son = metin if len(metin) <= SON_KISIM else "…" + metin[-SON_KISIM:]
+            self.l_son.setText(_(D_SON_KISIM).format(metin=son))
+        self.l_son.setVisible(self._tasiyor)
+        if hasattr(self, "_kurma_son"):  # düğmeler kurulduysa
+            self.b_izin.setEnabled(self._izin_acilabilir())
+            self._dugme_metinleri()
+
+    def _izin_acilabilir(self) -> bool:
+        """İzin düğmesi: güvenlik beklemesi (kurma + fare hareketi) bitti VE taşan komut kutusu sona kaydırıldı."""
+        return (self._bekleme_tamam and not self.bitti and (not self._tasiyor or self._sona_kaydirildi)
+                and (not hasattr(self, "toplam") or self.kalan() > 0))
 
     def resizeEvent(self, e):  # noqa: N802 - Qt API
         super().resizeEvent(e)
@@ -331,6 +369,8 @@ class OnayDiyalog(QDialog):
         izin = _(T.D_DEVIR_BITTI if self.devir else T.D_IZIN)
         if self.b_izin.isEnabled() or self.bitti:
             self.b_izin.setText(izin)
+        elif self._bekleme_tamam and self._tasiyor and not self._sona_kaydirildi:
+            self.b_izin.setText(_(D_IZIN_KAYDIR).format(dugme=izin))
         elif not self._kurma_bitti:
             sn = max(1, int(self._kurma_son - time.monotonic() + 0.999))
             self.b_izin.setText(_(D_IZIN_BEKLE).format(dugme=izin, sn=sn))
@@ -346,17 +386,19 @@ class OnayDiyalog(QDialog):
         self._kurma_bitti = True
         self._ilk_konum = None  # süre içindeki hareket sayılmaz
         if self._hareket_px <= 0:
-            self.b_izin.setEnabled(True)
+            self._bekleme_tamam = True
+            self.b_izin.setEnabled(self._izin_acilabilir())
         self._dugme_metinleri()
 
     def eventFilter(self, nesne, olay):  # noqa: N802 - Qt API
         if (olay.type() == QEvent.Type.MouseMove and self._kurma_bitti and not self.bitti
-                and not self.b_izin.isEnabled()):
+                and not self._bekleme_tamam):
             p = olay.globalPosition()
             if self._ilk_konum is None:  # pencere imlecin altında açılınca gelen yapay hareket (aynı nokta) sayılmaz
                 self._ilk_konum = p
             elif abs(p.x() - self._ilk_konum.x()) + abs(p.y() - self._ilk_konum.y()) >= self._hareket_px:
-                self.b_izin.setEnabled(True)
+                self._bekleme_tamam = True
+                self.b_izin.setEnabled(self._izin_acilabilir())
                 self._dugme_metinleri()
         return False  # olay yutulmaz
 

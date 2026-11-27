@@ -1704,8 +1704,8 @@ def onay_iletisi(istek: dict) -> dict:
 
     icerik_etiket = icerik_deger = ""
     kutu = False
-    if tur in ("bilinmeyen", "diger"):
-        icerik_etiket, icerik_deger = _("Eylem"), onay_tek_satir(temiz(eylem), kisaltma_eki=True)
+    if tur in ("bilinmeyen", "diger"):  # the raw action may BE a command: whole, in the scroll box (UX-C-R1c)
+        icerik_etiket, icerik_deger, kutu = _("Eylem"), onay_tek_satir(temiz(eylem), None), True
     elif tur not in ("devir", "dur"):
         for k, v in alan.items():
             etiket = _ONAY_ICERIK_ETIKET.get((tur, k)) or _ONAY_ICERIK_ETIKET.get(k)
@@ -1735,7 +1735,7 @@ def onay_iletisi(istek: dict) -> dict:
         satirlar.append(_("İsteyen süreç") + ": " + isteyen)
     return {"tur": tur, "baslik": _(_ONAY_TUR_CUMLE[tur]), "risk": _(_ONAY_RISK[tur]), "icerik": icerik,
             "icerik_etiket": icerik_etiket, "icerik_deger": icerik_deger, "icerik_kutu": kutu,
-            "isteyen": isteyen, "hedef": gizli_baslik if baslik_gizli else onay_tek_satir(hedef, 200),
+            "isteyen": isteyen, "hedef": gizli_baslik if baslik_gizli else onay_tek_satir(hedef, 200, kisaltma_eki=True),
             "ayrinti": "\n".join(satirlar)}
 
 

@@ -406,8 +406,11 @@ kontrol("taşan komut: kaydırma çubuğu + görünür 'kaydırın' notu, son k�
         d.k_icerik.verticalScrollBar().maximum() > 0 and d.l_kaydir.isVisible()
         and d.l_kaydir.text() == _("Komutun tamamını görmek için kaydırın.")
         and d.k_icerik.toPlainText().endswith("; rm -rf ~'"), d.l_kaydir.text())
-kontrol("taşan komut: izin düğmesi beklemesi aynı (kurma_ms=0 → etkin; Reddet varsayılan)",
-        d.b_izin.isEnabled() and d.b_red.isDefault())
+kontrol("taşan komut: izin sona kaydırılana dek pasif, Reddet varsayılan (UX-C-R1c)",
+        not d.b_izin.isEnabled() and d.b_red.isDefault() and d.b_red.isEnabled())
+d.k_icerik.verticalScrollBar().setValue(d.k_icerik.verticalScrollBar().maximum())
+app.processEvents()
+kontrol("taşan komut: sona kaydırınca (bekleme yok: kurma_ms=0) izin etkin", d.b_izin.isEnabled())
 d.close()
 d = diyalog(istek("k", konu="ucbirim", eylem=_("Uçbirime komut yaz: {komut}").format(komut="'ls'"), hedef="x"))
 kontrol("kısa komut: kaydırma notu yok", d.k_icerik.isVisible() and not d.l_kaydir.isVisible())
