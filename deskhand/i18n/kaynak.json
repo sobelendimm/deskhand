@@ -201,10 +201,10 @@
   "doktor.py:183"
  ],
  "\"{ad}\" adlı kayıtlı parola silinecek. Bu geri alınamaz.": [
-  "gui/sekmeler/gizli.py:125"
+  "gui/sekmeler/gizli.py:127"
  ],
  "\"{ad}\" için yeni parolayı yazın. Bağlı olduğu site ya da uygulama değişmez.": [
-  "gui/sekmeler/gizli.py:147"
+  "gui/sekmeler/gizli.py:149"
  ],
  "# '{ad}' için {sayi} öge:": [
   "erisim.py:1445"
@@ -597,10 +597,10 @@
  ],
  "Ad": [
   "gui/sekmeler/gizli.py:62",
-  "gui/sekmeler/gizli.py:131"
+  "gui/sekmeler/gizli.py:133"
  ],
  "Ad yalnız harf, rakam, nokta, tire ve alt çizgi içerebilir (en çok 64 karakter).": [
-  "gui/sekmeler/gizli.py:142"
+  "gui/sekmeler/gizli.py:144"
  ],
  "Adım dizisi çalıştırılıyor": [
   "gui/metinler.py:310"
@@ -832,7 +832,7 @@
   "gui/gorev.py:37"
  ],
  "Bir görev \"{ad}\" parolasını istedi ama kayıtlı değil. Parolayı buraya kaydedin; görev sonra yeniden deneyebilir.": [
-  "gui/sekmeler/gizli.py:128"
+  "gui/sekmeler/gizli.py:130"
  ],
  "Bir görev zaten çalışıyor (başka bir panel ya da komuttan).": [
   "gorev.py:526"
@@ -881,7 +881,7 @@
   "surum.py:39"
  ],
  "Bu adla kayıtlı bir parola zaten var.": [
-  "gui/sekmeler/gizli.py:145"
+  "gui/sekmeler/gizli.py:147"
  ],
  "Bu bir ödeme işlemi olabilir; para çekilebilir.": [
   "guvenlik.py:1522"
@@ -1005,7 +1005,7 @@
   "gui/sekmeler/gizli.py:78"
  ],
  "Cüzdan girişte otomatik açılsın mı?": [
-  "gui/sekmeler/gizli.py:121"
+  "gui/sekmeler/gizli.py:123"
  ],
  "Cüzdan okunabildi; {ayar} panelin imzalı kaydıyla doğrulandı.": [
   "liste_koruma.py:1003"
@@ -1505,7 +1505,7 @@
   "gui/sekmeler/gizli.py:54"
  ],
  "Girişte açmak için cüzdan parolasını yazın.": [
-  "gui/sekmeler/gizli.py:126"
+  "gui/sekmeler/gizli.py:128"
  ],
  "Gizli bilgiler": [
   "gui/sekmeler/gizli.py:44"
@@ -1936,7 +1936,7 @@
   "gui/metinler.py:186"
  ],
  "Kaydedilemedi. Ayrıntıdaki nedene bakıp yeniden deneyin.": [
-  "gui/sekmeler/gizli.py:127"
+  "gui/sekmeler/gizli.py:129"
  ],
  "Kaydedilmemiş değişiklikler": [
   "gui/metinler.py:170"
@@ -2029,10 +2029,10 @@
   "gui/sekmeler/gizli.py:103"
  ],
  "Kuruldu · bu oturumda cüzdan Deskhand'den önce başlatıldı ve kilitli; sonraki girişte yeniden denenecek": [
-  "gui/sekmeler/gizli.py:140"
+  "gui/sekmeler/gizli.py:142"
  ],
  "Kuruldu · sonraki girişte denenecek": [
-  "gui/sekmeler/gizli.py:139"
+  "gui/sekmeler/gizli.py:141"
  ],
  "Kurulum komutunu panoya kopyalar: {komut}": [
   "gui/metinler.py:415"
@@ -2135,7 +2135,7 @@
   "cli.py:47"
  ],
  "Okunuyor…": [
-  "gui/sekmeler/gizli.py:115"
+  "gui/sekmeler/gizli.py:117"
  ],
  "Onay bekleniyor ({n}): onay penceresine bakın — Claude sizin kararınızı bekliyor.": [
   "gui/metinler.py:277"
@@ -2196,7 +2196,7 @@
   "gui/metinler.py:64"
  ],
  "Oturum açılınca KDE Cüzdanı parola sormadan açılacak. Bu bilgisayarda oturumunuzu açan herkes cüzdandaki parolalara erişebilir.\n\nDevam edilsin mi?": [
-  "gui/sekmeler/gizli.py:122"
+  "gui/sekmeler/gizli.py:124"
  ],
  "Oturum açılınca cüzdan parola sormadan açılır. Cüzdan parolası bu bilgisayara kilitli olarak saklanır.": [
   "gui/sekmeler/gizli.py:55"
@@ -2249,35 +2249,35 @@
   "guvenlik.py:2245"
  ],
  "Parola": [
-  "gui/sekmeler/gizli.py:132"
+  "gui/sekmeler/gizli.py:134"
  ],
  "Parola (tekrar)": [
-  "gui/sekmeler/gizli.py:133"
+  "gui/sekmeler/gizli.py:135"
  ],
  "Parola alanına yaz": [
   "guvenlik.py:1492",
   "guvenlik.py:2528"
  ],
  "Parola boş olamaz.": [
-  "gui/sekmeler/gizli.py:144"
+  "gui/sekmeler/gizli.py:146"
  ],
  "Parola deposu değişsin mi?": [
-  "gui/sekmeler/gizli.py:118"
+  "gui/sekmeler/gizli.py:120"
  ],
  "Parola ekle": [
-  "gui/sekmeler/gizli.py:130"
+  "gui/sekmeler/gizli.py:132"
  ],
  "Parola hesabınıza erişim verir; yalnız siz istediyseniz izin verin.": [
   "guvenlik.py:1529"
  ],
  "Parola silinsin mi?": [
-  "gui/sekmeler/gizli.py:124"
+  "gui/sekmeler/gizli.py:126"
  ],
  "Parolalar KDE Cüzdanı'nda durur. Cüzdan kilitliyse Deskhand onu açmaz; siz açana kadar bekler.": [
   "gui/sekmeler/gizli.py:53"
  ],
  "Parolalar ve ayar koruma anahtarı {yeni} konumuna taşınacak. {eski} artık kullanılmayacak.\n\nDevam edilsin mi?": [
-  "gui/sekmeler/gizli.py:119"
+  "gui/sekmeler/gizli.py:121"
  ],
  "Parolaları nerede sakla": [
   "gui/sekmeler/gizli.py:46"
@@ -2286,7 +2286,7 @@
   "gui/sekmeler/gizli.py:73"
  ],
  "Parolayı değiştir": [
-  "gui/sekmeler/gizli.py:146"
+  "gui/sekmeler/gizli.py:148"
  ],
  "Pencere": [
   "gui/metinler.py:58",
@@ -2513,6 +2513,12 @@
  "Uygula'ya basınca açılacak": [
   "gui/sekmeler/gizli.py:113"
  ],
+ "Uygula'ya basınca bırakılacak": [
+  "gui/sekmeler/gizli.py:115"
+ ],
+ "Uygula'ya basınca kullanılacak": [
+  "gui/sekmeler/gizli.py:114"
+ ],
  "Uygulama": [
   "gui/metinler.py:153",
   "guvenlik.py:1506"
@@ -2630,13 +2636,13 @@
   "gui/metinler.py:61"
  ],
  "Yalnız bu site (isteğe bağlı)": [
-  "gui/sekmeler/gizli.py:134"
+  "gui/sekmeler/gizli.py:136"
  ],
  "Yalnız bu sitelerin çerezleri (girişleri) görev tarayıcısına kopyalanır; boşsa tarayıcı hiçbir oturum olmadan açılır. Kayıtlı parolalar HİÇ kopyalanmaz. Bu sitelerde ajan sizin adınıza işlem yapabilir (ayar değiştirme, gönderi, silme); güvenilmeyen sayfa içeriği ajanı kandırabilir.": [
   "gui/metinler.py:315"
  ],
  "Yalnız bu uygulama (isteğe bağlı)": [
-  "gui/sekmeler/gizli.py:136"
+  "gui/sekmeler/gizli.py:138"
  ],
  "Yalnız fare": [
   "gui/metinler.py:152"
@@ -2663,7 +2669,7 @@
   "cli.py:42"
  ],
  "Yeni parola": [
-  "gui/sekmeler/gizli.py:148"
+  "gui/sekmeler/gizli.py:150"
  ],
  "Yeniden denetle": [
   "gui/metinler.py:248"
@@ -3254,7 +3260,7 @@
   "doktor.py:100"
  ],
  "bu sürümde yok": [
-  "gui/sekmeler/gizli.py:114"
+  "gui/sekmeler/gizli.py:116"
  ],
  "bu öge sayısal değer ister ({n} karakterlik metin sayı değil)": [
   "erisim.py:782"
@@ -5267,7 +5273,7 @@
   "guvenlik.py:1287"
  ],
  "pencere sınıfı, ör. firefox": [
-  "gui/sekmeler/gizli.py:137"
+  "gui/sekmeler/gizli.py:139"
  ],
  "pencere taşıma": [
   "arka_uc/kde.py:930"
@@ -6202,7 +6208,7 @@
   "oturum/firefox.py:503"
  ],
  "{ad} · yalnız {hedef}": [
-  "gui/sekmeler/gizli.py:138"
+  "gui/sekmeler/gizli.py:140"
  ],
  "{ad} · {g}×{y}": [
   "gui/metinler.py:245"
@@ -6813,7 +6819,7 @@
   "arka_ortak.py:1234"
  ],
  "ör. ornekbanka.com.tr; alt alan adları dahil": [
-  "gui/sekmeler/gizli.py:135"
+  "gui/sekmeler/gizli.py:137"
  ],
  "özel D-Bus (dbus-daemon) açılmadı": [
   "masaustu.py:1178"
@@ -6878,7 +6884,7 @@
   "cli.py:45"
  ],
  "İki parola aynı değil.": [
-  "gui/sekmeler/gizli.py:143"
+  "gui/sekmeler/gizli.py:145"
  ],
  "İmzasız çalışma kabul edildi (anahtarlık yok); panelin koyduğu DUR kaldırıldı.": [
   "gui/panel.py:298"

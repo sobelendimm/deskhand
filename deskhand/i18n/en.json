@@ -338,6 +338,8 @@
  "UYARI: ayarlar.toml: {ileti}": "WARNING: ayarlar.toml: {ileti}",
  "UYARI: klavye etkinliği izlenemiyor ({neden}); yalnız fare izleniyor": "WARNING: keyboard activity cannot be monitored ({neden}); only the mouse is monitored",
  "UYARI: {uyari}": "WARNING: {uyari}",
+ "Uygula'ya basınca bırakılacak": "Will stop being used when you press Apply",
+ "Uygula'ya basınca kullanılacak": "Will be used when you press Apply",
  "Varsayılan kapalıdır. Açınca kısayol KDE'ye bu uygulama adına kaydedilir; kapatınca kaydı silinir. Çalışmazsa tepsi simgesindeki DUR yeterlidir.": "Off by default. When on, the shortcut is registered with KDE under this app's name; when off, the registration is removed. If it does not work, the STOP icon in the tray is enough.",
  "Xvfb 8 sn içinde açılmadı": "Xvfb did not start within 8 s",
  "Xvfb bellek kafesinde değil: {cgroup}": "Xvfb is not in the memory cage: {cgroup}",

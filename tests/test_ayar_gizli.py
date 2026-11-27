@@ -280,6 +280,14 @@ s.gizli.yukle()
 s.gizli.s_kasa.anahtar.click()
 kontrol("kasa kapatılınca cüzdan açılır (tek seçim)",
         not s.gizli.s_kasa.anahtar.isChecked() and s.gizli.s_cuzdan.anahtar.isChecked())
+kontrol("bekleyen seçim rozeti: cüzdan 'Uygula'ya basınca kullanılacak', kasa 'Uygula'ya basınca bırakılacak' (uyarı)",
+        s.gizli.s_cuzdan.rozet.metin() == _(G.D_DEPO_KULLANILACAK) and s.gizli.s_cuzdan.rozet.tur() == "uyari"
+        and s.gizli.s_kasa.rozet.metin() == _(G.D_DEPO_BIRAKILACAK) and s.gizli.s_kasa.rozet.tur() == "uyari",
+        f"{s.gizli.s_kasa.rozet.metin()} | {s.gizli.s_cuzdan.rozet.metin()}")
+s.gizli.s_kasa.anahtar.click()
+kontrol("kayıtlı seçime dönünce rozet yine kayıtlı durumu söyler (kasa 'Hazır…', cüzdan 'Kullanılmıyor')",
+        s.gizli.s_kasa.rozet.metin() == _(G.D_HAZIR_TPM) and s.gizli.s_cuzdan.rozet.metin() == _(G.D_KULLANILMIYOR))
+s.gizli.s_kasa.anahtar.click()
 kontrol("bekleyen değişiklik göstergesi", "gizli" in s.degisenler() and s.durum_metni() == DEGISIKLIK,
         str(s.degisenler()))
 kontrol("cüzdan kilitli: Cüzdanı aç etkin", s.gizli.b_cuzdan_ac.isEnabled())
@@ -597,6 +605,10 @@ bp2.close()
 s, d, c = kur()
 d.hedefler["github"] = {"site": "github.com"}
 s.gizli.yukle()
+bas_ = s.gizli.tablo.horizontalHeader()
+kontrol("tablo: Ad sütunu en az ~12 karakter, başlıklar sola hizalı",
+        s.gizli.tablo.columnWidth(0) >= s.gizli.tablo.fontMetrics().horizontalAdvance("M" * 6 + "n" * 6)
+        and bool(bas_.defaultAlignment() & G.Qt.AlignmentFlag.AlignLeft), str(s.gizli.tablo.columnWidth(0)))
 kontrol("seçim yokken Değiştir/Sil gri", not s.gizli.b_degistir.isEnabled() and not s.gizli.b_sil.isEnabled())
 s.gizli.sec("github")
 kontrol("seçince Değiştir etkin", s.gizli.b_degistir.isEnabled())

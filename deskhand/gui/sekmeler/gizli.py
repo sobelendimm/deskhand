@@ -111,6 +111,8 @@ D_SECILI_KILITLI = N_("Seçili · kilitli")
 D_OTO_ACIK = N_("Açık · girişte cüzdan kendiliğinden açılır")
 D_OTO_KAPALI = N_("Kapalı")
 D_OTO_BEKLIYOR = N_("Uygula'ya basınca açılacak")
+D_DEPO_KULLANILACAK = N_("Uygula'ya basınca kullanılacak")
+D_DEPO_BIRAKILACAK = N_("Uygula'ya basınca bırakılacak")
 D_ARKA_UC_YOK = N_("bu sürümde yok")
 D_OKUNMADI = N_("Okunuyor…")
 
@@ -773,7 +775,8 @@ class GizliBilgiler(QGroupBox):
         self.tablo.setShowGrid(False)
         self.tablo.setAlternatingRowColors(False)
         bas = self.tablo.horizontalHeader()
-        bas.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        bas.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)   # genişlik _ad_sutunu(): içerik, en az 12 harf
+        bas.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         bas.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         bas.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.tablo.setMinimumHeight(120)
@@ -951,6 +954,16 @@ class GizliBilgiler(QGroupBox):
                                        _(D_SECILI_ACIK) if acik else _(D_SECILI_KILITLI))
         else:
             self.s_cuzdan.rozet.ayarla("soluk", _(D_KULLANILMIYOR))
+        # anahtar kayıtlı seçimden farklıysa rozet BEKLEYEN durumu söyler (anahtar ile rozet çelişmesin)
+        kayitli_tur = self._kayitli[0]
+        for satir, tur in ((self.s_kasa, KASA), (self.s_cuzdan, CUZDAN)):
+            if not satir.anahtar.isEnabled() and not self._secim_bozuk:
+                continue
+            simdi = satir.anahtar.isChecked()
+            if simdi and kayitli_tur != tur:
+                satir.rozet.ayarla("uyari", _(D_DEPO_KULLANILACAK))
+            elif not simdi and kayitli_tur == tur:
+                satir.rozet.ayarla("uyari", _(D_DEPO_BIRAKILACAK))
         # KDE Cüzdanı kartı (Açık / Kilitli / Yok)
         if self.cuzdan_var() is False:
             self.k_cuzdan.rozet.ayarla("soluk", _(D_YOK))
@@ -1000,9 +1013,17 @@ class GizliBilgiler(QGroupBox):
                 self.tablo.setItem(r, i, it)
             if o["ad"] == secili:
                 self.tablo.selectRow(r)
+        self._ad_sutunu()
         self.tablo.setVisible(bool(self._kayitlar))
         self.l_bos.setVisible(not self._kayitlar)
         self._etkin()
+
+    def _ad_sutunu(self) -> None:
+        """Ad sütunu içeriğe göre genişler; en az ~12 karakter (kısa adlarda başlık ve satır sıkışmasın)."""
+        self.tablo.resizeColumnToContents(0)
+        en_az = self.tablo.fontMetrics().horizontalAdvance("M" * 6 + "n" * 6) + 2 * _BOSLUK
+        if self.tablo.columnWidth(0) < en_az:
+            self.tablo.setColumnWidth(0, en_az)
 
     def adlar(self) -> list[str]:
         return [self.tablo.item(r, 0).data(Qt.ItemDataRole.UserRole) for r in range(self.tablo.rowCount())]
