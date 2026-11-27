@@ -601,11 +601,24 @@ async def stdio_testleri():
         kontrol("stdio: yasak pencereye tıklama → [10], olay yok", r.is_error and "[10]" in metin(r) and
                 not log_bekle(r"^tık", 0.5, n2, LOG2), metin(r)[:200])
 
+        # 6f96402 (SINIF-MASKE) sonrası: yasak pencere ana pencerenin üstünde açıkken maske OCR'ı karartır → 'OYUN ALANI'
+        # bulunamaz, press_key hiç başlamaz ve SIGTERM'de bırakma SINANMAZDI. Testin kendisi (MCP girdisi değil, arka
+        # ucun pencere yönetimi) yasak pencereyi kapatır; sonra tuşun gerçekten basılı olduğu ve bırakıldığı ölçülür.
+        from deskhand.arka_uc import sec
+        au_ = sec(arka_bayragi=True)
+        if gw.get("id"):
+            au_.kapat(gw["id"])
+        kapali = False
+        for _ in range(60):
+            if not any(k_ == gw.get("id") for k_, _b, _g in au_.pencereler("gizli-pencere")):
+                kapali = True
+                break
+            await asyncio.sleep(0.05)
         # kapanış: basılı tuş SIGTERM'de 500 ms içinde bırakılır (ikinci sunucu; aynı masaüstü)
         once_pid = set(sunucu_pidleri())
         async with Client(param) as c2:
             pid = next(iter(set(sunucu_pidleri()) - once_pid), None)
-            await c2.call_tool("click", {"window": w, "text": "OYUN ALANI", "desktop": "background"})
+            rk = await c2.call_tool("click", {"window": w, "text": "OYUN ALANI", "desktop": "background"})
             n0 = len(log_satirlari())
             gorev = asyncio.ensure_future(c2.call_tool("press_key", {"window": w, "keys": "d", "hold_s": 8,
                                                                      "desktop": "background"}))
@@ -627,7 +640,8 @@ async def stdio_testleri():
                     break
             gecikme = float(birak.split()[-1]) - t_kill if birak else None
             kontrol("stdio: SIGTERM → basılı 'd' 500 ms içinde bırakıldı", bas and birak and gecikme is not None and
-                    gecikme < 0.5, f"pid {pid} bas {bas} bırak {birak} gecikme {gecikme}")
+                    gecikme < 0.5, f"pid {pid} yasak pencere kapandı {kapali} tık {metin(rk)[:120]!r} bas {bas} "
+                                   f"bırak {birak} gecikme {gecikme}")
             olu = False
             for _ in range(20):
                 await asyncio.sleep(0.05)
