@@ -786,7 +786,8 @@ try:
     w.durum_guncelle(p.izleyici.durum)
     kontrol("tepsi menüsü + ipucu tazelendi", p.tepsi.a_dur.text() == "STOP — halt all input" and
             "Idle" in p.tepsi.ikon.toolTip(), p.tepsi.a_dur.text())
-    kontrol("açık onay diyaloğu tazelendi", dlg_dil.b_red.text() == "Deny" and dlg_dil.b_izin.text() == "Allow once")
+    kontrol("açık onay diyaloğu tazelendi (geri sayım Reddet düğmesinde, UX-C)",
+            dlg_dil.b_red.text().startswith("Deny (") and dlg_dil.b_izin.text() == "Allow once", dlg_dil.b_red.text())
     kontrol("çevrilmeyen metin Türkçe kalır (eksik katalog bozmaz)", w.onaylar.b_ac.text() == "Diyaloğu aç")
     kontrol("pencere başlığı dil değişse de sabit", w.windowTitle() == "Deskhand")
     dil_etkinlestir("tr")
