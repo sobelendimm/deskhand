@@ -19,6 +19,21 @@ YOL = "/org/freedesktop/Notifications"
 YETENEKLER = ["body", "actions", "persistence"]
 BASIT = set("sbyniqxtud")
 GOVDE_SINIRI = 4000
+
+
+def _surum() -> str:
+    """deskhand.__version__ read from the sibling __init__.py (this file runs with `python3 -I`, no package import)."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "__init__.py"), encoding="utf-8") as f:
+            for satir in f:
+                if satir.startswith("__version__"):
+                    return satir.split("=", 1)[1].strip().strip("\"'")
+    except OSError:
+        pass
+    return "0"
+
+
+SURUM = _surum()
 INTROSPECT = """<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node>
@@ -109,7 +124,7 @@ def calistir(adres: str, gunluk: str) -> int:
             elif uye == "GetCapabilities":
                 c.send(new_method_return(m, "as", (YETENEKLER,)))
             elif uye == "GetServerInformation":
-                c.send(new_method_return(m, "ssss", ("deskhand", "deskhand", "0.6.1", "1.2")))
+                c.send(new_method_return(m, "ssss", ("deskhand", "deskhand", SURUM, "1.2")))
             elif uye == "Introspect":
                 c.send(new_method_return(m, "s", (INTROSPECT,)))
             elif uye == "Ping":

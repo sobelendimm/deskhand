@@ -42,6 +42,7 @@ import subprocess
 import time
 
 from . import arka_ortak as ao
+from . import sistemd
 from . import yollar
 from .hata import ARAC_EKSIK, SANAL_KAPALI, ZAMAN_ASIMI, Dur
 from .i18n import _
@@ -940,8 +941,8 @@ def _baslat_ic(d: dict, cdir: str, xekran: str | None) -> None:
     with _gunluk(cdir, "dbus") as log:
         if d["bellek"]:
             kafes = f"deskhand-kwin-{d['kimlik']}-{os.getpid()}.scope"
-            komut = [ao.arac("systemd-run"), "--user", "--scope", "--quiet", f"--unit={kafes}",
-                     "-p", f"MemoryMax={d['bellek']}", "-p", f"MemorySwapMax={d.get('takas') or '0'}",
+            komut = [ao.arac("systemd-run"), "--user", "--scope", "--quiet", *sistemd.genisleme_kapali(),
+                     f"--unit={kafes}", "-p", f"MemoryMax={d['bellek']}", "-p", f"MemorySwapMax={d.get('takas') or '0'}",
                      "-p", "Delegate=yes", "-p", "TimeoutStopSec=5", "--", *ao._oncelik(), *dbus_cmd]
             p = subprocess.Popen(komut, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                  env=ao._kullanici_bus_ortami(), start_new_session=True)

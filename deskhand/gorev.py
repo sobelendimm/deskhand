@@ -35,7 +35,7 @@ import threading
 import time
 import uuid
 
-from . import gorev_kipi, yollar
+from . import gorev_kipi, sistemd, yollar
 from .i18n import _
 
 MCP_AD = "deskhand-gorev"
@@ -182,7 +182,7 @@ def komut_olustur(claude: str, mcp_dosya: str, model: str, kafes: bool = False,
             "--disable-slash-commands", "--no-session-persistence",
             "--append-system-prompt", TALIMAT]
     if kafes:
-        argv = ["systemd-run", "--user", "--scope", "--quiet", "-p", f"MemoryMax={BELLEK_SINIRI}",
+        argv = ["systemd-run", "--user", "--scope", "--quiet", *sistemd.genisleme_kapali(), "-p", f"MemoryMax={BELLEK_SINIRI}",
                 "-p", "MemorySwapMax=0", *argv]
     return argv
 

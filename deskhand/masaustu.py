@@ -35,7 +35,7 @@ import subprocess
 import sys
 import time
 
-from . import masalar, yollar
+from . import masalar, sistemd, yollar
 # Ortak yapı taşları (kafes, ses, özel veri yolu, Xauthority): arka_ortak.py. Eski adlar burada da kalır (geriye uyum).
 from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYILAN_BELLEK,  # noqa: F401
                          VARSAYILAN_TAKAS, _atalar, _bekle, _bellek_siniri, _canli, _cgroup, _dbus_yapilandir,
@@ -1006,7 +1006,7 @@ def _baslat_ic(d: dict, cdir: str, openbox: bool) -> None:
     with _gunluk_dosyasi(cdir, "xvfb") as log:
         if d["bellek"]:
             kafes = f"deskhand-sanal-{no}-{os.getpid()}.scope"
-            komut = [_arac("systemd-run"), "--user", "--scope", "--quiet", f"--unit={kafes}",
+            komut = [_arac("systemd-run"), "--user", "--scope", "--quiet", *sistemd.genisleme_kapali(), f"--unit={kafes}",
                      "-p", f"MemoryMax={d['bellek']}", "-p", f"MemorySwapMax={d.get('takas') or '0'}",
                      "-p", "Delegate=yes", "-p", "TimeoutStopSec=5",
                      "--", *_oncelik(), *xvfb]

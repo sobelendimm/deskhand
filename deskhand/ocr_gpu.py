@@ -239,7 +239,8 @@ def _baslat_komutu(py: str) -> list[str]:
     if shutil.which("gpu-is"):
         return ["gpu-is", "-m", BELLEK] + temel
     if shutil.which("systemd-run"):
-        return ["systemd-run", "--user", "--scope", "-q", "--nice=5", "-p", f"MemoryMax={BELLEK}",
+        from . import sistemd
+        return ["systemd-run", "--user", "--scope", "-q", *sistemd.genisleme_kapali(), "--nice=5", "-p", f"MemoryMax={BELLEK}",
                 "-p", "MemorySwapMax=1G", "--"] + temel
     return temel
 
