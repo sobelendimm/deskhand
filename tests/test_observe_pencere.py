@@ -350,6 +350,123 @@ kontrol("ORTA 1: tıklama sonrası belge adı 2 okuma geride → kısa yeniden d
 kontrol("kalıcı uyuşmazlık → Dur 6, üst sınır ≤ 1.5 sn", r == "dur" and v.kod == 6 and sure <= 1.5 and n >= 2,
         f"{r} n={n} sure={sure:.2f}")
 
+# ================================================================ SOAK-FIX-R2: REL-INC poc2 (O1, O2, O2b, O3) + poc3
+print("F) SOAK-FIX-R2: kısayol yalnız pencerenin KENDİ süreci, pid okunamazsa bilinmiyor, yeniden deneme = yeni girişim")
+# O1 (ORTA 2): tek çerçeve torun süreçten, ad hiç uymuyor, kardeş yok → kısayol AÇILMAZ (birebir ad şart)
+r, v = sonuc(erisim.cerceve_karari, ["Gizli Hesap" + MF], "Odeme" + MF, [], [False])
+kontrol("O1 torun tek çerçeve, ad uymuyor, kardes=[] → Dur 6 (kısayol yalnız pencerenin kendi sürecinden)",
+        r == "dur" and v.kod == 6, f"{r} {v}")
+r, v = sonuc(erisim.cerceve_karari, ["Gizli Hesap" + MF], "Odeme" + MF, [], None)
+kontrol("O1 tam_pid bilinmiyor, ad uymuyor → Dur 6 (güvenli yön)", r == "dur" and v.kod == 6, f"{r} {v}")
+r, v = sonuc(erisim.cerceve_karari, ["Odeme"], "Odeme" + MF, [], [True])
+kontrol("O1b pencerenin KENDİ sürecinden tek çerçeve, ad geride → seçilir (gerileme yok)", r == "ok" and v == 0, f"{r} {v}")
+r, v = sonuc(erisim.cerceve_karari, ["Odeme" + MF], "Odeme" + MF, [], [False])
+kontrol("torun tek çerçeve, BİREBİR ad, kardeş yok → seçilir", r == "ok" and v == 0, f"{r} {v}")
+erisim._surec_akrabasi, erisim._exe = (lambda a, b: True), (lambda p: "/usr/bin/firefox")
+try:
+    r, v = er_sec2(["Gizli Hesap" + MF], "Odeme" + MF, [], uyg_pid=777, pencere_pid=4242)
+    kontrol("O1 uçtan uca (_cerceve_bul): torun çerçevesi başka pencere adında → Dur 6", r == "dur" and v.kod == 6,
+            f"{r} {v}")
+finally:
+    erisim._surec_akrabasi, erisim._exe = _eski
+# O1 ileti: _cerceve_denetle yasak iletisi seçilen çerçevenin adını (belge başlığı) taşımaz
+_eski_yd = erisim.guvenlik.yasak_desenler
+erisim.guvenlik.yasak_desenler = lambda: ["Gizli"]
+try:
+    for islem in ("tara", "eylem"):
+        r, v = sonuc(erisim._cerceve_denetle, 999999, "Firefox", "Gizli Hesap Ozeti Ali Veli 4421" + MF, islem)
+        kontrol(f"O1 ileti ({islem}): yasak çerçeve → Dur 10, iletide çerçeve adı/belge başlığı YOK",
+                r == "dur" and v.kod == 10 and "Ali Veli" not in v.mesaj and "Hesap Ozeti" not in v.mesaj, f"{r} {v}")
+finally:
+    erisim.guvenlik.yasak_desenler = _eski_yd
+
+
+class PidsizAu(KardesAu):
+    def pid(self, k): return next(p for k_, _b, p in self.p if k_ == k)
+
+
+for bos in ("", None, 0):
+    au_ = PidsizAu([("arka:{a}", "Odeme" + MF, 4242), ("arka:{b}", "Banka" + MF, bos), ("arka:{c}", "X" + MF, 4242)])
+    kontrol(f"O2 bir pencerenin pid'i okunamıyor ({bos!r}) → kardes_basliklari None (bilinmiyor)",
+            erisim.kardes_basliklari(au_, "arka:{a}", 4242) is None, str(erisim.kardes_basliklari(au_, "arka:{a}", 4242)))
+
+
+class KwinPidsizAu:
+    tur = "kwin"
+
+    def __init__(self, p): self.p = p
+
+    def _liste(self):
+        return [{"i": "00000000-0000-0000-0000-00000000000a", "t": "Odeme" + MF, "p": 4242},
+                {"i": "00000000-0000-0000-0000-00000000000b", "t": "Banka" + MF, "p": self.p}]
+
+
+for bos in (-1, 0, None, ""):
+    kontrol(f"O2 KWin: pencerenin pid'i {bos!r} → None (bilinmiyor)",
+            erisim.kardes_basliklari(KwinPidsizAu(bos), "arka:00000000-0000-0000-0000-00000000000a", 4242) is None)
+kd = erisim.kardes_basliklari(PidsizAu([("arka:{a}", "Odeme" + MF, 4242), ("arka:{b}", "Banka" + MF, "")]), "arka:{a}", 4242)
+r, v = er_sec2(["Banka" + MF], "Odeme" + MF, kd)
+kontrol("O2b A + B(pid okunamıyor), tek çerçeve B'nin → Dur 6 (önce: seçiliyordu = sızıntı)", r == "dur" and v.kod == 6,
+        f"{r} {v}")
+r, v = er_sec2(["Odeme" + MF], "Odeme" + MF, kd)
+kontrol("O2b kardeş bilinmiyor, tek çerçeve BİREBİR ve güçlü başlık → seçilir (gerileme yok)", r == "ok", f"{r} {v}")
+# O3 (DÜŞÜK 4): hedefin çerçevesi yok, öbür pencerenin a11y adı hedef başlığına eşit, WM başlığı geride
+r, v = sonuc(erisim.cerceve_karari, ["Odeme" + MF], "Odeme" + MF, ["Banka" + MF], [True])
+kontrol("O3 iki adlı pencere, tek çerçeve → Dur 6 (bir pencerenin çerçevesi yok: birebir ad kanıt değil)",
+        r == "dur" and v.kod == 6, f"{r} {v}")
+r, v = sonuc(erisim.cerceve_karari, ["Odeme" + MF, "Banka" + MF], "Odeme" + MF, ["Banka" + MF], [True, True])
+kontrol("iki pencere, iki çerçeve → hedef seçilir (gerileme yok)", r == "ok" and v == 0, f"{r} {v}")
+r, v = sonuc(erisim.cerceve_karari, ["Odeme" + MF], "Odeme" + MF, [""], [True])
+kontrol("adsız kardeş pencere (açılır pencere) çerçeve sayısına katılmaz → seçilir", r == "ok" and v == 0, f"{r} {v}")
+
+
+def calistir(baslik_sirasi, islem, yeniden_denetim="yok", basla="Docs" + MF):
+    """_atspi_calistir: ilk çağrı SAYFA_BELIRSIZ, sonraki başarılı; tazelenen başlık baslik_sirasi'ndan.
+    yeniden_denetim: "yok" = istekte _korumalar yok; None = korumalar geçer; işlev = korumalar onu çağırır."""
+    eski = erisim._atspi_is, erisim._pencere_istegi, erisim._atspi_korumalari
+    cagri = []
+
+    def isle(i):
+        cagri.append(("atspi_is", i["baslik"]))
+        if len([c for c in cagri if c[0] == "atspi_is"]) == 1:
+            raise Dur(6, "x", tur=erisim.SAYFA_BELIRSIZ)
+        return {"tamam": True}
+    sira = iter(baslik_sirasi)
+    erisim._atspi_is = isle
+    erisim._pencere_istegi = lambda k_, i: {"pid": "1", "baslik": next(sira), "kardes": []}
+    def korumalar(k_, desen, tur):
+        cagri.append(("denetim", k_, desen, tur))
+        if callable(yeniden_denetim):
+            yeniden_denetim()
+    erisim._atspi_korumalari = korumalar
+    ek = {} if yeniden_denetim == "yok" else {"_korumalar": ["Docs", "fare"]}
+    try:
+        return sonuc(erisim._atspi_calistir, {"_pencere": "A", "islem": islem, "baslik": basla, "pid": "1",
+                                               "kardes": [], **ek}), cagri
+    finally:
+        erisim._atspi_is, erisim._pencere_istegi, erisim._atspi_korumalari = eski
+
+
+for islem in ("eylem", "yaz"):
+    (r, v), c = calistir(["Bank odeme" + MF], islem, None)
+    kontrol(f"poc3 {islem}: yeniden denemede başlık değişti (sayfa geçişi) → eylem YOK, Dur 6",
+            r == "dur" and v.kod == 6 and c == [("atspi_is", "Docs" + MF)], f"{r} {v} {c}")
+    (r, v), c = calistir(["Docs" + MF], islem)
+    kontrol(f"{islem}: istekte _korumalar yok → yeniden deneme YOK (güvenli yön), Dur 6",
+            r == "dur" and v.kod == 6 and len(c) == 1, f"{r} {v} {c}")
+    (r, v), c = calistir(["Docs" + MF], islem, None)
+    kontrol(f"{islem}: başlık aynı → denetimler BAŞTAN koşar, sonra yeniden denenir",
+            r == "ok" and c == [("atspi_is", "Docs" + MF), ("denetim", "A", "Docs", "fare"), ("atspi_is", "Docs" + MF)], f"{r} {v} {c}")
+
+    def kilit():
+        raise Dur(4, "başlık kilidi")
+    (r, v), c = calistir(["Docs" + MF], islem, kilit)
+    kontrol(f"{islem}: yeniden denemedeki denetim Dur verirse eylem YOK", r == "dur" and v.kod == 4 and
+            c[0] == ("atspi_is", "Docs" + MF) and len([x for x in c if x[0] == "atspi_is"]) == 1, f"{r} {v} {c}")
+(r, v), c = calistir(["Yeni sayfa" + MF], "tara")
+kontrol("okuma (tara): başlık değişse de kısa yeniden deneme sürer (çerçeve kararı yeniden koşar)",
+        r == "ok" and c[-1] == ("atspi_is", "Yeni sayfa" + MF), f"{r} {v} {c}")
+
 t0 = time.monotonic()
 print(f"\n{gecen}/{toplam} test geçti ({time.monotonic() - t0:.1f} sn)")
 sys.exit(0 if gecen == toplam else 1)
