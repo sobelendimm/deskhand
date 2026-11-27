@@ -8,12 +8,26 @@ from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QHBoxLayout,
                              QHeaderView, QLineEdit, QTableView, QVBoxLayout, QWidget)
 
-from ...i18n import _
+from ...i18n import N_, _
 from .. import metinler as T
 from ..dil import Metinler, gunluk_eylemi
 from ..durum import RENK
 from ..gunluk_okur import KUYRUK
+from ..insan_metni import ayrinti, pencere_metni
 from ..ortak import (soluk_etiket)
+
+# Sütunlar (UX-B, Y3/D3): Saat · Ne oldu (insan metni) · Pencere (kimlik/yasak başlık yok) · Ayrıntı (ham satır)
+SUTUNLAR = (N_("Saat"), N_("Ne oldu"), N_("Pencere"), N_("Ayrıntı"))
+ARKA_PENCERE = N_("{pencere} (arka plan)")
+FILTRE_AD = N_("Etkinlikte ara")
+
+
+def pencere_sutunu(d: dict) -> str:
+    """Pencere sütunu: başlık (pencere_metni); arka plan masaüstündeki satırda "(arka plan)" eki."""
+    p = pencere_metni(d)
+    if d.get("arka") == "arka":
+        return _(ARKA_PENCERE).format(pencere=p) if p else _(T.E_ARKA_AD["arka"])
+    return p
 
 
 # =========================================================================== Etkinlik
@@ -28,11 +42,11 @@ class EtkinlikModel(QAbstractTableModel):
         return 0 if parent.isValid() else len(self.satirlar)
 
     def columnCount(self, parent=QModelIndex()):  # noqa: N802, B008
-        return 0 if parent.isValid() else len(T.E_SUTUNLAR)
+        return 0 if parent.isValid() else len(SUTUNLAR)
 
     def headerData(self, bolum, yon, rol=Qt.ItemDataRole.DisplayRole):  # noqa: N802
         if yon == Qt.Orientation.Horizontal and rol == Qt.ItemDataRole.DisplayRole:
-            return _(T.E_SUTUNLAR[bolum])
+            return _(SUTUNLAR[bolum])
         return None
 
     def data(self, i: QModelIndex, rol=Qt.ItemDataRole.DisplayRole):
@@ -41,10 +55,14 @@ class EtkinlikModel(QAbstractTableModel):
         d = self.satirlar[i.row()]
         if rol == Qt.ItemDataRole.DisplayRole:
             if i.column() == 1:
-                return _(T.E_ARKA_AD[d["arka"]]) if d["arka"] in T.E_ARKA_AD else d["arka"]
-            return (d["zaman"], "", d["pencere"], gunluk_eylemi(d))[i.column()]
+                return gunluk_eylemi(d)
+            if i.column() == 2:
+                return pencere_sutunu(d)
+            if i.column() == 3:
+                return ayrinti(d)
+            return d["zaman"]
         if rol == Qt.ItemDataRole.ToolTipRole:
-            return d["ham"]
+            return ayrinti(d)  # ham satır (yasak başlık / URL sorgusu maskeli)
         if rol == Qt.ItemDataRole.UserRole:
             return d
         if rol == Qt.ItemDataRole.BackgroundRole and d["tur"] == "dur":
@@ -105,7 +123,7 @@ class EtkinlikSuzgec(QSortFilterProxyModel):
             return False
         if self.tur == "onay" and d["tur"] != "onay":
             return False
-        return not self.metin or self.metin in d["ham"].casefold()
+        return not self.metin or self.metin in d["ham"].casefold() or self.metin in gunluk_eylemi(d).casefold()
 
 
 class EtkinlikSekmesi(QWidget):
@@ -119,6 +137,7 @@ class EtkinlikSekmesi(QWidget):
         ust = QHBoxLayout()
         self.filtre = QLineEdit()
         self.mt(self.filtre.setPlaceholderText, T.E_FILTRE_IPUCU)
+        self.mt(self.filtre.setAccessibleName, FILTRE_AD)  # AT-SPI: adsız giriş olmasın
         self.filtre.setClearButtonEnabled(True)
         self.filtre.textChanged.connect(lambda m: self.suzgec.ayarla(metin=m))
         ust.addWidget(self.filtre, 1)
