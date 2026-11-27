@@ -971,13 +971,33 @@ def odakli_metin(k):
 YEREL_DIYALOG_ROLLERI = ("file chooser", "dialog", "alert", "color chooser", "font chooser")
 
 
-def yerel_diyalog_mu(k) -> bool:
+def _algi_hatasi(e):
+    """Üç durumlu algının hata kararı (SON-FIX, belirsiz-kapalı sınıfı): algılanacak ağaç YOK → False (önceki davranış;
+    ikisi de sayfanın tetikleyebileceği durum değil): uygulamanın erişilebilirlik ağacı yok (Dur tur agacta_yok:
+    çerçevesi olmayan uygulama ya da PID'siz pencere) ya da görünmez masaüstü/erişilebilirlik veri yolu kullanılamıyor
+    (Dur 14 SANAL_KAPALI; girdi de o masaüstüne gidemez). Başka her şey (SAYFA_BELIRSIZ, öbür Dur'lar, AT-SPI hatası,
+    zaman aşımı) → None = BİLİNMİYOR (çağıran parola gibi ele alır)."""
+    from .hata import SANAL_KAPALI
+    return False if isinstance(e, Dur) and (e.tur == "agacta_yok" or e.kod == SANAL_KAPALI) else None
+
+
+def yerel_diyalog_mu(k) -> bool | None:
     """Pencerenin AT-SPI çerçevesi uygulamanın YEREL diyaloğu mu (GTK dosya seçici vb.; rol sayfa tarafından
-    değiştirilemez)? Bilinmiyorsa False."""
+    değiştirilemez)? True / False / None (bilinmiyor: Dur, sayfa belirsiz, AT-SPI hatası). Çağıran yalnız `is True`
+    ile gevşer (bilinmiyor = diyalog DEĞİL: sınama kapısı kalır; SON-FIX belirsiz-kapalı sınıfı)."""
     try:
         return _atspi_calistir(_pencere_istegi(k, "cerceve_rol")) in YEREL_DIYALOG_ROLLERI
-    except Exception:  # noqa: BLE001
-        return False
+    except Exception as e:  # noqa: BLE001 - Dur dahil: bilinmiyor (ağaç yoksa False)
+        return _algi_hatasi(e)
+
+
+def ucbirim_ogesi_var_mi(k) -> bool | None:
+    """Pencerede rolü `terminal` olan öge var mı (uçbirim algısı; guvenlik.ucbirim_penceresi_mi)? Erişilebilirliği
+    AÇMAZ. True / False / None (bilinmiyor: Dur, sayfa belirsiz, AT-SPI hatası → çağıran UÇBİRİM sayar)."""
+    try:
+        return bool(_atspi_calistir(_pencere_istegi(k, "satir")))
+    except Exception as e:  # noqa: BLE001 - Dur dahil: bilinmiyor (ağaç yoksa False)
+        return _algi_hatasi(e)
 
 
 def imlec_satirlari(k):
@@ -989,26 +1009,27 @@ def imlec_satirlari(k):
     return r or None
 
 
-def odakli_parola_mi(k):
-    """Pencerede odaklı öge parola alanı mı? Erişilebilirlik kapalıysa AÇMAZ (bilinmez → False)."""
+def odakli_parola_mi(k) -> bool | None:
+    """Pencerede odaklı öge parola alanı mı? True / False / None = BİLİNMİYOR (Dur, sayfa belirsiz, AT-SPI hatası,
+    zaman aşımı): çağıran parola gibi ele alır (onay + gizli; SON-FIX, rapor-SON-KAPI2 O-1). Erişilebilirlik
+    kapalıysa AÇMAZ ve False; uygulamanın ağacı yoksa (agacta_yok) False (_algi_hatasi; sayfa tetikleyemez)."""
     try:
         if not erisim_acik():
             return False
         return bool(_atspi_calistir(_pencere_istegi(k, "odak_parola")))
-    except Dur:
-        return False
-    except Exception:  # noqa: BLE001
-        return False
+    except Exception as e:  # noqa: BLE001 - Dur dahil: bilinmiyor (False DEĞİL: onaysız + açık günlük olurdu)
+        return _algi_hatasi(e)
 
 
-def odakli_kart_mi(k):
-    """Pencerede odaklı öge kart bilgisi alanı mı? Erişilebilirlik kapalıysa AÇMAZ (bilinmez → False)."""
+def odakli_kart_mi(k) -> bool | None:
+    """Pencerede odaklı öge kart bilgisi alanı mı? True / False / None = bilinmiyor (bkz. odakli_parola_mi).
+    Erişilebilirlik kapalıysa AÇMAZ ve False."""
     try:
         if not erisim_acik():
             return False
         return bool(_atspi_calistir(_pencere_istegi(k, "odak_kart")))
-    except Exception:  # noqa: BLE001
-        return False
+    except Exception as e:  # noqa: BLE001 - Dur dahil: bilinmiyor (ağaç yoksa False)
+        return _algi_hatasi(e)
 
 
 def _yardimci_ana():
@@ -1442,11 +1463,12 @@ def _web_sec(a, tur):
             try:
                 oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, rol, a.sira, True, yol_ver=True)
             except Dur as e:
-                if e.kod != 6:
+                if e.kod != 6 or e.tur == SAYFA_BELIRSIZ:
                     raise
                 oge, sayfa, sure, idx = web.oge_ve_sayfa(k, a.ad, rol, a.sira, False, yol_ver=True)
         except Dur as e:
-            if e.kod in (6, ARAC_EKSIK):
+            # sayfa belirsiz (çerçeve/belge ↔ pencere kanıtlanamadı) genel ağaca DÜŞÜRÜLMEZ: belge adı kilidi atlanırdı
+            if e.kod in (6, ARAC_EKSIK) and e.tur != SAYFA_BELIRSIZ:
                 return None
             raise
     if tur == "fare" and not sayfa.get("konum_dogrulandi"):

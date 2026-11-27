@@ -337,6 +337,7 @@ def ucbirim_penceresi_mi(k):
     if kayit and _t.monotonic() - kayit[0] < 2.0:
         return kayit[1]
     sonuc = ucbirim_mi(sinif)
+    bilinmiyor = False  # erişilebilirlik algısı belirsiz (sayfa belirsiz/Dur): uçbirim say ama önbelleğe ALMA
     if not sonuc:
         from . import kendi
         pid = _pencere_pid(au, k)
@@ -347,10 +348,12 @@ def ucbirim_penceresi_mi(k):
         if not sonuc and (not pid or _GOMULU.search(sinif or "")):
             try:
                 from . import erisim
-                sonuc = erisim.erisim_acik() and erisim.imlec_satirlari(k) is not None
-            except Exception:  # noqa: BLE001 - erişilebilirlik isteğe bağlı
+                v = erisim.ucbirim_ogesi_var_mi(k) if erisim.erisim_acik() else False
+                bilinmiyor = v is None  # SON-FIX: belirsizlik "uçbirim değil" sayılmaz (Enter kapısı açık kalmaz)
+                sonuc = v is not False
+            except Exception:  # noqa: BLE001 - erişilebilirlik isteğe bağlı (kapalı/yok: önceki davranış)
                 sonuc = False
-    if sonuc:  # yalnız "uçbirim" sonucu tutulur: "değil" her çağrıda yeniden hesaplanır (F4'ten sonra kabuk doğar)
+    if sonuc and not bilinmiyor:  # yalnız kesin "uçbirim" tutulur: "değil"/"bilinmiyor" her çağrıda yeniden hesaplanır
         if len(_UCBIRIM_ONBELLEK) > 256:
             _UCBIRIM_ONBELLEK.clear()
         _UCBIRIM_ONBELLEK[anahtar] = (_t.monotonic(), True)
@@ -2205,13 +2208,24 @@ def kart_bilgisi_engel(k, onayli, metin, alan_kart=False, ne="yazı", son4=None)
     return True
 
 
-def parola_alani_engel(k, onayli, uzunluk, ne):
+def parola_alani_engel(k, onayli, uzunluk, ne, belirsiz=False):
     """Hedef/odaklı öge bir PAROLA alanı (AT-SPI rolü 'password text'): yazı / yapıştırma / değer yazma insan onayı
     ister (--onayli yoksa panelden; red/gözetimsiz → 10). Metin hiçbir iletiye/günlüğe/onay isteğine yazılmaz: yalnız
-    uzunluğu. → True (onaylandı)."""
+    uzunluğu. belirsiz=True: alan türü BELİRLENEMEDİ (sayfa belirsiz: çerçeve ↔ pencere kanıtlanamadı; SON-FIX) →
+    parola gibi onay; iletide neden "alan türü belirlenemedi", pencere başlığı/adres/belge adı YOK (hangi sayfanın
+    okunduğu bilinmiyor; başlık saldırgan sayfanın metni olabilir). → True (onaylandı)."""
     if onaysiz_serbest("parola alanına yazma", ne):  # DEĞERİNİ OKUMA reddi (erisim) bundan bağımsız
         return False
     if onayli_gecerli(onayli):
+        return True
+    if belirsiz:
+        izin, neden = _panelden_onay(_("Türü belirlenemeyen alana yaz"), "", _(
+            "Ajan odaklı alana {n} karakter yazmak istiyor ({ne}); alan türü belirlenemedi (parola alanı olabilir: "
+            "sayfa belirsiz).").format(n=uzunluk, ne=ne))
+        if not izin:
+            raise Dur(10, _("HASSAS: alan türü belirlenemedi (parola alanı olabilir); {ne} kullanıcının onayını ister "
+                            "({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla").format(
+                                ne=ne, neden=neden), tur="hassas")
         return True
     b = sec().baslik(k) if k and k != EKRAN else ""
     izin, neden = _panelden_onay(_("Parola alanına yaz"), b, _("Ajan bir parola alanına {n} karakter yazmak istiyor "

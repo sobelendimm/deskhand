@@ -888,9 +888,10 @@ def _tus_onaylari(g, k, onayli, kombinasyon, birlikte=False):
             and guvenlik.yapistirma_engel(k, onayli):
         _onayli_etiket(g)
     yazi_n = guvenlik.yazi_tusu_sayisi(kombinasyon)  # parola alanı kapısı: tek karakterli tuşlar yazıdır (k_yaz ile tutarlı)
-    if yazi_n and _parola_alani_mi(k):
+    parola = _parola_alani_mi(k) if yazi_n else False  # None = alan türü bilinmiyor (sayfa belirsiz): parola gibi
+    if parola is not False:
         g.gizli = True  # parola tuşları günlüğe yazılmaz
-        if guvenlik.parola_alani_engel(k, onayli, yazi_n, _("tuş")):  # hepsi: onay · kart: onaysız (k_yaz ile aynı kural)
+        if guvenlik.parola_alani_engel(k, onayli, yazi_n, _("tuş"), belirsiz=parola is None):  # hepsi: onay · kart: onaysız
             _onayli_etiket(g)
     if guvenlik.onay_kapsami() == "kart":  # tek tuşla kart numarası: rakam tuşları pencere başına tamponda birleştirilir
         tus_yazisi = guvenlik.tus_metni(kombinasyon)
@@ -962,40 +963,48 @@ def k_tus(a):
 
 
 def _parola_alani_mi(k):
-    """Pencerede odaklı öge AT-SPI'de parola alanı mı? (erişilebilirlik kapalıysa açılmaz: bilinmez → False)"""
+    """Pencerede odaklı öge AT-SPI'de parola alanı mı? True / False / None = BİLİNMİYOR (sayfa belirsiz, Dur, AT-SPI
+    hatası): çağıran PAROLA GİBİ ele alır (onay "alan türü belirlenemedi" + gizli; SON-FIX). Erişilebilirlik kapalıysa
+    açılmaz (False, önceki davranış)."""
     if k == EKRAN or not k:
         return False
     try:
         from .erisim import odakli_parola_mi
         return odakli_parola_mi(k)
-    except Exception:  # noqa: BLE001
-        return False
+    except Exception:  # noqa: BLE001 - bilinmiyor
+        return None
 
 
 def _kart_alani_mi(k):
     """Pencerede odaklı öge bir kart bilgisi alanı mı (ad/etiket/autocomplete)? Yalnız onay kapsamı "kart"ta sorulur;
-    erişilebilirlik kapalıysa açılmaz (bilinmez → False)."""
+    erişilebilirlik kapalıysa açılmaz (False). None = bilinmiyor (bkz. _parola_alani_mi)."""
     if k == EKRAN or not k or guvenlik.onay_kapsami() != "kart":
         return False
     try:
         from .erisim import odakli_kart_mi
         return odakli_kart_mi(k)
-    except Exception:  # noqa: BLE001
-        return False
+    except Exception:  # noqa: BLE001 - bilinmiyor
+        return None
 
 
 def gizli_karari(k, metin, istenen=False):
     """ETKİN gizli kararının TEK yeri (ABM-F2 inceleme-2 düşük 4): istenen (secret/--gizli) VEYA odaklı alan parola
     alanı VEYA (onay kapsamı "kart"ta) kart alanı / metinde ya da pencerenin kart tamponunda kart numarası. Sonuç,
     günlük, etkinlik akışı, ileti ve MCP sonucu (gonderim notu "gizli") bu değere bakar. Sorgular: AT-SPI (parola/kart
-    alanı) + süreç içi kart tamponu (kart_tampon_denetle metni tampona işler). → (gizli, parola, alan_kart, son4)"""
+    alanı) + süreç içi kart tamponu (kart_tampon_denetle metni tampona işler). → (gizli, parola, alan_kart, son4)
+    parola None = alan türü BİLİNMİYOR (sayfa belirsiz; SON-FIX): gizli=True ve çağıran parola gibi onay ister. Kart
+    sorgusu bilinmiyorsa da parola None olur (tek onay). Belirsizlikte ikinci AT-SPI sorgusu yapılmaz: yazış başına tek
+    yeniden deneme bütçesi (≤ BELIRSIZ_SURE; rapor-SON-KAPI2 n4)."""
     parola = _parola_alani_mi(k)
     alan_kart, son4, kart_gizli = False, None, False
     if guvenlik.onay_kapsami() == "kart":  # kart bilgisi: hedef alan kart alanı ya da metinde Luhn'lu numara
-        alan_kart = _kart_alani_mi(k)  # tek sorgu (AT-SPI)
+        alan_kart = None if parola is None else _kart_alani_mi(k)  # tek sorgu (AT-SPI); belirsizse yeniden sorma
         son4 = guvenlik.kart_tampon_denetle(k, metin)  # metin + aynı pencereye son 60 sn'de yazılan parçalar
-        kart_gizli = bool(alan_kart or son4 or guvenlik.kart_tampon_dolu(k) or guvenlik.gizli_rakamli_mi(metin))
-    gizli = bool(istenen or parola or kart_gizli)
+        kart_gizli = bool(alan_kart or alan_kart is None or son4 or guvenlik.kart_tampon_dolu(k)
+                          or guvenlik.gizli_rakamli_mi(metin))
+        if alan_kart is None:
+            parola, alan_kart = None, False  # alan türü bilinmiyor: parola gibi tek onay (kart onayı yalnız son4'te)
+    gizli = bool(istenen or parola or parola is None or kart_gizli)
     from . import gonderim
     gonderim.not_yaz("gizli", gizli)  # MCP katmanı (type_text sonucu, batch) aynı kararı okur
     return gizli, parola, alan_kart, son4
@@ -1020,7 +1029,8 @@ def k_yaz(a):
         insan_dogrulama_klavye(a.kimlik, dogrulama_sinamasi.metin_dizisi(metin))
         if guvenlik.sistem_istemi_engel(a.kimlik, onayli, _("yazı")):
             _onayli_etiket(g)
-        if parola and guvenlik.parola_alani_engel(a.kimlik, onayli, len(metin), _("yazı")):  # parola alanı: onay
+        if parola is not False and guvenlik.parola_alani_engel(a.kimlik, onayli, len(metin), _("yazı"),
+                                                               belirsiz=parola is None):  # parola / bilinmeyen alan: onay
             _onayli_etiket(g)
             onayli = True
         if alan_kart or son4:
