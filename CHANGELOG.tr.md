@@ -34,9 +34,13 @@
 - **Güvenlik: önizleme maskesi sıkılaştırıldı.** Pencere sınıfı okunamazsa sonuç önbelleğe alınmaz ve kare
   gösterilmez; pencere listesi görüntü alınmadan önce ve sonra okunur, ikisinin birleşimi maskelenir. KWin'de maske
   çerçeve geometrisini (başlık çubuğu dahil) kullanır (`api.goruntu_al` dahil); orada denetlenemeyen pencere maskelenir.
+  Ajana giden görüntü (`api.goruntu_al`: ekran görüntüsü, okuma, simge arama) de aynı önce/sonra okumayı kullanır;
+  kare alınırken yasak bir pencere kapanırsa ya da liste okunamazsa görüntü hiç gönderilmez (yeniden denenebilir hata).
 - **Güvenlik: Firefox oturum kopyasında çerez düzeltmeleri.** Kaynakta süresi geçmiş oturum çerezi kopyaya alınmaz;
-  yazılan ömür kaynaktaki bitişi aşmaz. Alan çerezi (`.ornek.com`), profilden bilinen ve ret desenine uyan bir alt
-  alana (`*bank*` → `bank.ornek.com`) da gideceği için taşınmaz; `deskhand sessions check` aynı kuralla karar verir.
+  yazılan ömür kaynaktaki bitişi aşmaz. Alan çerezi (`.ornek.com`), sonu sabit bir ret kuralının (`*.bank.com`,
+  `accounts.google.com`) eşleşebileceği herhangi bir alt alana gidebiliyorsa taşınmaz. Sonu `*` olan kuralda
+  (`*bank*`) karar profilden bilinen alt alanlara (geçmiş WAL'ı dahil) bakar; hiç görülmemiş alt alan kapsanmaz
+  (docs/SESSIONS.md §8). `deskhand sessions check` aynı kuralla karar verir.
   Kopyanın `cookies.sqlite`'ı `VACUUM INTO` ile yeniden kurulur: silinen değerler dosyada bayt olarak kalmaz.
 
 ## 0.9.0 (22 Kasım 2026)

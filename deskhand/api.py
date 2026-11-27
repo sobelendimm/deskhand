@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw
 from . import yollar
 from .arka_uc import ARKA_ONEK, EKRAN, hedef_sabit, sec
 from . import desen as _desen
-from .hata import Dur
+from .hata import PENCERE_YOK, ZAMAN_ASIMI, Dur
 from .i18n import _
 
 ONAY_YASAK = ()  # onay diyaloğu/panel pencereleri (onay.YASAK_DESENLER): yoksa boş
@@ -240,29 +240,50 @@ def pencereler(desen: str | None = None) -> list[dict]:
 
 # ---------------------------------------------------------------- görüntü (maskeli)
 
-def _yasak_dikdortgenler(k: str, kok_ekran: tuple[int, int], boyut: tuple[int, int]) -> list[dict]:
-    """Görüntüye düşen yasak pencerelerin kutuları (görüntü pikseli, ölçeksiz)."""
+def _yasak_geometriler(k: str) -> dict:
+    """Forbidden windows other than k → {id: screen geometry}. KWin: the FRAME (title bar + borders), not only the
+    client area: a secret title must not show. A window that cannot be checked (closed meanwhile / read error)
+    counts as forbidden (safe side). A list read error raises (the caller drops the frame)."""
     au = arka()
-    sonuc = []
-    ox, oy = kok_ekran
-    W, H = boyut
-    # KWin: mask the FRAME (title bar + borders), not only the client area: a secret title must not show
     cerceve = getattr(au, "maske_pencereleri", None)
     liste = [(w, b, geo) for w, b, _s, geo in cerceve()] if cerceve is not None else au.pencereler()
-    for w, b, (X, Y, G, Yk) in liste:
+    sonuc = {}
+    for w, _b, geo in liste:
         if w == k:
             continue
         try:
             y = yasak_mi(w)
         except Dur:
             y = "?"  # could not be checked (closed meanwhile / read error): mask it (safe side)
-        if not y:
-            continue
+        if y:
+            sonuc[w] = tuple(geo)
+    return sonuc
+
+
+def _kutulara(geolar, kok_ekran: tuple[int, int], boyut: tuple[int, int]) -> list[dict]:
+    """[(id, screen geometry)] → boxes that fall on the image (image pixel, unscaled)."""
+    sonuc = []
+    ox, oy = kok_ekran
+    W, H = boyut
+    for w, (X, Y, G, Yk) in geolar:
         x0, y0 = max(0, X - ox), max(0, Y - oy)
         x1, y1 = min(W, X - ox + G), min(H, Y - oy + Yk)
         if x1 > x0 and y1 > y0:
             sonuc.append({"id": w, "box": [x0, y0, x1 - x0, y1 - y0]})
     return sonuc
+
+
+def _yasak_dikdortgenler(k: str, kok_ekran: tuple[int, int], boyut: tuple[int, int]) -> list[dict]:
+    """Görüntüye düşen yasak pencerelerin kutuları (görüntü pikseli, ölçeksiz; tek okuma)."""
+    return _kutulara(list(_yasak_geometriler(k).items()), kok_ekran, boyut)
+
+
+def _maske_okunamadi(e: BaseException) -> Dur:
+    neden = getattr(e, "neden", e)
+    kod = neden.kod if isinstance(neden, Dur) else ZAMAN_ASIMI
+    return Dur(kod, _("yasak pencere listesi okunamadı: görüntü gönderilmedi (güvenli taraf; tekrar dene): {neden}"
+                      ).format(neden=getattr(neden, "mesaj", None) or str(neden) or type(neden).__name__),
+               tur="maske-okunamadi")
 
 
 def goruntu_al(k: str, bolge=None, tam: bool = False, kararli: bool = False):
@@ -271,19 +292,34 @@ def goruntu_al(k: str, bolge=None, tam: bool = False, kararli: bool = False):
     (foto, metin, bekle, simge-bul, simge-kaydet, renk-bul) da bu yoldan okur (gorsel.korumali_goruntu).
     kararli=True: içerik durana dek bekle (gorsel.pencere_goruntusu).
     tam=True: fiziksel çözünürlük (ölçek 2 masaüstü: iki kat piksel); görüntü pikseli = (pencere koordinatı − kök)
-    × gorsel.piksel_olcegi(im), maskeler de görüntü pikselinde."""
+    × gorsel.piksel_olcegi(im), maskeler de görüntü pikselinde.
+    Yarış (Z3 O2): yasak pencere listesi karenin ÖNÜNDE ve ARKASINDA okunur (maske_kare.iki_okumali_kare, panel
+    önizlemesiyle aynı yol), iki konumun birleşimi örtülür. Kare sırasında bir yasak pencere kapandıysa ya da liste
+    okunamadıysa görüntü DÖNMEZ (Dur; yeniden denenebilir). Hedef kare sırasında yasaklandıysa Dur(10)."""
     from .gorsel import pencere_goruntusu, piksel_olcegi
+    from .maske_kare import ListeOkunamadi, iki_okumali_kare
     y = yasak_mi(k)
     if y:
         raise Dur(10, _("YASAK pencere: içeriği gösterilmez/okunmaz ({neden})").format(neden=y))
     bolge_s = ",".join(str(int(v)) for v in bolge) if bolge else None
     from .gorsel import bolge_coz
-    im, geo, kok = pencere_goruntusu(k, bolge_coz(bolge_s), kararli=kararli, tam=tam)
+    try:
+        (im, geo, kok), geolar, kapanan = iki_okumali_kare(
+            lambda: _yasak_geometriler(k),
+            lambda: pencere_goruntusu(k, bolge_coz(bolge_s), kararli=kararli, tam=tam))
+    except ListeOkunamadi as e:
+        raise _maske_okunamadi(e) from e
+    if kapanan:  # where it was at grab time is unknown (it may have moved before closing): drop the frame
+        raise Dur(PENCERE_YOK, _("kare alınırken yasak bir pencere kapandı: görüntü gönderilmedi (güvenli taraf); "
+                                 "tekrar dene"), tur="maske-yarisi")
+    y = yasak_mi(k)
+    if y:
+        raise Dur(10, _("YASAK pencere: içeriği gösterilmez/okunmaz ({neden})").format(neden=y))
     f = piksel_olcegi(im)
     au = arka()
     sx0, sy0, *_x = au.ekran_alani()
     kok_ekran = (geo[0] + kok[0], geo[1] + kok[1]) if k != EKRAN else (sx0 + kok[0], sy0 + kok[1])
-    maskeler = _yasak_dikdortgenler(k, kok_ekran, (math.ceil(im.width / f), math.ceil(im.height / f)))
+    maskeler = _kutulara(geolar, kok_ekran, (math.ceil(im.width / f), math.ceil(im.height / f)))
     if f != 1.0:  # mantıksal kutu → görüntü pikseli (kenarlar dışa yuvarlanır: maske eksik kalmasın)
         for m in maskeler:
             x, y_, g, h = m["box"]

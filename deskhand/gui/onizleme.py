@@ -212,8 +212,8 @@ class MaskeHatasi(Exception):
         self.mesaj = getattr(neden, "mesaj", None) or str(neden)
 
 
-def _yasak_pencereler(au, desenler, onb: dict) -> list[tuple[int, int, int, int]]:
-    """Geometries (screen coordinates) of the forbidden windows. A backend with `maske_pencereleri` (KWin) gives title,
+def _yasak_pencereler(au, desenler, onb: dict) -> dict:
+    """{id: geometry (screen coordinates)} of the forbidden windows. A backend with `maske_pencereleri` (KWin) gives title,
     class and FRAME geometry from one listing; otherwise the class is read per window and cached. A failed class
     read raises (the frame is dropped) and is never cached; an empty class is not cached either (read again next
     frame), so a transient failure cannot leave a window permanently unchecked."""
@@ -232,8 +232,8 @@ def _yasak_pencereler(au, desenler, onb: dict) -> list[tuple[int, int, int, int]
             else:
                 sinif = ""
             kayitlar.append((k, baslik, sinif, geo))
-    return [tuple(geo) for _k, baslik, sinif, geo in kayitlar
-            if any(d.search(baslik or "") or d.search(sinif or "") for d in desenler)]
+    return {k: tuple(geo) for k, baslik, sinif, geo in kayitlar
+            if any(d.search(baslik or "") or d.search(sinif or "") for d in desenler)}
 
 
 def _desenler():
@@ -274,28 +274,31 @@ def yasak_kutulari(au, im_boyut: tuple[int, int], sinif_onbellek: dict | None = 
     onb = sinif_onbellek if sinif_onbellek is not None else {}
     if len(onb) > 256:
         onb.clear()
-    return _kutulara(au, _yasak_pencereler(au, _desenler(), onb), im_boyut)
+    return _kutulara(au, list(_yasak_pencereler(au, _desenler(), onb).values()), im_boyut)
 
 
 def maskeli_goruntu(au, sinif_onbellek: dict | None = None):
     """Frame of the background desktop with forbidden windows blacked out. The window list is read BEFORE and AFTER
-    the grab and the union is masked, so a window that closes, opens or moves while the frame is taken is still
-    covered at both positions. Grab errors propagate as they are; any masking error is raised as MaskeHatasi (the
-    caller must not show the frame)."""
+    the grab (maske_kare.iki_okumali_kare, the same guard as the agent path api.goruntu_al) and the union is masked,
+    so a window that closes, opens or moves while the frame is taken is still covered at both positions (a closed
+    window is masked at its last known place; the agent path drops such a frame instead). Grab errors propagate as
+    they are; any masking error is raised as MaskeHatasi (the caller must not show the frame)."""
     if getattr(au, "pencereler", None) is None:
         return au.goruntu()
+    from ..maske_kare import ListeOkunamadi, iki_okumali_kare
     onb = sinif_onbellek if sinif_onbellek is not None else {}
     if len(onb) > 256:
         onb.clear()
     try:
         desenler = _desenler()
-        once = _yasak_pencereler(au, desenler, onb)
     except Exception as e:  # noqa: BLE001
         raise MaskeHatasi(e) from e
-    im = au.goruntu()
     try:
-        sonra = _yasak_pencereler(au, desenler, onb)
-        return maskele(im, _kutulara(au, once + sonra, (im.width, im.height)))
+        im, geolar, _kapanan = iki_okumali_kare(lambda: _yasak_pencereler(au, desenler, onb), au.goruntu)
+    except ListeOkunamadi as e:
+        raise MaskeHatasi(e.neden) from e
+    try:
+        return maskele(im, _kutulara(au, [g for _k, g in geolar], (im.width, im.height)))
     except Exception as e:  # noqa: BLE001
         raise MaskeHatasi(e) from e
 

@@ -1255,5 +1255,7 @@
  "çalışıyor (pid {pid}); kimlik kaydı {saat}'te kendiliğinden tazelendi ({neden})": "running (pid {pid}); identity record refreshed itself at {saat} ({neden})",
  "{g} gün {s} sa": "{g} d {s} h",
  "onay isteği beklerken silindi → red": "the approval request was removed while waiting → denied",
- "devir isteği beklerken silindi; hiçbir girdi gönderilmedi": "the handoff request was removed while waiting; no input was sent"
+ "devir isteği beklerken silindi; hiçbir girdi gönderilmedi": "the handoff request was removed while waiting; no input was sent",
+ "kare alınırken yasak bir pencere kapandı: görüntü gönderilmedi (güvenli taraf); tekrar dene": "a forbidden window closed while the frame was taken: no image was sent (safe side); try again",
+ "yasak pencere listesi okunamadı: görüntü gönderilmedi (güvenli taraf; tekrar dene): {neden}": "the forbidden-window list could not be read: no image was sent (safe side; try again): {neden}"
 }

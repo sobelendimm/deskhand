@@ -22,6 +22,7 @@ import os
 import re
 import sqlite3
 import struct
+import tempfile
 
 from . import kopya as kopya_mod
 from . import tespit
@@ -159,8 +160,9 @@ def _recovery_oku(recovery: str) -> dict:
 def _bilinen_konaklar(kaynak: str, cookies_db: str, recovery: dict) -> set[str]:
     """Hosts known from the profile (read only; values are never read): cookie hosts of the copy, site storage
     folders, session-cookie hosts and open-tab hosts of recovery.jsonlz4, and visited origins in places.sqlite
-    (opened read-only + immutable: no -wal/-shm is created in the user's profile). Used to decide whether a domain
-    cookie (`.example.com`) would also be sent to a rejected subdomain (`*bank*` -> bank.example.com)."""
+    (db + WAL read from a temporary copy: the profile itself is never opened, no -wal/-shm is created there). Used to
+    decide whether a domain cookie (`.example.com`) would also be sent to a rejected subdomain (`*bank*` ->
+    bank.example.com); see Politika.cerez_reddedildi."""
     from urllib.parse import quote, urlsplit
     konaklar: set[str] = set()
     try:
@@ -189,14 +191,21 @@ def _bilinen_konaklar(kaynak: str, cookies_db: str, recovery: dict) -> set[str]:
                     pass
     yer = os.path.join(kaynak, "places.sqlite")
     if os.path.isfile(yer):
-        try:
-            con = sqlite3.connect(f"file:{quote(yer)}?mode=ro&immutable=1", uri=True)
+        # read from a consistent temporary 0700 copy of the db + its WAL (kopya.sqlite_yedek; the profile is never
+        # opened, no -wal/-shm is created there): with Firefox open, recent visits are still only in the WAL, which
+        # an `immutable=1` read of the profile file would miss
+        with tempfile.TemporaryDirectory(prefix="deskhand-places-") as td:
+            os.chmod(td, 0o700)
+            gecici = os.path.join(td, "places.sqlite")
             try:
-                konaklar |= {str(r[0]).lower() for r in con.execute("SELECT DISTINCT host FROM moz_origins")}
-            finally:
-                con.close()
-        except sqlite3.Error:
-            pass
+                kopya_mod.sqlite_yedek(yer, gecici)
+                con = sqlite3.connect(f"file:{quote(gecici)}?mode=ro", uri=True)
+                try:
+                    konaklar |= {str(r[0]).lower() for r in con.execute("SELECT DISTINCT host FROM moz_origins")}
+                finally:
+                    con.close()
+            except (sqlite3.Error, OSError):
+                pass
     konaklar.discard("")
     return konaklar
 

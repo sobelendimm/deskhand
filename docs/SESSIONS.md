@@ -411,9 +411,9 @@ yalnız bellekte SHA-256 özetiyle karşılaştırılır; değer ve özet yazıl
 (`session`, `sid`, `auth`, `token`, `login`, `user`, `buyer`…) ya da `--cerez AD` (fnmatch, tekrarlanabilir) ile
 verilir. Süresi geçmiş kalıcı giriş çerezi var, geçerli kalıcı yoksa (yalnız süresiz `PHPSESSID` kalmışsa) oturum YOK
 sayılır: Shopier olayındaki durum budur. "Kopyaya taşınır mı" kararı kopyanın kurallarıyla aynıdır (ret listesi, hesap
-oturumu izni, görev kipi, bilinen konaklarla alan çerezi kuralı; §8 "Site ret listesi"): reddedilen bilinen alt alana
-giden alan çerezi `politika_disi` sayılır. Bilinen konaklar için de profilin `cookies.sqlite`'ına bağlanılmaz
-(geçici 0700 kopyadan okunur).
+oturumu izni, görev kipi, alan çerezi kuralı; §8 "Site ret listesi"): reddedilen bir alt alana gidebilecek alan
+çerezi `politika_disi` sayılır. Bilinen konaklar için de profilin `cookies.sqlite`'ına ve `places.sqlite`'ına
+bağlanılmaz (WAL dahil geçici 0700 kopyadan okunur).
 
 | Çıkış | Anlamı | Ne yapılır |
 |---|---|---|
@@ -585,14 +585,28 @@ Flatpak örneği yok) normal açılış (`paylas`: kendi verisiyle, kullanıcı 
 kullanıcının ekranına devredebilir.
 
 **Site ret listesi** (`[site].reddet`): bu alan adlarının çerezi/deposu kopyaya ALINMAZ; düz alan adı alt alanlarını
-da kapsar. Kayıtlı parolalar (`logins.json` / `logins.db`) aynı listeyle süzülür. **Alan çerezi** (`.ornek.com`,
-baştaki nokta) reddedilen bir alt alana da gönderildiği için ayrıca reddedilir: hem ret listesindeki düz alt alan
-(`accounts.google.com` → `.google.com`) hem de profilden **bilinen** ve bir desene uyan alt alan (`*bank*` →
-`bank.ornek.com` → `.ornek.com`). Bilinen konaklar (`Politika.cerez_reddedildi(host, bilinen_konaklar)`): çerez
-konakları, site deposu klasörleri (`storage/default`), `recovery.jsonlz4`'teki oturum çerezi ve açık sekme konakları,
-`places.sqlite` köken listesi (salt okuma, `immutable`). Kopya (`firefox.hazirla`) ve `sessions check` aynı kümeyi
-kullanır. Kopyanın `cookies.sqlite`'ı süzmeden sonra `VACUUM INTO` ile yeniden kurulur: silinen değerler dosya
-baytlarında kalmaz. Liste şunları içerir:
+da kapsar. Kayıtlı parolalar (`logins.json` / `logins.db`) aynı listeyle süzülür.
+
+**Alan çerezi** (`.ornek.com`, baştaki nokta) `ornek.com`'un BÜTÜN alt alanlarına gönderilir; bu yüzden reddedilen bir
+alt alana gidebiliyorsa o da reddedilir (`Politika.cerez_reddedildi`). Kuralın anlamı, desenin sonuna göre ikiye ayrılır:
+- **Sonu sabit kural** (düz alan `accounts.google.com`, `*.bank.com`, `*.gov.tr`, `login?.ornek.com`): kural alan
+  çerezinin gidebileceği HERHANGİ bir alt alanla (`X.ornek.com`) eşleşebiliyorsa çerez reddedilir. Karar yalnız
+  kuraldan verilir, profile bakılmaz (kapalı-güvenli): `accounts.google.com` → `.google.com`, `*.bank.com` →
+  `.bank.com`, `*.gizli.ornek.com` → `.ornek.com` reddedilir; `*.gov.tr` `.ornek.com`'a dokunmaz.
+- **Sonu `*` olan kural** (`*bank*`, `*checkout*`, `bank.*`): bu kural her alanın bir alt alanıyla eşleşebilir
+  (`bank.<alan>`). Harfiyen uygulanırsa varsayılan listede bütün alan çerezleri (hesap oturumu izni verilmiş
+  `.google.com` / `.live.com` dahil) düşerdi. Bu yüzden ancak **kanıtla** reddeder: profilden bilinen, alanın alt
+  alanı olan ve ret listesine takılan bir konak varsa (`*bank*` + bilinen `bank.ornek.com` → `.ornek.com`).
+  Bilinen konaklar: çerez konakları, site deposu klasörleri (`storage/default`), `recovery.jsonlz4`'teki oturum
+  çerezi ve açık sekme konakları, `places.sqlite` köken listesi. `places.sqlite` WAL'ıyla birlikte geçici 0700
+  kopyadan okunur; Firefox açıkken WAL'da duran yeni ziyaretler de sayılır, profilde dosya oluşmaz.
+- **Kalan sınır:** profilde hiç görülmemiş (ziyaret edilmemiş, çerezi/deposu olmayan) bir alt alan, sonu `*` olan
+  kuralla kapsanmaz. Böyle bir alt alanı kesin dışarıda tutmak için sonu sabit bir kural ekleyin
+  (`bank.ornek.com` ya da `*.bank.ornek.com`).
+
+Kopya (`firefox.hazirla`) ve `sessions check` aynı kuralı ve aynı bilinen konak kümesini kullanır. Kopyanın
+`cookies.sqlite`'ı süzmeden sonra `VACUUM INTO` ile yeniden kurulur: silinen değerler dosya baytlarında kalmaz.
+Liste şunları içerir:
 - genel desenler: `*bank*`, `*banka*`, `*odeme*`, `*payment*`, `*checkout*`, `*paypal*`, `*stripe*`, `*e-devlet*`, `*edevlet*`;
 - Türk bankaları ve ödeme kuruluşları (ör. İş Bankası, Garanti BBVA, Yapı Kredi, Akbank, Ziraat, Halkbank, Vakıfbank,
   QNB, DenizBank, ING, TEB, Kuveyt Türk, Enpara, Papara, ininal, Param, iyzico, PayTR);

@@ -991,7 +991,7 @@
  ],
  "Firefox profili bulunamadı (profiles.ini)": [
   "oturum/denetle.py:313",
-  "oturum/firefox.py:241"
+  "oturum/firefox.py:250"
  ],
  "Firefox çalışırken açılan erişilebilirliği algılamıyor: Firefox'u kapatıp yeniden başlat": [
   "erisim.py:239"
@@ -1279,7 +1279,7 @@
   "arka_uc/kwin.py:253"
  ],
  "KWin pencere listesi alınamadı: {hata}": [
-  "api.py:624",
+  "api.py:660",
   "uygulama.py:851"
  ],
  "KWin süreci doğrulanamadı (pid {pid})": [
@@ -1713,15 +1713,16 @@
   "erisim.py:332"
  ],
  "YASAK pencere: ağacı okunmaz": [
-  "api.py:376",
+  "api.py:412",
   "dogrulama_sinamasi.py:676",
   "web.py:680"
  ],
  "YASAK pencere: içeriği gösterilmez/okunmaz ({neden})": [
-  "api.py:278"
+  "api.py:303",
+  "api.py:317"
  ],
  "YASAK pencere: içeriği okunmaz": [
-  "api.py:432"
+  "api.py:468"
  ],
  "YASAK pencere: {baslik} (sınıf {sinif}) /{desen}/ ile eşleşti; hiçbir girdi gönderilmez ({dosya})": [
   "guvenlik.py:1076"
@@ -1828,7 +1829,7 @@
   "mcp_sunucu.py:2423"
  ],
  "akış adı yalnız harf/rakam/._- içermeli: {ad} (list ile adlara bak)": [
-  "api.py:653"
+  "api.py:689"
  ],
  "akış dosyası okunamadı: {hata}": [
   "akis.py:43"
@@ -1849,7 +1850,7 @@
   "akis.py:167"
  ],
  "akış yok: {ad} ({dizin})": [
-  "api.py:656"
+  "api.py:692"
  ],
  "akış {ad}: {pencere}": [
   "mcp_sunucu.py:2411"
@@ -3203,6 +3204,9 @@
  "kararı + kopyayı üret (başlatmaz)": [
   "oturum/cli.py:67"
  ],
+ "kare alınırken yasak bir pencere kapandı: görüntü gönderilmedi (güvenli taraf); tekrar dene": [
+  "api.py:313"
+ ],
  "kare boyutu {boyut} ≠ oturum {hedef} (ölçek {olcek})": [
   "kwin_oturum.py:657"
  ],
@@ -3258,7 +3262,7 @@
   "guvenlik.py:778"
  ],
  "kimlik oturumları: {ozet}": [
-  "oturum/firefox.py:468"
+  "oturum/firefox.py:477"
  ],
  "kimlikle verilen girdi komutunda otomatik tam başlık kilidini kapat": [
   "cli.py:406"
@@ -3812,7 +3816,7 @@
   "arka_uc/sanal.py:790"
  ],
  "pano yazma": [
-  "api.py:523",
+  "api.py:559",
   "arka_uc/kde.py:789",
   "cli.py:280",
   "guvenlik.py:2046"
@@ -4565,6 +4569,9 @@
  "yasak listesi /{desen}/": [
   "mesgul.py:222"
  ],
+ "yasak pencere listesi okunamadı: görüntü gönderilmedi (güvenli taraf; tekrar dene): {neden}": [
+  "api.py:284"
+ ],
  "yasak/hassas: yapılmadı": [
   "mcp_sunucu.py:142"
  ],
@@ -4669,7 +4676,7 @@
   "guvenlik.py:840"
  ],
  "{ad} aktarıldı ({cerez} çerez, {giris} kayıtlı giriş)": [
-  "oturum/firefox.py:463"
+  "oturum/firefox.py:472"
  ],
  "{ad} arka planda çalıştırılmaz (ikinci örnek asıl veriyi/oturumu bozar).": [
   "oturum/__init__.py:42"
@@ -4684,10 +4691,10 @@
   "oturum/__init__.py:148"
  ],
  "{ad} süzüldü (görev kipinde aktarılmaz)": [
-  "oturum/firefox.py:461"
+  "oturum/firefox.py:470"
  ],
  "{ad} süzüldü ({cerez} çerez; izin kapalı: panel → Ayarlar → Hesap oturumları)": [
-  "oturum/firefox.py:466"
+  "oturum/firefox.py:475"
  ],
  "{ad} · {g}×{y}": [
   "gui/metinler.py:219"
@@ -4924,7 +4931,7 @@
   "mesgul.py:505"
  ],
  "{sn} sn içinde yeni pencere görünmedi (çıktı: {log})": [
-  "api.py:622"
+  "api.py:658"
  ],
  "{sure} kaldı": [
   "oturum/denetle.py:300"

@@ -195,9 +195,15 @@ class Politika:
         """Çerez/giriş kaydı konağı reddedilmeli mi? Alanın kendisi (ya da üstü) ret listesindeyse; ayrıca ALAN
         çerezi (".google.com", baştaki nokta) ret listesindeki bir alt alana (accounts.google.com) da
         gönderildiği için reddedilir. host baştaki noktayla verilmezse yalnız ilk kural.
-        bilinen_konaklar: hosts known from the profile (cookie hosts, session cookies). A domain cookie is also
-        rejected when ANY known host it would be sent to is rejected, so a wildcard rule (`*bank*`) that matches
-        bank.example.com also stops the `.example.com` cookie."""
+        Domain cookie rule (docs/SESSIONS.md §8 "Alan çerezi"):
+          - a rule whose end is fixed (plain domain `accounts.google.com`, `*.bank.com`, `*.gov.tr`, `login?.x.com`)
+            rejects `.alan` when it could match ANY subdomain of alan (some `X.alan`), decided from the rule alone
+            (_alt_alana_uyabilir), without the profile: closed-safe;
+          - a rule ending in `*` (`*bank*`, `bank.*`) can match a subdomain of EVERY domain (`bank.<alan>`); taken
+            literally it would drop every domain cookie, so it only rejects `.alan` with evidence: a host known from
+            the profile (`bilinen_konaklar`: cookie hosts, site storage, session cookies, open tabs, places.sqlite
+            history incl. its WAL) that is a subdomain of alan and is rejected.
+        Residual limit: a trailing-`*` rule does not cover a subdomain the profile has never seen."""
         h = (host or "").strip().lower()
         alan = h.lstrip(".").rstrip(".")
         if not alan:
@@ -208,10 +214,8 @@ class Politika:
             return False
         for k in self._reddet:
             k = str(k).strip().lower()
-            if not k:
-                continue
-            # yalnız düz alan kalıpları ("*.gov.tr" gibi kalıpların alt alanları zaten site_reddedildi'de)
-            if "*" not in k and "?" not in k and "[" not in k and (k == alan or k.endswith("." + alan)):
+            # the ONLY switch between "decided from the rule" and "needs evidence": the trailing `*`
+            if k and not k.endswith("*") and _alt_alana_uyabilir(k, alan):
                 return True
         for b in bilinen_konaklar or ():
             b = str(b).strip().lower().lstrip(".").rstrip(".")
@@ -228,6 +232,79 @@ class Politika:
         if not izin:
             return True
         return _alan_eslesir(alan, izin)
+
+
+def _glob_parcala(kural: str) -> list[tuple[str, str]]:
+    """fnmatch pattern → tokens ("*", ""), ("?", ""), ("[", class pattern), ("=", literal char). Classes follow
+    fnmatch.translate: `[!...]` negates, a `]` right after `[` / `[!` is literal, an unclosed `[` is a literal `[`."""
+    parca, i, n = [], 0, len(kural)
+    while i < n:
+        c = kural[i]
+        i += 1
+        if c == "*":
+            if not parca or parca[-1] != ("*", ""):
+                parca.append(("*", ""))
+        elif c == "?":
+            parca.append(("?", ""))
+        elif c == "[":
+            j = i
+            if j < n and kural[j] == "!":
+                j += 1
+            if j < n and kural[j] == "]":
+                j += 1
+            while j < n and kural[j] != "]":
+                j += 1
+            if j >= n:
+                parca.append(("=", "["))
+            else:
+                parca.append(("[", kural[i - 1:j + 1]))
+                i = j + 1
+        else:
+            parca.append(("=", c))
+    return parca
+
+
+def _alt_alana_uyabilir(kural: str, alan: str) -> bool:
+    """Can the fnmatch rule match SOME subdomain host `X.alan` (X non-empty)? Exact search over the product of the
+    pattern automaton and the language Σ⁺ "." alan (a few hundred states at most; no enumeration). Over-approximates
+    only for a character class with no member at all (treated as matching some character): closed-safe."""
+    import fnmatch
+    parca = _glob_parcala(kural)
+    m = len(parca)
+    ek = "." + alan
+    L = len(ek)
+    # target states: -2 = nothing read yet, -1 = inside X (≥1 char), q ≥ 1 = q chars of ".alan" read (L = accept)
+
+    def hedef_adimlari(q):  # → [(next state, required char or None = any char)]
+        if q == -2:
+            return [(-1, None)]
+        if q == -1:
+            return [(-1, None), (1, ek[0])]
+        return [(q + 1, ek[q])] if q < L else []
+
+    def uyar(tur, deger, ch):  # can pattern token accept char ch (None = some char of our choosing)?
+        if tur in ("*", "?"):
+            return True
+        if tur == "=":
+            return ch is None or ch == deger
+        return ch is None or fnmatch.fnmatchcase(ch, deger)
+
+    gorulen, yigin = set(), [(0, -2)]
+    while yigin:
+        i, q = yigin.pop()
+        if (i, q) in gorulen:
+            continue
+        gorulen.add((i, q))
+        if i == m and q == L:
+            return True
+        if i < m and parca[i][0] == "*":
+            yigin.append((i + 1, q))  # `*` matches the empty string
+        for q2, ch in hedef_adimlari(q):
+            if i < m and parca[i][0] == "*":
+                yigin.append((i, q2))  # `*` eats one more char
+            elif i < m and uyar(parca[i][0], parca[i][1], ch):
+                yigin.append((i + 1, q2))
+    return False
 
 
 def _alan_eslesir(alan: str, kaliplar) -> bool:
