@@ -267,6 +267,30 @@ def kilit_eksigi() -> str | None:
     return "oturum kilitli" if d else None
 
 
+def bellek_kafesi_eksigi() -> str | None:
+    """Görünmez masaüstü Xvfb'yi `systemd-run --user --scope` kafesine koyar ve kafeste değilse Dur verir (ürün kuralı,
+    gevşetilmez). YALNIZ DESKHAND_CI=1 iken yoklanır: kullanıcı systemd'si cgroup devretmiyorsa (GitHub runner: süreç
+    '/system.slice/hosted-compute-agent.service' altında kalır) neden döner. Yerelde hep None: kural gerçek kapı."""
+    if os.environ.get("DESKHAND_CI") != "1":
+        return None
+    import subprocess
+    if not shutil.which("systemd-run"):
+        return "systemd-run yok: kullanıcı bellek kafesi kurulamaz"
+    birim = f"deskhand-test-kafes-{os.getpid()}.scope"
+    rt = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    try:
+        r = subprocess.run(["systemd-run", "--user", "--scope", "--quiet", f"--unit={birim}", "-p", "MemoryMax=64M",
+                            "--", "cat", "/proc/self/cgroup"], capture_output=True, text=True, timeout=15,
+                           env={**os.environ, "DBUS_SESSION_BUS_ADDRESS": f"unix:path={rt}/bus"})
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"systemd-run --user --scope çalışmadı: {e}"
+    cg = next((s[3:].strip() for s in r.stdout.splitlines() if s.startswith("0::")), "")
+    if r.returncode == 0 and cg.endswith("/" + birim):
+        return None
+    return (f"kullanıcı bellek kafesi yok (systemd-run --user --scope rc {r.returncode}, cgroup {cg!r}"
+            f"{', ' + r.stderr.strip()[-160:] if r.stderr.strip() else ''})")
+
+
 def masaustu_girdisi_eksigi(*kimlikler: str) -> str | None:
     """XDG uygulama dizinlerinde <kimlik>.desktop dosyası olmayanlar → neden | None."""
     veri = [os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),

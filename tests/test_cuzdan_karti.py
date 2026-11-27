@@ -620,13 +620,19 @@ def test_tasarim_kapisi_ve_taban():
     guncelle = os.environ.get("GORSEL_GUNCELLE") == "1"
     os.makedirs(taban, exist_ok=True)
     pngler = sorted(f for f in os.listdir(cikti) if f.endswith(".png")) if os.path.isdir(cikti) else []
+    # birebir piksel kıyası yazı tipi/render ortamına bağlı: ortam referanstan (gorsel_taban/ORTAM.txt) farklıysa
+    # yalnız kıyas atlanır; çekim, 4 ekran sayısı ve tasarım kapısı yine koşar
+    ortam_farki = _yalitim.yazi_ortami_farki() if pngler and not guncelle else None
     for f in pngler:
         t, y = os.path.join(taban, f), os.path.join(cikti, f)
         if guncelle or not os.path.exists(t):
             shutil.copyfile(y, t)
             print(f"TABAN YAZILDI: {t}", flush=True)
-        n = GR.kiyasla(t, y, os.path.join(_yalitim.GECICI, f + ".fark.png"))
-        kontrol(f"kart tabanı: {f} birebir", n == 0, f"{'boyut farklı' if n < 0 else f'{n} piksel'}")
+        if ortam_farki:
+            _yalitim.atla(f"kart tabanı: {f} birebir", ortam_farki)
+        else:
+            n = GR.kiyasla(t, y, os.path.join(_yalitim.GECICI, f + ".fark.png"))
+            kontrol(f"kart tabanı: {f} birebir", n == 0, f"{'boyut farklı' if n < 0 else f'{n} piksel'}")
         if os.environ.get("KART_PNG"):
             os.makedirs(os.environ["KART_PNG"], exist_ok=True)
             shutil.copyfile(y, os.path.join(os.environ["KART_PNG"], f))
