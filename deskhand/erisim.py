@@ -903,7 +903,7 @@ def _yardimci_ana():
     istek = json.load(sys.stdin)
     from . import masalar
     try:
-        with masalar.masa_sabit(istek.get("masa") or ""):
+        with masalar.masa_sabit(istek.get("masa") or ""), guvenlik.baslik_gizle(istek.get("baslik_gizli")):
             yanit = {"sonuc": _atspi_is(istek)}
     except Dur as e:
         yanit = {"dur": [e.kod, e.mesaj, e.tur]}
@@ -958,7 +958,8 @@ def _pencere_istegi(k, islem, **ek):
         pid = int(pid) if pid not in (None, "") else ""
     except (TypeError, ValueError):
         pid = ""
-    return {"a11y": _a11y_adresi(), "pid": str(pid or ""), "baslik": au.baslik(k), "islem": islem, **ek}
+    return {"a11y": _a11y_adresi(), "pid": str(pid or ""), "baslik": au.baslik(k), "islem": islem, **ek,
+            "baslik_gizli": getattr(guvenlik._BASLIK_GIZLI, "acik", False)}  # yardımcı süreç: gizli yazı bayrağı
 
 
 def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400, kimlik_ver=False, ayrinti=False):

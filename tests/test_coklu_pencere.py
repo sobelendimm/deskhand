@@ -563,6 +563,37 @@ def f2r3_birim_testleri():
     for ad in ("pid yok", "ağaçta yok", "yasak", "kendi", "seviye", "gorsel"):
         m = m_er.get(ad, "(yok)")
         kontrol(f"R3 EK-1 başlık basımı gizli bağlamda gizli ({ad})", "(qzx)" not in m and "gizlendi" in m, m)
+    # R3 EK-2: iki masaüstü → AT-SPI işi AYRI SÜREÇTE (_yardimci_ana); iş parçacığı yereli oraya geçmez, gizli kararı
+    # süreçler arası isteğe bayrak olarak taşınır. Yardımcı süreç süreç içinde, YENİ iş parçacığında taklit edilir.
+    import io
+    import json
+    au = iki_pencere(sm)
+    au.pen[A][0] = onizleme
+    au.pid_[A] = ""  # PID bilinmiyor → _cerceve_bul başlıklı Dur 6
+    with guvenlik.baslik_gizle(True):
+        istek = erisim._pencere_istegi(A, "tara")
+    cikti = {}
+
+    def yardimci():
+        eski_io = sys.stdin, sys.stdout
+        sys.stdin, sys.stdout = io.StringIO(json.dumps(istek)), io.StringIO()
+        try:
+            erisim._yardimci_ana()
+            cikti["m"] = sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout = eski_io
+    eski_atspi = erisim._atspi
+    erisim._atspi = lambda a11y=None: SahteAtspi
+    try:
+        t = threading.Thread(target=yardimci)
+        t.start()
+        t.join(10)
+    finally:
+        erisim._atspi = eski_atspi
+    m = cikti.get("m", "(çıktı yok)")
+    kontrol("R3 EK-2 ayrı süreç AT-SPI: gizli yazıda erisim iletisinde başlık yok",
+            '"dur"' in m and "(qzx)" not in m and "gizlendi" in m, m[:300])
+
     # gizli olmayan bağlamda başlık kalır (gerileme)
     try:
         erisim._cerceve_bul(SahteAtspi, "", onizleme)
