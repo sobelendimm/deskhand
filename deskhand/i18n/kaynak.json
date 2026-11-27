@@ -931,6 +931,9 @@
  "Bu, bir ajanın kendi masaüstü: burada yalnız izlersiniz. «Kontrolü al» varsayılan masaüstünde ya da bir onay devrinde açılır.": [
   "gui/metinler.py:352"
  ],
+ "Büyük görünümü kapatır; sekmedeki küçük önizleme sürer. Devral kapalıyken Esc de kapatır.": [
+  "gui/onizleme.py:227"
+ ],
  "Büyüt": [
   "gui/sekmeler/arka_plan.py:35"
  ],
@@ -1287,6 +1290,9 @@
  ],
  "Devam etmek için panelde 'Devam et'e basın.": [
   "gorev.py:93"
+ ],
+ "Devral açık: Esc arka plana gider; çıkmak için Küçült": [
+  "gui/onizleme.py:228"
  ],
  "Devral açılamadı: {hata}": [
   "gui/metinler.py:89"
@@ -2078,6 +2084,9 @@
  ],
  "Kurulum komutunu panoya kopyalar: {komut}": [
   "gui/metinler.py:415"
+ ],
+ "Küçült": [
+  "gui/onizleme.py:226"
  ],
  "Kısayol etkin: {tus}": [
   "gui/metinler.py:237"

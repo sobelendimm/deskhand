@@ -14,7 +14,7 @@ from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QPainter, QPalette
 from PyQt6.QtWidgets import QSizePolicy, QWidget
 
-from ..i18n import _
+from ..i18n import N_, _
 from . import metinler as T
 
 FARE_ARALIK = 1 / 60  # fare hareketi en çok 60 Hz gönderilir
@@ -223,19 +223,69 @@ class Onizleme(QWidget):
         return super().focusNextPrevChild(ileri)
 
 
+K_KUCULT = N_("Küçült")
+K_KUCULT_IPUCU = N_("Büyük görünümü kapatır; sekmedeki küçük önizleme sürer. Devral kapalıyken Esc de kapatır.")
+K_DEVRAL_ESC = N_("Devral açık: Esc arka plana gider; çıkmak için Küçült")
+
+
 class OnizlemePenceresi(QWidget):
     """"Büyüt": önizlemenin ayrı, büyük penceresi. Kendi karesini ALMAZ: sekmenin maskelenmiş karesini gösterir (yasak
-    pencere maskesi burada da aynıdır); girdisi sekmenin girdi yoluna (DUR denetimli) gider."""
+    pencere maskesi burada da aynıdır); girdisi sekmenin girdi yoluna (DUR denetimli) gider.
+
+    Çıkış pencerenin İÇİNDE de vardır (kullanıcı 28 Kas: "küçültüp çıkamıyorum"): üstteki ince şeritte "Küçült" düğmesi
+    ve Devral kapalıyken Esc. Devral açıkken Esc önizlemeye (arka plan masaüstüne) gider; şerit bunu söyler."""
 
     def __init__(self, baslik: str, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
-        from PyQt6.QtWidgets import QVBoxLayout
+        from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+
+        from .ortak import soluk_etiket
+        self._baslik = baslik
         self.setWindowTitle(baslik)
+        self.l_baslik = QLabel(baslik)
+        self.l_devral = soluk_etiket("", kaydir=False)
+        self.l_devral.hide()
+        self.b_kucult = QPushButton()
+        self.b_kucult.setAutoDefault(False)
+        self.b_kucult.setFocusPolicy(Qt.FocusPolicy.TabFocus)  # tıklamak önizlemenin odağını (Devral) çalmasın
+        self.b_kucult.clicked.connect(self.close)
+        serit = QHBoxLayout()
+        serit.setContentsMargins(8, 4, 8, 4)
+        serit.setSpacing(12)
+        serit.addWidget(self.l_baslik)
+        serit.addWidget(self.l_devral, 1)
+        serit.addWidget(self.b_kucult)
         self.onizleme = Onizleme(self)
         kok = QVBoxLayout(self)
         kok.setContentsMargins(0, 0, 0, 0)
-        kok.addWidget(self.onizleme)
+        kok.setSpacing(0)
+        kok.addLayout(serit)
+        kok.addWidget(self.onizleme, 1)
+        self.tazele()
         self.resize(1280, 760)
+
+    def tazele(self) -> None:
+        """Dil değişince şerit metinleri (başlık çağıranın çevirisidir)."""
+        self.b_kucult.setText(_(K_KUCULT))
+        self.b_kucult.setToolTip(_(K_KUCULT_IPUCU))
+        self.l_devral.setText(_(K_DEVRAL_ESC))
+
+    def baslik_ayarla(self, baslik: str) -> None:
+        self._baslik = baslik
+        self.setWindowTitle(baslik)
+        self.l_baslik.setText(baslik)
+
+    def devral_ayarla(self, acik: bool) -> None:
+        self.onizleme.devral = acik
+        self.l_devral.setVisible(acik)
+        self.onizleme.update()
+
+    def keyPressEvent(self, e):  # noqa: N802 - Devral açıkken Esc buraya ulaşmaz (Onizleme kabul eder)
+        if e.key() == Qt.Key.Key_Escape and not self.onizleme.devral:
+            self.close()
+            e.accept()
+            return
+        super().keyPressEvent(e)
 
 
 class MaskeHatasi(Exception):
