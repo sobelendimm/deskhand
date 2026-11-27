@@ -50,10 +50,25 @@ permission mode says:
   is holding are released as soon as you touch anything.
 - **STOP switch.** Panel button, tray menu or an optional global shortcut. While it is on,
   nothing sends input and held keys are released. An agent may set STOP itself, but **it
-  cannot lift a STOP that you set**; only the panel can.
+  cannot lift a STOP that you set**. STOP comes off only with your Yes in the panel (the panel's
+  Resume, the shortcut, or the question `deskhand resume` asks there, default No); `--approved` does
+  not count as an answer. If the panel cannot read its signed STOP record at start (locked wallet,
+  no Secret Service, unreadable or old-format record), it sets a STOP of its own. It removes only
+  that one itself, once it reads a signed record that says STOP is off; a record from an older
+  version needs your Resume once. An agent's `resume` never removes a STOP it did not set.
 - **Activity log.** Every input is logged (`~/.local/state/deskhand`, kept 7 days, readable only by
   you: folder 0700, files 0600) and shown live in the panel. Text typed without `secret` shows up there in
   pieces, so type passwords, codes and personal data with `secret=true` (`--secret`).
+  Limits of `secret`: the text is typed key by key and never goes through the clipboard, and the
+  active window is checked before and after every key. The one check that cannot run is after the
+  submit key (Enter), because a closing dialog or a moved focus is the normal outcome. The text and
+  window titles are left out of the result, the log and the panel feed. Typing by window id or ref is
+  locked to the window and its app class, not its title, so a tab or page switch inside the same
+  window is not noticed. The focus is also checked right before each Enter, but a window change in
+  the few milliseconds between that check and the key is not caught. A separate `observe` or
+  screenshot call after the typing can still show a window title that contains the text. Type
+  secrets into masked fields (password fields). Text sent to a terminal ends up in the shell's own
+  history, outside Deskhand.
 
 ### Background desktop
 
@@ -64,8 +79,21 @@ default, separate from your session.
   talk to its own X display). Apps there get a private D-Bus, so their notifications are
   captured to a log instead of popping up, and their audio goes to a silent sink.
   Wayland variables are removed so an app cannot escape to your screen.
-- **Light.** Low CPU/IO priority and a memory cap (systemd scope, 6 GB by default).
+- **Light.** Low CPU/IO priority and a memory cap (systemd scope, 8 GB by default).
   Starting it takes about 0.2 s; an empty desktop uses about 30 MiB.
+- **Memory watch.** Tool results carry a `memory_warning` field when the desktop uses 80% or more of
+  its cap (anonymous + shared memory; page cache is not counted). When the desktop has been idle
+  for 2 minutes and usage is at 85% or more, Deskhand restarts only Firefox with its session
+  restored; other apps and the desktop stay open. Tabs come back from Firefox's own recovery file,
+  written about every 15 seconds, so a tab opened in the last ~15 seconds can be lost, and window
+  ids change (observe again). Firefox is left alone if the recovery file is missing or older than
+  the running Firefox. At most one restart per 10 minutes and 3 per 24 hours; if a restart frees
+  less than 10%, the next one waits 60 minutes (doubling each time, up to 24 hours). If a restart
+  fails, the warning names the session backup (`sessionstore-backups/deskhand-yedek.jsonlz4` in the
+  session copy) and the copy is kept for up to 24 hours, also across a desktop stop. At 60% or more
+  (when no restart is due), `memory.reclaim` runs at most every 10 minutes. `DESKHAND_FF_YENIDEN=off` (also
+  `false`, `0`, `no`, `kapali`) turns the restart off; the warning stays. While you or a task are
+  using the desktop only the warning is given.
 - **Per-app session policy.** Some apps can open there already logged in:
   - **Firefox:** a consistent, **one-way snapshot copy** of your profile (cookies, logins,
     site storage for the task's sites). Nothing is ever written back. Sync identity is left out;
@@ -73,8 +101,12 @@ default, separate from your session.
     e-Devlet) and central login pages (Google, Microsoft) are not copied, so Google/YouTube are not signed
     in there. Camera, microphone, location and notification permissions are removed from the copy.
   - **Flatpak apps that do not use the keyring** (for example Discord, Spotify): snapshot copy.
-  - **Apps that need the keyring** (Chromium family, VS Code) and apps that write to real
+  - **Apps that need the keyring** (VS Code and similar) and apps that write to real
     files (Obsidian vaults) run **only on your screen**.
+  - **Chromium:** the native `chromium` opens on the background desktop with an **empty profile**:
+    no saved logins, no password store. A second window opens in the same process. **Flatpak
+    Chrome does not start there** (exit code 16 with the reason); use native `chromium` or your
+    screen.
   - **Apps that break with two clients** (Telegram, Signal, WhatsApp wrappers, Element,
     Steam, Thunderbird and similar) are **never cloned** and never started in the
     background: the agent is told to wait for you. Mail/sync daemons (KMail/Akonadi,
