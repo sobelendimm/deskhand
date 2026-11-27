@@ -2086,5 +2086,12 @@
  "systemd-creds çalıştırılamadı": "systemd-creds could not be run",
  "taşınan öğe geri okunamadı ({ad}); depo değiştirilmedi": "a moved item could not be read back ({ad}); the store was not changed",
  "text ile secret_ref birlikte verilmez": "text and secret_ref cannot be given together",
- "yazılacak metin ya da --secret-ref gerekli": "text to type or --secret-ref is required"
+ "yazılacak metin ya da --secret-ref gerekli": "text to type or --secret-ref is required",
+ "KDE Cüzdanı tuz dosyası beklenen boyda değil": "the KDE Wallet salt file does not have the expected size",
+ "KDE Cüzdanı tuz dosyası yok ({yol}); cüzdan bu kullanıcıda oluşturulmamış olabilir": "no KDE Wallet salt file ({yol}); the wallet may not have been created for this user",
+ "boş parola kaydedilmez": "an empty password is not saved",
+ "cüzdan kilitli: kayıtlı anahtar açmadı ya da cüzdan bu birimden önce başlatıldı": "wallet locked: the saved key did not open it, or the wallet was started before this unit",
+ "ksecretd bulunamadı (KDE Cüzdanı 6 gerekir)": "ksecretd not found (KDE Wallet 6 required)",
+ "kullanıcı birimi etkinleştirilemedi ({birim})": "the user unit could not be enabled ({birim})",
+ "kullanım: deskhand wallet open|status|remove (kurulum: panel Ayarlar)": "usage: deskhand wallet open|status|remove (setup: panel Settings)"
 }

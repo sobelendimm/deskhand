@@ -833,6 +833,9 @@ def main(argv=None):
         gecis[ilk](argparse.Namespace(arg=argv[1:]))
     if argv[0] in ("secret", "sir"):  # key store commands (anahtar_deposu): no back end, own parser
         sys.exit(k_sir(argv[1:]))
+    if argv[0] in ("wallet", "cuzdan"):  # open KDE Wallet at login (cuzdan_ac; the login unit runs `wallet open`)
+        from .cuzdan_ac import main as cuzdan_main
+        sys.exit(cuzdan_main([{"ac": "open", "durum": "status", "kaldir": "remove"}.get(x, x) for x in argv[1:]]))
     a = ayristirici().parse_args(argv)
     if getattr(a, "masa", None) is not None:  # komuttan sonra verilen --desktop-name (arka uç seçilmeden ÖNCE)
         from . import masalar

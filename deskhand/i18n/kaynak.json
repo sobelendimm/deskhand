@@ -1087,11 +1087,11 @@
  ],
  "DURDURULDU ({kod}): {mesaj}": [
   "cli.py:821",
-  "cli.py:842",
+  "cli.py:845",
   "masaustu.py:1589"
  ],
  "DURDURULDU: {mesaj}": [
-  "cli.py:885"
+  "cli.py:888"
  ],
  "Denetim sonucu alınamadı": [
   "gui/metinler.py:419"
@@ -1627,6 +1627,12 @@
  ],
  "KDE Cüzdanı": [
   "anahtar_deposu.py:52"
+ ],
+ "KDE Cüzdanı tuz dosyası beklenen boyda değil": [
+  "cuzdan_ac.py:76"
+ ],
+ "KDE Cüzdanı tuz dosyası yok ({yol}); cüzdan bu kullanıcıda oluşturulmamış olabilir": [
+  "cuzdan_ac.py:73"
  ],
  "KDE Cüzdanı'nı açın (kilidi açık olmalı)": [
   "doktor.py:248"
@@ -2712,7 +2718,7 @@
   "uygulama.py:1367"
  ],
  "başlık değişti (otomatik tam başlık kilidi): sayfa başlığı değişen akışlarda -b ile esnek desen ver ya da --no-title-lock kullan": [
-  "cli.py:883"
+  "cli.py:886"
  ],
  "başlık değişti: {baslik} (beklenen /{desen}/)": [
   "arka_uc/kde.py:572",
@@ -2936,6 +2942,9 @@
  "boş değer kaydedilmez": [
   "cli.py:439"
  ],
+ "boş parola kaydedilmez": [
+  "cuzdan_ac.py:179"
+ ],
  "boş ses çıkışı kurulamadı ({hata}): arka plan sesi kapatıldı": [
   "arka_ortak.py:1281"
  ],
@@ -3038,6 +3047,9 @@
  "cüzdan kilitli": [
   "anahtar_deposu.py:344",
   "anahtar_deposu.py:362"
+ ],
+ "cüzdan kilitli: kayıtlı anahtar açmadı ya da cüzdan bu birimden önce başlatıldı": [
+  "cuzdan_ac.py:217"
  ],
  "dbus-daemon bellek kafesinde değil: {cgroup}": [
   "kwin_oturum.py:962"
@@ -4306,6 +4318,9 @@
  "kscreen-doctor çalışmadı: {hata}": [
   "arka_uc/kwin.py:133"
  ],
+ "ksecretd bulunamadı (KDE Cüzdanı 6 gerekir)": [
+  "cuzdan_ac.py:226"
+ ],
  "kullanıcı Bitti dedi ama sınama işareti hâlâ sayfada: observe ile bak; sayfa ilerlemiyorsa kullanıcıya söyle (aynı sınama için yeniden çağrılmaz)": [
   "mcp_sunucu.py:3079"
  ],
@@ -4335,6 +4350,9 @@
  ],
  "kullanıcı bir kez izin verdi": [
   "onay.py:61"
+ ],
+ "kullanıcı birimi etkinleştirilemedi ({birim})": [
+  "cuzdan_ac.py:168"
  ],
  "kullanıcı bu hassas tıklamayı AÇIKÇA onayladı": [
   "cli.py:580",
@@ -4440,6 +4458,9 @@
  ],
  "kullanılmayan arka plan tarayıcılarını kapatın (deskhand masaustu durdur)": [
   "doktor.py:455"
+ ],
+ "kullanım: deskhand wallet open|status|remove (kurulum: panel Ayarlar)": [
+  "cuzdan_ac.py:324"
  ],
  "kurulu": [
   "oturum/cli.py:107"
@@ -4986,7 +5007,7 @@
   "arka_uc/kde.py:909"
  ],
  "pencere/erişilebilirlik listesi": [
-  "cli.py:864"
+  "cli.py:867"
  ],
  "pencere/masaüstü görüntüsü al (--out, --width)": [
   "cli.py:186"
@@ -6401,7 +6422,7 @@
   "cli.py:573"
  ],
  "çıktı yolu iki kez verildi (konumsal ve --out)": [
-  "cli.py:868"
+  "cli.py:871"
  ],
  "ödeme sayfasında Enter/Tab/boşluk içeren yazı: kullanıcı AÇIKÇA onayladı": [
   "cli.py:613",
