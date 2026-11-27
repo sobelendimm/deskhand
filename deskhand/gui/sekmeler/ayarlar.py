@@ -320,6 +320,12 @@ class AyarlarSekmesi(QWidget):
         self.l_dil = _Ileti()
         gl.addRow(self.l_dil)
         gl.addRow(self._not(T.Y_DIL_NOT_UYGULA))
+        # UX-K: panel teması (panel.json "tema"; kayıt yoksa koyu); Uygula'da hemen uygulanır
+        self.c_tema = QComboBox()
+        self._doldur(self.c_tema, tuple(T.Y_TEMA_SECENEK), T.Y_TEMA_SECENEK)
+        self._sec(self.c_tema, A.tema_tercihi())
+        self.c_tema.activated.connect(lambda _i: self._degisti())
+        gl.addRow(self._etiket(T.Y_TEMA), self.c_tema)
         kok.addWidget(g)
 
     def _onay_kur(self, kok):
@@ -618,7 +624,7 @@ class AyarlarSekmesi(QWidget):
 
     # =================================================================== kaydetme modeli
     def _anlik(self) -> dict:
-        d = {"dil": self.c_dil.currentData(), "onay": self.c_onay.currentData(),
+        d = {"dil": self.c_dil.currentData(), "tema": self.c_tema.currentData(), "onay": self.c_onay.currentData(),
              "hesap": frozenset(s for s, k in self.k_hesap.items() if k.isChecked()),
              "yasak": self.yasak.toPlainText(), "seviye": self.seviye.toPlainText(),
              "kisayol": (self.k_acik.isChecked(), self.tus()), "gorev": self.k_gorev_onay.isChecked()}
@@ -629,7 +635,7 @@ class AyarlarSekmesi(QWidget):
     def degisenler(self) -> list[str]:
         """Kaydedilmemiş bölümler (Uygula sırası)."""
         a = self._anlik()
-        return [k for k in ("onay", "hesap", "karar", "gorev", "yasak", "seviye", "kisayol", "dil")
+        return [k for k in ("onay", "hesap", "karar", "gorev", "yasak", "seviye", "kisayol", "tema", "dil")
                 if k in a and a[k] != self._kayitli.get(k)]
 
     def kaydedilmemis_var(self) -> bool:
@@ -680,7 +686,7 @@ class AyarlarSekmesi(QWidget):
         → hepsi kaydedildi mi."""
         iletiler, tamam = [], True
         bolum_adi = {"onay": T.Y_ONAY, "hesap": T.Y_HESAP, "karar": T.Y_MESGUL, "gorev": T.Y_GOREV, "yasak": T.Y_YASAK,
-                     "seviye": T.Y_SEVIYE, "kisayol": T.Y_KISAYOL, "dil": T.Y_DIL}
+                     "seviye": T.Y_SEVIYE, "kisayol": T.Y_KISAYOL, "tema": T.Y_TEMA, "dil": T.Y_DIL}
         for k in self.degisenler():
             sonuc, hata = self._bolum_uygula(k)
             if sonuc == "tamam":
@@ -724,6 +730,8 @@ class AyarlarSekmesi(QWidget):
             return self._sonuc(self.seviye_kaydet(), self.l_seviye)
         if k == "kisayol":
             return self._sonuc(self._kisayol_kaydet(), self.l_kisayol)
+        if k == "tema":
+            return self._sonuc(self._tema_kaydet(), self.l_dil)
         if k == "dil":
             kod = self.c_dil.currentData()
             sonuc = self.dil_sec(kod)
@@ -758,6 +766,8 @@ class AyarlarSekmesi(QWidget):
                 self.k_acik.setChecked(v[0])
                 self.k_tus.setKeySequence(QKeySequence(v[1]))
                 self._tus_yaz()
+            elif k == "tema":
+                self._sec(self.c_tema, v)
             elif k == "dil":
                 self._dil_secili()
         finally:
@@ -768,6 +778,7 @@ class AyarlarSekmesi(QWidget):
         self._yukleniyor += 1
         try:
             self._dil_secili()
+            self._sec(self.c_tema, A.tema_tercihi())
             self._sec(self.c_onay, A.onay_kapsami_oku())
             self._hesap_kutulari()
             if self.karar.var:
@@ -1260,6 +1271,25 @@ class AyarlarSekmesi(QWidget):
         else:
             self.l_kisayol.setText(_(T.Y_KISAYOL_BOS).format(tus=tus))
         return c
+
+    def _tema_kaydet(self) -> bool:
+        """Görünüm seçimi → panel.json "tema" + hemen uygula (gui.tema.tema_uygula)."""
+        kip = self.c_tema.currentData()
+        d = A.panel_oku()
+        d["tema"] = kip
+        try:
+            A.panel_yaz(d)
+        except OSError as e:
+            self.l_dil.hata(T.hata_ozeti(e), e)
+            return False
+        from PyQt6.QtWidgets import QApplication
+
+        from ..tema import tema_uygula
+        app = QApplication.instance()
+        if app is not None:
+            tema_uygula(app, kip)
+        self._kayitli["tema"] = kip
+        return True
 
     def _kisayol_kaydet(self, *_a) -> bool:
         d = A.panel_oku()

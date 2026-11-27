@@ -24,6 +24,8 @@ from deskhand.hata import Dur
 KOK = _yalitim.KOK
 GECICI = _yalitim.GECICI
 PENCERE = os.path.join(KOK, "tests", "yardimci", "kwin_test_pencere.py")
+sys.path.insert(0, os.path.dirname(PENCERE))
+import kwin_renk as KR  # noqa: E402  (test penceresi renkleri, UX-K)
 gecen = toplam = 0
 olcum = {}
 GONDERILEN = []
@@ -319,7 +321,7 @@ kontrol("pencere: kullanıcının DISPLAY'i değil oturumun XWayland ekranı", f
 
 def renk_kutulari():
     im = ko.goruntu(D)
-    return im, kutu_bul(im, (0, 255, 255)), kutu_bul(im, (255, 0, 255)), kutu_bul(im, (255, 255, 0))
+    return im, kutu_bul(im, KR.CERCEVE), kutu_bul(im, KR.DUGME), kutu_bul(im, KR.ALAN)
 
 
 def hepsi_gorundu():
@@ -350,7 +352,7 @@ def git(kutu):
 # tık
 git(DUGME)
 eis.satir("click left")
-kontrol("girdi: eflatun düğmeye sol tık → günlükte tık", bekle(lambda: "tik: Kaydet" in loglar(), 5), "\n".join(loglar()[-5:]))
+kontrol("girdi: mavi düğmeye sol tık → günlükte tık", bekle(lambda: "tik: Kaydet" in loglar(), 5), "\n".join(loglar()[-5:]))
 # metin kutusu: tık + ASCII
 git(KUTU)
 eis.satir("click left")
@@ -412,7 +414,7 @@ yeni = bekle(lambda: len([l for l in loglar()[n0:] if l.startswith("tus_")]) >= 
 tuslar = [l.split()[0] for l in loglar()[n0:] if l.startswith("tus_")]
 kontrol("girdi: keydown/keyup sırası (shift bas, a bas, a bırak, shift bırak)",
         tuslar == ["tus_bas", "tus_bas", "tus_birak", "tus_birak"], str([l for l in loglar()[n0:] if l.startswith("tus_")]))
-# fare düğmesi bas/bırak + tekerlek (sarı alan)
+# fare düğmesi bas/bırak + tekerlek (turuncu alan)
 git(TEKER)
 n0 = sakin()
 eis.gonder("buttondown left", "buttonup left")
@@ -579,8 +581,8 @@ kontrol("XWayland: pencere xcb platformunda, DISPLAY oturumun XWayland ekranı",
         and f"display='{D['xwayland']}'" in log_x(), log_x()[:200])
 pen = bekle(lambda: [p for p in ko.pencereler(D) if p[1] == "Deskhand XWayland Test"], 10)
 kontrol("XWayland: X11 penceresi kdotool pencere listesinde", bool(pen), str(ko.pencereler(D)))
-ob = bekle(lambda: kutu_bul(ko.goruntu(D), (255, 0, 255)) is not None, 5)
-kontrol("XWayland: X11 penceresi ekran görüntüsünde (eflatun düğme)", bool(ob))
+ob = bekle(lambda: kutu_bul(ko.goruntu(D), KR.DUGME) is not None, 5)
+kontrol("XWayland: X11 penceresi ekran görüntüsünde (mavi düğme)", bool(ob))
 try:
     from Xlib import display as xdisplay
     os.environ["XAUTHORITY"] = D["xauth"]

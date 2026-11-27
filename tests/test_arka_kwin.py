@@ -32,6 +32,8 @@ atexit.register(lambda: masaustu.durum_oku() is not None and masaustu.masaustu_d
 KOK = _yalitim.KOK
 GECICI = _yalitim.GECICI
 PENCERE = os.path.join(KOK, "tests", "yardimci", "kwin_test_pencere.py")
+sys.path.insert(0, os.path.dirname(PENCERE))
+import kwin_renk as KR  # noqa: E402  (test penceresi renkleri, UX-K)
 PANO_PENCERE = os.path.join(KOK, "tests", "yardimci", "pano_pencere.py")
 gecen = toplam = 0
 olcum = {}
@@ -417,7 +419,7 @@ kontrol("görüntü: RGB, oturum boyutu (ölçek 1)", im.mode == "RGB" and im.si
 def kutular():
     """Pencerenin renkli ögeleri ekranda (pencere taşınınca yeniden bulunur)."""
     return bekle(lambda: (lambda t_: t_ if all(t_[1:]) else None)((lambda im_: (
-        im_, kutu_bul(im_, (0, 255, 255)), kutu_bul(im_, (255, 0, 255)), kutu_bul(im_, (255, 255, 0))))(au.goruntu())),
+        im_, kutu_bul(im_, KR.CERCEVE), kutu_bul(im_, KR.DUGME), kutu_bul(im_, KR.ALAN)))(au.goruntu())),
         8, 0.1) or (au.goruntu(), None, None, None)
 
 
@@ -558,7 +560,7 @@ au.tasi(k2, 860, 40)
 bekle(lambda: au.geometri(k)[:2] == (20, 40) and au.geometri(k2)[:2] == (860, 40), 3)
 def iki_dugme():
     im_ = au.goruntu()
-    a_, b_ = kutu_bul(im_.crop((0, 0, 800, 900)), (255, 0, 255)), kutu_bul(im_.crop((800, 0, 1600, 900)), (255, 0, 255))
+    a_, b_ = kutu_bul(im_.crop((0, 0, 800, 900)), KR.DUGME), kutu_bul(im_.crop((800, 0, 1600, 900)), KR.DUGME)
     return (a_, (b_[0] + 800, b_[1], b_[2] + 800, b_[3])) if a_ and b_ else None
 
 

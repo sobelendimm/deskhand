@@ -141,7 +141,9 @@ for ad in ("bos", "ekran", "arka", "dur"):
     kontrol(f"tepsi simgesi rengi: {ad}", c.name() == D.RENK[ad], c.name())
 pm = durum_pixmap(D.Durum(ad="bos", bekleyen=1), 64)
 c = renk(pm, 58, 13)
-kontrol("onay bekliyor: sarı rozet", abs(c.red() - 0xfa) < 30 and abs(c.green() - 0xb0) < 40 and c.blue() < 60, c.name())
+r_ = QColor(D.RENK["rozet"])  # tokens.json durum.rozet (UX-K: sakin sarı)
+kontrol("onay bekliyor: sarı rozet", abs(c.red() - r_.red()) < 30 and abs(c.green() - r_.green()) < 40
+        and abs(c.blue() - r_.blue()) < 40 and c.red() > c.blue() and c.green() > c.blue(), c.name())
 pm = durum_pixmap(D.Durum(ad="dur"), 64)
 kontrol("DUR: ortada beyaz çarpı", renk(pm, 32, 32).name() == "#ffffff")
 t = Tepsi()

@@ -31,7 +31,7 @@ VARYANTLAR = [
     ("tr-acik-1.0", "tr", "acik", "1.0", "-", False),
     ("tr-koyu-1.0", "tr", "koyu", "1.0", "-", False),
     ("en-acik-1.25", "en", "acik", "1.25", "-", False),
-    ("tr-acik-1.0-dur", "tr", "acik", "1.0", "dur", True),
+    ("tr-koyu-1.0-dur", "tr", "koyu", "1.0", "dur", True),  # UX-K: varsayılan tema koyu
 ]
 DIYALOGLAR = ("odeme", "tus", "devir")
 TOKENS = os.path.join(KOK, "deskhand", "gui", "tema", "tokens.json")
@@ -144,11 +144,13 @@ def anahtar(i: dict) -> str:
 
 # =========================================================================== alt süreç kipleri
 def _app(tema: str):
-    """Fusion + panel teması (tokens.json; gui.tema.tema_uygula) — panelin kendi tema_uygula("sistem") çağrısı bu
-    paletin koyu/açık oluşuna göre aynı kipi seçer."""
+    """Fusion + panel teması (tokens.json; gui.tema.tema_uygula). Panel açılışta kayıtlı tercihi (panel.json "tema";
+    yoksa koyu) uygular: varyantın teması geçici yapılandırmaya tercih olarak yazılır (UX-K)."""
     from PyQt6.QtWidgets import QApplication
 
+    from deskhand.gui import ayar as A
     from deskhand.gui.tema import tema_uygula
+    A.panel_yaz({**A.panel_oku(), "tema": tema})
     app = QApplication([])
     app.setStyle("Fusion")
     tema_uygula(app, tema)
@@ -236,7 +238,7 @@ def _kip_diyalog(cikti, dil):
     import _yalitim  # noqa: F401
     os.environ["DESKHAND_DIL"] = dil
     os.makedirs(cikti, exist_ok=True)
-    app = _app("acik")
+    app = _app("koyu")  # UX-K: varsayılan tema
     from deskhand.gui.onay_diyalog import OnayDiyalog
     istekler = diyalog_istekleri()
     for ad in DIYALOGLAR:

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (QAbstractItemView, QFrame, QHBoxLayout,
 from ...i18n import N_, _
 from .. import metinler as T
 from ..dil import Metinler
-from ..onizleme import MaskeHatasi, Onizleme, OnizlemePenceresi, maskeli_goruntu, pil_qimage
+from ..onizleme import MaskeHatasi, Onizleme, OnizlemePenceresi, maskeli_goruntu, pil_qimage, zemin_siyah
 from ..ortak import (IZLEME_MS, MASA_LISTE_MS, Isci, _devral_temizle, _DEVRAL_ATEXIT, soluk_etiket)
 
 # Kontrol kullanıcıdayken kare aralığı (ölçülen kare maliyeti ≈16 ms; 100–150 ms hedef, UX-D O3) ve girdiden sonraki
@@ -443,7 +443,7 @@ class ArkaPlanSekmesi(QWidget):
             au = self.arka_f()
             if au is None:
                 raise LookupError("arka uç yok")
-            im = maskeli_goruntu(au, self._sinif_onb)
+            im = zemin_siyah(maskeli_goruntu(au, self._sinif_onb), au)
         except MaskeHatasi as e:  # denetlenemedi: kare HİÇ gösterilmez (güvenli taraf)
             _onizleme_hatasi(self, _(T.A_MASKE_HATA).format(hata=_(K_HATA_TEKRAR)), e)
             return

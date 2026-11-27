@@ -218,6 +218,8 @@ Y_HESAP_SORU = N_("{hesap} görünmez masaüstündeki tarayıcıda oturum açık
                   "Arka plandaki tarayıcı bu hesabın e-postalarına ve dosyalarına erişebilir; güvenilmeyen bir sayfa "
                   "ajanı kandırabilir. Yalnız gerektiğinde açın, işiniz bitince kapatın.\n\nAçılsın mı?")
 Y_DIL = N_("Dil")
+Y_TEMA = N_("Görünüm")
+Y_TEMA_SECENEK = {"koyu": N_("Koyu tema"), "acik": N_("Açık tema"), "sistem": N_("Sistem teması")}
 Y_DIL_OTOMATIK = N_("Otomatik (sistem dili: {dil})")
 Y_DIL_NOT = N_("Arayüzün dili. Panel ve tepsi menüsü hemen değişir; komut satırı ve ajanın (MCP) iletileri yeni "
                "başlatılan süreçlerde geçerli olur. Etkinlik günlüğü Türkçe kaydedilir.")

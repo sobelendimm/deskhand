@@ -16,7 +16,9 @@ _DUR_KAYNAK_PANEL = {"panel-kapali-basarisiz": N_("panel durdurdu: cüzdandaki D
 ONIZLEME_MS = 500  # ~2 fps (Devral açıkken: girdi geri bildirimi)
 IZLEME_MS = 1000  # yalnız izlerken 1 fps (her karede yasak pencere denetimi: pencere listesi okunur)
 MASA_LISTE_MS = 2000  # masaüstü listesi yenileme (yalnız sekme görünürken)
-YESIL, KIRMIZI, SARI = "#2f9e44", "#e03131", "#e8a317"
+from .durum import _D as _DURUM_RENK  # noqa: E402  (tokens.json; UX-K)
+
+YESIL, KIRMIZI, SARI = _DURUM_RENK["basari"], _DURUM_RENK["hata"], _DURUM_RENK["uyari"]
 
 
 class Isci(QThread):
@@ -65,6 +67,23 @@ def _devral_temizle(yol: str) -> None:
 
 
 _DEVRAL_ATEXIT: set[str] = set()
+
+
+def sakin_pixmap(pm: QPixmap) -> QPixmap:
+    """Simgenin HSL doygunluğunu tokens.json `doygunluk.s_min` × 0,8 ile sınırlar (ton ve açıklık korunur): sistem
+    simgeleri (uyarı üçgeni) ekranın tek doygun vurgusuyla (Highlight) yarışmaz (tasarım kapısı DOYGUNLUK)."""
+    from .tema.uret import yukle
+    tavan = yukle()["doygunluk"]["s_min"] * 0.8
+    im = pm.toImage()
+    for y in range(im.height()):
+        for x in range(im.width()):
+            c = im.pixelColor(x, y)
+            if c.alpha() and c.hslSaturationF() > tavan:
+                c.setHslF(c.hslHueF(), tavan, c.lightnessF(), c.alphaF())
+                im.setPixelColor(x, y, c)
+    cik = QPixmap.fromImage(im)
+    cik.setDevicePixelRatio(pm.devicePixelRatio())
+    return cik
 
 
 def nokta(renk: str, boyut: int = 12) -> QIcon:

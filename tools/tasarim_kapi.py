@@ -9,6 +9,9 @@ tasarım kurallarını denetler:
   QSS_RENK     QSS rengi token paleti dışında
   KONTRAST     metin/zemin kontrastı < kontrast_min (WCAG 2)
   ARALIK       düzen kenar/boşluk değeri aralık biriminin katı değil
+  DOYGUNLUK    aynı ekranda >1 yüksek doygun vurgu rengi (HSL S ≥ s_min, l_min ≤ L ≤ l_max; tokens.json `doygunluk`)
+  UYUM         koyu paletin vurgu/uyarı/başarı/tehlike + durum şeridi renkleri arası CIEDE2000 < renk_ayrim_min_de ya da
+               biri koyu zemine (Window) kontrastı < 3:1 (WCAG 1.4.11 grafik öğe)
 Eşikler token dosyasından okunur (esikler(): `min_tiklama_hedefi_px`, `kontrast_min`, aralık, yazı, palet); dosyada
 eşik yoksa token şemasının varsayılanı (gui/tema/uret.VARSAYILAN: 24 px — WCAG 2.5.8, 4,5:1 — WCAG 1.4.3).
 
@@ -39,7 +42,13 @@ TESTLER = os.path.join(KOK, "tests")
 TOKENS = os.path.join(KOK, "deskhand", "gui", "tema", "tokens.json")
 BILINEN = os.path.join(TESTLER, "tasarim_bilinen.json")
 PANO_KENAR = 1600
-KURALLAR = ("KESIK", "HEDEF_KUCUK", "YAZI_BOYUTU", "QSS_RENK", "KONTRAST", "ARALIK")
+KURALLAR = ("KESIK", "HEDEF_KUCUK", "YAZI_BOYUTU", "QSS_RENK", "KONTRAST", "ARALIK", "DOYGUNLUK", "UYUM")
+DOYGUN_MIN_PX = 40  # bir vurgu "görünür" sayılması için en az piksel (kenar yumuşatma kırıntısı sayılmaz)
+GRAFIK_KONTRAST_MIN = 3.0  # WCAG 1.4.11 (grafik öğe / durum rengi ↔ zemin)
+# UYUM kuralının denetlediği roller: (ad, kaynak) — koyu palet Highlight + durum şeridi/uyarı renkleri
+UYUM_ROLLER = (("vurgu", ("renk", "koyu", "palet", "Highlight")), ("uyari", ("durum", "uyari")),
+               ("basari", ("durum", "basari")), ("tehlike", ("durum", "hata")), ("dur", ("durum", "dur")),
+               ("bos", ("durum", "bos")), ("ekran", ("durum", "ekran")), ("arka", ("durum", "arka")))
 _HEX = re.compile(r"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b")
 _QSS_RENK = re.compile(r"#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|\b[a-zA-Z]+\b")
 _RENK_OZELLIK = ("color", "background", "border", "outline", "selection")
@@ -91,9 +100,13 @@ def esikler(ham: dict, temel_pt: float) -> dict:
     _renkleri_topla(ham, palet)
     from deskhand.gui.tema.uret import VARSAYILAN  # eksik eşik → token şemasının varsayılanı (WCAG 24 px / 4,5)
     hedef, kontrast = ham.get("min_tiklama_hedefi_px"), ham.get("kontrast_min")
+    de = ham.get("renk_ayrim_min_de")
+    doy = dict(VARSAYILAN["doygunluk"])
+    doy.update({k: float(v) for k, v in (ham.get("doygunluk") or {}).items() if k in doy and _sayi(v)})
     return {"hedef_min": int(hedef if _sayi(hedef) and hedef > 0 else VARSAYILAN["min_tiklama_hedefi_px"]),
             "kontrast_min": float(kontrast if _sayi(kontrast) and kontrast > 0 else VARSAYILAN["kontrast_min"]),
-            "aralik_birim": max(1, birim), "yazi_pt": yazi, "palet": palet}
+            "aralik_birim": max(1, birim), "yazi_pt": yazi, "palet": palet,
+            "renk_ayrim_min_de": de if _sayi(de) and de > 0 else VARSAYILAN["renk_ayrim_min_de"], "doygunluk": doy}
 
 
 # =========================================================================== denetim
@@ -310,6 +323,90 @@ def denetle(kokler: list, esik: dict, ekran: str = "") -> list[dict]:
     return cik
 
 
+def doygunluk_denetle(resim, esik: dict, ekran: str = "") -> list[dict]:
+    """Ekran görüntüsü (QImage) → yüksek doygun piksellerin ton grupları (10° kutu, ≥ DOYGUN_MIN_PX, bitişik kutular
+    tek grup). >1 grup = DOYGUNLUK ihlali (tek ihlal; değer: grupların ortalama tonu ve piksel sayısı)."""
+    import numpy as np
+    from PyQt6.QtGui import QImage
+    im = resim.convertToFormat(QImage.Format.Format_RGB32)
+    g, y = im.width(), im.height()
+    if g == 0 or y == 0:
+        return []
+    ham = np.frombuffer(im.constBits().asstring(im.sizeInBytes()), np.uint8).reshape(y, im.bytesPerLine())
+    a = ham[:, : g * 4].reshape(y, g, 4)[:, :, 2::-1].astype(np.float32) / 255  # BGRA → RGB
+    mx, mn = a.max(axis=2), a.min(axis=2)
+    L = (mx + mn) / 2
+    fark = mx - mn
+    S = np.where(fark > 0, fark / np.maximum(1e-6, 1 - np.abs(2 * L - 1)), 0)
+    d = esik["doygunluk"]
+    m = (d["s_min"] <= S) & (d["l_min"] <= L) & (d["l_max"] >= L)
+    if not m.any():
+        return []
+    p = a[m]
+    r, gg, b = p[:, 0], p[:, 1], p[:, 2]
+    f = np.maximum(1e-6, fark[m])
+    mxp = mx[m]
+    h = np.where(mxp == r, ((gg - b) / f) % 6, np.where(mxp == gg, (b - r) / f + 2, (r - gg) / f + 4)) * 60
+    sayi = np.bincount((h // 10).astype(int) % 36, minlength=36)
+    dolu = sayi >= DOYGUN_MIN_PX
+    if dolu.all():
+        gruplar = [(0, 36)]
+    else:
+        bas = int(np.argmin(dolu))  # boş bir kutudan başla: halka bitişikliği (350°–0°) tek grup
+        gruplar, i = [], 0
+        while i < 36:
+            k = (bas + i) % 36
+            if dolu[k]:
+                j = i
+                while j < 36 and dolu[(bas + j) % 36]:
+                    j += 1
+                gruplar.append((bas + i, j - i))
+                i = j
+            else:
+                i += 1
+    if len(gruplar) <= 1:
+        return []
+    ozet = ", ".join(f"{((s + n / 2) * 10) % 360:.0f}° ({sum(int(sayi[(s + t) % 36]) for t in range(n))} px)"
+                     for s, n in gruplar)
+    return [{"kural": "DOYGUNLUK", "ekran": ekran, "yol": "<ekran>", "sinif": "", "metin": "",
+             "deger": f"{len(gruplar)} doygun vurgu: {ozet}"}]
+
+
+def _token(ham: dict, yol: tuple):
+    d = ham
+    for k in yol:
+        d = d[k]
+    return d
+
+
+def uyum_denetle(ham: dict, esik: dict) -> list[dict]:
+    """Koyu palet: UYUM_ROLLER renkleri çift çift CIEDE2000 ≥ renk_ayrim_min_de (aynı renk = aynı rol, ör. dur ve
+    tehlike, tek sayılır) ve her biri koyu zemine (Window) kontrast ≥ 3:1."""
+    from PyQt6.QtGui import QColor
+
+    from deskhand.gui.tema.uret import birlestir, de2000, kontrast
+    t = birlestir(ham)
+    zemin = t["renk"]["koyu"]["palet"]["Window"]
+    renk = [(ad, _token(t, yol).lower()) for ad, yol in UYUM_ROLLER]
+    cik = []
+
+    def ekle(deger):
+        cik.append({"kural": "UYUM", "ekran": "palet-koyu", "yol": "<tokens>", "sinif": "", "metin": "",
+                    "deger": deger})
+    for ad, r in renk:
+        o = kontrast(QColor(r), QColor(zemin))
+        if o < GRAFIK_KONTRAST_MIN:
+            ekle(f"{ad} {r} / zemin {zemin} kontrast {o:.2f} < {GRAFIK_KONTRAST_MIN:g}")
+    for i, (a1, r1) in enumerate(renk):
+        for a2, r2 in renk[i + 1:]:
+            if r1 == r2:
+                continue
+            de = de2000(r1, r2)
+            if de < esik["renk_ayrim_min_de"]:
+                ekle(f"{a1} {r1} ~ {a2} {r2} ΔE2000 {de:.1f} < {esik['renk_ayrim_min_de']:g}")
+    return cik
+
+
 def anahtar(i: dict) -> str:
     """Koordinatsız, ekrandan bağımsız kimlik (sekme dışı şerit her sekmede bir kez sayılır)."""
     return f"{i['kural']}|{i['yol']}|{i['metin']}"
@@ -351,6 +448,8 @@ def calistir(ham: dict, kip: str, pano_dizin: str | None) -> tuple[list[dict], l
     # palet panel kurulmadan ÖNCE: soluk etiketler rengini kurulumda paletten alır; panelin tema_uygula("sistem")
     # çağrısı bu paletin koyu/açık oluşuna göre aynı kipi seçer, ardından denetlenen token'lar yeniden uygulanır
     app.setPalette(uret.palet_uret(birlesik, kip, app.style().standardPalette()))
+    from deskhand.gui import ayar as A
+    A.panel_yaz({**A.panel_oku(), "tema": kip})  # panel açılışta kayıtlı tercihi uygular (yoksa koyu; UX-K)
     panel = G._panel_kur(app)
     app.setPalette(uret.palet_uret(birlesik, kip, app.style().standardPalette()))
     app.setStyleSheet(uret.qss_uret(birlesik, kip))
@@ -361,14 +460,17 @@ def calistir(ham: dict, kip: str, pano_dizin: str | None) -> tuple[list[dict], l
     ihlal: list[dict] = []
     cekim: list[tuple[str, str]] = []
     n = w.sekmeler.count()
+    ihlal += uyum_denetle(ham, esik)
     for i in range(n):
         w.sekmeler.setCurrentIndex(i)
         _bekle(app, 0.02)
         ad = f"sekme{i}-{w.sekmeler.tabText(i).replace('&', '')}"
         ihlal += denetle([w], esik, ad)
+        resim = w.grab()
+        ihlal += doygunluk_denetle(resim.toImage(), esik, ad)
         if pano_dizin:
             yol = os.path.join(pano_dizin, f"{i:02d}.png")
-            w.grab().save(yol)
+            resim.save(yol)
             cekim.append((yol, ad))
     w.hide()
     from deskhand.gui.onay_diyalog import OnayDiyalog
@@ -379,9 +481,11 @@ def calistir(ham: dict, kip: str, pano_dizin: str | None) -> tuple[list[dict], l
         d.show()
         app.processEvents()
         ihlal += denetle([d], esik, f"diyalog-{ad}")
+        resim = d.grab()
+        ihlal += doygunluk_denetle(resim.toImage(), esik, f"diyalog-{ad}")
         if pano_dizin:
             yol = os.path.join(pano_dizin, f"{n + j:02d}.png")
-            d.grab().save(yol)
+            resim.save(yol)
             cekim.append((yol, f"diyalog-{ad}"))
         d.hide()
         d.deleteLater()

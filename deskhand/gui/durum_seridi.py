@@ -3,7 +3,6 @@ from __future__ import annotations
 
 
 from PyQt6.QtCore import (Qt, pyqtSignal)
-from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (QFrame, QHBoxLayout,
                              QLabel, QPushButton, QVBoxLayout)
 
@@ -52,9 +51,9 @@ class DurumSeridi(QFrame):
         self.b_dur.setObjectName("dur")
         self.mt(self.b_dur.setToolTip, T.DUR_IPUCU)
         self.b_dur.setMinimumSize(120, 40)
-        self.b_dur.setStyleSheet(f"QPushButton#dur {{ background: {RENK['dur']}; color: white; font-weight: 700;"
+        self.b_dur.setStyleSheet(f"QPushButton#dur {{ background: {RENK['dur']}; color: {RENK['dur_metin']}; font-weight: 700;"
                                  f" border: none; border-radius: 6px; padding: 6px 18px; }}"
-                                 f" QPushButton#dur:hover {{ background: {QColor(RENK['dur']).lighter(112).name()}; }}")
+                                 f" QPushButton#dur:hover {{ background: {RENK['dur_uzerinde']}; }}")
         self.b_dur.clicked.connect(self.dur_istendi.emit)
         self.b_devam = QPushButton()
         self.mt(self.b_devam.setText, T.DEVAM_DUGME)
