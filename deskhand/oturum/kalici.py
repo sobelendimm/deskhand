@@ -108,69 +108,50 @@ class AnahtarYok(Exception):
 
 
 class GizliServis:
-    """The key in the user's Secret Service (org.freedesktop.secrets: KDE Wallet / GNOME Keyring) via secretstorage
-    (jeepney; the secret travels DH-encrypted on the bus). Never unlocks (no prompt from the background)."""
+    """The key as the item "kalici-oturum" of the selected key store (anahtar_deposu.secili_depo: the Deskhand kasa,
+    sealed with systemd-creds, or the Secret Service through secretstorage). Never unlocks a wallet (no prompt from the
+    background). The name is kept for callers of earlier releases."""
 
-    ETIKET = "Deskhand session store"
-    OZNITELIK = {"application": "deskhand", "purpose": "kalici-oturum"}
+    AD = "kalici-oturum"
 
     def anahtar(self, olustur: bool) -> bytes:
+        from ..anahtar_deposu import DepoHatasi, secili_depo
         if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali":  # tests (tests/_yalitim.py): never the real wallet
             raise AnahtarYok(_("anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)"))
+        depo = secili_depo()
         try:
-            import secretstorage
-            from secretstorage.exceptions import SecretStorageException
-        except ImportError:
-            raise AnahtarYok(_("python-secretstorage kurulu değil")) from None
-        try:
-            baglanti = secretstorage.dbus_init()
-        except Exception:  # noqa: BLE001 - no session bus
-            raise AnahtarYok(_("Secret Service'e bağlanılamadı (oturum veri yolu yok)")) from None
-        try:
-            try:
-                koleksiyon = secretstorage.Collection(baglanti)  # the default collection; never created here
-            except SecretStorageException:
-                raise AnahtarYok(_("Secret Service yok ya da varsayılan cüzdan yok (KDE Cüzdanı)")) from None
-            if koleksiyon.is_locked():
-                raise AnahtarYok(_("cüzdan kilitli"))
-            k = self._bul(koleksiyon)
+            k = self._bul(depo)
             if k is not None:
                 return k
             if not olustur:
                 raise AnahtarYok(_("anahtar yok (henüz kayıt yapılmadı)"), yok=True)
-            return self._olustur(koleksiyon)
-        except AnahtarYok:
-            raise
-        except Exception:  # noqa: BLE001 - D-Bus / service errors: closed-fail (the message may carry no secret)
-            raise AnahtarYok(_("anahtar okunamadı (Secret Service hatası)")) from None
-        finally:
-            baglanti.close()
+            return self._olustur(depo)
+        except DepoHatasi as e:
+            raise AnahtarYok(e.neden) from None
 
-    def _bul(self, koleksiyon) -> bytes | None:
-        for oge in koleksiyon.search_items(self.OZNITELIK):
-            if oge.is_locked():
-                raise AnahtarYok(_("cüzdan kilitli"))
-            s = bytes(oge.get_secret())
-            if len(s) == 32:
-                return s
-        return None
+    def _bul(self, depo) -> bytes | None:
+        s = depo.oku(self.AD)
+        if s is None:
+            return None
+        if len(s) != 32:
+            raise AnahtarYok(_("anahtar okunamadı (bozuk anahtar)"))
+        return bytes(s)
 
-    def _olustur(self, koleksiyon) -> bytes:
+    def _olustur(self, depo) -> bytes:
         """Create the key once: an exclusive lock (RUNTIME_DIR) so two closing copies do not create two keys; read back
-        what the service holds."""
+        what the store holds."""
         import fcntl
         kilit = os.path.join(yollar.runtime_dir(), "kalici-anahtar.kilit")
         os.makedirs(os.path.dirname(kilit), mode=0o700, exist_ok=True)
         fd = os.open(kilit, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX)
-            k = self._bul(koleksiyon)
+            k = self._bul(depo)
             if k is None:
-                koleksiyon.create_item(self.ETIKET, self.OZNITELIK, os.urandom(32), replace=True,
-                                       content_type="application/octet-stream")
-                k = self._bul(koleksiyon)
+                depo.yaz(self.AD, os.urandom(32))
+                k = self._bul(depo)
             if k is None:
-                raise AnahtarYok(_("anahtar okunamadı (Secret Service hatası)"))
+                raise AnahtarYok(_("anahtar okunamadı (anahtar deposu hatası)"))
             return k
         finally:
             os.close(fd)

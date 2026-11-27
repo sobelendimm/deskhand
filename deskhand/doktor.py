@@ -244,9 +244,31 @@ def satir_kalici_oturum():
             parcalar.append(_("{site}: kayıt yok").format(site=s))
     metin = "; ".join(parcalar)
     if neden:
+        from .anahtar_deposu import secili_tur
+        oneri = (_("KDE Cüzdanı'nı açın (kilidi açık olmalı)") if secili_tur() == "cuzdan"
+                 else _("deskhand secret list ile kasayı denetleyin; gerekirse Ayarlar'dan anahtar deposunu seçin"))
         return _satir(ad, "uyari", _("{neden}: kalıcı oturum bu açılışta kullanılmadı").format(neden=neden) +
-                      f" ({metin})" + ek, _("KDE Cüzdanı'nı açın (kilidi açık olmalı)"))
+                      f" ({metin})" + ek, oneri)
     return _satir(ad, "uyari" if ek else "tamam", metin + ek)
+
+
+def satir_anahtar_deposu():
+    """The selected key store (anahtar_deposu): kasa → systemd-creds present + TPM2 or host key (no D-Bus call);
+    cuzdan → the Secret Service answers and the wallet is unlocked. Never reads a value."""
+    from . import anahtar_deposu as ad_
+    ad = _("Anahtar deposu")
+    try:
+        d = ad_.secili_depo().durum()
+    except Exception as e:  # noqa: BLE001 - information only
+        return _satir(ad, "uyari", str(e))
+    tur = _(ad_.TUR_ADLARI.get(d.get("tur"), d.get("tur") or "?"))
+    if d.get("tur") == "kasa":
+        tur += " · " + (_("TPM2 + makine anahtarı") if d.get("tpm") else _("makine anahtarı (TPM2 yok)"))
+    if d.get("hazir"):
+        return _satir(ad, "tamam", tur)
+    oneri = _("KDE Cüzdanı'nı açın ya da Ayarlar'dan Deskhand kasasını seçin") if d.get("tur") == "cuzdan" \
+        else _("Ayarlar'dan KDE Cüzdanı'nı seçin")
+    return _satir(ad, "uyari", f"{tur}: {d.get('neden')}", oneri)
 
 
 def satir_girdi_merkezi():
@@ -483,7 +505,7 @@ def satir_dinleme():
                   _("pipewire, wireplumber, pipewire-pulse ve libpulse araçlarını kur"))
 
 
-SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_mcp_surecleri, satir_onay_kapsami, satir_hesap_oturumlari, satir_kalici_oturum, satir_girdi_merkezi, satir_yardimcilar,
+SATIRLAR = (satir_surum, satir_gercek_ekran, satir_oturum, satir_kwin, satir_panel, satir_mcp_surecleri, satir_onay_kapsami, satir_hesap_oturumlari, satir_anahtar_deposu, satir_kalici_oturum, satir_girdi_merkezi, satir_yardimcilar,
             satir_erisim, satir_tarayici_erisim, satir_arka_plan, satir_calisma_dizini, satir_oturum_kopyalari, satir_arka_tur, satir_gpu_ocr, satir_dinleme)
 
 

@@ -157,77 +157,64 @@ def _test_kumu() -> bool:
     return tmp_altinda(yollar.config_dir()) and tmp_altinda(yollar.state_dir())
 
 
+class _PanelKasasi:
+    """ONE item "panel-isaret" in the selected key store (anahtar_deposu.secili_depo: the Deskhand kasa or the
+    Secret Service): the mark key, a counter per setting and the panel's last approved value. The store is looked up on
+    every call, so a switch in Settings (depo_degistir) takes effect at once. `son_tur`: the store that answered last."""
+    AD = "panel-isaret"
+    son_tur: str | None = None
+
+    @staticmethod
+    def _kapali() -> bool:
+        return os.environ.get("DESKHAND_ANAHTARLIK") == "kapali"
+
+    def oku(self):
+        from .anahtar_deposu import DepoHatasi, secili_depo
+        from .oturum.kalici import AnahtarYok
+        if self._kapali() and _test_kumu():
+            self.son_tur = None
+            return None  # test sandbox (tests/_yalitim): "no item" (a first start), never the real wallet / TPM
+        depo = secili_depo()
+        self.son_tur = depo.tur
+        try:
+            return depo.oku(self.AD)
+        except DepoHatasi as e:
+            raise AnahtarYok(e.neden) from None
+
+    def servis_yok_kesin(self) -> bool:
+        """True ONLY when the selected store is definitely absent (cuzdan: no python-secretstorage, or the session bus
+        answers that org.freedesktop.secrets is neither running nor activatable; kasa: no systemd-creds). A locked
+        wallet, a seal that does not open, no session bus, D-Bus errors and DESKHAND_ANAHTARLIK=kapali outside the
+        test sandbox are NOT "absent" (closed-fail)."""
+        if self._kapali():
+            return False
+        from .anahtar_deposu import secili_depo
+        return bool(secili_depo().servis_yok_kesin())
+
+    def yaz(self, veri: bytes) -> None:
+        from .anahtar_deposu import DepoHatasi, secili_depo
+        from .oturum.kalici import AnahtarYok
+        if self._kapali():
+            raise AnahtarYok(_("anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)"))
+        try:
+            secili_depo().yaz(self.AD, veri)
+        except DepoHatasi as e:
+            raise AnahtarYok(e.neden) from None
+
+
 def _kasa_nesnesi():
     global _KASA
     if _KASA is None:
-        from .oturum.kalici import AnahtarYok, GizliServis
-
-        class _PanelKasasi(GizliServis):
-            """ONE Secret Service item: the mark key, a counter per setting and the panel's last approved value."""
-            ETIKET = "Deskhand panel settings"
-            OZNITELIK = {"application": "deskhand", "purpose": "panel-isaret"}
-            _baglanti = None  # the reused D-Bus connection of servis_yok_kesin
-
-            def _bul(self, koleksiyon):
-                for oge in koleksiyon.search_items(self.OZNITELIK):
-                    if oge.is_locked():
-                        raise AnahtarYok(_("cüzdan kilitli"))
-                    s = bytes(oge.get_secret())
-                    if s:
-                        return s
-                return None
-
-            def oku(self):
-                if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali" and _test_kumu():
-                    return None  # test sandbox (tests/_yalitim): "no item" (a first start), never the real wallet
-                try:
-                    return self.anahtar(False)
-                except AnahtarYok as e:
-                    if e.yok:
-                        return None
-                    raise
-
-            def servis_yok_kesin(self) -> bool:
-                """True ONLY when there is definitely no Secret Service: python-secretstorage is not installed, or
-                the session bus answers that org.freedesktop.secrets is neither running nor activatable. A locked
-                wallet, no session bus, D-Bus errors and DESKHAND_ANAHTARLIK=kapali outside the test sandbox are
-                NOT "absent" (closed-fail)."""
-                if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali":
-                    return False
-                try:
-                    import secretstorage
-                except ImportError:
-                    return True
-                if self._baglanti is None:  # ONE session-bus connection for every poll (review INC6 D5)
-                    try:
-                        self._baglanti = secretstorage.dbus_init()
-                    except Exception:  # noqa: BLE001 - no session bus: unknown, not absent
-                        return False
-                try:
-                    return not secretstorage.check_service_availability(self._baglanti)
-                except Exception:  # noqa: BLE001 - unknown; a broken connection is opened again next time
-                    b, self._baglanti = self._baglanti, None
-                    try:
-                        b.close()
-                    except Exception:  # noqa: BLE001
-                        pass
-                    return False
-
-            def yaz(self, veri: bytes) -> None:
-                if os.environ.get("DESKHAND_ANAHTARLIK") == "kapali":
-                    raise AnahtarYok(_("anahtarlık kapalı (DESKHAND_ANAHTARLIK=kapali)"))
-                import secretstorage
-                baglanti = secretstorage.dbus_init()
-                try:
-                    koleksiyon = secretstorage.Collection(baglanti)
-                    if koleksiyon.is_locked():
-                        raise AnahtarYok(_("cüzdan kilitli"))
-                    koleksiyon.create_item(self.ETIKET, self.OZNITELIK, veri, replace=True,
-                                           content_type="application/json")
-                finally:
-                    baglanti.close()
         _KASA = _PanelKasasi()
     return _KASA
+
+
+def _varsayilan_dosyalar() -> bool:
+    """Both list files are absent or hold only the defaults (yasak: the shipped default list; seviye: no rule)."""
+    from .guvenlik import VARSAYILAN_YASAK
+    yasak, seviye = _oku(dosya("yasak")), _oku(dosya("seviye"))
+    return (yasak is None or yasak.strip() in (_(VARSAYILAN_YASAK).strip(), VARSAYILAN_YASAK.strip())) and \
+        (seviye is None or not seviye.strip())
 
 
 def isaret_anahtarlik_ayarla(nesne) -> None:
@@ -326,9 +313,16 @@ def isaret_gecmisi() -> bool:
 
 
 def ilk_kurulum() -> bool:
-    """A first start ONLY when the key ring definitely answered "no item" AND no mark exists."""
+    """A first start ONLY when the key ring definitely answered "no item" AND no mark exists. The Deskhand kasa
+    (files a file-writing process can delete, unlike a wallet item) additionally needs both list files to be absent or
+    the defaults: deleting the kasa item and the marks while a list file holds anything else is closed-fail (the panel
+    asks once), never a silent first start (anahtar_deposu: threat model)."""
     _durum(False)
-    return _DURUM_YOK_KESIN and not isaret_gecmisi()
+    if not (_DURUM_YOK_KESIN and not isaret_gecmisi()):
+        return False
+    if getattr(_kasa_nesnesi(), "son_tur", None) == "kasa":
+        return _varsayilan_dosyalar()
+    return True
 
 
 def kasa_nedeni() -> str | None:
@@ -416,6 +410,10 @@ def panel_dur_ayrinti() -> tuple[bool | None, str | None]:
     if _SERVIS_YOK_KESIN:
         return None, DUR_NEDEN_SERVIS_YOK if isaret_gecmisi() else DUR_NEDEN_SERVIS_YOK_ILK
     if _DURUM_YOK_KESIN:
+        if getattr(_kasa_nesnesi(), "son_tur", None) in ("kasa", "cuzdan") and isaret_gecmisi():
+            # the selected store has no item but the panel signed here before: the kasa file was deleted or the store
+            # setting was edited by hand (anahtar_deposu). Not a first start: the user's DUR stays closed-fail.
+            return None, DUR_NEDEN_OKUNAMADI
         return False, None
     return None, DUR_NEDEN_OKUNAMADI
 

@@ -349,6 +349,103 @@ def k_panel(a):
     raise SystemExit(panel_main(a.arg))
 
 
+def sir_degeri(ad: str) -> str:
+    """The user's named secret from the selected key store (anahtar_deposu). Never printed, never logged."""
+    from .anahtar_deposu import DepoHatasi, kullanici_adi_mi, secili_depo
+    if not kullanici_adi_mi(ad):
+        raise Dur(1, _("geçersiz gizli bilgi adı: {ad}").format(ad=ad if isinstance(ad, str) else "?"))
+    try:
+        v = secili_depo().oku(ad)
+    except DepoHatasi as e:
+        raise Dur(10, _("gizli bilgi okunamadı ({ad}): {neden}").format(ad=ad, neden=e.neden)) from None
+    if v is None:
+        raise Dur(1, _("kayıtlı gizli bilgi yok: {ad} (deskhand secret set {ad})").format(ad=ad))
+    try:
+        return v.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Dur(1, _("gizli bilgi metin değil: {ad}").format(ad=ad)) from None
+
+
+def k_yaz_sir(a):
+    """`type`: with --secret-ref AD the value comes from the key store (never argv, never the log, never the result) and
+    goes ONLY into a field the accessibility tree reports as a password field (so a stored password cannot be typed
+    into a chat box, a terminal or a page field an agent controls); the usual password-field approval applies.
+    MCP type_text(secret_ref=…) uses the same function. a.sir_ek: text appended to the value (submit's Enter)."""
+    ad = getattr(a, "sir_ref", None)
+    if ad is None:
+        if getattr(a, "metin", None) is None:
+            raise Dur(1, _("yazılacak metin ya da --secret-ref gerekli"))
+        return k_yaz(a)
+    if getattr(a, "metin", None) is not None:
+        raise Dur(1, _("metin ile --secret-ref birlikte verilmez"))
+    from . import eylem
+    if eylem._parola_alani_mi(a.kimlik) is not True:
+        raise Dur(10, _("--secret-ref yalnız parola alanına yazılır: odaklı alan parola alanı değil ya da alan türü "
+                        "belirlenemedi (erişilebilirlik: deskhand a11y on)"))
+    a.metin, a.gizli = sir_degeri(ad) + (getattr(a, "sir_ek", "") or ""), True
+    try:
+        return k_yaz(a)
+    finally:
+        a.metin = None
+
+
+def k_sir(argv: list[str]) -> int:
+    """`deskhand secret set|list|rm|status`: the user's named secrets in the key store (anahtar_deposu). `set` reads
+    the value from stdin (a terminal: hidden input, asked twice); it is never an argument and never printed."""
+    import getpass
+    import json
+    from . import anahtar_deposu as ad_
+    p = argparse.ArgumentParser(prog=f"{prog_adi()} secret", allow_abbrev=False,
+                                description=_("Anahtar deposundaki adlandırılmış gizli bilgiler (değer yalnız stdin'den)."))
+    alt = p.add_subparsers(dest="islem", required=True)
+    s = alt.add_parser("set", help=_("değeri stdin'den (uçbirimde gizli giriş) kaydet")); s.add_argument("ad")
+    alt.add_parser("list", help=_("kayıtlı adlar (değer gösterilmez)"))
+    s = alt.add_parser("rm", help=_("sil")); s.add_argument("ad")
+    s = alt.add_parser("status", help=_("seçili depo ve durumu")); s.add_argument("--json", action="store_true")
+    a = p.parse_args(argv)
+    depo = ad_.secili_depo()
+    try:
+        if a.islem == "status":
+            d = depo.durum()
+            print(json.dumps(d, ensure_ascii=False) if a.json else
+                  f"{_(ad_.TUR_ADLARI.get(d['tur'], d['tur']))}: " + (_("hazır") if d["hazir"] else str(d["neden"])))
+            return 0 if d["hazir"] else 10
+        if a.islem == "list":
+            for ad in depo.listele():
+                print(ad)
+            return 0
+        if not ad_.kullanici_adi_mi(a.ad):
+            print(_("geçersiz ya da ayrılmış ad: {ad}").format(ad=a.ad), file=sys.stderr)
+            return 1
+        if a.islem == "rm":
+            if depo.sil(a.ad):
+                print(_("silindi: {ad}").format(ad=a.ad))
+                return 0
+            print(_("kayıtlı değil: {ad}").format(ad=a.ad), file=sys.stderr)
+            return 1
+        if sys.stdin.isatty():
+            v1 = getpass.getpass(_("Değer: "))
+            if getpass.getpass(_("Yeniden: ")) != v1:
+                print(_("değerler aynı değil; kaydedilmedi"), file=sys.stderr)
+                return 1
+            veri = v1.encode("utf-8")
+        else:
+            veri = sys.stdin.buffer.read(64 * 1024 + 2)
+            if veri.endswith(b"\n"):
+                veri = veri[:-1]
+            if veri.endswith(b"\r"):
+                veri = veri[:-1]
+        if not veri:
+            print(_("boş değer kaydedilmez"), file=sys.stderr)
+            return 1
+        depo.yaz(a.ad, veri)
+        print(_("kaydedildi: {ad} ({depo})").format(ad=a.ad, depo=_(ad_.TUR_ADLARI.get(depo.tur, depo.tur))))
+        return 0
+    except ad_.DepoHatasi as e:
+        print(_("anahtar deposu: {neden}").format(neden=e.neden), file=sys.stderr)
+        return 10
+
+
 def k_oturum(a):
     """Arka plan oturum aktarımı: durum | hazirla <uygulama> | politika | sil."""
     from .oturum.cli import main as oturum_main
@@ -506,7 +603,11 @@ def ayristirici(prog=None, sessiz=False):
     s.add_argument("islem", type=cevirici(PENCERE), choices=secimler(PENCERE, ["tasi", "boyut", "kucult", "buyut", "geri"]),
                    metavar="{move,resize,minimize,maximize,restore}")
     s.add_argument("deger", nargs="*", metavar="PX", help=h_("move: X Y (ekran pikseli); resize: GENİŞLİK YÜKSEKLİK"))
-    s = komut("yaz", k_yaz, parents=[ortak]); s.add_argument("kimlik"); s.add_argument("metin", type=kacis_coz)
+    s = komut("yaz", k_yaz_sir, parents=[ortak]); s.add_argument("kimlik")
+    s.add_argument("metin", type=kacis_coz, nargs="?", default=None)
+    s.add_argument("--secret-ref", dest="sir_ref", metavar="AD", default=None,
+                   help=h_("metin yerine anahtar deposundaki AD gizli bilgisini yaz (yalnız parola alanına; değer "
+                           "komut satırında ve günlükte görünmez)"))
     secenek(s, "--gizli", action="store_true", help=h_("günlüğe metni yazma"))
     secenek(s, "--onayli", action="store_true",
             help=h_("ödeme sayfasında Enter/Tab/boşluk içeren yazı: kullanıcı AÇIKÇA onayladı"))
@@ -730,6 +831,8 @@ def main(argv=None):
     ilk = ic_ad(argv[0]) if argv else ""
     if ilk in gecis:
         gecis[ilk](argparse.Namespace(arg=argv[1:]))
+    if argv[0] in ("secret", "sir"):  # key store commands (anahtar_deposu): no back end, own parser
+        sys.exit(k_sir(argv[1:]))
     a = ayristirici().parse_args(argv)
     if getattr(a, "masa", None) is not None:  # komuttan sonra verilen --desktop-name (arka uç seçilmeden ÖNCE)
         from . import masalar

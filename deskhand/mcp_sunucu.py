@@ -2026,7 +2026,7 @@ def click(
 def type_text(
     text: Annotated[str, Field(max_length=20000, description="Text to type (Turkish letters OK; \\n = Enter, \\t = Tab; "
                                                              "emoji and long text are pasted via the clipboard, "
-                                                             "which is restored; never with secret=true)")],
+                                                             "which is restored; never with secret=true)")] = "",
     window: Annotated[str | None, Field(description="Target window (title pattern or id); optional with ref")] = None,
     ref: Annotated[str | None, Field(description="Field ref from observe: it is clicked first (focus), then "
                                                  "typed into")] = None,
@@ -2040,6 +2040,11 @@ def type_text(
     secret: Annotated[bool, Field(description="Keep the text out of the log and the result; typed key by key, "
                                                   "never via the clipboard")] = False,
     verify: Annotated[bool, Field(description="Measure the effect (after, effect)")] = True,
+    secret_ref: Annotated[str | None, Field(max_length=64, description="Instead of text: the name of a secret the "
+                                                                       "user saved in Deskhand (Settings or `deskhand "
+                                                                       "secret set NAME`). Its value is typed only "
+                                                                       "into a password field, never returned or "
+                                                                       "logged; implies secret=true")] = None,
     desktop: Masaustu = "auto",
 ) -> dict[str, Any]:
     """Type text into a window: into the focused field, or into the field given by ref (clicked first). element= sets
@@ -2062,6 +2067,12 @@ def type_text(
         raise ToolError("[1] " + _("role/nth yalnız element hedefiyle kullanılır"))
     if not window and not ref:
         raise ToolError("[1] " + _("window ya da ref gerekli"))
+    if secret_ref is not None:  # the value never enters this function: cli.k_yaz_sir reads it from the key store
+        if text:
+            raise ToolError("[1] " + _("text ile secret_ref birlikte verilmez"))
+        if element:
+            raise ToolError("[1] " + _("secret_ref element ile kullanılamaz (parola alanına klavyeyle yazılır)"))
+        secret = True
     # secret: bu iş parçacığındaki ret iletileri pencere başlığı taşımaz (önizleme gizli harfi gösterebilir; EK-1)
     with baglam(desktop, _("yazı: {pencere}").format(pencere=window or ref)) as bilgi, guvenlik.baslik_gizle(secret):
         hata.dur_denetle()
@@ -2091,7 +2102,13 @@ def type_text(
                 time.sleep(0.05)
             if clear_first:
                 parcalar.append(api.tus(k, "ctrl+a", desen))
-            parcalar.append(api.yaz(k, metin_, desen, secret, onayli))
+            if secret_ref is not None:
+                from .cli import k_yaz_sir
+                parcalar.append(api.calistir(k_yaz_sir, api.ns(kimlik=k, metin=None, sir_ref=secret_ref,
+                                                               sir_ek="\n" if submit else "", gizli=True,
+                                                               baslik=desen, onayli=onayli)))
+            else:
+                parcalar.append(api.yaz(k, metin_, desen, secret, onayli))
             return "\n".join(p for p in parcalar if p)
         # ödeme sayfasında Enter/Tab/boşluklu yazı kullanıcı onayı ister (sunucu sorar)
         mesaj, onaylandi = onayla_ve_yap("type_text", k, yap)
