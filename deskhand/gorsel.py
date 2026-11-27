@@ -26,18 +26,21 @@ def bolge_coz(s):
     return v
 
 
-def pencere_goruntusu(k, bolge=None, kararli=False, tam=False):
+def pencere_goruntusu(k, bolge=None, kararli=False, tam=False, son_tarih=None):
     """→ (görüntü, pencere geometrisi, bölge kökü). Görüntü pikseli + kök = pencere koordinatı.
     tam=True: ekranın FİZİKSEL çözünürlüğü (ölçek 2 masaüstünde iki kat piksel; küçültülmez): görüntü pikseli =
     (pencere koordinatı − kök) × piksel_olcegi(im). tam=False (varsayılan): mantıksal piksel (eski davranış).
     kararli=True: içerik DURANA dek bekle (en çok 1,5 sn): tarayıcının yumuşak kaydırması sürerken okunan konuma
     tıklamak, sayfa kaymaya devam ettiği için bir üst satırdaki alanı tıklıyordu (gerçek ekran testi: yazı
-    'Not alanı' yerine 'E-posta' kutusuna gitti). Tıklama/hassas denetim yolları bunu kullanır."""
+    'Not alanı' yerine 'E-posta' kutusuna gitti). Tıklama/hassas denetim yolları bunu kullanır.
+    son_tarih (time.monotonic): kararlılık beklemesi bundan öteye gitmez (korumali_goruntu'nun toplam süre sınırı)."""
     im, geo, kok = _pencere_goruntusu(k, bolge, tam)
     if not kararli:
         return im, geo, kok
     from .ocr import ayni_konum
     bitis = time.monotonic() + 1.5
+    if son_tarih is not None:
+        bitis = min(bitis, son_tarih)
     while time.monotonic() < bitis:
         time.sleep(0.1)
         im2, geo2, kok2 = _pencere_goruntusu(k, bolge, tam)
@@ -52,10 +55,33 @@ def korumali_goruntu(k, bolge=None, kararli=False, tam=False):
     """CLI okuma komutları için pencere_goruntusu: yasak pencere listesine uyar (api.goruntu_al) — hedef yasaksa
     Dur(10) (hiçbir şey okunmaz/kaydedilmez), görüntüye düşen diğer yasak pencereler siyah kutuyla örtülür.
     0.9.0 öncesi `foto`, `metin`, `bekle`, `simge-bul`, `simge-kaydet`, `renk-bul` yasak pencereyi okuyabiliyordu
-    (MCP yolu zaten api.goruntu_al kullanıyordu). → (görüntü, geo, kök)."""
+    (MCP yolu zaten api.goruntu_al kullanıyordu). → (görüntü, geo, kök).
+    Görüntüsü ya da OCR metni ajana giden HER yol bundan geçer (akış, metne/renge tıklama, noktadaki yazı, bekle;
+    tests/test_guv_sinif_maske.py ham kareyi gerekçeli izin listesinde tutar).
+    Maske yarışı / okunamayan liste (Dur tur maske-yarisi | maske-okunamadi): kısa beklemeyle en çok MASKE_DENEME
+    kare denenir, uzun akış/bekle tek yarışta düşmesin; hâlâ öyleyse aynı tur'lu Dur (kare gönderilmez).
+    Gerçek toplam süre sınırı: yeniden deneme yalnız MASKE_SURE son tarihinden önce başlar ve kararlılık beklemesi o
+    son tarihte biter (son_tarih) → toplam en çok ≈ MASKE_SURE + bir kare/liste okuması (kararli=True dahil)."""
     from . import api
-    im, geo, kok, _maskeler = api.goruntu_al(k, bolge, tam=tam, kararli=kararli)
-    return im, geo, kok
+    bitis = time.monotonic() + MASKE_SURE
+    for deneme in range(MASKE_DENEME):
+        try:
+            kw = {"son_tarih": bitis} if deneme else {}  # ilk kare: kendi 1,5 sn sınırı (< MASKE_SURE)
+            im, geo, kok, _maskeler = api.goruntu_al(k, bolge, tam=tam, kararli=kararli, **kw)
+            return im, geo, kok
+        except Dur as e:
+            bekle = MASKE_BEKLE * (deneme + 1)
+            if getattr(e, "tur", None) not in MASKE_YARISI or deneme + 1 >= MASKE_DENEME or \
+                    time.monotonic() + bekle >= bitis:
+                raise
+            time.sleep(bekle)
+    raise AssertionError("ulaşılamaz")  # döngü ya döner ya fırlatır
+
+
+MASKE_YARISI = ("maske-yarisi", "maske-okunamadi")  # api.goruntu_al: kare gönderilmedi, yeniden denenebilir
+MASKE_DENEME = 3      # korumali_goruntu: en çok bu kadar kare
+MASKE_BEKLE = 0.05    # n. yeniden denemeden önce n × bu kadar sn
+MASKE_SURE = 2.0      # toplam son tarih: yeniden deneme bundan sonra başlamaz, kararlılık beklemesi burada biter
 
 
 def piksel_olcegi(im) -> float:

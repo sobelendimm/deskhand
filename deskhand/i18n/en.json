@@ -1659,5 +1659,8 @@
  "özel veri yolu süreci bu oturumun yapılandırmasıyla çalışmıyor; bağlanılmadı": "the private bus process is not running with this session's configuration; not connected",
  "İpucu: tarayıcı erişilebilirlik açıkken başlamamış olabilir; kapatıp arka planda yeniden aç (ac --arka / open_app desktop=background: erişilebilirlik kendiliğinden açılır) ya da Firefox'u GNOME_ACCESSIBILITY=1, Chromium'u --force-renderer-accessibility ile başlat": "Hint: the browser may have started before accessibility was on; close it and reopen it in the background (ac --background / open_app desktop=background: accessibility is turned on automatically) or start Firefox with GNOME_ACCESSIBILITY=1 and Chromium with --force-renderer-accessibility",
  "kare alınırken yasak bir pencere kapandı: görüntü gönderilmedi (güvenli taraf); tekrar dene": "a forbidden window closed while the frame was taken: no image was sent (safe side); try again",
+ "ekrandan okunan satır (ayrıntı yalnız onay panelinde)": "the line read from the screen (details only in the approval panel)",
+ "Uçbirimde komut çalıştır (Enter)": "Run a command in the terminal (Enter)",
+ "kare alınırken yasak bir pencere değişti (artık yasak sayılmıyor): görüntü gönderilmedi (güvenli taraf); tekrar dene": "a forbidden window changed while the frame was taken (no longer counts as forbidden): no image was sent (safe side); try again",
  "yasak pencere listesi okunamadı: görüntü gönderilmedi (güvenli taraf; tekrar dene): {neden}": "the forbidden-window list could not be read: no image was sent (safe side; try again): {neden}"
 }

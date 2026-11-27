@@ -156,15 +156,23 @@ def test_kwin_cerceve():
     kutular = onizleme.yasak_kutulari(au, (200, 100), {})
     kontrol("3 önizleme (KWin): maske başlık çubuğunu da kapsar (çerçeve geometrisi)",
             kutular and min(k[1] for k in kutular) <= 10, str(kutular))
-    eski_arka, eski_yasak = api.arka, api.yasak_mi
+    # the AGENT path itself (api.goruntu_al, and gorsel.korumali_goruntu on top of it): only the raw grab is faked
+    from deskhand import gorsel
+    from deskhand.arka_uc import EKRAN
+    eski = api.arka, api.yasak_mi, gorsel.pencere_goruntusu
     api.arka = lambda: au
     api.yasak_mi = lambda k: "test" if k == ARKA_ONEK + uuid else None
+    gorsel.pencere_goruntusu = lambda k_, bolge=None, kararli=False, tam=False: (au.goruntu(), (0, 0, 200, 100), (0, 0))
     try:
-        m = api._yasak_dikdortgenler("ekran", (0, 0), (200, 100))
+        _im, _geo, _kok, m = api.goruntu_al(EKRAN)
+        im, _geo, _kok = gorsel.korumali_goruntu(EKRAN)
     finally:
-        api.arka, api.yasak_mi = eski_arka, eski_yasak
+        api.arka, api.yasak_mi, gorsel.pencere_goruntusu = eski
     kontrol("3 api.goruntu_al (KWin): ajanın görüntüsünde de maske çerçeveden",
             m and m[0]["box"][1] <= 10 and m[0]["box"][3] >= 50, str(m))
+    baslik_cubugu = [im.getpixel((x, y)) for x in range(22, 78, 5) for y in range(11, 40, 4)]
+    kontrol("3 gorsel.korumali_goruntu (KWin): başlık çubuğu pikselleri de karartılmış (ajana giden kare)",
+            all(p == (0, 0, 0) for p in baslik_cubugu), str(set(baslik_cubugu)))
 
 
 # ------------------------------------------------------------------ cookie fakes

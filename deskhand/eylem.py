@@ -14,7 +14,7 @@ import unicodedata
 
 from . import yollar
 from .arka_uc import EKRAN, ArkaUc, sec
-from .gorsel import bolge_coz, pencere_goruntusu, renk_alanlari, simge_bul_ic
+from .gorsel import bolge_coz, korumali_goruntu, renk_alanlari, simge_bul_ic
 from .gunluk import gunluk
 from . import dogrulama_sinamasi, guvenlik, ucbirim
 from .guvenlik import (denetle, hassas_engel, hassas_sayfa_engel, hedef_pencere_denetle,
@@ -548,7 +548,7 @@ def kaydirarak_ara(g, a, bolge, geo, ilk_im):
         sürebiliyor; animasyon ortasındaki kare 'sayfa sonu' ya da yanlış kayma sanılıyordu (gerçek ekran testi)."""
         kaydir_ic(g, k, a.baslik, yon, tik, nokta)
         time.sleep(KAYDIR_BEKLE)
-        return pencere_goruntusu(k, bolge, kararli=True)
+        return korumali_goruntu(k, bolge, kararli=True)  # OCR'ı ajana yazdırılır: yasak pencere maskeli
 
     onceki = ilk_im
     cur, geo, kok = kaydir_al("asagi")
@@ -597,7 +597,7 @@ def kaydirarak_ara(g, a, bolge, geo, ilk_im):
             # 2) görünmüyor: geri kaydır; aynı konuma dönüldüyse eski koordinatlar, değilse kaymayı ölçüp doğrula
             kaydir_ic(g, k, a.baslik, "yukari", tik, nokta)
             time.sleep(KAYDIR_BEKLE)
-            geri, geo3, kok3 = pencere_goruntusu(k, bolge)
+            geri, geo3, kok3 = korumali_goruntu(k, bolge)
             if geo3 == geo and ayni_konum(cur, geri):
                 return ms, geo, adim
             d = kayma(geri, cur) if geo3 == geo else None
@@ -1335,7 +1335,7 @@ def k_renge_tikla(a):
         _au().one_getir(a.kimlik)
         sistem_istemi_on(g, a.kimlik, a.onayli)  # polkit/KWallet: aramadan önce onay (koordinatlı tık gibi)
         denetle(a.kimlik, a.baslik)
-        im, geo, kok = pencere_goruntusu(a.kimlik, bolge_coz(a.bolge))
+        im, geo, kok = korumali_goruntu(a.kimlik, bolge_coz(a.bolge))  # koordinatlar ajana yazdırılır
         alanlar = renk_alanlari(im, a.renk, a.en_az)
         if not alanlar:
             raise Dur(6, _("'{renk}' renkli alan yok (en az {en_az} piksel)").format(renk=a.renk, en_az=a.en_az))
@@ -1388,6 +1388,8 @@ def k_metne_tikla(a):
         hassas_nokta(g, a.kimlik, a.onayli, _("tıklama"), m["cx"] + dx, m["cy"] + dy, yakin,
                      ek_metinler=[a.metin, m["satir"], *([] if a.kay else [m["t"]])])
         if a.kimlik == EKRAN:  # pencere kilidi yok: ekran bu arada değişmiş olabilir → taze görüntüde DOĞRULA
+            # ham kare: yalnız bool (dogrula); tıklama yasak pencereye imlec_alti_denetle ile gitmez (SINIF-MASKE izinli)
+            from .gorsel import pencere_goruntusu
             im2, _geo2, kok2 = pencere_goruntusu(EKRAN, (round(m["cx"]) - 260, round(m["cy"]) - 40, 520, 80))
             if not dogrula(im2, kok2, a.metin, m["cx"], m["cy"]):
                 raise Dur(6, _("'{metin}' artık ({x},{y}) noktasında değil (ekran değişti); tıklanmadı").format(
