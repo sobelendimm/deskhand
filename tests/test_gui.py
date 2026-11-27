@@ -314,7 +314,10 @@ kontrol("tek örnek: yeniden dinleme", sunucu.listen(soket_adi()))
 gunluk_ekle("09:00:02 yaz 2 karakter | arka :91 [Belge] | type 'çş'")
 p.izleyici.yenile()
 m = w.etkinlik.model
-kontrol("yeni günlük satırı akışa eklendi", m.rowCount() == 3 and m.satirlar[-1]["pencere"] == "Belge")
+# the panel's own start-up warning may sit in between (keyring off in tests → "UYARI: Panelin imzalı kaydı…")
+uyari_ = sum(s["ham"].split(" ", 1)[-1].startswith("UYARI:") for s in m.satirlar)
+kontrol("yeni günlük satırı akışa eklendi", uyari_ <= 1 and m.rowCount() == 3 + uyari_ and
+        m.satirlar[-1]["pencere"] == "Belge", str([s["ham"] for s in m.satirlar]))
 idx = m.index(1, 0)
 bg = m.data(idx, Qt.ItemDataRole.BackgroundRole)
 kontrol("DUR satırı vurgulu (kırmızı zemin)", isinstance(bg, QColor) and bg.red() > 200 and bg.green() < 100)
