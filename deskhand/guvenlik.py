@@ -1869,6 +1869,48 @@ def hassas_mi(*metinler):
     return None
 
 
+DUZENLEME_PAYI = 2  # px: OCR satır kutusu ↔ erişilebilirlik kutusu karşılaştırmasında yuvarlama payı
+
+
+def _kapsar(dis, ic, pay=DUZENLEME_PAYI) -> bool:
+    """dis (x, y, w, h) kutusu ic (x, y, w, h) kutusunu (pay ile) tamamen içeriyor mu?"""
+    return (dis[0] - pay <= ic[0] and dis[1] - pay <= ic[1] and ic[0] + ic[2] <= dis[0] + dis[2] + pay
+            and ic[1] + ic[3] <= dis[1] + dis[3] + pay)
+
+
+def _kesisir(a, b) -> bool:
+    """İki (x, y, w, h) kutusu pozitif alanla kesişiyor mu?"""
+    return min(a[0] + a[2], b[0] + b[2]) > max(a[0], b[0]) and min(a[1] + a[3], b[1] + b[3]) > max(a[1], b[1])
+
+
+def duzenleme_icerigini_ayikla(yakin, alanlar, digerleri=(), dugmeler=()):
+    """Hassas düğme bağlamı: tıklanan noktanın OCR komşu satırlarından (ocr.NoktaYazisi, kutu = x, y, x2, y2 pencere
+    pikseli) bir DÜZENLENEBİLİR ALANIN İÇERİĞİ olduğu KANITLANANLARI ayıkla (textarea'daki "Buy/Pay buttons…" yazısı
+    düğme değildir). Kutular (x, y, w, h) pencere pikseli, erişilebilirlik ağacından:
+      alanlar   — düzenlenebilir alanlar (entry/text, editable, salt okunur değil);
+      dugmeler  — etkileşimli ögeler (düğme, bağlantı, menü ögesi…; düzenlenebilir alanlar hariç);
+      digerleri — etkileşimsiz ögeler (metin, başlık, bölüm…).
+    Kanıt: satır kutusu bir alanın içinde VE satıra hiçbir düğme değmiyor (alana bindirilmiş ya da alanı örten "Pay"
+    düğmesi → satır kalır) VE alanı kapsamayan hiçbir etkileşimsiz öge satıra değmiyor (alanı kapsayan kaplar: belge,
+    form, bölüm sayılmaz). Kutusuz yazı (düz str: hedefin kendi adı, ajanın aradığı metin, eski çağıranlar) HİÇBİR ZAMAN
+    ayıklanmaz. → (kalan, ayıklanan)."""
+    kalan, ayiklanan = [], []
+    for t in yakin:
+        k = getattr(t, "kutu", None)
+        satir = (k[0], k[1], k[2] - k[0], k[3] - k[1]) if k and len(k) == 4 else None
+        icerik = False
+        if satir is not None and satir[2] > 0 and satir[3] > 0 and not any(_kesisir(d, satir) for d in dugmeler):
+            for a in alanlar:
+                if not _kapsar(a, satir):
+                    continue
+                if any(not _kapsar(o, a) and _kesisir(o, satir) for o in digerleri):
+                    continue  # alanın içinde/üstünde başka bir öge satıra değiyor: içerik olduğu kanıtlanamadı
+                icerik = True
+                break
+        (ayiklanan if icerik else kalan).append(t)
+    return kalan, ayiklanan
+
+
 # Menüden yapıştırma (Yapıştır / Paste / Einfügen … ya da "Ctrl+V" kısayol ipucu): kısayolla yapıştırma ile aynı kural.
 _YAPISTIR_METIN = re.compile(r"^\W{0,2}(?:yapistir|paste|einfugen|coller|pegar|incolla|plakken|wklej|vlozit|"
                              r"beillesztes|klistra in|lim inn|indsaet|liita)\b|\b(?:ctrl|strg)[\s+]*(?:shift[\s+]*)?v\b|"

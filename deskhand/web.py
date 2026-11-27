@@ -639,6 +639,50 @@ def sayfa_bilgisi(k) -> dict:
     return oku(k, roller=["__yok__"], en_cok=0, ayrinti=False)["sayfa"]
 
 
+# Hassas düğme bağlamı (duzenleme_alanlari): etkileşimli ögelere ek olarak kutusu istenen metin/kap rolleri — bir
+# düzenleme alanının içine/üstüne bindirilmiş etkileşimsiz ögeyi (sayaç, "Pay" yazılı div) görmek için
+_DUZENLEME_EK_ROLLER = frozenset({"label", "static", "heading", "paragraph", "image", "text", "section", "list item",
+                                  "table cell", "article", "form", "group", "panel", "block quote"})
+
+
+def duzenleme_alanlari(k):
+    """Hassas düğme denetimi (eylem.hassas_nokta → guvenlik.duzenleme_icerigini_ayikla) için tarayıcı sayfasının ögeleri,
+    PENCERE pikseli kutularıyla: (alanlar, digerleri, dugmeler). alanlar = düzenlenebilir giriş alanları (rol entry —
+    textarea dahil —, durum editable, read_only değil, görünür; kutu görüş alanına kırpılır); dugmeler = öbür etkileşimli
+    ögeler; digerleri = metin/kap ögeleri. Öge konumu doğrulanamadıysa ya da okunan sayfa bu pencereye ait
+    kanıtlanamadıysa None (çağıran hiçbir satırı ayıklamaz: güvenli taraf)."""
+    try:
+        au, yol, bus, cerceve, koord, koken, konum = _baglam(k)
+    except Dur:
+        return None
+    try:
+        if konum is None:  # koordinatlar doğrulanamadı: tık yolundaki gibi fail-closed
+            return None
+        ham, belgeler, _sayi = _yuru(yol, bus, cerceve, koord, koken, set(ETKILESIMLI) | _DUZENLEME_EK_ROLLER, True)
+        ust = min(belgeler, key=lambda b: b["derinlik"]) if belgeler else None
+        if ust is None:
+            return None
+        _belge_pencereye_ait(ust, au.baslik(k))
+    except Dur:
+        return None
+    finally:
+        yol.kapat()
+    alanlar, digerleri, dugmeler = [], [], []
+    for o in ham:
+        kutu, d = o["_kutu"], o["_d"]
+        if not kutu:
+            continue
+        kutu = tuple(kutu)
+        if o["rol"] == "entry" and "editable" in d and "read_only" not in d:
+            if "showing" in d and "visible" in d:
+                gorus = _kesisim(o["_alan"], kutu) if o["_alan"] else kutu
+                if gorus[2] > 0 and gorus[3] > 0:
+                    alanlar.append(tuple(gorus))
+            continue  # görünmeyen düzenleme alanı hiçbir listeye girmez (OCR satırı ondan gelemez)
+        (dugmeler if o["rol"] in ETKILESIMLI else digerleri).append(kutu)
+    return alanlar, digerleri, dugmeler
+
+
 def oge_ve_sayfa(k, ad, rol=None, sira=None, gorunur=True, yol_ver=False):
     """oge_bul ile aynı seçim; ek olarak sayfa bilgisi ve okuma bilgisi. → (öge, sayfa, süre, eşleşme sırası 0…)."""
     s = oku(k, sorgu=ad, roller=[rol] if rol else None, gorunur=gorunur, en_cok=0, ad_siniri=0, yol_ver=yol_ver)

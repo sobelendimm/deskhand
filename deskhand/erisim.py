@@ -1280,6 +1280,35 @@ def erisim_ogeleri(k, en_cok=4000, sure=8.0, cocuk_siniri=400, kimlik_ver=False,
             time.sleep(0.4)
 
 
+DUZENLEME_SURE = 3.0  # sn: hassas düğme bağlamı için ağaç taramasının üst sınırı (yalnız noktadaki yazı hassassa)
+
+
+def duzenleme_alanlari(k):
+    """Hassas düğme bağlamı (eylem.hassas_nokta → guvenlik.duzenleme_icerigini_ayikla): penceredeki düzenlenebilir
+    alanlar, öbür etkileşimli ögeler ve etkileşimsiz ögeler, PENCERE pikseli kutularıyla → (alanlar, digerleri,
+    dugmeler). Tarayıcıda sayfa ağacı (web.duzenleme_alanlari), değilse uygulamanın ağacı: alan = rol entry/text ve
+    durumda salt okunur YOK (_ayrinti: EDITABLE durumu olmayan entry/text salt okunur sayılır). Masaüstü kipi, ağaç
+    okunamadı, pencere ağaçta yok… → None (çağıran hiçbir satırı ayıklamaz: eski davranış, güvenli taraf)."""
+    if not k or k == EKRAN:
+        return None
+    try:
+        from .dogrulama_sinamasi import tarayici_mi
+        if tarayici_mi(k):
+            from . import web
+            return web.duzenleme_alanlari(k)
+        ogeler, _sure = erisim_ogeleri(k, sure=DUZENLEME_SURE, ayrinti=True)
+    except Exception:  # noqa: BLE001 - okunamadı: ayıklama yok
+        return None
+    alanlar, digerleri, dugmeler = [], [], []
+    for o in ogeler:
+        kutu = (o["x"], o["y"], o["w"], o["h"])
+        if o["rol"] in ("entry", "text") and "durumlar" in o and "readonly" not in o["durumlar"]:
+            alanlar.append(kutu)
+        else:
+            (dugmeler if o["rol"] in ETKILESIMLI else digerleri).append(kutu)
+    return alanlar, digerleri, dugmeler
+
+
 def _oge_istegi(k, o, islem, **ek):
     return _pencere_istegi(k, islem, yol=o["yol"], rol=o["rol"], ad=o["ad"], cerceve_kimlik=o.get("cerceve"), **ek)
 
