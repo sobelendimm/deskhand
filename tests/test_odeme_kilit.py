@@ -9,17 +9,15 @@
 4. Sayfadan çıkış: geri (alt+left) ve pencereyi kapatma ödeme sayfası kapısına takılmaz.
 
 Çalıştır:  python3 tests/test_odeme_kilit.py"""
-import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; deskhand'den ÖNCE)
+import _yalitim  # DESKHAND_* geçici klasörler; deskhand'den ÖNCE
 
 import argparse
 import contextlib
 import io
-import os
 
 from PIL import Image
 
 from deskhand import api, arka_uc, dogrulama_sinamasi, erisim, eylem, gezin, guvenlik, hata, onay, web
-from deskhand.arka_uc import EKRAN
 from deskhand.hata import Dur
 
 GECEN = TOPLAM = 0
@@ -101,14 +99,10 @@ ISTEKLER = []
 onay._panel_kaydi = lambda *a, **k: None  # gerçek panel kaydı HİÇ okunmaz (panel-yok)
 
 
-@contextlib.contextmanager
 def gercek_calisma_dizini():
-    """iste_sonuc'un 'kullanıcının gerçek paneli' dalı (DESKHAND_RUNTIME_DIR yok); panel kaydı sahte (None)."""
-    rt = os.environ.pop("DESKHAND_RUNTIME_DIR")
-    try:
-        yield
-    finally:
-        os.environ["DESKHAND_RUNTIME_DIR"] = rt
+    """iste_sonuc'un 'kullanıcının gerçek paneli' dalı (DESKHAND_RUNTIME_DIR yok); panel kaydı sahte (None). Çalışma
+    dizini sahte bir XDG_RUNTIME_DIR altında: kullanıcının canlı onay/devir isteği (Dur 7) teste sızmaz (28 Kas)."""
+    return _yalitim.gercek_calisma_dizini()
 
 
 # ================================================================ 1. iste_sonuc: kilit yalnız kullanıcının ekranına
