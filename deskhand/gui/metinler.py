@@ -147,6 +147,35 @@ Y_CEVAPSIZ_SECENEK = {"sonra": N_("Sonraya bırak"), "arka": N_("Arka planda yap
 Y_TAM_EKRAN = N_("Tam ekranda da sor")
 Y_TAM_EKRAN_NOT = N_("Kapalıysa film/oyun sırasında bildirim gösterilmez, 'Yanıt yoksa' seçeneği uygulanır.")
 Y_YASAK = N_("Yasak pencereler")
+Y_YASAK_LISTE_NOT = N_("Bu uygulamaların pencerelerine Deskhand hiçbir girdi göndermez ve bu uygulamaları başlatmaz.")
+Y_SEVIYE_LISTE_NOT = N_("Deskhand'in bir uygulamada ne yapabileceğini sınırlar. Yalnız göster: bakar, tıklamaz ve "
+                        "yazmaz. Yalnız fare: tıklar ama yazmaz. Tam: kısıt yok. Listede olmayan uygulamalar "
+                        "kısıtsızdır.")
+Y_SEVIYE_AD = {"goruntule": N_("Yalnız göster"), "tikla": N_("Yalnız fare"), "tam": N_("Tam")}
+Y_UYGULAMA = N_("Uygulama")
+Y_SEVIYE_SUTUN = N_("Seviye")
+Y_UYGULAMA_EKLE = N_("Uygulama ekle…")
+Y_KALDIR = N_("Kaldır")
+Y_METIN_KIPI = N_("Metin olarak düzenle (ileri düzey)")
+Y_PENCERE_SEC_BASLIK = N_("Uygulama ekle")
+Y_PENCERE_SEC = N_("Açık pencerelerden bir uygulama seçin:")
+Y_PENCERE_YOK = N_("Eklenebilecek açık pencere yok. Uygulamayı açıp yeniden deneyin.")
+Y_PENCERE_HATA = N_("Açık pencereler okunamadı ({hata}). Biraz sonra yeniden deneyin.")
+Y_TEMEL = N_("Temel")
+Y_GELISMIS = N_("Gelişmiş")
+Y_UYGULA = N_("Uygula")
+Y_SIFIRLA = N_("Sıfırla")
+Y_DEGISIKLIK_VAR = N_("Kaydedilmemiş değişiklikler var")
+Y_KAYDEDILDI_TIK = N_("Kaydedildi ✓")
+Y_UYGULA_HATA = N_("⚠ {bolum} kaydedilemedi: {hata}. Kayıtlı değer geri yüklendi; yeniden deneyin.")
+Y_UYGULA_GECERSIZ = N_("⚠ {bolum}: düzeltip yeniden Uygula'ya basın.")
+Y_UYGULA_RED = N_("{bolum}: izin vermediniz; bu değişiklik uygulanmadı.")
+Y_CIKIS_BASLIK = N_("Kaydedilmemiş değişiklikler")
+Y_CIKIS_SORU = N_("Ayarlar'da uygulanmamış değişiklikler var. Uygulansın mı?")
+Y_CIKIS_AT = N_("Değişiklikleri at")
+Y_IPTAL = N_("İptal")
+Y_IZINLER = N_("İzinler")
+Y_IZINLER_YAKINDA = N_("Uygulama başına ayrıntılı izinler yakında burada olacak.")
 Y_YASAK_ACIKLAMA = N_("Bu desenlere (regex, büyük/küçük harf duyarsız) uyan pencere başlığı ya da sınıfına hiçbir "
                       "girdi gönderilmez ve bu uygulamalar başlatılmaz. # ile başlayan satırlar açıklamadır.")
 Y_SEVIYE = N_("Uygulama erişim seviyeleri")
@@ -196,7 +225,9 @@ Y_DIL = N_("Dil")
 Y_DIL_OTOMATIK = N_("Otomatik (sistem dili: {dil})")
 Y_DIL_NOT = N_("Arayüzün dili. Panel ve tepsi menüsü hemen değişir; komut satırı ve ajanın (MCP) iletileri yeni "
                "başlatılan süreçlerde geçerli olur. Etkinlik günlüğü Türkçe kaydedilir.")
-Y_DIL_ZORLA = N_("DESKHAND_DIL ortam değişkeni bu süreçte dili zorluyor ({dil}); seçim kaydedildi, sonraki "
+Y_DIL_NOT_UYGULA = N_("Arayüzün dili. Uygula'ya basınca panel ve tepsi menüsü hemen değişir; komut satırı ve ajanın "
+                      "(MCP) iletileri yeni başlatılan süreçlerde geçerli olur.")
+Y_DIL_ZORLA =N_("DESKHAND_DIL ortam değişkeni bu süreçte dili zorluyor ({dil}); seçim kaydedildi, sonraki "
                  "açılışta geçerli olur.")
 Y_DIL_HATA = N_("Dil kaydedilemedi: {hata}")
 Y_KISAYOL = N_("Genel kısayol")
