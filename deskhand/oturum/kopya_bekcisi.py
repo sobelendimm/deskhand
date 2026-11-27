@@ -30,6 +30,8 @@ ESKI_PAY = 300.0         # sahip kaydı OLMAYAN (eski sürüm) kopya bu kadar sn
 BEKCI_ARALIK = 2.0       # sahip öldükten sonra kopyayı kullanan süreç kaldıysa yoklama aralığı
 BEKCI_AZAMI = 7 * 86400  # bekçi en çok bu kadar yaşar (sonra süpürme yapar)
 SON_PAY = 5.0            # sahip bittikten sonra silmeden önce: masaüstü kapanıyorsa oturum.kapanis önce davransın
+KORU_DOSYA = ".deskhand-koru.json"  # koruma işareti (bellek bekçisi): varken bekçi/süpürme kopyayı SİLMEZ
+KORU_AZAMI = 86400.0     # işaret en çok bu kadar sn geçerli (sonra süpürülebilir; masaüstü kapanışı yine siler)
 
 
 def surec_durumu(pid: int) -> tuple[str, str] | None:
@@ -86,6 +88,44 @@ def sahip_yaz(yol: str, kayit: dict) -> None:
             os.unlink(gecici)
         except OSError:
             pass
+
+
+def koru_isaretle(yol: str, neden: str) -> None:
+    """Kopyayı silinmeye karşı işaretle (ör. bellek bekçisinin bekleyen ya da başarısız Firefox yeniden başlatması: oturum
+    yedeği kopyanın içinde). İşaret KORU_AZAMI sn geçerlidir; sonra kopya yine süpürülebilir (tmpfs dolmasın)."""
+    gecici = os.path.join(yol, f"{KORU_DOSYA}.{os.getpid()}.tmp")
+    try:
+        fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"neden": str(neden), "zaman": time.time(), "pid": os.getpid()}, f)
+        os.replace(gecici, os.path.join(yol, KORU_DOSYA))
+    except OSError:
+        try:
+            os.unlink(gecici)
+        except OSError:
+            pass
+
+
+def koru_kaldir(yol: str) -> None:
+    try:
+        os.unlink(os.path.join(yol, KORU_DOSYA))
+    except OSError:
+        pass
+
+
+def korunuyor(yol: str) -> bool:
+    """Kopyada geçerli (KORU_AZAMI sn'den yeni) koruma işareti var mı? Okunamayan işaret dosyanın yaşıyla değerlendirilir."""
+    isaret = os.path.join(yol, KORU_DOSYA)
+    try:
+        st = os.lstat(isaret)
+    except OSError:
+        return False
+    try:
+        with open(isaret, encoding="utf-8") as f:
+            zaman = float(json.load(f).get("zaman"))
+    except (OSError, ValueError, TypeError, AttributeError):
+        zaman = st.st_mtime
+    return time.time() - zaman < KORU_AZAMI
 
 
 def kullanilanlar(yollar) -> set[str]:
@@ -145,6 +185,8 @@ def silinebilir_yol(yol: str, kok: str) -> bool:
         return False
     if not KOPYA_DESENI.fullmatch(os.path.basename(yol)):
         return False
+    if korunuyor(yol):
+        return False  # bekleyen/başarısız Firefox yeniden başlatması: oturum yedeği burada
     return os.path.dirname(os.path.realpath(yol)) == os.path.realpath(kok)
 
 
