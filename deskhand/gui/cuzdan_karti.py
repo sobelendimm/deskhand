@@ -10,11 +10,15 @@ Ayarlar'daki soruyu sorar):
      gri (çift tık tek çağrı); parola alanı iş başlarken temizlenir; hata iletisi yalnız sade cümle (T.hata_ozeti),
      parola ASLA metinde/ipucunda/günlükte yok. Başarı → "Kuruldu · sonraki girişte denenecek", kart birkaç saniye sonra
      gizlenir.
-  2. "Cüzdanı Deskhand için kullanma" (A3 B2): seçili depo kasa / bilinmiyor → yalnız oto_giris.kart_kapat(). Seçili
-     depo KDE Cüzdanı ve cüzdan AÇIK → Ayarlar'daki depo sorusunun aynısı (S_DEPO, Evet/Hayır; Hayır → hiçbir şey
-     değişmez), Evet → depo_degistir("kasa") (taşıma) + kart_kapat(). Cüzdan kilitli ya da durumu bilinmiyor → taşıma
-     DENENMEZ: kart bu çalışmada kapanır (işaret yazılmaz) ve tek satır "önce cüzdanı açın: Ayarlar › Gizli bilgiler"
-     der; Ayarlar'daki onayın yerine geçmez, onu atlatmaz.
+  2. "Cüzdanı Deskhand için kullanma" (A3 B2): seçili depo kasa → yalnız oto_giris.kart_kapat(). Seçili depo
+     bilinmiyor (seçim doğrulanamadı / anahtarlık kapalı; A3 D1) → hiçbir şey değişmez, işaret YAZILMAZ: kart bu
+     çalışmada kapanır ve tek satır "depoyu Ayarlar › Gizli bilgiler'den seçin" der. Seçili depo KDE Cüzdanı ve cüzdan
+     AÇIK → kilit durumu soru öncesi ve Evet'ten sonra yeniden okunur (busctl --auto-start=no, servis başlatmaz; A3 D3)
+     → Ayarlar'daki depo sorusunun aynısı (S_DEPO, Evet/Hayır; Hayır → hiçbir şey değişmez), Evet → depo_degistir
+     ("kasa") (taşıma) + kart_kapat(); taşıma oldu ama işaret yazılamadıysa ayrı ileti ve bitti("kasa") (Ayarlar
+     tazelenir; A3 D6). Cüzdan kilitli ya da durumu bilinmiyor → taşıma DENENMEZ: kart bu çalışmada kapanır (işaret
+     yazılmaz) ve tek satır "önce cüzdanı açın: Ayarlar › Gizli bilgiler" der; Ayarlar'daki onayın yerine geçmez, onu
+     atlatmaz.
   "Bir daha gösterme" → kart_kapat(); "×" → yalnız bu panel çalışmasında gizler (işaret yazmaz).
 Kart panel penceresinde (YERLESIK_YASAK: ajan tıklayamaz); düğmeleri arka plan / MCP / CLI'dan çağrılmaz
 (tests/test_cuzdan_yardim.py kaynak taraması)."""
@@ -25,7 +29,7 @@ import threading
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QToolButton, QVBoxLayout
 
-from .. import oto_giris
+from .. import cuzdan_ac, oto_giris
 from ..i18n import N_, _
 from . import metinler as T
 from .dil import Metinler
@@ -47,6 +51,9 @@ K_KAYDEDILEMEDI = N_("Kaydedilemedi.")
 K_KASA_HATA = N_("Kasaya geçilemedi.")
 K_ISARET_HATA = N_("Bu seçim kaydedilemedi; kart bir sonraki açılışta yeniden görünebilir.")
 K_KASA_KILITLI = N_("Parolaları kasaya taşımak için önce cüzdanı açın: Ayarlar › Gizli bilgiler.")
+K_DEPO_BILINMIYOR = N_("Parola deposu okunamadı; hiçbir şey değişmedi. Depoyu Ayarlar › Gizli bilgiler'den seçin.")
+K_TASINDI_ISARET_HATA = N_("Parolalar kasaya taşındı, ancak kart kapatılamadı; bir sonraki açılışta yeniden "
+                           "görünebilir.")
 VARYANTLAR = ("ilk", "yeniden")
 
 
@@ -78,6 +85,7 @@ class CuzdanGirisKarti(QFrame):
         self.mt = mt
         self.au = arka_uc if arka_uc is not None else ArkaUc()
         self._durum_f = durum_f
+        self.kilit_f = cuzdan_ac.kilitli   # tıklama anında kilit durumu (busctl --auto-start=no); testler değiştirir
         self.gizle_ms = self.GIZLE_MS
         self._durum: dict | None = None
         self._okundu = False
@@ -235,15 +243,29 @@ class CuzdanGirisKarti(QFrame):
         if self._is is not None:
             return
         d = self._durum or {}
-        if d.get("depo") != "cuzdan":
+        if d.get("depo") == "kasa":
             self._isaretle("kasa")
             return
-        if d.get("cuzdan_kilitli") is not False:
-            self._kilitli_kapat()   # kilitli / bilinmiyor: taşıma denenmez
+        if d.get("depo") != "cuzdan":
+            self._iletiyle_kapat(_(K_DEPO_BILINMIYOR))   # A3 D1: depo bilinmiyor → işaret yok, taşıma yok
+            return
+        if d.get("cuzdan_kilitli") is not False or self._kilit_oku() is not False:
+            self._kilitli_kapat()   # kilitli / bilinmiyor (panel açılışında ya da şimdi; A3 D3): taşıma denenmez
             return
         if not self.onay_sor(_(S_DEPO_BASLIK), _(S_DEPO).format(yeni=_(G_KASA), eski=_(G_CUZDAN))):
             return  # Hayır: hiçbir şey değişmez
+        if self._kilit_oku() is not False:
+            self._kilitli_kapat()   # soru açıkken kilitlendi / servis kapandı: secretstorage servisi başlatmasın
+            return
         self._is_baslat("kasa", self.au.depo_degistir, "kasa")
+
+    def _kilit_oku(self) -> bool | None:
+        """Kilit durumu şimdi (A3 D3): servis başlatmayan özellik okuması; hata → None (bilinmiyor)."""
+        try:
+            k = self.kilit_f()
+        except Exception:  # noqa: BLE001 - kapalı-başarısız
+            return None
+        return k if isinstance(k, bool) else None
 
     def onay_sor(self, baslik: str, metin: str) -> bool:
         """Evet/Hayır (varsayılan Hayır) — Ayarlar › Gizli bilgiler'deki soruyla aynı. Testler değiştirir."""
@@ -290,11 +312,15 @@ class CuzdanGirisKarti(QFrame):
     def _kilitli_kapat(self) -> None:
         """Depo KDE Cüzdanı ama cüzdan kilitli / durumu bilinmiyor: taşıma denenmez (Ayarlar'daki onayı atlatmaz). Kart
         bu çalışmada kapanır (işaret YAZILMAZ: taşıma olmadı), kısa süre tek satır yol gösterir."""
+        self._iletiyle_kapat(_(K_KASA_KILITLI))
+
+    def _iletiyle_kapat(self, metin: str, sinyal: str = "gizlendi") -> None:
+        """Seçenekler gizlenir, tek satır `metin` kısa süre kalır; süre dolunca kart gizlenir ve bitti(sinyal)."""
         self._kapatildi = True
         for w in self._icerik:
             w.setVisible(False)
-        self._ileti(_(K_KASA_KILITLI))
-        self._zaman_sinyal = "gizlendi"
+        self._ileti(metin)
+        self._zaman_sinyal = sinyal
         self._zaman.start(self.gizle_ms)
 
     def _is_sonu(self, ad: str, e) -> None:
@@ -313,19 +339,18 @@ class CuzdanGirisKarti(QFrame):
             self.bitti.emit("kuruldu")
             self._zaman.start(self.gizle_ms)
         else:
-            self._isaretle("kasa")
+            self._isaretle("kasa", tasindi=True)
 
-    def _isaretle(self, sinyal: str) -> None:
-        """Bir daha gösterme işareti; yazılamazsa kart tek satır sade iletiyle kısa süre kalır, sonra gizlenir."""
+    def _isaretle(self, sinyal: str, tasindi: bool = False) -> None:
+        """Bir daha gösterme işareti; yazılamazsa kart tek satır sade iletiyle kısa süre kalır, sonra gizlenir. Taşıma
+        olduysa (tasindi) ayrı ileti ve bitti("kasa"): Ayarlar › Gizli bilgiler yeni depoyu göstersin (A3 D6)."""
         try:
             oto_giris.kart_kapat()
         except Exception:  # noqa: BLE001 - panel çökmez; bir sonraki açılışta kart yeniden görünebilir
-            self._kapatildi = True
-            for w in self._icerik:
-                w.setVisible(False)
-            self._ileti(_(K_ISARET_HATA))
-            self._zaman_sinyal = "gizlendi"
-            self._zaman.start(self.gizle_ms)
+            if tasindi:
+                self._iletiyle_kapat(_(K_TASINDI_ISARET_HATA), "kasa")
+            else:
+                self._iletiyle_kapat(_(K_ISARET_HATA))
             return
         self._kapat(sinyal)
 

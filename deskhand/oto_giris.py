@@ -27,6 +27,7 @@ import stat
 
 KAPALI_ISARET = "cuzdan-karti-kapali"
 _AZAMI = 64 * 1024
+_AZAMI_MOUNTINFO = 1024 * 1024   # A3 D8: a container / flatpak-heavy machine's mountinfo can pass 64 KiB
 _BOLUM = "Autologin"
 _DM_BAG = "etc/systemd/system/display-manager.service"
 # (name, display-manager unit, files in the order the manager reads them; "*" = every *.conf of that directory, sorted)
@@ -43,7 +44,12 @@ def _kokte(kok: str, goreli: str) -> str:
 
 # ---------------------------------------------------------------- automatic login
 
-def _dosyalar(kok: str, desenler: tuple[str, ...]) -> list[str]:
+class _Bilinmiyor(Exception):
+    """The login manager's main configuration file exists but cannot be read: the result is unknown (A3 D2)."""
+
+
+def _dosyalar(kok: str, desenler: tuple[str, ...]) -> list[tuple[str, bool]]:
+    """→ [(path, is the main file)] in reading order."""
     yollar = []
     for d in desenler:
         if d.endswith("/*"):
@@ -52,24 +58,30 @@ def _dosyalar(kok: str, desenler: tuple[str, ...]) -> list[str]:
                 adlar = sorted(os.listdir(dizin))
             except OSError:
                 continue
-            yollar += [os.path.join(dizin, a) for a in adlar if a.endswith(".conf")]
+            yollar += [(os.path.join(dizin, a), False) for a in adlar if a.endswith(".conf")]
         else:
-            yollar.append(_kokte(kok, d))
+            yollar.append((_kokte(kok, d), True))
     return yollar
 
 
-def _oku(yol: str) -> str | None:
+def _oku(yol: str, azami: int = _AZAMI, kesik: bool = False) -> str | None:
     """A configuration file's text; None (skipped) when it is missing, not a regular file, unreadable, larger than
-    64 KiB or not UTF-8."""
+    `azami` (64 KiB) or not UTF-8. kesik=True (mountinfo, A3 D8): a longer file is not rejected; its first `azami`
+    bytes up to the last whole line are returned, decoded leniently (surrogateescape)."""
     try:
         with open(yol, "rb") as f:
             if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
                 return None
-            ham = f.read(_AZAMI + 1)
+            ham = f.read(azami + 1)
     except OSError:
         return None
-    if len(ham) > _AZAMI:
-        return None
+    if len(ham) > azami:
+        if not kesik:
+            return None
+        ham = ham[:azami]
+        ham = ham[:ham.rfind(b"\n") + 1]
+    if kesik:
+        return ham.decode("utf-8", "surrogateescape")
     try:
         return ham.decode("utf-8")
     except UnicodeDecodeError:
@@ -102,10 +114,15 @@ def _user_degeri(metin: str) -> tuple[bool, str | None]:
 
 
 def _yonetici_kullanicisi(kok: str, desenler: tuple[str, ...]) -> str | None:
+    """The cascade's user. A conf.d file that cannot be read is skipped (KConfig does too); the MAIN file existing but
+    unreadable (permission, too large, not UTF-8, not a regular file) → _Bilinmiyor: it overrides conf.d, so what it
+    says is unknown (A3 D2, closed-fail)."""
     kullanici = None
-    for yol in _dosyalar(kok, desenler):
+    for yol, ana in _dosyalar(kok, desenler):
         metin = _oku(yol)
         if metin is None:
+            if ana and os.path.lexists(yol):
+                raise _Bilinmiyor(yol)
             continue
         var, deger = _user_degeri(metin)
         if var:
@@ -123,7 +140,15 @@ def _etkin_yonetici(kok: str) -> str | None:
 
 def otomatik_giris_kullanicisi(kok: str = "/") -> tuple[str | None, str | None]:
     """→ (user, "plasmalogin" | "sddm") of the active login manager's automatic login, or (None, None) (no automatic
-    login, another login manager, nothing readable)."""
+    login, another login manager, nothing readable, the main file unreadable)."""
+    try:
+        return _otomatik_giris(kok)
+    except _Bilinmiyor:
+        return None, None
+
+
+def _otomatik_giris(kok: str) -> tuple[str | None, str | None]:
+    """otomatik_giris_kullanicisi; _Bilinmiyor when a main configuration file cannot be read."""
     etkin = _etkin_yonetici(kok)
     for ad, birim, desenler in _YONETICILER:
         if etkin is not None and etkin != birim:
@@ -143,7 +168,15 @@ def _ben() -> str | None:
 
 def otomatik_giris_acik(kok: str = "/") -> bool:
     """The login manager logs THIS user in automatically (no password typed at login)."""
-    kullanici, _kaynak = otomatik_giris_kullanicisi(kok)
+    return _oto_giris_durumu(kok) is True
+
+
+def _oto_giris_durumu(kok: str) -> bool | None:
+    """True: THIS user logs in automatically · False: not · None: unknown (a main configuration file unreadable)."""
+    try:
+        kullanici, _kaynak = _otomatik_giris(kok)
+    except _Bilinmiyor:
+        return None
     ben = _ben()
     return kullanici is not None and ben is not None and kullanici == ben
 
@@ -159,8 +192,9 @@ def _kacis_coz(s: str) -> str:
 
 def _baglama(kok: str, yol: str) -> tuple[str, str] | None:
     """mountinfo → ("major:minor", source) of the mount that holds `yol` (the longest mount point that is `yol` or a
-    parent of it; the last such line wins: stacked mounts). None: mountinfo unreadable / nothing matches."""
-    metin = _oku(_kokte(kok, "proc/self/mountinfo"))
+    parent of it; the last such line wins: stacked mounts). None: mountinfo unreadable / nothing matches. Up to 1 MiB
+    is read; past that, the whole lines read so far decide (A3 D8)."""
+    metin = _oku(_kokte(kok, "proc/self/mountinfo"), _AZAMI_MOUNTINFO, kesik=True)
     if metin is None:
         return None
     en_iyi, uzunluk = None, -1
@@ -293,7 +327,8 @@ def kart_durumu(kok: str = "/") -> dict:
        "depo": "kasa" | "cuzdan" | None, "cuzdan_kilitli": bool | None}
 
     Decision (first match wins; `neden`):
-      no automatic login for this user → hide "giris_parolali" · no Secret Service answer (busctl / session bus
+      no automatic login for this user → hide "giris_parolali" · the login manager's main configuration file
+      unreadable → hide "giris_bilinmiyor" · no Secret Service answer (busctl / session bus
       unknown) → hide "veri_yolu_yok" · no KDE Wallet (or unknown) → hide "cuzdan_yok" · "do not show again" → hide
       "kapatildi" · login unit state unknown (a back-end error) → hide "durum_bilinmiyor" · installed and the last
       result is not "anahtar_acmadi" → hide "kurulu" · installed and "anahtar_acmadi" → show "yeniden"
@@ -311,9 +346,12 @@ def kart_durumu(kok: str = "/") -> dict:
         return d
 
     try:
-        d["oto_giris"] = otomatik_giris_acik(kok)
+        oto = _oto_giris_durumu(kok)
     except Exception:  # noqa: BLE001 - closed-fail
-        d["oto_giris"] = False
+        oto = False
+    d["oto_giris"] = oto is True
+    if oto is None:
+        return gizle("giris_bilinmiyor")
     if not d["oto_giris"]:
         return gizle("giris_parolali")
     try:

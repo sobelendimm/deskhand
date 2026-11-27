@@ -154,6 +154,48 @@ def test_okunamaz_dosya_atlanir():
             sonuc == (BEN, "plasmalogin") or okunabilir, sonuc)
 
 
+def test_ana_dosya_okunamaz_bilinmiyor():
+    """A3 D2: conf.d'de okunamayan dosya atlanır (KConfig), ama ana dosya var ve okunamıyorsa sonuç BİLİNMİYOR: ne
+    "otomatik giriş var" ne "yok"; kart gizli, neden giris_bilinmiyor (kapalı-başarısızlık)."""
+    if os.geteuid() == 0:
+        kontrol("ana dosya okunamaz (root: izin sınanamaz, atlandı)", True)
+        return
+    kok = yeni_kok()
+    yaz(kok, "etc/plasmalogin.conf.d/oto.conf", oto(BEN))
+    yaz(kok, "etc/plasmalogin.conf", oto(""), kip=0)  # okunsa conf.d'yi silerdi
+    kontrol("ana dosya okunamaz → otomatik_giris_kullanicisi (None, None)",
+            OG.otomatik_giris_kullanicisi(kok) == (None, None), OG.otomatik_giris_kullanicisi(kok))
+    kontrol("…otomatik_giris_acik False (conf.d'deki User=ben ile kart açılmaz)", OG.otomatik_giris_acik(kok) is False)
+    _isaret_sil()
+    with sahte_cuzdan():
+        d = OG.kart_durumu(kok=kok)
+    kontrol("…kart gizli, neden giris_bilinmiyor (giris_parolali değil)", d["goster"] is False and
+            d["neden"] == "giris_bilinmiyor" and d["oto_giris"] is False, d)
+    # ana dosya UTF-8 değil / >64 KiB / klasör → aynı (bilinmiyor)
+    for ad, icerik in (("UTF-8 değil", b"[Autologin]\nUser=\xff\n"), (">64 KiB", oto("") + "#" * (64 * 1024 + 1))):
+        kok = yeni_kok()
+        yaz(kok, "etc/plasmalogin.conf.d/oto.conf", oto(BEN))
+        yaz(kok, "etc/plasmalogin.conf", icerik)
+        with sahte_cuzdan():
+            d = OG.kart_durumu(kok=kok)
+        kontrol(f"ana dosya {ad} → giris_bilinmiyor", d["neden"] == "giris_bilinmiyor", d)
+    # ana dosya YOK → bilinmiyor değil: conf.d geçerli
+    kok = yeni_kok()
+    yaz(kok, "etc/plasmalogin.conf.d/oto.conf", oto(BEN))
+    with sahte_cuzdan():
+        d = OG.kart_durumu(kok=kok)
+    kontrol("ana dosya yok → conf.d geçerli, kart gösterilir", d["goster"] is True and d["oto_giris"] is True, d)
+    # sddm etkin: sddm'nin ana dosyası okunamaz → bilinmiyor; plasmalogin'inki önemsiz
+    kok = yeni_kok("sddm.service")
+    yaz(kok, "etc/sddm.conf.d/oto.conf", oto(BEN))
+    yaz(kok, "etc/plasmalogin.conf", oto(""), kip=0)
+    kontrol("sddm etkin: plasmalogin ana dosyası okunamaz → yok sayılır", OG.otomatik_giris_acik(kok) is True)
+    yaz(kok, "etc/sddm.conf", oto(""), kip=0)
+    with sahte_cuzdan():
+        d = OG.kart_durumu(kok=kok)
+    kontrol("sddm etkin: sddm ana dosyası okunamaz → giris_bilinmiyor", d["neden"] == "giris_bilinmiyor", d)
+
+
 def test_bozuk_satir_atlanir_dosya_okunur():
     """A3 B3: KConfig gibi hoşgörülü — bozuk satır atlanır, dosyanın geri kalanı okunur."""
     kok = yeni_kok()
@@ -229,6 +271,34 @@ def test_disk_crypt_zinciri():
     kontrol("mountinfo yok → None", OG.disk_sifreli("/", kok=yeni_kok(dm=None)) is None)
     kontrol("sys bağı yok → None", OG.disk_sifreli("/", kok=_mountinfo_kok("22 1 8:1 / / rw - ext4 /dev/sda1 rw\n"))
             is None)
+
+
+
+def test_mountinfo_buyuk():
+    """A3 D8: mountinfo 64 KiB'ı geçse de okunur (1 MiB'a kadar); 1 MiB'ı geçerse okunan tam satırlarla karar verilir
+    (None değil)."""
+    kok = yeni_kok(dm=None)
+    _sys_blok(kok, "dm-0", "253:0", "CRYPT-LUKS2-0123456789abcdef-luks-root")
+    _sys_blok(kok, "nvme0n1p2", "259:2")
+    dolgu = "".join(f"{100 + i} 22 0:{100 + i} / /run/kap/{i:06d} rw - tmpfs tmpfs rw\n" for i in range(3000))
+    kok_satir = "22 1 259:2 / / rw - ext4 /dev/nvme0n1p2 rw\n"
+    ev_satir = "40 22 253:0 / /home rw - ext4 /dev/mapper/luks-root rw\n"
+    _mountinfo(kok, [kok_satir, dolgu, ev_satir])
+    boy = os.path.getsize(os.path.join(kok, "proc/self/mountinfo"))
+    kontrol(f"mountinfo {boy // 1024} KiB (>64 KiB) → /home şifreli True", boy > 64 * 1024 and
+            OG.disk_sifreli("/home/u", kok=kok) is True)
+    kontrol("…kök bölüm False", OG.disk_sifreli("/var/x", kok=kok) is False)
+    # >1 MiB: sondaki /home satırı okunmaz; kök satırı okunur → /home kök bölümde sayılır (False), None DEĞİL
+    dolgu = "".join(f"{100 + i} 22 0:{100 + i} / /run/kap/{i:06d} rw - tmpfs tmpfs rw\n" for i in range(20000))
+    _mountinfo(kok, [kok_satir, dolgu, ev_satir])
+    boy = os.path.getsize(os.path.join(kok, "proc/self/mountinfo"))
+    kontrol(f"mountinfo {boy // 1024} KiB (>1 MiB) → okunan kısımla karar (False), None değil",
+            boy > 1024 * 1024 and OG.disk_sifreli("/home/u", kok=kok) is False)
+    # yarım kalan son satır kullanılmaz: sınır tam bir satırın ortasına düşse de bozuk alan okunmaz
+    metin = OG._oku(os.path.join(kok, "proc/self/mountinfo"), OG._AZAMI_MOUNTINFO, kesik=True)
+    kontrol("…sınırda yarım satır kullanılmaz (≤1 MiB, tam satırla biter)", metin is not None and
+            len(metin.encode()) <= 1024 * 1024 and metin.endswith("\n") and
+            all(len(x.split()) == 10 for x in metin.splitlines()), None if metin is None else metin[-120:])
 
 
 def _mountinfo_kok(satir):
@@ -445,8 +515,8 @@ def test_kapat_isareti_kalici():
 
 
 for _t in (test_ana_dosya_confd_ezer, test_bos_user_siler, test_baska_kullanici_kart_yok,
-           test_sddm_etkin_plasmalogin_yok_sayilir, test_okunamaz_dosya_atlanir, test_bozuk_satir_atlanir_dosya_okunur,
-           test_disk_crypt_zinciri, test_kart_karar_tablosu, test_depo_cuzdan_secret_service_baslatmaz,
+           test_sddm_etkin_plasmalogin_yok_sayilir, test_okunamaz_dosya_atlanir, test_ana_dosya_okunamaz_bilinmiyor,
+           test_bozuk_satir_atlanir_dosya_okunur, test_disk_crypt_zinciri, test_mountinfo_buyuk, test_kart_karar_tablosu, test_depo_cuzdan_secret_service_baslatmaz,
            test_kapat_isareti_kalici):
     print(f"--- {_t.__name__}", flush=True)
     try:

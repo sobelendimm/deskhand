@@ -301,7 +301,35 @@ def test_kur_son_sonucu_siler():
         os.environ.pop("DESKHAND_ANAHTARLIK")
 
 
-for _t in (test_son_sonuc_her_yol, test_kur_son_sonucu_siler):
+def test_gunluk_kilitli_zaman_asimi_ayrimi():
+    """A3 D7: ksecretd başlatıldıktan sonra "kilitli kaldı" (yanlış anahtar) ile "zaman aşımı" (yanıt yok) günlükte
+    ayrı; ilki anahtar_acmadi, ikincisi hata."""
+    satirlar: list = []
+    eski = {a: getattr(CA, a) for a in ("_gunluk", "_baslat", "kilitli", "servis_var", "_BEKLE_SN")}
+    try:
+        CA.cuzdan_otomatik_kur(PAROLA)
+        CA._gunluk = satirlar.append
+        CA.servis_var = lambda: False
+        CA._baslat = lambda anahtar: None
+        CA._BEKLE_SN = 0.3
+        CA.kilitli = lambda: True
+        kod = CA.cuzdan_ac()
+        son = satirlar[-1] if satirlar else ""
+        kontrol("kilitli kaldı → anahtar_acmadi, günlükte 'kilitli kaldı' (zaman aşımı değil)",
+                kod == 1 and (CA.son_sonuc() or {}).get("sonuc") == "anahtar_acmadi" and "kilitli kaldı" in son and
+                "zaman aşımı" not in son, son)
+        CA.kilitli = lambda: None
+        kod = CA.cuzdan_ac()
+        son = satirlar[-1] if satirlar else ""
+        kontrol("yanıt yok → hata, günlükte 'zaman aşımı' (kilitli kaldı değil)",
+                kod == 1 and (CA.son_sonuc() or {}).get("sonuc") == "hata" and "zaman aşımı" in son and
+                "kilitli kaldı" not in son, son)
+    finally:
+        for a, v in eski.items():
+            setattr(CA, a, v)
+
+
+for _t in (test_son_sonuc_her_yol, test_kur_son_sonucu_siler, test_gunluk_kilitli_zaman_asimi_ayrimi):
     print(f"--- {_t.__name__}", flush=True)
     try:
         _t()

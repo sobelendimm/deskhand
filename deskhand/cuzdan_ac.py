@@ -469,12 +469,12 @@ def _cuzdan_ac() -> tuple[int, str]:
             _gunluk("cüzdan: girişte açıldı")
             return 0, "acildi"
         if k is True:
-            _gunluk("cüzdan: açılmadı: kayıtlı anahtar cüzdanı açmadı (parola değişmiş olabilir; Ayarlar'dan yeniden "
+            _gunluk("cüzdan: açılmadı: kilitli kaldı: kayıtlı anahtar cüzdanı açmadı (parola değişmiş olabilir; Ayarlar'dan yeniden "
                     "girin)")
             return 1, "anahtar_acmadi"
         time.sleep(0.2)
     # ksecretd never answered: not proof of a wrong key (the panel card stays hidden for "hata")
-    _gunluk("cüzdan: açılmadı: ksecretd süre içinde yanıt vermedi")
+    _gunluk("cüzdan: açılmadı: zaman aşımı: ksecretd süre içinde yanıt vermedi")
     return 1, "hata"
 
 
