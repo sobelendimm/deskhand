@@ -6,7 +6,43 @@ Versions 0.6.0 to 0.9.1 were local builds and were never published; 0.10.0 is th
 release after 0.5.4. Every entry between them is listed here so a 0.5.4 user sees the whole change.
 Security fixes are marked **Security**.
 
-## Unreleased
+## 0.10.0 (unreleased)
+
+The first public release after 0.5.4. **If you run 0.5.4 or older, please update:** MCP `open_app(args)` could run
+commands without approval there (closed in 0.6.0, see below).
+
+### New in 0.10.0
+
+- **New: key store, "Deskhand vault" or KDE Wallet.** Saved passwords and the panel's signed settings record live in
+  one of two stores. The vault (default for new installs) keeps each item as a file sealed with `systemd-creds`
+  (bound to the TPM2 when there is one, otherwise to the host key; the sealed name is part of the seal, so a copy
+  under another name does not open) and makes no D-Bus or wallet call. KDE Wallet is the Secret Service path used
+  until now. An install that already used the wallet stays on it until you choose the vault. Switching asks for your
+  Yes in the panel, copies and re-reads every item first, and changes nothing if the old store cannot be read.
+  The choice is sealed in the vault, so editing `[anahtar] depo` in `ayarlar.toml` by hand does not switch stores (the
+  panel then treats the store as unverified and stops with exit code 10).
+- **New: Settings, Advanced, "Secrets".** A status badge for the chosen store (ready with TPM, ready with the machine
+  key, open, locked, unavailable with the reason), a switch between the two stores, the list of saved passwords
+  (names and bindings only, never values) with **Add password** and **Delete**, and **Open KDE Wallet at login**.
+- **New: saved passwords with per-site binding and per-use approval.** `deskhand secret set NAME [--site DOMAIN]
+  [--app WINDOW_CLASS]` (value from stdin; hidden prompt on a terminal), `secret list`, `secret rm`, `secret status
+  [--json]`. An agent types one with `deskhand type <window> --secret-ref NAME` or the MCP `type_text` argument
+  `secret_ref` (not together with `text` or `element`). The value goes from the store to the keyboard layer and
+  never appears in a result, the log or the panel feed. It is typed only into a field the accessibility tree calls a
+  password field, and every use asks in the panel (name, window class, site, never the value; refusal or unattended
+  mode exits with code 10). The site is read from the page address right before typing and checked again after your
+  Yes; a password bound to a site or app that does not match is refused.
+- **New: unlock KDE Wallet at login.** `deskhand wallet open|status|remove` (Settings has the switch). Deskhand seals
+  the key derived from the wallet password (not the password) in the vault; the user service
+  `deskhand-cuzdan-ac.service` starts `ksecretd --pam-login` with it at login, using `kwallet-pam`'s own protocol,
+  but only if nothing owns the Secret Service yet. If the wallet was already started and is locked, it logs one line
+  and tries again at the next login; Settings shows which of these happened. Needs the wallet to exist and its salt
+  file to be present.
+- **Known limits of the vault** (also in the README, "Security model"): code running as you can decrypt vault items
+  with `systemd-creds`, like it could read an unlocked wallet; a rolled-back copy of the panel record is detected only
+  while a Deskhand process has seen the newer one (a TPM counter was not available); `secret_ref` needs the
+  accessibility tree (`deskhand a11y on`) and is refused otherwise; between the last check and the first key, a page
+  change inside the same window is not noticed.
 
 Documentation and upgrade notes for the changes since 0.9.1. Where a sentence in an older entry below says the
 panel "removes" or "lifts" something, the rules in this section and in the README's "Security model" apply.
@@ -56,7 +92,7 @@ panel "removes" or "lifts" something, the rules in this section and in the READM
 - Do not update a machine that runs unattended while nobody is at it: both the question and the Resume need you.
 - The memory-watch counters were reset by the new format; the first restart limits start from zero.
 
-### Earlier unreleased changes (planned for the next version)
+### Also in 0.10.0 (changes since 0.9.1)
 
 Changes since 0.9.1:
 
@@ -76,7 +112,7 @@ Changes since 0.9.1:
   panel-authoritative: a site written into the file by hand is used only after you answer Yes in the panel.
   `deskhand sessions forget <domain>` / `--all` deletes records; `deskhand doctor` and `sessions check` show the
   state (never a value). Details: [docs/SESSIONS.md §3.8](docs/SESSIONS.md).
-- **Change: the background desktop memory cap is 6 GB** (was 4 GB; 20 OOM kills in 17–24 hour sessions).
+- **Change: the background desktop memory cap went from 4 GB to 6 GB (20 OOM kills in 17–24 hour sessions) and is now 8 GB, see above.**
 - **Docs: English is the primary documentation language.** `README.md`, `CHANGELOG.md`, `docs/ARCHITECTURE.md`
   and `docs/SESSIONS.md` are English; the Turkish originals are `README.tr.md`, `CHANGELOG.tr.md`,
   `docs/ARCHITECTURE.tr.md` and `docs/SESSIONS.tr.md`. README now has a "Security model" section and the MCP

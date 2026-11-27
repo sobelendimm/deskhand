@@ -2,7 +2,40 @@
 
 *Asıl dosya İngilizcedir: [CHANGELOG.md](CHANGELOG.md). Bu dosya Türkçe özettir; 0.10.0 ve öncesinin ayrıntısı İngilizce dosyadadır.*
 
-## Unreleased
+## 0.10.0 (yayımlanmadı)
+
+0.5.4'ten sonraki ilk herkese açık sürüm. **0.5.4 ya da daha eskisini kullanıyorsanız lütfen güncelleyin:** orada MCP
+`open_app(args)` onaysız komut çalıştırabiliyordu (0.6.0'da kapatıldı, aşağıya bakın).
+
+### 0.10.0'da yeni
+
+- **Yeni: anahtar deposu, "Deskhand kasası" ya da KDE Cüzdanı.** Kayıtlı parolalar ve panelin imzalı ayar kaydı iki
+  depodan birinde durur. Kasa (yeni kurulumda varsayılan) her öğeyi `systemd-creds` ile mühürlü bir dosyada tutar
+  (TPM2 varsa ona, yoksa makine anahtarına bağlı; ad mührün parçasıdır, başka adla kopyalanan açılmaz) ve hiç D-Bus
+  ya da cüzdan çağrısı yapmaz. KDE Cüzdanı şimdiye dek kullanılan Secret Service yoludur. Cüzdanı zaten kullanan bir
+  kurulum, kasayı siz seçene dek cüzdanda kalır. Değiştirmek panelde Evet'inizi ister, önce her öğeyi kopyalayıp
+  geri okur, eski depo okunamıyorsa hiçbir şey değiştirmez. Seçim kasada mühürlenir; `ayarlar.toml`'daki `[anahtar] depo`
+  satırını elle değiştirmek depoyu değiştirmez (panel depoyu doğrulanmamış sayar ve 10 koduyla durur).
+- **Yeni: Ayarlar, Gelişmiş, "Gizli bilgiler".** Seçili depo için durum rozeti (TPM ile hazır, makine anahtarıyla hazır,
+  açık, kilitli, nedeniyle kullanılamıyor), iki depo arasında anahtar, kayıtlı parolalar listesi (yalnız ad ve bağlama,
+  değer asla) ile **Parola ekle** ve **Sil**, bir de **Girişte KDE Cüzdanı'nı aç**.
+- **Yeni: siteye bağlı, her kullanımda onaylı kayıtlı parolalar.** `deskhand secret set AD [--site ALAN]
+  [--app PENCERE_SINIFI]` (değer stdin'den; uçbirimde gizli giriş), `secret list`, `secret rm`, `secret status
+  [--json]`. Ajan bir parolayı `deskhand type <pencere> --secret-ref AD` ya da MCP `type_text`'in `secret_ref`
+  argümanıyla yazar (`text` ya da `element` ile birlikte verilmez). Değer depodan klavye katmanına gider; sonuçta,
+  günlükte ve panel akışında görünmez. Yalnız erişilebilirlik ağacının parola alanı dediği alana yazılır ve her
+  kullanım panelde sorulur (ad, pencere sınıfı, site; değer asla; ret ya da gözetimsiz kip 10 koduyla çıkar). Site,
+  yazmadan hemen önce sayfa adresinden okunur ve Evet'inizden sonra yeniden denetlenir; eşleşmeyen siteye ya da
+  uygulamaya bağlı parola reddedilir.
+- **Yeni: girişte KDE Cüzdanı'nı aç.** `deskhand wallet open|status|remove` (anahtar Ayarlar'da da var). Deskhand
+  cüzdan parolasından türetilen anahtarı (parolayı değil) kasaya mühürler; `deskhand-cuzdan-ac.service` kullanıcı
+  servisi girişte onu `kwallet-pam`'ın kendi protokolüyle `ksecretd --pam-login`'e verir, ama yalnız Secret Service'in
+  sahibi henüz yoksa. Cüzdan zaten başlamış ve kilitliyse tek satır günlüğe yazar, sonraki girişte yeniden dener;
+  hangisinin olduğunu Ayarlar gösterir. Cüzdanın var olması ve tuz dosyasının bulunması gerekir.
+- **Kasanın bilinen sınırları** (README "Güvenlik modeli"nde de): sizin kullanıcınızla çalışan kod kasa öğelerini
+  `systemd-creds` ile çözebilir, kilidi açık cüzdanı okuyabileceği gibi; panel kaydının geri alınmış kopyası yalnız
+  bir Deskhand süreci daha yenisini görmüşse yakalanır (TPM sayacı yoktu); `secret_ref` erişilebilirlik ağacını ister
+  (`deskhand a11y on`), yoksa reddedilir; son denetim ile ilk tuş arasında aynı pencerede sayfa değişimi fark edilmez.
 
 0.9.1'den bu yana değişenler için belge ve yükseltme notları. Aşağıdaki eski bir girdi panelin bir şeyi "kaldırdığını"
 söylüyorsa, bu bölümdeki ve README'deki "Güvenlik modeli"ndeki kurallar geçerlidir.

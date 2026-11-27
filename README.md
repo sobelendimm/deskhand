@@ -2,6 +2,8 @@
 
 *Türkçe: [README.tr.md](README.tr.md)*
 
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE) [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sobelendimm%2Fdeskhand-informational)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sobelendimm/deskhand) [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ea4aaa)](https://github.com/sponsors/sobelendimm)
+
 **Deskhand lets AI agents (Claude Code and other MCP clients) use your KDE Plasma desktop
 safely — on your screen, or on an invisible second desktop while you watch a movie.**
 
@@ -170,6 +172,10 @@ See [CHANGELOG.md](CHANGELOG.md) for the details.
 - **Web elements:** the buttons/links/fields of a browser page are read from the accessibility tree; no remote-control port is opened on the browser.
 - **Invisible desktop:** an isolated, GPU-accelerated KWin session (inside `bubblewrap`); Xvfb fallback when it is not available.
 - **Approval scope "card payments only":** can only be turned on from the panel (Settings → Approval questions); only money buttons and typing card data ask. The default is "all".
+- **Deskhand vault or KDE Wallet (new in 0.10.0):** saved passwords and the panel's signed settings record live in one of two stores. The *Deskhand vault* (default for new installs) keeps items as files sealed with `systemd-creds` (to the TPM2 when there is one, otherwise to the machine key) and makes no D-Bus or wallet call, so no wallet prompt appears at login. *KDE Wallet* is the Secret Service path used before. Switching asks you and moves the items. An install that already used the wallet stays on it until you choose the vault.
+- **Settings → Advanced → Secrets (new in 0.10.0):** pick the store, see a status badge for it (ready with TPM / ready with the machine key / open / locked / unavailable and why), add or delete named saved passwords (values are never shown), and switch on **Open KDE Wallet at login**.
+- **Saved passwords with per-site binding and per-use approval (new in 0.10.0):** `deskhand secret set NAME [--site DOMAIN] [--app WINDOW_CLASS]` (value from stdin, never from the command line), `secret list`, `secret rm`, `secret status`. An agent types one with `deskhand type <window> --secret-ref NAME` or the MCP `type_text` argument `secret_ref`. The value goes from the store straight to the keyboard layer and never appears in a result, the log or the panel feed. It is typed only into a password field (accessibility must be on, `deskhand a11y on`), and **every use asks in the panel** (name, window class, site; never the value). A password bound to a site or app is refused anywhere else.
+- **Unlock KDE Wallet at login (new in 0.10.0):** `deskhand wallet open|status|remove`. Deskhand stores the wallet's derived key, not your password, sealed in the vault, and a user service (`deskhand-cuzdan-ac.service`) hands it to `ksecretd` at login, the way `kwallet-pam` does. If the wallet was already started and is locked when the service runs, nothing is forced: it logs one line and tries again at the next login, and Settings says so.
 - **Persistent background sessions, account sessions, several desktops, `--scale 2`, file upload, `doctor`:** see the sections above and below.
 
 ### MCP server (20 tools)
@@ -177,6 +183,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the details.
 `deskhand mcp` is a stdio MCP server with 20 tools: `get_status`, `choose_desktop`, `manage_desktop`,
 `observe`, `screenshot`, `read_text`, `listen`, `find`, `click`, `type_text`, `clipboard`, `press_key`,
 `scroll`, `drag`, `open_app`, `manage_window`, `run_flow`, `batch`, `wait_for`, `request_human`.
+`type_text` also takes `secret_ref` (the name of a saved password, see above) instead of `text`.
 Screenshots are scaled to 1280 px on the long edge. Coordinates are checked against a `shot_id`, so a
 click on a stale screenshot is refused. There is no "approved" flag on the MCP surface: sensitive
 actions always go through the panel.
@@ -185,7 +192,7 @@ actions always go through the panel.
 
 Activity (live log, filter), background desktops (picker, live view, stop, take over), task
 (give the panel's own agent a job on the invisible desktop), approvals (pending + history),
-settings (busy behaviour, forbidden windows, STOP shortcut, approval scope, account sessions),
+settings (busy behaviour, forbidden windows, STOP shortcut, approval scope, account sessions, secrets),
 saved icons and a health check of all dependencies. The tray icon shows idle / on your screen /
 in the background / STOP, with a badge when an approval is waiting.
 
@@ -271,8 +278,20 @@ sudo modprobe uinput                                  # if /dev/uinput does not 
 echo uinput | sudo tee /etc/modules-load.d/uinput.conf   # load it at boot
 ```
 
-> Developed and tested on **CachyOS (Arch) + KDE Plasma 6**. Other distributions should
-> work with equivalent packages but are untested.
+## Supported systems
+
+| Status | System |
+| ------ | ------ |
+| **Tested** | CachyOS (Arch) with KDE Plasma 6.8 on Wayland. This is the only setup the author has run Deskhand on. |
+| **Expected to work (untested)** | Arch Linux, EndeavourOS and Manjaro with Plasma 6.8 (same packages, same repositories). |
+| **Not yet** | Fedora, openSUSE, Debian and Ubuntu (and their KDE spins): most ship KWin older than 6.8 or lack packages Deskhand needs (`kdotool`, `dotool`, `mcp` 2.3+), and `install.sh` only prints `pacman` commands. With KWin older than 6.8 the background desktop falls back to Xvfb (X11 apps only). GNOME and other desktops: only the background desktop could work (Xvfb), the foreground needs KDE. Windows, macOS and BSD: not supported (Linux-only parts: `uinput`, D-Bus, `bubblewrap`, `systemd`). |
+
+Helpers (`kdotool`, `dotool`, `bwrap`) are looked up only in `/usr/bin` and `/bin`, and the Python module `mcp`
+must be 2.3 or newer and importable by the system `python3`.
+
+Want your distribution supported? [Open an issue](https://github.com/sobelendimm/deskhand/issues) with
+your `deskhand doctor` output, or [sponsor the work](https://github.com/sponsors/sobelendimm): testing on other
+systems takes real time, and reports from other setups are the fastest way to get them covered.
 
 ## Install
 
@@ -517,6 +536,12 @@ It is **not a sandbox**, and it does not defend against code that already runs a
   can be read. Settings shows an unverified list read-only. This does not cover code running as you
   that deliberately reads or changes the wallet item (KDE Wallet has no per-application access
   control), or that deletes the item while the wallet is open (that looks like a first start).
+- **The Deskhand vault is not stronger than an unlocked wallet against code running as you.** A process under
+  your user account can run `systemd-creds --user decrypt` on a vault item, just as it could read an unlocked
+  KDE Wallet with `secret-tool`; a locked wallet is the stronger choice against that. The vault detects a
+  rolled-back copy of the panel's record only while some Deskhand process has seen the newer one; with no
+  Deskhand process running, restoring an old copy is not noticed (a TPM counter was not available to anchor it).
+  `secret_ref` is an extra: each use needs your Yes in the panel and the value goes only into a password field.
 - **An agent that can run arbitrary shell commands as your user** can edit files, kill the panel or drive
   the desktop without Deskhand. Keep shell access behind your client's permission prompts.
 - Apps on the background desktop run inside `bubblewrap` (read-only root, empty home, masked secret
@@ -540,6 +565,13 @@ config. The suites in `tests/ekranli/` drive your **real** screen; run them only
 not using the computer: `tests/ekranli/hepsi.sh` runs them all (~15 min; it opens its own Firefox with a
 temporary profile, never yours; `--insansiz` skips the two steps that ask you to click in the approval dialog).
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Sponsor
+
+Deskhand is free software, written and maintained by one person. If it saves you time or you want
+the Linux/KDE side of agent tooling to keep improving, you can support the work through
+[GitHub Sponsors](https://github.com/sponsors/sobelendimm). Bug reports, tests on other Plasma setups
+and pull requests help just as much.
 
 ## License
 
