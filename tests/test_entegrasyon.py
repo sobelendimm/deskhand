@@ -155,55 +155,59 @@ guvenlik.dur_ac("cli")
 kontrol("DUR: ajanın kendi DUR'unu ajan kaldırır", guvenlik.dur_kapat("cli") is True)
 
 # ---------------------------------------------------------------- 5. ekran koruması (oyun/film sırasında ön plan YOK)
-from deskhand import mesgul  # noqa: E402
-import json  # noqa: E402
+_neden = _yalitim.arac_eksigi("kscreen-doctor")
+if _neden:
+    _yalitim.atla('5. ekran koruması (tam ekran denetimi çıkışları kscreen-doctor ile okur)', _neden)
+else:
+    from deskhand import mesgul  # noqa: E402
+    import json  # noqa: E402
 
-pc = lambda sinif, fs=False, ad="": {"fs": fs, "sinif": sinif, "ad": ad, "baslik": "x", "g": [0, 0, 800, 600],
-                                       "cikis": "", "cg": None, "kimlik": "{a}"}
-kontrol("koruma: tam ekran → engel", (mesgul.ekran_korumasi(pc("firefox", fs=True), []) or "").startswith("tam ekran"))
-kontrol("koruma: oyun penceresi → engel", (mesgul.ekran_korumasi(pc("steam_app_123456"), []) or "").startswith("oyunda"))
-kontrol("koruma: etkin pencerede video çalıyor → engel",
-        (mesgul.ekran_korumasi(pc("firefox"), [{"oynatici": "firefox", "durum": "Playing"}]) or "").startswith("video"))
-kontrol("koruma: arka planda müzik (başka uygulama) → engel YOK",
-        mesgul.ekran_korumasi(pc("org.kde.dolphin"), [{"oynatici": "spotify", "durum": "Playing"}]) is None)
-kontrol("koruma: duraklatılmış video → engel YOK",
-        mesgul.ekran_korumasi(pc("firefox"), [{"oynatici": "firefox", "durum": "Paused"}]) is None)
-kontrol("koruma: sıradan pencere → engel YOK", mesgul.ekran_korumasi(pc("kwrite"), []) is None)
-kab = dict(pc("plasmashell"), g=[0, 0, 2560, 1440], cg=[0, 0, 2560, 1440])
-kontrol("koruma: masaüstü yüzeyi (plasmashell) ekranı kaplasa da oyun/film DEĞİL", mesgul.ekran_korumasi(kab, []) is None)
-kontrol("koruma: ekranı kaplayan sıradan pencere (kenarlıksız oyun) → engel",
-        mesgul.ekran_korumasi(dict(pc("oyun"), g=[0, 0, 2560, 1440], cg=[0, 0, 2560, 1440]), []) is not None)
-os.environ["DESKHAND_EKRANIMDA"] = "1"
-kontrol("koruma: --ekranimda (kullanıcı açık izni) → serbest", mesgul.ekran_korumasi(pc("firefox", fs=True), []) is None)
-del os.environ["DESKHAND_EKRANIMDA"]
-os.makedirs(os.path.dirname(mesgul.son_karar_yolu()), exist_ok=True)
-with open(mesgul.son_karar_yolu(), "w") as f:
-    json.dump({"zaman": time.time(), "karar": "on", "soruldu": True}, f)
-kontrol("koruma: kullanıcı bildirimde 'Ekranımda yap' dedi → 10 dk serbest",
-        mesgul.ekran_korumasi(pc("firefox", fs=True), []) is None)
-with open(mesgul.son_karar_yolu(), "w") as f:
-    json.dump({"zaman": time.time(), "karar": "on", "soruldu": False}, f)
-kontrol("koruma: sorulmadan verilen 'on' izin sayılmaz", mesgul.ekran_korumasi(pc("firefox", fs=True), []) is not None)
-with open(mesgul.son_karar_yolu(), "w") as f:
-    json.dump({"zaman": time.time() - 700, "karar": "on", "soruldu": True}, f)
-kontrol("koruma: 10 dk'dan eski izin geçersiz", mesgul.ekran_korumasi(pc("firefox", fs=True), []) is not None)
-os.remove(mesgul.son_karar_yolu())
+    pc = lambda sinif, fs=False, ad="": {"fs": fs, "sinif": sinif, "ad": ad, "baslik": "x", "g": [0, 0, 800, 600],
+                                           "cikis": "", "cg": None, "kimlik": "{a}"}
+    kontrol("koruma: tam ekran → engel", (mesgul.ekran_korumasi(pc("firefox", fs=True), []) or "").startswith("tam ekran"))
+    kontrol("koruma: oyun penceresi → engel", (mesgul.ekran_korumasi(pc("steam_app_123456"), []) or "").startswith("oyunda"))
+    kontrol("koruma: etkin pencerede video çalıyor → engel",
+            (mesgul.ekran_korumasi(pc("firefox"), [{"oynatici": "firefox", "durum": "Playing"}]) or "").startswith("video"))
+    kontrol("koruma: arka planda müzik (başka uygulama) → engel YOK",
+            mesgul.ekran_korumasi(pc("org.kde.dolphin"), [{"oynatici": "spotify", "durum": "Playing"}]) is None)
+    kontrol("koruma: duraklatılmış video → engel YOK",
+            mesgul.ekran_korumasi(pc("firefox"), [{"oynatici": "firefox", "durum": "Paused"}]) is None)
+    kontrol("koruma: sıradan pencere → engel YOK", mesgul.ekran_korumasi(pc("kwrite"), []) is None)
+    kab = dict(pc("plasmashell"), g=[0, 0, 2560, 1440], cg=[0, 0, 2560, 1440])
+    kontrol("koruma: masaüstü yüzeyi (plasmashell) ekranı kaplasa da oyun/film DEĞİL", mesgul.ekran_korumasi(kab, []) is None)
+    kontrol("koruma: ekranı kaplayan sıradan pencere (kenarlıksız oyun) → engel",
+            mesgul.ekran_korumasi(dict(pc("oyun"), g=[0, 0, 2560, 1440], cg=[0, 0, 2560, 1440]), []) is not None)
+    os.environ["DESKHAND_EKRANIMDA"] = "1"
+    kontrol("koruma: --ekranimda (kullanıcı açık izni) → serbest", mesgul.ekran_korumasi(pc("firefox", fs=True), []) is None)
+    del os.environ["DESKHAND_EKRANIMDA"]
+    os.makedirs(os.path.dirname(mesgul.son_karar_yolu()), exist_ok=True)
+    with open(mesgul.son_karar_yolu(), "w") as f:
+        json.dump({"zaman": time.time(), "karar": "on", "soruldu": True}, f)
+    kontrol("koruma: kullanıcı bildirimde 'Ekranımda yap' dedi → 10 dk serbest",
+            mesgul.ekran_korumasi(pc("firefox", fs=True), []) is None)
+    with open(mesgul.son_karar_yolu(), "w") as f:
+        json.dump({"zaman": time.time(), "karar": "on", "soruldu": False}, f)
+    kontrol("koruma: sorulmadan verilen 'on' izin sayılmaz", mesgul.ekran_korumasi(pc("firefox", fs=True), []) is not None)
+    with open(mesgul.son_karar_yolu(), "w") as f:
+        json.dump({"zaman": time.time() - 700, "karar": "on", "soruldu": True}, f)
+    kontrol("koruma: 10 dk'dan eski izin geçersiz", mesgul.ekran_korumasi(pc("firefox", fs=True), []) is not None)
+    os.remove(mesgul.son_karar_yolu())
 
-# kde arka ucunun girdi/öne getirme/açma yollarına bağlı mı (gerçek kde nesnesi, korumayı sahteyle)
-from deskhand.arka_uc import kde as kde_mod  # noqa: E402
-from deskhand import hata as hata_mod  # noqa: E402
-gercek = mesgul.ekran_korumasi
-mesgul.ekran_korumasi = lambda *a, **k: "tam ekranda (test)"
-try:
-    au = kde_mod.KdeArkaUc()
-    for ad, f in (("girdi", lambda: au.girdi("t")), ("uygulama açma", lambda: au.baslat(["/bin/true"]))):
-        try:
-            f()
-            kontrol(f"koruma: kde {ad} → 15", False, "geçti")
-        except hata_mod.Dur as d:
-            kontrol(f"koruma: kde {ad} → 15", d.kod == 15, str(d.kod))
-finally:
-    mesgul.ekran_korumasi = gercek
+    # kde arka ucunun girdi/öne getirme/açma yollarına bağlı mı (gerçek kde nesnesi, korumayı sahteyle)
+    from deskhand.arka_uc import kde as kde_mod  # noqa: E402
+    from deskhand import hata as hata_mod  # noqa: E402
+    gercek = mesgul.ekran_korumasi
+    mesgul.ekran_korumasi = lambda *a, **k: "tam ekranda (test)"
+    try:
+        au = kde_mod.KdeArkaUc()
+        for ad, f in (("girdi", lambda: au.girdi("t")), ("uygulama açma", lambda: au.baslat(["/bin/true"]))):
+            try:
+                f()
+                kontrol(f"koruma: kde {ad} → 15", False, "geçti")
+            except hata_mod.Dur as d:
+                kontrol(f"koruma: kde {ad} → 15", d.kod == 15, str(d.kod))
+    finally:
+        mesgul.ekran_korumasi = gercek
 
 # ---------------------------------------------------------------- 6. kendi ayrıştırıcısı olan komutlar: argümanlar aynen
 from deskhand import cli as _cli  # noqa: E402

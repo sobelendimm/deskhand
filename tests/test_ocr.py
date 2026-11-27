@@ -68,7 +68,10 @@ def main():
             print(f"{'GEÇTİ ' if ok else 'KALDI!'} {dosya}: ara({sorgu!r})")
     # Yakın önbellek eşleşmesi: imleç çizgisi = aynı; tek rakam/harf değişikliği = FARKLI (eski metin dönmemeli)
     from PIL import ImageDraw, ImageFont
-    font = ImageFont.truetype("/usr/share/fonts/noto/NotoSans-Regular.ttf", 15) if os.path.exists("/usr/share/fonts/noto/NotoSans-Regular.ttf") else ImageFont.load_default()
+    # gerçekçi ekran yazısı: Noto Sans 15 px (Arch /usr/share/fonts/noto, Debian/Ubuntu fonts-noto-core truetype/noto)
+    noto = next((y for y in ("/usr/share/fonts/noto/NotoSans-Regular.ttf",
+                             "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf") if os.path.exists(y)), None)
+    font = ImageFont.truetype(noto, 15) if noto else None
 
     def resim(metin, imlec=False):
         r = Image.new("RGB", (240, 40), "white")
@@ -82,6 +85,9 @@ def main():
                 ("%16 → %18 → FARKLI", resim("Makineleşme %16"), resim("Makineleşme %18"), False),
                 ("harf eklendi (abc → abcd) → FARKLI", resim("abc"), resim("abcd"), False),
                 ("nokta eklendi (Hazır → Hazır.) → FARKLI değilse kabul", resim("Durum: Hazır"), resim("Durum: Hazır."), None)]
+    if font is None:  # bitmap yedek yazı tipinde tek rakam farkı birkaç piksel: eşik gerçek ekran yazısına göre
+        print("ATLANDI  önbellek yakınlık (NotoSans-Regular.ttf yok: Arch noto-fonts / Debian fonts-noto-core)")
+        durumlar = []
     for ad, a_, b_, beklenen in durumlar:
         sonuc_ = m._imlec_farki(a_, b_)
         if beklenen is None:

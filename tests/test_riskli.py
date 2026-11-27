@@ -214,26 +214,30 @@ kontrol("riskli tuş: bas (birlikte): 'leftctrl leftalt delete' aynı anda → r
 kontrol("riskli tuş: tus (ardışık): 'ctrl alt delete' ayrı akorlar → riskli DEĞİL",
         guvenlik.riskli_tus("ctrl alt delete") is None)
 kontrol("riskli tuş: bas alt+sysrq+b birlikte → riskli", guvenlik.riskli_tus("leftalt sysrq b", birlikte=True) is not None)
-# tus_coz çıktısı ile (gerçek dönüşüm: control→ctrl, meta→super, del→delete…)
-for ham, beklenen in (("control+alt+del", True), ("meta+l", True), ("ctrl+alt+f4", True), ("ctrl+s", False)):
-    kontrol(f"tus_coz → riskli_tus: {ham!r} → {beklenen}", (guvenlik.riskli_tus(eylem.tus_coz(ham)) is not None) == beklenen)
+_neden = _yalitim.arac_eksigi("dotool")
+if _neden:
+    _yalitim.atla('tus_coz → riskli_tus (tus_coz, kde arka ucunda dotool --list-keys ile tuşları doğrular)', _neden)
+else:
+    # tus_coz çıktısı ile (gerçek dönüşüm: control→ctrl, meta→super, del→delete…)
+    for ham, beklenen in (("control+alt+del", True), ("meta+l", True), ("ctrl+alt+f4", True), ("ctrl+s", False)):
+        kontrol(f"tus_coz → riskli_tus: {ham!r} → {beklenen}", (guvenlik.riskli_tus(eylem.tus_coz(ham)) is not None) == beklenen)
 
-# güç / uyku / kilit / oturum kapatma tuşları: değiştiricisiz TEK tuş da riskli; KDE onaysız kapatma kısayolları
-GUC_TUSLARI = ["power", "sleep", "wakeup", "coffee", "suspend", "k:116", "k:142", "k:143", "k:152", "k:205",
-               "x:XF86PowerOff", "x:XF86PowerDown", "x:XF86Sleep", "x:XF86Suspend", "x:XF86Hibernate",
-               "x:XF86ScreenSaver", "x:XF86LogOff", "x:XF86WakeUp", "x:0x1008ff2a", "shift+power", "a power",
-               "ctrl+alt+shift+delete", "ctrl+alt+shift+pageup", "ctrl+alt+shift+pagedown", "ctrl+alt+shift+page_down",
-               "ctrl+alt+shift+next", "ctrl+alt+shift+x:Prior", "ctrl+alt+shift+k:109", "ctrl+alt+shift+k:104"]
-for t in GUC_TUSLARI:
-    kontrol(f"güç/kilit tuşu: riskli_tus(tus_coz({t!r})) → neden", guvenlik.riskli_tus(eylem.tus_coz(t)) is not None,
-            str(guvenlik.riskli_tus(eylem.tus_coz(t))))
-for t in ("pagedown", "pageup", "ctrl+pagedown", "ctrl+shift+pageup", "ctrl+alt+pagedown", "shift+delete", "homepage"):
-    kontrol(f"güç/kilit tuşu değil: {t!r}", guvenlik.riskli_tus(eylem.tus_coz(t)) is None)
-kontrol("güç tuşu: bas (birlikte) 'ctrl alt shift pagedown' aynı anda → riskli",
-        guvenlik.riskli_tus("ctrl alt shift pagedown", birlikte=True) is not None)
-for t in ("power", "k:116", "suspend", "k:205"):
-    kontrol(f"güç tuşu: bas {t!r} birlikte=True → riskli", guvenlik.riskli_tus(eylem.tus_coz(t, ayri_tuslar=True),
-                                                                          birlikte=True) is not None)
+    # güç / uyku / kilit / oturum kapatma tuşları: değiştiricisiz TEK tuş da riskli; KDE onaysız kapatma kısayolları
+    GUC_TUSLARI = ["power", "sleep", "wakeup", "coffee", "suspend", "k:116", "k:142", "k:143", "k:152", "k:205",
+                   "x:XF86PowerOff", "x:XF86PowerDown", "x:XF86Sleep", "x:XF86Suspend", "x:XF86Hibernate",
+                   "x:XF86ScreenSaver", "x:XF86LogOff", "x:XF86WakeUp", "x:0x1008ff2a", "shift+power", "a power",
+                   "ctrl+alt+shift+delete", "ctrl+alt+shift+pageup", "ctrl+alt+shift+pagedown", "ctrl+alt+shift+page_down",
+                   "ctrl+alt+shift+next", "ctrl+alt+shift+x:Prior", "ctrl+alt+shift+k:109", "ctrl+alt+shift+k:104"]
+    for t in GUC_TUSLARI:
+        kontrol(f"güç/kilit tuşu: riskli_tus(tus_coz({t!r})) → neden", guvenlik.riskli_tus(eylem.tus_coz(t)) is not None,
+                str(guvenlik.riskli_tus(eylem.tus_coz(t))))
+    for t in ("pagedown", "pageup", "ctrl+pagedown", "ctrl+shift+pageup", "ctrl+alt+pagedown", "shift+delete", "homepage"):
+        kontrol(f"güç/kilit tuşu değil: {t!r}", guvenlik.riskli_tus(eylem.tus_coz(t)) is None)
+    kontrol("güç tuşu: bas (birlikte) 'ctrl alt shift pagedown' aynı anda → riskli",
+            guvenlik.riskli_tus("ctrl alt shift pagedown", birlikte=True) is not None)
+    for t in ("power", "k:116", "suspend", "k:205"):
+        kontrol(f"güç tuşu: bas {t!r} birlikte=True → riskli", guvenlik.riskli_tus(eylem.tus_coz(t, ayri_tuslar=True),
+                                                                              birlikte=True) is not None)
 
 # ================================================================ 2. uçbirim komutları
 POZITIF_KOMUT = [

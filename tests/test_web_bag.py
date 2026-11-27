@@ -204,7 +204,8 @@ async def senaryo():
 
         r = await arac(c, "read_text", window=k, source="web")
         y = yapi(r)
-        adlar = {(o["role"], o["text"]) for o in y.get("items", [])}
+        # at-spi2-core sürümüne göre düğme "push button" (eski) ya da "button": aynı rol
+        adlar = {("button" if o["role"] == "push button" else o["role"], o["text"]) for o in y.get("items", [])}
         kontrol("read_text(web): etkileşimli ögeler rol + ad + merkezle", not r.is_error and
                 ("button", "Kaydet") in adlar and ("check box", "Bülten aboneliği") in adlar and
                 ("link", "Yardım") in adlar and all(len(o["center"]) == 2 for o in y["items"]), metin(r)[:300])

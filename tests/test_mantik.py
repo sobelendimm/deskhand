@@ -4,7 +4,7 @@ başlatma yasağı (ekran v3.2'den, 28 test) + paket yapısı: yollar/geçiş, D
 güvenlik denetiminin sahte arka uçla sınanması, Girdi bağlantısı (sahte dotool borusu), ham araç çağrısı taraması.
 
 Çalıştır:  python3 tests/test_mantik.py"""
-import os, sys, tempfile, time, types
+import glob, os, sys, tempfile, time, types
 
 import _yalitim  # noqa: F401  (DESKHAND_* geçici klasörler; Deskhand'den ÖNCE)
 from deskhand import akis, guvenlik, hata, insan, ocr, uygulama, yollar
@@ -76,9 +76,13 @@ e = sahte_etk([])
 e.kendi_girdi(t, t + 0.01); e.kendi_girdi(t + 0.02, t + 0.03)
 kontrol("kendi_girdi: çakışan pencereler birleşir", len(e.kendi) == 1, str(e.kendi))
 # 9) gerçek yardımcı süreç çalışıyor mu (yalnız dinler; girdi göndermez)
-r = E.Etkinlik()
-kontrol("yardımcı: Wayland boşta bildirimi v2 bağlandı", r.calisiyor() and r.hazir_an is not None, r.hata or "")
-r.kapat()
+_neden = _yalitim.wayland_eksigi()
+if _neden:
+    _yalitim.atla("yardımcı: Wayland boşta bildirimi v2", _neden)
+else:
+    r = E.Etkinlik()
+    kontrol("yardımcı: Wayland boşta bildirimi v2 bağlandı", r.calisiyor() and r.hazir_an is not None, r.hata or "")
+    r.kapat()
 
 # 10) bulanık eşleşme
 n = lambda s: E.kaba(E.norm(s))
@@ -117,12 +121,20 @@ kontrol("akış: bloksuz girintili adım → hata 1", ok)
 
 # 12) uygulama bulma + başlatma yasağı (HİÇBİR ŞEY BAŞLATILMAZ)
 gir = E.masaustu_girdileri()
-kontrol("uygulama: .desktop girdileri okundu", len(gir) > 20, str(len(gir)))
-try:
-    g = E.uygulama_bul("Dolphin"); ok = "dolphin" in g["kimlik"].lower()
-except E.Dur as x:
-    ok, g = False, x.mesaj
-kontrol("uygulama: 'Dolphin' bulundu", ok, str(g))
+_sistem_girdi = len(glob.glob("/usr/share/applications/*.desktop"))  # bağımsız sayım (önkoşul)
+if _sistem_girdi > 20:
+    kontrol("uygulama: .desktop girdileri okundu", len(gir) > 20, str(len(gir)))
+else:
+    _yalitim.atla("uygulama: .desktop girdileri okundu (> 20)", f"sistemde yalnız {_sistem_girdi} .desktop dosyası var")
+_neden = _yalitim.masaustu_girdisi_eksigi("org.kde.dolphin")
+if _neden:
+    _yalitim.atla("uygulama: 'Dolphin' bulundu", _neden)
+else:
+    try:
+        g = E.uygulama_bul("Dolphin"); ok = "dolphin" in g["kimlik"].lower()
+    except E.Dur as x:
+        ok, g = False, x.mesaj
+    kontrol("uygulama: 'Dolphin' bulundu", ok, str(g))
 os.makedirs(os.path.dirname(yollar.yasak_dosya()), exist_ok=True)
 with open(yollar.yasak_dosya(), "w") as f:  # testin kendi listesi (varsayılan liste boş)
     f.write("Ornek Oyun\nsteam_app_123456\n")
@@ -274,6 +286,10 @@ finally:
 
 
 # 18) kde Girdi bağlantısı: SAHTE dotool borusu (gerçek dotool AÇILMAZ). gonder: DUR → denetle → yaz; zorla denetimsiz
+class _Atla(Exception):
+    pass
+
+
 class SahteBoru:
     def __init__(self): self.stdin = io.StringIO()
     def poll(self): return None
@@ -288,7 +304,11 @@ def sahte_girdi(denetimler):
 
 
 arka_uc._ORNEKLER["kde"] = sahte
+_kilit_neden = _yalitim.kilit_eksigi()  # gonder her seferinde GERÇEK oturum kilidini okur (kapalı-başarısız)
 try:
+    if _kilit_neden:
+        _yalitim.atla("18) kde Girdi bağlantısı (sahte dotool borusu)", _kilit_neden)
+        raise _Atla
     den = []
     g = sahte_girdi(den)
     g.gonder("{a}", "defter", "key enter")
@@ -308,6 +328,8 @@ try:
     kontrol("Girdi: 'wheel N' dotool'a N ayrı çentik (XWayland Chromium/CEF ilk olayı yutar); büyük N olduğu gibi",
             g3.p.stdin.getvalue() == "mouseto 0.5 0.5\n" + "wheel -1\n" * 3 + "hwheel 1\n" * 2 + "wheel 1\nwheel 500\n",
             repr(g3.p.stdin.getvalue()))
+except _Atla:
+    pass
 finally:
     guvenlik.dur_kapat()
     if eski_kde is None:
@@ -353,8 +375,12 @@ kontrol("cli: devam panel kapalı → ret (13), DUR açık kalır (yalnız kulla
 from deskhand import guvenlik as _guvenlik  # noqa: E402
 _guvenlik.dur_kapat("kullanici")  # the user's panel button (test cleanup)
 kontrol("panel düğmesi (kullanıcı) → DUR kalktı", not os.path.exists(hata.dur_dosyasi()))
-kod, out = deskhand("bas", "{00000000-0000-0000-0000-000000000000}", "w", "99")
-kontrol("cli: yok pencere → 8 (girdi açılmadan)", kod == 8, f"{kod} {out}")
+_neden = _yalitim.arac_eksigi("kdotool")  # pencere varlığı kde arka ucunda kdotool ile sorulur
+if _neden:
+    _yalitim.atla("cli: yok pencere → 8 (girdi açılmadan)", _neden)
+else:
+    kod, out = deskhand("bas", "{00000000-0000-0000-0000-000000000000}", "w", "99")
+    kontrol("cli: yok pencere → 8 (girdi açılmadan)", kod == 8, f"{kod} {out}")
 
 # komut satırında `type` kaçışları: kabuk çift tırnakta \\n'i olduğu gibi iletir → Enter'a çevrilmeli (MCP'de değil)
 from deskhand.cli import ayristirici, kacis_coz  # noqa: E402

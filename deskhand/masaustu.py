@@ -37,11 +37,11 @@ import time
 
 from . import masalar, sistemd, yollar
 # Ortak yapı taşları (kafes, ses, özel veri yolu, Xauthority): arka_ortak.py. Eski adlar burada da kalır (geriye uyum).
-from .arka_ortak import (IZINLI_SERVISLER, KAPI, SILINECEK_ORTAM, SINK, VARSAYILAN_BELLEK,  # noqa: F401
+from .arka_ortak import (IZINLI_SERVISLER, KAPI, KAPI_KABUK, SILINECEK_ORTAM, SINK, VARSAYILAN_BELLEK,  # noqa: F401
                          VARSAYILAN_TAKAS, _atalar, _bekle, _bellek_siniri, _canli, _cgroup, _dbus_yapilandir,
                          _gunluk_dosyasi, _isaretli_surecler, _kafes_surecleri, _kafese_al, _komut_satiri,
                          _kullanici_bus_ortami, _oncelik, _ortam_oku, _pactl, _satir_bekle, _sink_modulu, _sinyal,
-                         _takas_siniri, _xauth_yaz, kafeste_baslat, korumali_baslat, oncelik_bekcisi_baslat, ortam_tabani, pid_dogru,
+                         _takas_siniri, _xauth_yaz, atspi_yardimci, kafeste_baslat, korumali_baslat, oncelik_bekcisi_baslat, ortam_tabani, pid_dogru,
                          pid_kaydet, runtime_denetle, ses_kaldir, ses_kur, soket_karsi_pid, soket_kimligi,
                          gercek_soket_kimlikleri, GUVENLI_PATH, python_yolu,
                          ses_bagi, ses_ortami_uygula, uygulama_runtime)
@@ -1066,7 +1066,7 @@ def _kwin_baslat(boyut: str | None, olcek: int = 1) -> dict:
 
 
 def _xvfb_baslat(boyut: str | None, openbox: bool) -> dict:
-    for arac in ("Xvfb", "dbus-daemon", "nice", "ionice", "sh"):
+    for arac in ("Xvfb", "dbus-daemon", "nice", "ionice", KAPI_KABUK):
         if not _arac(arac, zorunlu=False):
             raise Dur(ARAC_EKSIK, _("{arac} yok (Xvfb: xorg-server-xvfb paketi)").format(arac=arac))
     g, y, derinlik = boyut_coz(boyut)
@@ -1270,7 +1270,8 @@ def _erisim_hazirla_ic(d: dict) -> str:
         _busctl(adres, "set-property", *nesne, "b", "true")
     a11y = erisim_adresi(adres)
     acik = _busctl(adres, "get-property", *nesne) == "b true"
-    kayit_exe = _arac("/usr/lib/at-spi2-registryd", zorunlu=False) or "/yok/at-spi2-registryd"
+    kayit_exe = _arac(atspi_yardimci("at-spi2-registryd") or "/usr/lib/at-spi2-registryd", zorunlu=False) or \
+        "/yok/at-spi2-registryd"
     kayit = False
     if a11y and acik:
         sor = ("call", "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", "s", A11Y_KAYIT)

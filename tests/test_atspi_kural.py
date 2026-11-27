@@ -161,8 +161,12 @@ else:
               f"yol={o['yol']}", flush=True)
     for k, n in duzelen.items():
         print(f"  DÜZELDİ ×{n} (atspi_bilinen.json'dan silin): {k}", flush=True)
-    kontrol(f"AT-SPI: bilinen dışında yeni ihlal yok (bugün {sum(guncel.values())}, bilinen {sum(bilinen.values())})",
-            not yeni, f"{sum(yeni.values())} yeni")
+    _ortam_farki = _yalitim.yazi_ortami_farki()  # hedef boyutu (HEDEF_KUCUK) yazı tipinin ölçüsüne bağlı
+    if _ortam_farki and yeni:
+        _yalitim.atla(f"AT-SPI: bilinen dışında yeni ihlal yok ({sum(yeni.values())} yeni)", _ortam_farki)
+    else:
+        kontrol(f"AT-SPI: bilinen dışında yeni ihlal yok (bugün {sum(guncel.values())}, bilinen {sum(bilinen.values())})",
+                not yeni, f"{sum(yeni.values())} yeni")
 
 print(f"\n{gecen}/{toplam} AT-SPI kural testi geçti")
 sys.exit(0 if gecen == toplam else 1)

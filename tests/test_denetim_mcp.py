@@ -213,6 +213,12 @@ SHEBANG = {"sh-sarmalayici": ("#!/usr/bin/sh\nexec /usr/lib/x/soffice \"$@\"\n",
            "env-atama": ("#!/usr/bin/env FOO=1 python3\n", False),
            "goreli": ("#!sh\n", False),
            "kullanici-yorumlayici": (f"#!{benim}\n", False)}
+# env-python: `env python3` PATH'ten çözülür; PATH'teki python3 kullanıcıya aitse (ör. CI'daki sanal ortam) güvenilir
+# OLMAMASI doğrudur, "root sahipli hedef → güvenilir" savı o ortamda sınanamaz.
+_py3 = shutil.which("python3")
+if not (_py3 and gercek_root(_py3)):
+    print(f"ATLANDI  YB2: 'env-python' (PATH'teki python3 root sahipli/yazılamaz değil: {_py3})")
+    SHEBANG.pop("env-python")
 for ad_, (icerik, beklenen) in SHEBANG.items():
     yol_ = os.path.join(SB, ad_)
     with open(yol_, "w") as f:
@@ -284,6 +290,9 @@ for kimlik in ("firefox", "org.kde.kate", "org.kde.dolphin", "org.kde.gwenview",
                "vivaldi-stable"):  # vivaldi: root sahipli #! sarmalayıcı (libreoffice/steam kod barındırır: onaylı)
     x = sistem.get(kimlik)
     if x is None:
+        continue
+    if not uygulama._root_yazilamaz(x["yol"]):  # sistem dizininde ama dosya root'a ait/yazılamaz değil (CI kalıbı)
+        print(f"ATLANDI  YB2: sistem girdisi '{kimlik}' (dosya root sahipli/yazılamaz değil: {x['yol']})")
         continue
     ISTEKLER.clear()
     g, _b = uygulama.mcp_uygulama(kimlik)
