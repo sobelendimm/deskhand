@@ -669,6 +669,57 @@ for q in SUREC:
     if q.poll() is None:
         q.kill()
 
+# D1: geri çekilme üst sınırı kayan nokta hatasıyla yok sayılmaz
+import random  # noqa: E402
+_s = 4187507.9414002034
+kontrol("D1: simdi=4187507.94… + 86400 → geri çekilme uygulanır",
+        bb._uzun_engel({"geri_cekilme_bitis": _s + 86400.0}, _s) == "geri-cekilme")
+_rng = random.Random(1127)
+_kacan = []
+for _i in range(20000):
+    _s = _rng.uniform(0, 1e9)
+    _gc = _rng.choice([bb.GERI_CEKILME_AZAMI_SN, _rng.uniform(1, bb.GERI_CEKILME_AZAMI_SN)])
+    if bb._uzun_engel({"geri_cekilme_bitis": _s + _gc}, _s) != "geri-cekilme":
+        _kacan.append((_s, _gc))
+kontrol("D1: rastgele simdi/süre (≤ üst sınır) → geri çekilme her zaman uygulanır", not _kacan, _kacan[:3])
+kontrol("D1: üst sınırı çok aşan bitiş hâlâ bozuk sayılır",
+        bb._uzun_engel({"geri_cekilme_bitis": 1000.0 + 2 * bb.GERI_CEKILME_AZAMI_SN}, 1000.0) is None)
+
+# D2: kapanış payı gerçekten beklenir (durum None ile atlatılmadan)
+GERCEK_DOGRULA = bb.dogrula
+bb.dogrula = lambda *a, **k: (False, "acilmadi")
+_cagri = [0]
+
+
+def _kapanan_durum(*a, **k):
+    _cagri[0] += 1
+    return dict(D) if _cagri[0] <= 2 else None  # pay içinde (3. yoklamada) masaüstü kapanıyor
+
+
+sifirla()
+bb._durum_yaz(AD, {"kimlik": "test", "acilis": bb._acilis(), "bekleyen": {"id": "d2"}})
+masaustu.durum = _kapanan_durum
+bb._dogrula_is(AD, dict(D), {"current": 1, "kullanim": 1}, [({"pid": 1}, {"kopya": "/yok/k", "popen": None})], [],
+               bb._mono(), "d2")
+masaustu.durum = GERCEK_DURUM
+bb._ONBELLEK.clear()
+kontrol("D2: pay içinde masaüstü kapandı → sahte hata kaydı yok", bb._durum_oku(AD).get("son_hata_olay") is None,
+        (_cagri, bb._durum_oku(AD)))
+sifirla()
+bb._durum_yaz(AD, {"kimlik": "test", "acilis": bb._acilis(), "bekleyen": {"id": "d2"}})
+t0 = time.monotonic()
+bb._dogrula_is(AD, dict(D), {"current": 1, "kullanim": 1}, [({"pid": 1}, {"kopya": "/yok/k", "popen": None})], [],
+               bb._mono(), "d2")
+sure = time.monotonic() - t0
+bb._ONBELLEK.clear()
+h = bb._durum_oku(AD).get("son_hata_olay")
+kontrol("D2: masaüstü yaşıyor → pay dolunca hata yazılır", sure >= bb.KAPANIS_PAYI_SN and h and h.get("neden") == "acilmadi",
+        (sure, h))
+bb.dogrula = GERCEK_DOGRULA
+kontrol("D3: KAPANIS_PAYI_SN varsayılanı 20 sn", "KAPANIS_PAYI_SN = 20.0" in
+        open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "deskhand", "bellek_bekcisi.py"),
+             encoding="utf-8").read())
+
 # ---------------------------------------------------------------- ABM-KARAR değerleri
 kontrol("ABM-KARAR (a): varsayılan MemoryMax 8G, DESKHAND_SANAL_BELLEK ezer", ao.VARSAYILAN_BELLEK == "8G" and (
     os.environ.__setitem__("DESKHAND_SANAL_BELLEK", "3G") or ao._bellek_siniri() == "3G"))

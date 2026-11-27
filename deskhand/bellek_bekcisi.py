@@ -68,7 +68,7 @@ ESKI_BEKLE_SN = 5.0            # kayıttaki (sarmalayıcı) sürecin bitmesi iç
 ACILIS_SN = 15.0               # yeni ana Firefox'un görünmesi için bekleme (kilit dışında)
 DOGRULA_SN = 10.0              # açıldıktan sonra bu kadar sn ayakta kalmalı (kilit dışında)
 BEKLEYEN_AZAMI_SN = 180.0      # doğrulaması bitmemiş (iş parçacığı ölmüş) yeniden başlatma bu kadar sn sonra sonuçlandırılır
-KAPANIS_PAYI_SN = 10.0         # doğrulama başarısızsa: masaüstü mü kapanıyor (uygulamalar → çekirdek, ≤ ~8 sn)? bu kadar bekle
+KAPANIS_PAYI_SN = 20.0         # doğrulama başarısızsa: masaüstü mü kapanıyor (xvfb ≤ ~8 sn; KWin çekirdek süreçleri tek tek ≤ 4 sn)? bu kadar bekle
 ORTAM_FF = "DESKHAND_FF_YENIDEN"
 CGROUP_KOK = "/sys/fs/cgroup"
 DURUM_DOSYA = "bellek-bekcisi.json"
@@ -597,7 +597,7 @@ def _uzun_engel(kayit: dict, simdi: float) -> str | None:
         bitis = float(kayit.get("geri_cekilme_bitis") or 0)
     except (TypeError, ValueError):
         bitis = 0.0
-    if 0 < bitis - simdi <= GERI_CEKILME_AZAMI_SN:
+    if 0 < bitis - simdi <= GERI_CEKILME_AZAMI_SN + 1:  # +1 sn: simdi + AZAMI kayan noktada AZAMI'yı az aşabilir
         return "geri-cekilme"
     if len(_gecmis(kayit, simdi)) >= GUNLUK_AZAMI:
         return "gunluk-sinir"
