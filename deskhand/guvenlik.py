@@ -4,7 +4,8 @@
 - Hassas düğme (ödeme/yetki/hesap silme) ve ödeme sayfası başlığı: --onayli olmadan tıklanmaz (10).
   --onayli YALNIZ kullanıcı o adımı sohbette açıkça onayladıysa verilir.
 - Başlık (-b) ve sınıf (-s) kilidi: her girdiden hemen önce (4).
-- DUR anahtarı (RUNTIME_DIR/dur): her girdi satırından önce (13); `dur` oluşturur, `devam` siler. Yazma/kaldırma
+- DUR anahtarı (RUNTIME_DIR/dur): her girdi satırından önce (13); `dur` oluşturur; `devam` yalnız kullanıcının panel onayıyla
+  siler (dur_kaldir_iste). Yazma/kaldırma
   atomik: kullanıcının (arayüzden) koyduğu DUR'u ajan hiçbir yarışta kaldıramaz ya da ezemez.
 - Riskli tuş kombinasyonları (oturumu/sistemi sonlandıran, ekrandan çıkaran) ve uçbirime yazılan yıkıcı komutlar:
   YASAK değil, insan onayı (hassas düğmeyle aynı yol; --onayli yoksa panelden onay, panel kapalıysa 10).

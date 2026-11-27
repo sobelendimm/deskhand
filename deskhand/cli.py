@@ -212,7 +212,7 @@ KISA_ACIKLAMA = {
     "web": N_("tarayıcı sayfasının ögelerini listele"),
     "ogeye-tikla": N_("ögeye adıyla tıkla"),
     "dur": N_("DUR anahtarını aç (hiçbir girdi gönderilmez)"),
-    "devam": N_("DUR anahtarını kaldır"),
+    "devam": N_("DUR kaldırma isteği (kullanıcı panelde onaylar)"),
     "ogeye-yaz": N_("ögenin değerini yaz"),
     "durum": N_("arka uç ve DUR durumunu göster"),
     "mesgul": N_("kullanıcı meşgul mü (salt okunur)"),

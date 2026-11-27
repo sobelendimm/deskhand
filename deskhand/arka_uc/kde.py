@@ -518,7 +518,7 @@ class Girdi:
             m.gonder(satirlar)
         except _gm.MerkezHatasi as e:
             if e.kod == KULLANICI_DUR:  # merkez yazımdan hemen önce DUR'u gördü
-                raise Dur(KULLANICI_DUR, _("kullanıcı DUR dedi (deskhand devam ile kaldırılır); girdi gönderilmedi"))
+                raise Dur(KULLANICI_DUR, _("kullanıcı DUR dedi (yalnız kullanıcı panelden ya da kısayolla kaldırır); girdi gönderilmedi"))
             raise Dur(1 if e.kod == 1 else 9, _("girdi merkezi: {neden}").format(neden=e.mesaj)) from None
 
     def _mesgul_bekle(self, m, bitis):

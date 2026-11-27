@@ -556,10 +556,14 @@ def t_tepsi():
                          ("type", ["type", W.K, "x"]), ("open", ["open", "--command", "true", "--timeout", "2"])]:
             kod, out, t = ekran(*argv)
             kontrol(f"DUR açıkken {ad} → 13, girdi yok", kod == DUR_KODU and not W.yeni_olaylar(), f"kod {kod}, {son_satir(out)}")
-        kod, out, t = ekran("resume")
+        # CLI resume asks the panel (guvenlik.dur_kaldir_iste, default No); unattended mode refuses at once (no dialog
+        # left open in this test), and the message never tells the agent how to remove DUR
+        gozetimsiz = dict(os.environ, DESKHAND_GOZETIMSIZ="1")
+        kod, out, t = ekran("resume", env=gozetimsiz)
         kontrol("CLI 'resume' kullanıcının DUR'unu KALDIRAMAZ → 13", kod == DUR_KODU and guvenlik.dur_acik(), f"kod {kod}")
-        kod, out, t = ekran("devam")
-        kontrol("CLI 'devam' (Türkçe) da kaldıramaz → 13", kod == DUR_KODU and guvenlik.dur_acik(), f"kod {kod}")
+        kod, out, t = ekran("devam", env=gozetimsiz)
+        kontrol("CLI 'devam' (Türkçe) da kaldıramaz → 13, ileti kaldırma yolu tarif etmez",
+                kod == DUR_KODU and guvenlik.dur_acik() and " resume" not in out and " devam" not in out, f"kod {kod}")
         kod, out, t = ekran("status")
         kontrol("status: DUR açık gösterilir", kod == 0 and "AÇIK" in out, son_satir(out))
         m = bekle_kosul(lambda: (lambda x: x if x == "menu dur=0 devam=1" else "")(yardimci_komut(H, "menu")), 5)

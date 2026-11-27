@@ -99,7 +99,7 @@ def gozetimsiz() -> bool:
 def dur_denetle() -> None:
     """DUR anahtarı açıksa Dur(13). Her girdi satırından önce çağrılır (iki arka uçta da). ~2 µs."""
     if os.path.exists(dur_dosyasi()):
-        raise Dur(KULLANICI_DUR, _("kullanıcı DUR dedi (deskhand devam ile kaldırılır); girdi gönderilmedi"))
+        raise Dur(KULLANICI_DUR, _("kullanıcı DUR dedi (yalnız kullanıcı panelden ya da kısayolla kaldırır); girdi gönderilmedi"))
 
 
 # ---------------------------------------------------------------- geçici alan dolu (ENOSPC)

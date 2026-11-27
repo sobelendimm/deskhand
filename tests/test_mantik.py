@@ -347,8 +347,12 @@ kod, out = deskhand("tikla", "{00000000-0000-0000-0000-000000000000}", "1", "1")
 kontrol("cli: DUR açıkken girdi komutu → 13 (hiçbir şey açılmadan)", kod == 13 and "DUR" in out, f"{kod} {out}")
 kod, out = deskhand("durum")
 kontrol("cli: durum DUR'u gösterir", "DUR: AÇIK" in out)
-deskhand("devam")
-kontrol("cli: devam → DUR kalktı", not os.path.exists(hata.dur_dosyasi()))
+kod, out = deskhand("devam")
+kontrol("cli: devam panel kapalı → ret (13), DUR açık kalır (yalnız kullanıcı kaldırır)",
+        kod == 13 and os.path.exists(hata.dur_dosyasi()) and "devam" not in out.split("DURDURULDU", 1)[-1], f"{kod} {out}")
+from deskhand import guvenlik as _guvenlik  # noqa: E402
+_guvenlik.dur_kapat("kullanici")  # the user's panel button (test cleanup)
+kontrol("panel düğmesi (kullanıcı) → DUR kalktı", not os.path.exists(hata.dur_dosyasi()))
 kod, out = deskhand("bas", "{00000000-0000-0000-0000-000000000000}", "w", "99")
 kontrol("cli: yok pencere → 8 (girdi açılmadan)", kod == 8, f"{kod} {out}")
 
