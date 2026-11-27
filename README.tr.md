@@ -1,12 +1,14 @@
-# Deskhand — yapay zekâ ajanları KDE masaüstünüzü güvenle kullansın
+# Deskhand for KDE — Claude Code ve diğer yapay zekâ ajanlarının KDE Plasma (Wayland) masaüstünüzü kullanmasını sağlayan, ödemelerde onay isteyen MCP sunucusu
 
 *English: [README.md](README.md)*
 
+Son sürüm: 0.10.0 (Kasım 2026) · GPL-3.0-or-later · ücretsiz, hesap gerekmez · 20 MCP aracı
+
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE) [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sobelendimm%2Fdeskhand-informational)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sobelendimm/deskhand)
 
-**Deskhand, yapay zekâ ajanlarının (Claude Code ve diğer MCP istemcileri) KDE Plasma
-masaüstünüzü güvenle kullanmasını sağlar: ister sizin ekranınızda, ister siz film izlerken
-görünmez ikinci bir masaüstünde.**
+**Deskhand for KDE, yapay zekâ ajanlarının (Claude Code ve diğer MCP istemcileri) Wayland'daki
+KDE Plasma masaüstünüzü güvenle kullanmasını sağlayan bir MCP sunucusudur: ister sizin
+ekranınızda, ister siz film izlerken görünmez ikinci bir masaüstünde (KWin oturumu).**
 
 Ajan pencereleri okuyabilir, ekranda gördüğü yazıya tıklayabilir, yazı yazabilir, uygulama
 açabilir. Her girdi, o anda ekranda gerçekten ne olduğuna bakılarak denetlenir. Satın al/Öde
@@ -313,6 +315,21 @@ derler ve şunları kurar:
 
 Sistem geneline hiçbir şey kurulmaz. Güncelleme: `git pull && ./install.sh`. Kaldırma:
 `./uninstall.sh` (ayarlar, kayıtlı simgeler ve akışlar kalır) ya da `./uninstall.sh --purge`.
+
+### pipx ile
+
+```bash
+pipx install deskhand
+deskhand doctor    # eksik sistem araçlarını Arch / Debian / Fedora paket adıyla listeler
+```
+
+pipx yalnız Python tarafını kurar. Sistem araçları dağıtımınızdan gelir (kdotool, dotool,
+İngilizce/Türkçe verili tesseract, Xvfb, openbox, bubblewrap). Küçük C yardımcılarını derlemek
+için C derleyicisi, make, pkg-config ve wayland-client, libsystemd, libei (>= 1.3.901),
+xkbcommon geliştirme dosyalarını kurun, sonra `deskhand doctor`'ın yazdığı `make -C …`
+komutunu çalıştırın (`pipx upgrade`'den sonra yeniden). libei yoksa arka plan masaüstü Xvfb
+ile açılır. Menü girdisi ve oturum açılışı yalnız `./install.sh` ile gelir; pipx'te onaylar
+için paneli `deskhand panel --tepsi` ile kendiniz başlatın.
 
 ## Hızlı başlangıç
 

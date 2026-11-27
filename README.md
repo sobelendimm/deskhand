@@ -1,15 +1,18 @@
-# Deskhand — let AI agents use your KDE desktop, safely
+# Deskhand for KDE — MCP server that lets Claude Code and other AI agents use your KDE Plasma (Wayland) desktop, with approval for payments
 
 *Türkçe: [README.tr.md](README.tr.md)*
 
+Latest: 0.10.0 (Nov 2026) · GPL-3.0-or-later · free, no account · 20 MCP tools
+
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE) [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sobelendimm%2Fdeskhand-informational)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sobelendimm/deskhand)
 
-**Deskhand lets AI agents (Claude Code and other MCP clients) use your KDE Plasma desktop
-safely — on your screen, or on an invisible second desktop while you watch a movie.**
+**Deskhand for KDE is an MCP server that lets AI agents (Claude Code and other MCP clients) use
+your KDE Plasma desktop on Wayland safely — on your screen, or on an invisible second desktop
+(a KWin session) while you watch a movie.**
 
 An agent can read windows, click on visible text, type and open apps. Every input is checked
 against what is actually on screen at that moment. Buy/Pay buttons and payment pages wait
-for **your** answer in a dialog the agent cannot reach. It stops the moment you touch the
+for **your** approval in a dialog the agent cannot reach. It stops the moment you touch the
 mouse, and one click on **STOP** halts everything. When you are busy, the work moves to a
 hidden desktop that can reuse some of your logged-in sessions, so your film or game is never
 interrupted.
@@ -315,6 +318,21 @@ command. It then builds the helpers and installs:
 
 Nothing is installed system-wide. Update: `git pull && ./install.sh`. Uninstall:
 `./uninstall.sh` (keeps settings, saved icons and flows) or `./uninstall.sh --purge`.
+
+### With pipx
+
+```bash
+pipx install deskhand
+deskhand doctor    # lists missing system tools with Arch / Debian / Fedora package names
+```
+
+pipx installs the Python side only. System tools come from your distribution (kdotool,
+dotool, tesseract with English/Turkish data, Xvfb, openbox, bubblewrap). To build the small C
+helpers, install a C compiler, make, pkg-config and the wayland-client, libsystemd, libei
+(>= 1.3.901) and xkbcommon development files, then run the `make -C …` command that
+`deskhand doctor` prints (run it again after `pipx upgrade`). Without libei the background
+desktop uses Xvfb. The menu entry and autostart come only from `./install.sh`; with pipx,
+start the panel yourself with `deskhand panel --tepsi`, because approvals need it.
 
 ## Quick start
 
