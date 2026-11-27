@@ -142,6 +142,18 @@ for ad, metin in [
 rc, out, _ = tara(dosya("git.txt", "git clone git" + "@github.com:u/r.git; session_identifier; user" + "@1000.service\n"))
 kontrol("6h: git@github.com, session_identifier, user@1000.service bulgu değil", rc == 0, out)
 
+print("7) review round 2")
+MAKAS = "# ------------------------ " + ">8 ------------------------"
+rc, out, _ = tara("--ileti", "clean up\n\n" + MAKAS + "\n# Do not modify or remove the line above.\n"
+                  "-old " + EV + "gercekad/x\n-" + OTURUM + "\n")
+kontrol("7a: makas satırından sonrası (git commit -v farkı) taranmaz", rc == 0 and out == "", out)
+rc, out, _ = tara("--ileti", "clean up\n# " + OTURUM + "\n" + MAKAS + "\n-x\n")
+kontrol("7b: makastan önceki '#' satırındaki iz bulgu", rc == 1 and "<ileti>:2 · session-trailer" in out, out)
+rc, out, _ = tara(dosya("api.txt", "GET /users/" + "me\nPOST /USERS/" + "me/keys\n"))
+kontrol("7c: küçük/büyük harf /users/ API yolu ev sayılmaz", rc == 0, out)
+rc, out, _ = tara(dosya("mac.txt", "open /Users/" + AD + "/Library\n"))
+kontrol("7d: macOS /Users/<ad> (büyük U) hâlâ bulgu", rc == 1 and "home-path" in out, out)
+
 print("3) repository")
 rc, out, err = tara(ARAC, os.path.abspath(__file__))
 kontrol("3a: tarayıcı ve bu test kendi desenlerine takılmaz", rc == 0, out)

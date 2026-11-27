@@ -5,7 +5,8 @@ the public tree and commit messages.
 Usage:  python3 tools/iz_tara.py [--ek FILE] [--ek-zorunlu] [--ileti TEXT] [path…]
   path…        files (or directories, walked recursively) to scan; with neither paths nor --ileti: `git ls-files`
   --ileti      also scan this text (a commit message). Every line is scanned, '#' lines included: `git commit -m`
-               (cleanup=whitespace) keeps them in the commit.
+               (cleanup=whitespace) keeps them in the commit. Text after git's scissors line (the `commit -v`
+               diff) is cut off, as git drops it.
   --ek FILE    extra private patterns, one literal word per line ('#' comments, blank lines skipped), matched
                case-insensitively (Turkish I/ı/İ/i folded together). The file lives OUTSIDE the repository
                (~/.config/deskhand/iz-desenleri.txt); a missing file is a warning, not an error. Findings never
@@ -30,8 +31,11 @@ import sys
 SERBEST_EV = {"u", "x", "user", "kullanici", "kisi"}
 # any case: /home/<n>, ../home/<n>, /Users/<n>, URL-encoded %2Fhome%2F<n>; Windows C:\Users\<n> (also escaped
 # as C:\\Users\\<n>, or written with /)
-EV = re.compile(r"(?:(?<![\w~-])/|%2f)(?:home|users)(?:/|%2f)([\w.-]+)"
-                r"|(?<![\w])[a-z]:(?:\\{1,2}|/)users(?:\\{1,2}|/)([\w.-]+)", re.IGNORECASE)
+# macOS /Users only with a capital U: lower/upper-case /users/ is a common web API path (GET /users/me)
+EV = re.compile(r"(?:(?<![\w~-])/|(?i:%2f))(?:(?i:home)|Users)(?:/|(?i:%2f))([\w.-]+)"
+                r"|(?i:(?<![\w])[a-z]:(?:\\{1,2}|/)users(?:\\{1,2}|/))([\w.-]+)")
+# git's scissors line: everything below it (the `git commit -v` diff) never enters the commit
+MAKAS = "# ------------------------ >8 ------------------------"
 EPOSTA = re.compile(r"(?<![\w.+-])([\w.+-]+)@([\w-]+(?:\.[\w-]+)+)")
 # exact example domains (also Turkish "örnek") and the GitHub noreply domain; no subdomains
 SERBEST_ALAN = {f"{a}.{t}" for a in ("example", "örnek") for t in ("com", "org", "net")} | {"users.noreply.github.com"}
@@ -145,7 +149,9 @@ def main(argv: list[str] | None = None) -> int:
 
     bulgular = []
     for metin in a.ileti:
-        bulgular += metin_tara("<ileti>", metin, ekler)
+        satirlar = metin.splitlines()
+        kes = next((i for i, s in enumerate(satirlar) if s.startswith(MAKAS)), len(satirlar))
+        bulgular += metin_tara("<ileti>", "\n".join(satirlar[:kes]), ekler)
     n = 0
     for yol in dosyalari_ac(yollar):
         metin = dosya_oku(yol)
