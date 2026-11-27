@@ -846,8 +846,8 @@ class OnaylarSekmesi(QWidget):
 
 # =========================================================================== Ayarlar
 
-Y_DOGRULANMADI = N_("DOĞRULANMADI — dosyadaki onaylanmamış içerik (salt okunur). Cüzdan açılınca panel imzalı kaydı "
-                    "geri yükler; o zamana kadar Deskhand durdu (Dur 10).")
+Y_DOGRULANMADI = N_("DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı "
+                    "geri yükler (imzalı kayıt yoksa girişleri yeniden sorar); o zamana kadar Deskhand durdu (Dur 10).")
 
 
 class AyarlarSekmesi(QScrollArea):
@@ -1208,7 +1208,13 @@ class AyarlarSekmesi(QScrollArea):
         if dugme is not None:
             dugme.setEnabled(not kilitli)
         if kilitli:
-            etiket.setText(_(Y_DOGRULANMADI))
+            # the same display as the panel's question (review INC4 O3): every applied entry numbered, invisible /
+            # look-alike characters visible; the fixed label (entry count) is outside the content field
+            g = liste_koruma.dogrulanmamis_gosterim(tur, liste_koruma.AKTIF.metin(tur) if liste_koruma.AKTIF else None)
+            b = g.bolumler[0]
+            alan.setPlainText("\n".join(b.satirlar))
+            etiket.setTextFormat(Qt.TextFormat.PlainText)
+            etiket.setText(_(Y_DOGRULANMADI) + " " + b.etiket)
         self._liste_kilitli[tur] = kilitli
         return kilitli
 

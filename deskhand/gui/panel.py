@@ -5,7 +5,7 @@ import fcntl
 import os
 import time
 
-from PyQt6.QtCore import QObject, QTimer
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWidgets import QApplication
@@ -137,6 +137,8 @@ def uygulama_simgesi() -> QIcon:
 
 
 class Panel(QObject):
+    uyari_istendi = pyqtSignal(str)  # _liste_uyari from any thread → _liste_uyari_goster on the GUI thread (INC4 Y2)
+
     def __init__(self, app: QApplication, sunucu: QLocalServer | None = None, tepsi: bool = True,
                  izleyici: Izleyici | None = None, kisayol: GenelKisayol | None = None, diyalog_kurma_ms=None,
                  girdi_merkezi: bool = False, **pencere_kw):
@@ -177,6 +179,9 @@ class Panel(QObject):
             # 0.9.1 (Faz A): bekleyen isteğin tepsi bildirimine tıklamak yalnız paneli ve diyaloğu öne getirir (karar üretmez)
             self.tepsi.onay_istendi.connect(lambda k: (self.goster(), self.diyalog_one(k)))
         app.aboutToQuit.connect(self.kapanis)
+        self._bildirim_son: dict[str, float] = {}
+        self.liste_uyarilari: list[str] = []
+        self.uyari_istendi.connect(self._liste_uyari_goster)  # auto: direct on the GUI thread, queued from others
 
         onay.panel_kaydet()
         self._liste_koruma_baslat()
@@ -201,7 +206,6 @@ class Panel(QObject):
         from PyQt6.QtCore import QFileSystemWatcher
 
         from .. import liste_koruma
-        self.liste_uyarilari: list[str] = []
         self.koruyucu = liste_koruma.panel_baslat(self._liste_uyari, self._kalici_onayla, self._degisiklik_onayla)
         from .. import onay as _onay
         # the panel removed DUR itself on the user's Yes to a removal request: it is no longer the panel's own DUR
@@ -227,32 +231,82 @@ class Panel(QObject):
 
     def _dur_kaydet(self, acik: bool):
         """The user's DUR on/off as the panel knows it: in memory AND in the panel's signed state (Secret Service), so
-        a panel restart does not lose it (review INC3 B4). Wallet unusable → memory + the DUR file only."""
+        a panel restart does not lose it (review INC3 B4). Wallet unusable → memory + the DUR file now, the signed
+        state as soon as the wallet can be written (_dur_koru). The user's own decision ends a closed-fail wait."""
         self._dur_kullanici = bool(acik)
+        self._dur_kasa_bekliyor = False
+        kaydedildi = False
         try:
             from .. import liste_koruma
-            liste_koruma.panel_dur_sakla(bool(acik))
+            kaydedildi = liste_koruma.panel_dur_sakla(bool(acik))
         except Exception:  # noqa: BLE001 - the switch itself works without the wallet
             pass
+        self._dur_imzasiz = None if kaydedildi else bool(acik)
+
+    DUR_KASA_YENIDEN_SN = 5.0
 
     def _dur_baslat(self):
         """Panel start (B4): the user's DUR is the panel's own when the DUR file says "kullanici" OR the panel's
-        signed state says it was on (the agent may have killed the panel and deleted the file): put back."""
-        kayitli = False
+        signed state says it was on (the agent may have killed the panel and deleted the file): put back.
+        The signed state cannot be read (locked wallet, no Secret Service; review INC4 B4/E4): closed-fail, the DUR is
+        ON until the wallet can be read; then the signed value applies (off → the DUR put here is lifted)."""
+        self._dur_imzasiz = None
+        self._dur_kasa_bekliyor = False
+        self._dur_kasa_zaman = time.monotonic()
+        kayit = None
         try:
             from .. import liste_koruma
-            kayitli = liste_koruma.panel_dur_kayitli()
-        except Exception:  # noqa: BLE001 - wallet unusable: the DUR file only
-            pass
-        self._dur_kullanici = guvenlik.dur_kaynagi() == "kullanici" or kayitli
+            kayit = liste_koruma.panel_dur_durumu()
+        except Exception:  # noqa: BLE001 - wallet unusable: closed-fail below
+            kayit = None
+        dosyada = guvenlik.dur_kaynagi() == "kullanici"
+        if kayit is None and not dosyada:
+            self._dur_kullanici = True
+            guvenlik.dur_ac("kullanici")
+            self._dur_kasa_bekliyor = True
+            self._liste_uyari(_("Cüzdan okunamıyor; kullanıcının DUR kaydı doğrulanamadı. Güvenli tarafta DUR açık; "
+                                "cüzdan okununca panel imzalı kaydı uygular (kapalıysa DUR kalkar)."))
+            return
+        self._dur_kullanici = dosyada or bool(kayit)
         if self._dur_kullanici:
             self._dur_kaydet(True)
             self._dur_koru()
+
+    def _dur_kasa_denetle(self):
+        """Poll: a closed-fail DUR waits for the wallet; an unsigned DUR decision is signed once it can be written."""
+        if not (getattr(self, "_dur_kasa_bekliyor", False) or getattr(self, "_dur_imzasiz", None) is not None):
+            return
+        simdi = time.monotonic()
+        if simdi - getattr(self, "_dur_kasa_zaman", 0.0) < self.DUR_KASA_YENIDEN_SN:
+            return
+        self._dur_kasa_zaman = simdi
+        try:
+            from .. import liste_koruma
+            if self._dur_kasa_bekliyor:
+                kayit = liste_koruma.panel_dur_durumu()
+                if kayit is None:
+                    return
+                self._dur_kasa_bekliyor = False
+                if kayit:
+                    self._dur_kullanici = True
+                    self._liste_uyari(_("Cüzdan okundu; panelin imzalı kaydında kullanıcının DUR'u açık, DUR sürüyor."))
+                else:
+                    self._dur_kullanici = False
+                    guvenlik.dur_kapat("kullanici")
+                    self._liste_uyari(_("Cüzdan okundu; panelin imzalı kaydında DUR kapalı. Cüzdan okunamadığı için "
+                                        "açılan DUR kaldırıldı."))
+                    if hasattr(self, "izleyici"):
+                        self.izleyici.yenile()
+            elif liste_koruma.panel_dur_sakla(bool(self._dur_imzasiz)):
+                self._dur_imzasiz = None
+        except Exception:  # noqa: BLE001 - try again on the next poll
+            pass
 
     def _dur_koru(self):
         """The user's DUR (set in this panel) vanished without the panel's Devam (a process deleted the file): put it
         back and warn. Removing DUR is the user's decision only (CLI resume asks the panel: guvenlik.dur_kaldir_iste).
         A user DUR set outside this panel (the file says "kullanici") becomes the panel's own (B4)."""
+        self._dur_kasa_denetle()
         if not getattr(self, "_dur_kullanici", False) and guvenlik.dur_kaynagi() == "kullanici":
             self._dur_kaydet(True)
         if getattr(self, "_dur_kullanici", False) and not guvenlik.dur_acik():
@@ -270,41 +324,61 @@ class Panel(QObject):
             ayarlar_.liste_durumu_tazele()  # an unverified list became verified: Settings editable again (EK-2)
         self._liste_izle()  # geri yazılan dosya yeni inode: yeniden izle
 
-    def _kalici_onayla(self, siteler: list[str]) -> bool:
+    def _kalici_onayla(self, siteler: list[str], g=None):
         """A site was added to [oturum] kalici outside the panel (the user editing ayarlar.toml, or an agent): only
-        the user can let it keep its background session (encrypted, 30–365 days). Default answer: No."""
-        from PyQt6.QtWidgets import QMessageBox
-        metin = _("Görünmez masaüstündeki tarayıcının şu sitelerdeki oturumu kalıcı saklansın mı (şifreli, KDE "
-                  "Cüzdanı anahtarıyla; banka/ödeme siteleri hiçbir zaman)?\n\n{siteler}\n\nBu isteği siz "
-                  "yapmadıysanız Hayır deyin.").format(siteler="\n".join(siteler))
-        cevap = QMessageBox.question(None, "Deskhand — Onay", metin,
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                                     QMessageBox.StandardButton.No)
-        evet = cevap == QMessageBox.StandardButton.Yes
-        gunluk(f"kalıcı oturum sitesi onayı: {'evet' if evet else 'hayır'}: {', '.join(siteler)}")
-        return evet
+        the user can let it keep its background session (encrypted, 30–365 days). Default answer: No. The sites are
+        shown like every other approval (liste_koruma.gosterim: numbered, IDN / look-alike letters marked; INC4 O3)
+        and the display's token goes back with the answer."""
+        if g is None:
+            from .. import liste_koruma
+            g = liste_koruma.gosterim(_(liste_koruma.SORU_KALICI), [(liste_koruma.KALICI, ",".join(siteler), "",
+                                                                     "varsayilan")])
+        dlg, _alanlar = degisiklik_diyalogu(g)
+        evet = dlg.exec() == dlg.DialogCode.Accepted
+        gunluk(f"kalıcı oturum sitesi onayı: {'evet' if evet else 'hayır'}: {', '.join(siteler)!a}")
+        return evet, dlg.gosterilen_iz()
 
-    def _degisiklik_onayla(self, tur: str, aciklama: str) -> tuple[bool, str]:
+    def _degisiklik_onayla(self, tur: str, g) -> tuple[bool, str]:
         """A panel-authoritative setting changed while the panel was closed (or its mark cannot be verified) in the
         LOOSENING direction (liste_koruma): it is not used until the user says Yes. Default answer: No.
-        The WHOLE text is shown (scrollable, nothing cut) and the hash of what was shown goes back with the answer:
-        liste_koruma applies the Yes only when it equals the hash of the text built from the value (review EK-2)."""
-        dlg, _alan = degisiklik_diyalogu(aciklama)
+        Every applied entry is shown (liste_koruma.gosterim) and the display's token goes back with the answer:
+        liste_koruma applies the Yes only when it equals the hash of the canonical entry lists (review EK-2, INC4)."""
+        dlg, _alanlar = degisiklik_diyalogu(g)
         evet = dlg.exec() == dlg.DialogCode.Accepted
         gunluk(f"panel ayarı değişiklik onayı ({tur}): {'evet' if evet else 'hayır'}")
         return evet, dlg.gosterilen_iz()
 
+    BILDIRIM_ARALIK_SN = 10.0  # the same warning reason: at most one tray notification per this many seconds
+    LISTE_UYARI_SINIR = 200  # warnings kept in memory (a same-uid process can trigger refusals at will)
+
     def _liste_uyari(self, metin: str):
-        """Ayar dosyası panel dışında değişti/silindi ve geri yüklendi: günlük satırı (panel penceresinde görünür) +
-        tepsi bildirimi."""
+        """Ayar dosyası panel dışında değişti/silindi ve geri yüklendi, ya da bir Evet reddedildi: günlük satırı
+        (panel penceresinde görünür) + tepsi bildirimi. Callable from ANY thread (the approval channel's workers call
+        it: review INC4 Y2): the work is done on the GUI thread through a queued signal."""
+        self.uyari_istendi.emit(str(metin))
+
+    def _liste_uyari_goster(self, metin: str):
+        """GUI thread only (uyari_istendi). Tray notifications are limited per reason (BILDIRIM_ARALIK_SN)."""
+        import re
         self.liste_uyarilari.append(metin)
+        del self.liste_uyarilari[:-self.LISTE_UYARI_SINIR]
         gunluk("UYARI: " + metin)
-        if self.tepsi is not None:
-            try:
-                from PyQt6.QtWidgets import QSystemTrayIcon
-                self.tepsi.ikon.showMessage("Deskhand", metin, QSystemTrayIcon.MessageIcon.Warning, 8000)
-            except Exception:  # noqa: BLE001 - bildirim isteğe bağlı
-                pass
+        if self.tepsi is None:
+            return
+        neden = re.sub(r"\[[0-9a-f]{8} ", "[", metin)  # the request id changes per request; the reason does not
+        simdi = time.monotonic()
+        son = self._bildirim_son.get(neden)
+        if son is not None and simdi - son < self.BILDIRIM_ARALIK_SN:
+            return
+        self._bildirim_son[neden] = simdi
+        if len(self._bildirim_son) > self.LISTE_UYARI_SINIR:
+            self._bildirim_son = {k: v for k, v in self._bildirim_son.items()
+                                  if simdi - v < self.BILDIRIM_ARALIK_SN}
+        try:
+            from PyQt6.QtWidgets import QSystemTrayIcon
+            self.tepsi.ikon.showMessage("Deskhand", metin, QSystemTrayIcon.MessageIcon.Warning, 8000)
+        except Exception:  # noqa: BLE001 - bildirim isteğe bağlı
+            pass
 
     # -------- girdi merkezi (panel yaşadıkça hazır bekleyen tek dotool; deskhand/girdi_merkezi.py)
     @staticmethod
@@ -517,33 +591,54 @@ class Panel(QObject):
         self.app.quit()
 
 
-def degisiklik_diyalogu(aciklama: str):
-    """The loosening question of liste_koruma (review EK-2): the WHOLE text in a scrollable read-only field (every
-    pattern / level rule visible, nothing cut), Yes / No with No as the default. → (dialog, text field); the dialog's
-    gosterilen_iz() is the sha256 of the text it shows."""
-    import hashlib
-
+def degisiklik_diyalogu(g):
+    """The approval question of liste_koruma (review EK-2, INC4 O3): the fixed question, then per setting a fixed name
+    and a fixed label (entry counts; nothing from the file) OUTSIDE the content, and the entries in a scrollable
+    read-only monospace field (every entry numbered on its own line, invisible / look-alike characters visible;
+    liste_koruma.gosterim). Yes / No with No as the default; Yes disabled over the entry limit. → (dialog, content
+    fields); gosterilen_iz() is the display's token (the hash of the canonical entry lists), never the widget text."""
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QFontDatabase
     from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QPlainTextEdit, QVBoxLayout
+
+    def etiket(metin: str, kalin: bool = False) -> QLabel:
+        e = QLabel()
+        e.setTextFormat(Qt.TextFormat.PlainText)  # never rich text: names / counts only, but no HTML either way
+        e.setWordWrap(True)
+        e.setText(metin)
+        if kalin:
+            f = e.font()
+            f.setBold(True)
+            e.setFont(f)
+        return e
+
     dlg = QDialog()
     dlg.setWindowTitle("Deskhand — Onay")
-    dlg.setMinimumSize(560, 420)
+    dlg.setMinimumSize(640, 460)
     kok = QVBoxLayout(dlg)
-    soru = QLabel(_("Deskhand ayarı panel kapalıyken değişti ya da panelin imzası doğrulanamadı. Değerin tamamı "
-                    "aşağıda. Bu değişiklik uygulansın mı? Siz yapmadıysanız Hayır deyin."))
-    soru.setWordWrap(True)
-    kok.addWidget(soru)
-    alan = QPlainTextEdit()
-    alan.setReadOnly(True)
-    alan.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
-    alan.setPlainText(aciklama)
-    kok.addWidget(alan, 1)
+    kok.addWidget(etiket(g.soru))
+    alanlar = []
+    for b in g.bolumler:
+        kok.addWidget(etiket(b.ayar, kalin=True))
+        kok.addWidget(etiket(b.etiket))
+        alan = QPlainTextEdit()
+        alan.setReadOnly(True)
+        alan.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        alan.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        alan.setPlainText("\n".join(b.satirlar))
+        kok.addWidget(alan, 1)
+        alanlar.append(alan)
     dugmeler = QDialogButtonBox(QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No)
     hayir = dugmeler.button(QDialogButtonBox.StandardButton.No)
     if hayir is not None:
         hayir.setDefault(True)
         hayir.setFocus()
+    evet = dugmeler.button(QDialogButtonBox.StandardButton.Yes)
+    if evet is not None and g.evet_kapali:
+        evet.setEnabled(False)
     dugmeler.accepted.connect(dlg.accept)
     dugmeler.rejected.connect(dlg.reject)
     kok.addWidget(dugmeler)
-    dlg.gosterilen_iz = lambda: hashlib.sha256(alan.toPlainText().encode("utf-8", "surrogateescape")).hexdigest()
-    return dlg, alan
+    dlg.gosterilen_iz = lambda: g.iz
+    dlg.alanlar = alanlar
+    return dlg, alanlar

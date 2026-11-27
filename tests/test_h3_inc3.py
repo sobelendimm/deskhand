@@ -120,7 +120,8 @@ v = istemci_yasak()
 kontrol("B1-A: işaretler silindi + cüzdan kilitli → soru ya da Dur; istemci boş listeyi ALMAZ",
         (sorulan_yasak or v == "Dur 10") and v != SAHTE, f"sorulan={SORULAN} istemci={v!r}")
 kontrol("B1-A: tek birleşik soru (yasak + seviye birlikte), dosya içeriğiyle",
-        len(SORULAN) == 1 and "yasak" in SORULAN[0][0] and "seviye" in SORULAN[0][0] and "emptied" in SORULAN[0][1],
+        len(SORULAN) == 1 and "yasak" in SORULAN[0][0] and "seviye" in SORULAN[0][0] and
+        "TAMAMIDIR (0 giriş)" in SORULAN[0][1] and "1 yorum satırı (1) uygulanmaz" in SORULAN[0][1],
         str(SORULAN))
 kontrol("B1-A: Hayır → istemci Dur 10", v == "Dur 10", repr(v))
 kontrol("B1-A: Hayır → görünür neden (cüzdan okunamıyor; listeler doğrulanamadı)",
@@ -326,6 +327,8 @@ class SahtePanel:
     _dur_kaydet = Panel._dur_kaydet
     _dur_baslat = Panel._dur_baslat
     _dur_koru = Panel._dur_koru
+    _dur_kasa_denetle = getattr(Panel, "_dur_kasa_denetle", lambda self: None)
+    DUR_KASA_YENIDEN_SN = 0.0
 
     def __init__(self):
         self.uyarilar = []
@@ -431,8 +434,7 @@ GOSTERILEN = []
 def sor_iz(dogru):
     def f(tur, aciklama):
         GOSTERILEN.append(aciklama)
-        iz = hashlib.sha256(aciklama.encode("utf-8", "surrogateescape")).hexdigest()
-        return (True, iz if dogru else "0" * 64)
+        return (True, aciklama.iz if dogru else "0" * 64)  # the display token (INC4: canonical entry lists)
     return f
 
 
@@ -452,18 +454,258 @@ kontrol("EK-2: gösterilen = uygulanacak → Evet uygulanır", istemci_yasak() =
 panel_kapat()
 KASA.kilitli = False
 
-# the panel's own dialog shows the whole text in a scrollable read-only area and reports its hash
-DLG = ("import os, sys, hashlib; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path.insert(0, sys.argv[1])\n"
+# the panel's own dialog shows every entry in a scrollable read-only area and gives back the display's token
+DLG = ("import os, sys; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path.insert(0, sys.argv[1])\n"
        "from PyQt6.QtWidgets import QApplication, QPlainTextEdit\n"
        "app = QApplication([])\n"
+       "from deskhand import liste_koruma as lk\n"
        "from deskhand.gui.panel import degisiklik_diyalogu\n"
-       "metin = 'yasak pencereler:\\n' + ''.join(f'^P-{n:03d}$\\n' for n in range(300))\n"
-       "dlg, alan = degisiklik_diyalogu(metin)\n"
-       "print('TAM', alan.toPlainText() == metin, alan.isReadOnly(), isinstance(alan, QPlainTextEdit))\n"
-       "print('IZ', dlg.gosterilen_iz() == hashlib.sha256(metin.encode()).hexdigest())\n")
+       "metin = ''.join(f'^P-{n:03d}$\\n' for n in range(300))\n"
+       "g = lk.gosterim('soru', [('yasak', metin, None, None)])\n"
+       "dlg, alanlar = degisiklik_diyalogu(g)\n"
+       "t = alanlar[0].toPlainText()\n"
+       "print('TAM', all(f'^P-{n:03d}$' in t for n in range(300)), alanlar[0].isReadOnly(),\n"
+       "      isinstance(alanlar[0], QPlainTextEdit))\n"
+       "print('IZ', dlg.gosterilen_iz() == g.iz)\n")
 r = subprocess.run([sys.executable, "-c", DLG, _yalitim.KOK], capture_output=True, text=True, timeout=60)
-kontrol("EK-2: panel diyaloğu metni eksiksiz, kaydırılabilir salt okunur alanda gösterir ve izini verir",
+kontrol("EK-2: panel diyaloğu girişleri eksiksiz, kaydırılabilir salt okunur alanda gösterir ve jetonu verir",
         "TAM True True True" in r.stdout and "IZ True" in r.stdout, (r.stdout + r.stderr)[-500:])
+
+# ================================================================ INC4 (rapor-H3-inceleme-4.md)
+import re  # noqa: E402
+
+SATIR_RE = re.compile(r"^[ +\u2212~] +\d+ │ ")  # a content line: sign, number, bar
+ISARET_RE = re.compile(r"^ {9}[⚠⋯] ")  # an unnumbered marker line (folded run / note)
+
+
+def icerik_satirlari(g):
+    return [s for b in g.bolumler for s in b.satirlar]
+
+
+def yapisi_dogru(g):
+    return all(SATIR_RE.match(s) or ISARET_RE.match(s) for s in icerik_satirlari(g))
+
+
+# ---- Y1: the wallet locks between _kasa_yeniden's read and a second read → the refused content is NEVER served
+def y1_senaryo(kilit_araya):
+    KASA.kilitli = False
+    k = panel_ac(True)
+    k.kaydet("yasak", ONAYLI)
+    panel_kapat()
+    open(YASAK, "w").write(SAHTE)
+    for y in glob.glob(os.path.join(os.path.dirname(lk.isaret_yolu("yasak")), "liste-*.isaret")):
+        os.remove(y)
+    KASA.kilitli = True
+    k = panel_ac(False)  # the user says No
+    KASA.kilitli = False
+    eski_sn, lk._DURUM_ONBELLEK_SN = lk._DURUM_ONBELLEK_SN, 0.0
+    orijinal = lk.onayli_deger
+    say = [0]
+
+    def izle(tur):
+        r_ = orijinal(tur)
+        if tur == "yasak":
+            say[0] += 1
+            if say[0] == 1:
+                KASA.kilitli = True  # locked right after the first read, before any second read
+        return r_
+    if kilit_araya == "poc":  # INC4/poc_inc4_kasa_yaris.py: locked right after _kasa_yeniden's onayli_deger read
+        lk.onayli_deger = izle
+    eski_oku = Kasa.oku
+    if kilit_araya == "oku":  # locked after the FIRST wallet read inside denetle, whichever function reads it
+        sayac = [0]
+
+        def oku_kilitle(self):
+            v = eski_oku(self)
+            sayac[0] += 1
+            if sayac[0] == 1:
+                self.kilitli = True
+            return v
+        Kasa.oku = oku_kilitle
+    try:
+        k.KASA_YENIDEN_SN = 0
+        k.denetle()
+    finally:
+        lk.onayli_deger = orijinal
+        Kasa.oku = eski_oku
+        lk._DURUM_ONBELLEK_SN = eski_sn
+    v = istemci_yasak()
+    panel_kapat()
+    KASA.kilitli = False
+    return v
+
+
+v = y1_senaryo("poc")
+kontrol("INC4 Y1: iki okuma arasında kilit (PoC) → reddedilen içerik SUNULMAZ (onaylı liste ya da Dur 10)",
+        v in (ONAYLI, "Dur 10") and v != SAHTE, repr(v))
+v = y1_senaryo("oku")
+kontrol("INC4 Y1: ilk cüzdan okumasından hemen sonra kilit → reddedilen içerik SUNULMAZ",
+        v in (ONAYLI, "Dur 10") and v != SAHTE, repr(v))
+v = y1_senaryo("")
+kontrol("INC4 Y1 (negatif): cüzdan okunur kalınca imzalı değer geri yüklenir", v == ONAYLI, repr(v))
+
+# ---- O3: the display
+bos = "KeePassXC\n" + "\n" * 300 + "panelin kaydı «KeePassXC», dosyada «KeePassXC»\n"
+g = lk.gosterim("soru", [("yasak", bos, None, None)])
+st = icerik_satirlari(g)
+kontrol("INC4 O3: boş satırla kaydırma → boş satırlar tek işaretli satıra katlanır, girişler numaralı",
+        len(st) == 3 and "300 boş satır (2–301) katlandı" in st[1] and SATIR_RE.match(st[2]) and "  302 │ " in st[2],
+        str(st))
+kontrol("INC4 O3: içerikteki sahte 'panelin kaydı … dosyada' etiketi yalnız numaralı bir içerik satırı; sabit etiket "
+        "içeriği taşımaz", yapisi_dogru(g) and "KeePassXC" not in g.bolumler[0].etiket and
+        g.bolumler[0].etiket.startswith("Onaylı kayıt okunamadı"), g.bolumler[0].etiket)
+gizli = "KeePass\u202eCXssaP\u200b\nOnline\u00a0Banking\r\nx\u2028y\n"
+g = lk.gosterim("soru", [("yasak", gizli, None, None)])
+st = icerik_satirlari(g)
+ham = "".join(st)
+kontrol("INC4 O3: bidi / sıfır genişlik / NBSP görünür \\u{XXXX} kaçışıyla, ham karakter içerikte yok",
+        "\\u{202E}" in ham and "\\u{200B}" in ham and "\\u{00A0}" in ham and
+        not any(c in ham for c in "\u202e\u200b\u00a0\u2028\r") and yapisi_dogru(g), str(st))
+uygulanan = [x.strip() for x in gizli.splitlines() if x.strip() and not x.lstrip().startswith("#")]  # guvenlik
+kontrol("INC4 O3: U+2028 uygulamanın ayrıştırıcısı gibi satır böler (gösterilen = uygulanan)",
+        lk.kanonik("yasak", gizli) == uygulanan and len(uygulanan) == 4, str(lk.kanonik("yasak", gizli)))
+kiril = "KeePassXC\nKe\u0435PassXC\n"
+g = lk.gosterim("soru", [("yasak", kiril, "KeePassXC\n", "onayli")])
+st = icerik_satirlari(g)
+kontrol("INC4 O3: Kiril е işaretlenir (satırın altında ⚠ U+0435), fark +1 / −0",
+        any("U+0435 CYRILLIC SMALL LETTER IE" in s for s in st) and SATIR_RE.match(st[0]) and "Ke\u0435PassXC" in st[0]
+        and "0 kaldırılan, 1 eklenen" in g.bolumler[0].etiket and "Dikkat: 1 girişte" in g.bolumler[0].etiket, str(st))
+g = lk.gosterim("soru", [("yasak", "Yeni\n", ONAYLI, "onayli")])
+st = icerik_satirlari(g)
+kontrol("INC4 O3: onaylı kayda göre giriş bazlı fark; kaldırılanlar önce (− ), sayılar sabit etikette",
+        st[0].startswith("\u2212") and "KeePassXC" in st[0] and st[-1].startswith("+") and "Yeni" in st[-1] and
+        "2 kaldırılan, 1 eklenen" in g.bolumler[0].etiket, str(st) + g.bolumler[0].etiket)
+g = lk.gosterim("soru", [("seviye", "KeePassXC = tam\nkonsole\n", "KeePassXC = goruntule\n", "onayli")])
+st = icerik_satirlari(g)
+kontrol("INC4 O3: seviye değişikliği eski → yeni seviye; eşittir'siz satır uygulandığı gibi (goruntule)",
+        any("KeePassXC: goruntule → tam" in s for s in st) and any("konsole = goruntule" in s for s in st), str(st))
+g = lk.gosterim("soru", [("yasak", "".join(f"p{n}\n" for n in range(lk.GOSTERIM_UST_SINIR + 1)), None, None)])
+kontrol("INC4 O3: giriş üst sınırı aşılınca Evet kapalı", g.evet_kapali and "Evet verilemez" in g.bolumler[0].etiket)
+
+# cüzdan kilitliyken "TAMAMI (N giriş)" etiketi, birleşik soruda
+KASA.kilitli = False
+k = panel_ac(True)
+k.kaydet("yasak", ONAYLI)
+panel_kapat()
+open(YASAK, "w").write("A\n\nB\n# yorum\n")
+KASA.kilitli = True
+k = panel_ac(False)
+g = SORULAN[0][1] if SORULAN else None
+bol = {b.tur: b for b in g.bolumler} if g is not None else {}
+kontrol("INC4 O3: cüzdan kilitli → sabit etiket 'karşılaştırma yapılamıyor … TAMAMIDIR (2 giriş) … Hayır deyin'",
+        "yasak" in bol and "karşılaştırma yapılamıyor" in bol["yasak"].etiket and
+        "TAMAMIDIR (2 giriş)" in bol["yasak"].etiket and "Hayır deyin" in bol["yasak"].etiket,
+        str(bol.get("yasak").etiket if bol.get("yasak") else g))
+panel_kapat()
+
+# Y5: CR / NBSP / U+2029 content — a legitimate Yes (the token of the display) is ACCEPTED
+garip = "Online\u00a0Banking\r\nKee\u2029Pass\n"
+open(YASAK, "w").write(garip)
+for y in glob.glob(os.path.join(os.path.dirname(lk.isaret_yolu("yasak")), "liste-*.isaret")):
+    os.remove(y)
+lk._anahtar_unut()
+onay.panel_kaydet()
+GOSTERILEN.clear()
+k = lk.panel_baslat(UYARILAR.append, onayla, sor_iz(True))
+kontrol("INC4 Y5: CR/NBSP/U+2029 içeren dosyaya meşru Evet kabul edilir",
+        istemci_yasak() == garip.replace("\r\n", "\n"),
+        repr(istemci_yasak())[:80])
+panel_kapat()
+KASA.kilitli = False
+DLG5 = ("import os, sys; os.environ['QT_QPA_PLATFORM'] = 'offscreen'; sys.path.insert(0, sys.argv[1])\n"
+        "from PyQt6.QtWidgets import QApplication\n"
+        "app = QApplication([])\n"
+        "from deskhand import liste_koruma as lk\n"
+        "from deskhand.gui.panel import degisiklik_diyalogu\n"
+        "g = lk.gosterim('soru', [('yasak', 'Online\\u00a0Banking\\r\\nKee\\u2029Pass\\nKe\\u0435PassXC\\n', None, None)])\n"
+        "dlg, alanlar = degisiklik_diyalogu(g)\n"
+        "from PyQt6.QtWidgets import QLabel\n"
+        "etiketler = [e.text() for e in dlg.findChildren(QLabel)]\n"
+        "t = alanlar[0].toPlainText()\n"
+        "print('IZ', dlg.gosterilen_iz() == g.iz)\n"
+        "print('KACIS', '\\\\u{00A0}' in t, 'U+0435' in t)\n"
+        "print('ETIKET', g.bolumler[0].etiket in etiketler, all('Banking' not in e for e in etiketler))\n")
+r = subprocess.run([sys.executable, "-c", DLG5, _yalitim.KOK], capture_output=True, text=True, timeout=60)
+kontrol("INC4 Y5/O3: Qt diyaloğu jetonu kanonik listeden verir (widget metninden değil), kaçış ve işaret görünür, "
+        "yapı etiketleri içerikten ayrı bileşende", "IZ True" in r.stdout and "KACIS True True" in r.stdout and
+        "ETIKET True True" in r.stdout, (r.stdout + r.stderr)[-500:])
+
+# ---- Y3: the wallet becomes readable but holds no approved value → the check is repeated without a restart
+KASA.veri = None  # the item is gone (deleted earlier)
+open(YASAK, "w").write("Dosyadaki\n")
+for y in glob.glob(os.path.join(os.path.dirname(lk.isaret_yolu("yasak")), "liste-*.isaret")):
+    os.remove(y)
+open(lk.isaret_yolu("seviye"), "w").write('{"sha256": "yok"}')  # marks exist: not a first start
+KASA.kilitli = True
+k = panel_ac(False)
+kontrol("INC4 Y3 hazırlık: kilitli + Hayır → Dur 10", istemci_yasak() == "Dur 10")
+KASA.kilitli = False
+k.KASA_YENIDEN_SN = 0
+SORULAN.clear()
+CEVAP["v"] = True
+k.denetle()
+kontrol("INC4 Y3: cüzdan okunur ama onaylı değer yok → yeniden sorulur (panel yeniden başlamadan); Evet → uygulanır",
+        len(SORULAN) == 1 and "yasak" in SORULAN[0][0] and istemci_yasak() == "Dosyadaki\n",
+        f"{[t for t, _a in SORULAN]} {istemci_yasak()!r}")
+panel_kapat()
+KASA.veri = None
+open(lk.isaret_yolu("seviye"), "w").write('{"sha256": "yok"}')
+open(YASAK, "w").write("Dosyadaki2\n")
+k = panel_ac(False)  # wallet open, no item: asked at start, No; the item is then re-created without son[yasak]
+SORULAN.clear()
+k.KASA_YENIDEN_SN = 0
+for _i in range(3):
+    k.denetle()
+kontrol("INC4 Y3: aynı içeriğe Hayır sonrası soru döngüsü yok, Dur 10 sürer",
+        SORULAN == [] and istemci_yasak() == "Dur 10", f"{SORULAN} {istemci_yasak()!r}")
+open(YASAK, "w").write("Dosyadaki3\n")
+CEVAP["v"] = False
+k.denetle()
+kontrol("INC4 Y3: dosya değişince yeniden sorulur", len(SORULAN) == 1, str([t for t, _a in SORULAN]))
+kontrol("INC4 Y3: uyarı 'cüzdan açılınca geri yükler' diye yanlış vaatte bulunmaz; yeniden sorma yolunu söyler",
+        any("yeniden sorulur" in u for u in UYARILAR), str(UYARILAR)[-300:])
+panel_kapat()
+KASA.kilitli = False
+k = panel_ac(True)
+k.kaydet("yasak", ONAYLI)
+panel_kapat()
+
+# ---- B4/E4: wallet unreadable at panel start → the user's DUR counts as ON; the signed value applies later
+for kayitli in (False, True):
+    lk._anahtar_unut()
+    Panel._dur_kaydet(SahtePanel(), kayitli)
+    try:
+        os.remove(dur_dosyasi())
+    except FileNotFoundError:
+        pass
+    KASA.kilitli = True
+    lk._anahtar_unut()
+    p5 = SahtePanel()
+    Panel._dur_baslat(p5)
+    kontrol(f"INC4 B4: kilitli cüzdanda açılış → DUR açık (kapalı-başarısız; imzalı={kayitli})",
+            guvenlik.dur_acik() and guvenlik.dur_kaynagi() == "kullanici" and p5._dur_kullanici,
+            f"{guvenlik.dur_kaynagi()} {p5.uyarilar}")
+    KASA.kilitli = False
+    lk._anahtar_unut()
+    Panel._dur_koru(p5)
+    kontrol(f"INC4 B4: cüzdan okununca imzalı değer uygulanır (imzalı={kayitli} → DUR {'açık' if kayitli else 'kalkar'})",
+            guvenlik.dur_acik() == kayitli and p5._dur_kullanici == kayitli, f"{guvenlik.dur_kaynagi()} {p5.uyarilar}")
+    guvenlik.dur_kapat("kullanici")
+    Panel._dur_kaydet(p5, False)
+# the user pressed DUR while waiting for the wallet: it stays
+KASA.kilitli = True
+lk._anahtar_unut()
+p6 = SahtePanel()
+Panel._dur_baslat(p6)
+guvenlik.dur_ac("kullanici")
+Panel._dur_kaydet(p6, True)  # the panel's DUR button
+KASA.kilitli = False
+lk._anahtar_unut()
+Panel._dur_koru(p6)
+kontrol("INC4 B4: bekleme sırasında kullanıcının bastığı DUR cüzdan okununca kalkmaz ve imzalanır",
+        guvenlik.dur_acik() and lk.panel_dur_durumu() is True, f"{guvenlik.dur_kaynagi()} {lk.panel_dur_durumu()}")
+guvenlik.dur_kapat("kullanici")
+Panel._dur_kaydet(p6, False)
 
 print(f"\n{gecen}/{toplam} H3-INC3 testi geçti")
 sys.exit(0 if gecen == toplam else 1)

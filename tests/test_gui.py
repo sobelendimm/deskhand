@@ -269,6 +269,7 @@ saglik_sonuc = [{"ad": "kdotool", "tur": "arac", "ok": True, "not": "n"}, {"ad":
 p = Panel(app, sunucu, tepsi=False, kisayol=kis, diyalog_kurma_ms=0, arka_f=lambda: arka, masaustu_m=SahteMasaustu,
           cakisma_f=sahte_cakisma, simge_sor=lambda b, m: sor_cevap[0], saglik_f=lambda: saglik_sonuc)
 w = p.pencere
+
 kontrol("panel.pid yazıldı ve canlı", onay.panel_canli() and onay.panel_pid() == os.getpid())
 kontrol("panel açılışı sahipsiz Devral dosyasını sildi", not os.path.exists(D.devral_yolu()))
 kontrol("pencere başlığı sabit", w.windowTitle() == onay.PANEL_BASLIK == "Deskhand")
@@ -854,6 +855,35 @@ p.izleyici._yokla.start()
 p.izleyici.yenile()
 w.show()
 kontrol("çıkış öncesi diyalog açık", k in p.diyaloglar)
+
+# INC4 Y2: a refused-Yes warning raised on the approval channel's worker thread never touches Qt there: the tray
+# notification runs on the GUI thread (queued signal), at most once per reason per BILDIRIM_ARALIK_SN
+import threading as _th  # noqa: E402
+
+
+class _SahteIkon:
+    def __init__(self):
+        self.cagri = []
+
+    def showMessage(self, *a):  # noqa: N802
+        self.cagri.append(_th.current_thread().name)
+
+
+_ikon = _SahteIkon()
+p.tepsi = type("T", (), {"ikon": _ikon})()
+_t = _th.Thread(target=lambda: onay.onay_reddedildi("Onay isteği … [0123abcd karma]"), name="onay-kanal-b")
+_t.start()
+_t.join(3)
+kontrol("INC4 Y2: kanal iş parçacığında Qt bildirimi yok", _ikon.cagri == [], str(_ikon.cagri))
+bekle(lambda: bool(_ikon.cagri))
+kontrol("INC4 Y2: bildirim GUI iş parçacığında gösterilir", _ikon.cagri == ["MainThread"], str(_ikon.cagri))
+_t = _th.Thread(target=lambda: [onay.onay_reddedildi(f"Onay isteği … [{n:08x} karma]") for n in range(20)])
+_t.start()
+_t.join(3)
+bekle(lambda: len(p.liste_uyarilari) >= 21)
+kontrol("INC4 Y2: aynı nedenle bildirim yağmuru yok (10 sn'de en çok 1)", _ikon.cagri == ["MainThread"] and
+        len(p.liste_uyarilari) >= 21, f"{len(_ikon.cagri)} {len(p.liste_uyarilari)}")
+p.tepsi = None
 from PyQt6.QtCore import QTimer  # noqa: E402
 
 QTimer.singleShot(200, p.cik)
