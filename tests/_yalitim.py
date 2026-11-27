@@ -39,6 +39,37 @@ os.environ["PYTHONPATH"] = KOK + (os.pathsep + os.environ["PYTHONPATH"] if os.en
 if KOK not in sys.path:
     sys.path.insert(0, KOK)
 
+# ---------------------------------------------------------------- "GERÇEK" ÇALIŞMA DİZİNİ (28 Kas 2026)
+# Kod "kullanıcının gerçek paneli" dalını DESKHAND_RUNTIME_DIR'in YOKLUĞUYLA seçer (onay.iste_sonuc). Bunu sınamak için
+# değişkeni yalnız silmek yetmez: hata.calisma_dizini() $XDG_RUNTIME_DIR/deskhand'e (gerçek /run/user/UID/deskhand) düşer
+# ve test kullanıcının canlı onay/devir isteklerini (eylem._bekleyen_onay_kapisi → Dur 7), DUR anahtarını, panel kaydını
+# görür. Olay: tam takım koşarken gerçek oturumda request_human bekliyordu → test_odeme_kilit 2 kontrolde düştü.
+GERCEK_XDG = os.path.join(GECICI, "gercek-xdg-runtime")
+
+
+def gercek_calisma_dizini():
+    """Bağlam: DESKHAND_RUNTIME_DIR YOK (gerçek oturum dalı) ama XDG_RUNTIME_DIR GECICI altında sahte bir kök → çalışma
+    dizini GERCEK_XDG/deskhand; kullanıcının gerçek runtime dizini ne okunur ne yazılır. Çıkışta ikisi de geri gelir.
+    DESKHAND_RUNTIME_DIR'i silen her test bunu kullanır (os.environ.pop("DESKHAND_RUNTIME_DIR") tek başına YASAK)."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def _baglam():
+        os.makedirs(GERCEK_XDG, mode=0o700, exist_ok=True)
+        rt, xdg = os.environ.pop("DESKHAND_RUNTIME_DIR", None), os.environ.get("XDG_RUNTIME_DIR")
+        os.environ["XDG_RUNTIME_DIR"] = GERCEK_XDG
+        try:
+            yield GERCEK_XDG
+        finally:
+            if rt is not None:
+                os.environ["DESKHAND_RUNTIME_DIR"] = rt
+            if xdg is None:
+                os.environ.pop("XDG_RUNTIME_DIR", None)
+            else:
+                os.environ["XDG_RUNTIME_DIR"] = xdg
+    return _baglam()
+
+
 # ---------------------------------------------------------------- SÜREÇ SIZINTISI (0.9.1)
 # Kök neden: görünmez masaüstü süreçleri (kwin_wayland --virtual, özel dbus-daemon, oncelik_bekcisi, bildirim_yakalayici,
 # ayrık oto temizleyici) start_new_session ile AYRIK başlar; takımın sökümü (masaustu_durdur / atexit) yalnız süreç
