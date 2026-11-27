@@ -1,12 +1,14 @@
-# Deskhand — yapay zekâ ajanları KDE masaüstünüzü güvenle kullansın
+# Deskhand for KDE — Claude Code ve diğer yapay zekâ ajanlarının KDE Plasma (Wayland) masaüstünüzü kullanmasını sağlayan, ödemelerde onay isteyen MCP sunucusu
 
 *English: [README.md](README.md)*
 
+Son sürüm: 0.10.0 (Kasım 2026) · GPL-3.0-or-later · ücretsiz, hesap gerekmez · 20 MCP aracı
+
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE) [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sobelendimm%2Fdeskhand-informational)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sobelendimm/deskhand)
 
-**Deskhand, yapay zekâ ajanlarının (Claude Code ve diğer MCP istemcileri) KDE Plasma
-masaüstünüzü güvenle kullanmasını sağlar: ister sizin ekranınızda, ister siz film izlerken
-görünmez ikinci bir masaüstünde.**
+**Deskhand for KDE, yapay zekâ ajanlarının (Claude Code ve diğer MCP istemcileri) Wayland'daki
+KDE Plasma masaüstünüzü güvenle kullanmasını sağlayan bir MCP sunucusudur: ister sizin
+ekranınızda, ister siz film izlerken görünmez ikinci bir masaüstünde (KWin oturumu).**
 
 Ajan pencereleri okuyabilir, ekranda gördüğü yazıya tıklayabilir, yazı yazabilir, uygulama
 açabilir. Her girdi, o anda ekranda gerçekten ne olduğuna bakılarak denetlenir. Satın al/Öde
