@@ -366,6 +366,42 @@ def _diger(eylem: str) -> str | None:
     return None
 
 
+def islem_adi(etiket: str) -> str:
+    """Komut etiketi ("kapat", "git https://…") → kararsız, koordinatsız işlem adı ("pencereyi kapatma"); bilinmeyen
+    → "bir işlem". Onaylar › Geçmiş'in Eylem sütunu: karar ayrıca Durum sütununda (yineleme yok, UX-L)."""
+    kom = str(etiket or "").strip().removeprefix("dizi: ").split(" ", 1)[0]
+    ad = ISLEM_ADI.get(kom)
+    return _bas_buyuk(_(ad) if ad else _(ISLEM_GENEL))
+
+
+AYRINTI_ONAY = N_("onay sorusu")
+AYRINTI_DUR = N_("durdurma, kod {kod}")
+AYRINTI_DUR_KODSUZ = N_("durdurma")
+AYRINTI_KAYIT = N_("günlük kaydı")
+
+
+def ayrinti_ozeti(d: dict | None) -> str:
+    """Etkinlik "Ayrıntı" sütunu: panel dilinde kısa insan metni — masaüstü · işlem türü ("Ekran · tıklama işlemi").
+    Koordinat, komut sözcüğü, ham Türkçe günlük metni YOK; ham satır yalnız ipucunda (ayrinti()). Asla istisna."""
+    try:
+        d = d if isinstance(d, dict) else {}
+        tur = d.get("tur")
+        if tur == "girdi":
+            parca = islem_adi(str(d.get("etiket") or str(d.get("eylem") or "").partition(": ")[0])).lower()
+        elif tur == "onay":
+            parca = _(AYRINTI_ONAY)
+        elif tur == "dur":
+            m = re.match(r"^DUR (\d+)", str(d.get("eylem") or ""))
+            parca = _(AYRINTI_DUR).format(kod=m.group(1)) if m else _(AYRINTI_DUR_KODSUZ)
+        else:
+            parca = _(AYRINTI_KAYIT)
+        ad = T.E_ARKA_AD.get(d.get("arka") or "", "")
+        yer = _(ad) if ad else ""
+        return _bas_buyuk(f"{yer} · {parca}" if yer else parca)
+    except Exception:  # noqa: BLE001 - görüntüleme asla düşmez
+        return ""
+
+
 def insan_metni(d: dict | None) -> str:
     """Günlük satırı (ayristir sözlüğü) → etkin dilde tek cümle. Asla boş, asla istisna."""
     try:

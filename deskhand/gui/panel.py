@@ -170,7 +170,7 @@ class Panel(QObject):
         self.pencere.onaylar.ac_istendi.connect(self.diyalog_one)
         self.pencere.ayarlar.kisayol_degisti.connect(self.kisayol_ayarla)
         self.kisayol.basildi.connect(self.dur)
-        self.kisayol.hata.connect(lambda m: self.pencere.ayarlar.kisayol_durumu(_(T.Y_KISAYOL_HATA).format(hata=m)))
+        self.kisayol.hata.connect(lambda m: self.pencere.ayarlar.kisayol_durumu(_(T.Y_KISAYOL_HATA), str(m)))
         self.pencere.ayarlar.dil_degisti.connect(self.dil_degisti)  # pencere kendini zaten tazeler
         if self.tepsi is not None:
             self.tepsi.dur_istendi.connect(self.dur)
@@ -602,7 +602,7 @@ class Panel(QObject):
                 self.kisayol.kapat(kaydi_sil=True)
                 self.pencere.ayarlar.cakisma_goster()
         except Exception as e:  # noqa: BLE001 - KDE/D-Bus yok: tepsi yeterli
-            self.pencere.ayarlar.kisayol_durumu(_(T.Y_KISAYOL_HATA).format(hata=e))
+            self.pencere.ayarlar.kisayol_durumu(_(T.Y_KISAYOL_HATA), T.hata_ayrinti(e))  # ham hata Ayrıntı'da
 
     # -------- dil
     def dil_degisti(self, _kod: str = ""):

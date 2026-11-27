@@ -76,14 +76,13 @@ E_ONAY_SATIRI = N_("onay ({karar}): {eylem}")  # "onay izin: tıkla 'Öde'" → 
 # ---- arka plan ekranı
 A_ACIK = N_("Açık: {ekran} · {g}×{y}")
 A_KAPALI = N_("Arka plan masaüstü kapalı.")
-A_YOK = N_("Sanal masaüstü modülü yüklenemedi: {hata}")
+A_YOK = N_("Arka plan masaüstü bu kurulumda açılamıyor. «deskhand doctor» ile eksik bileşeni bulun; ayrıntı "
+           "ipucunda.")
 A_BASLAT_YOK = N_("bu kurulumda arka plan masaüstü başlatılamıyor")
 A_BASLAT = N_("Başlat")
 A_DURDUR = N_("Durdur")
 A_BASLATILIYOR = N_("Başlatılıyor…")
 A_DURDURULUYOR = N_("Durduruluyor…")
-A_DEVRAL = N_("Devral")
-A_BIRAK = N_("Bırak")
 A_DEVRAL_IPUCU = N_("Fare ve klavyeniz önizleme üzerinden arka plan masaüstüne gider; bu sırada ajan bekler. "
                     "DUR açıkken girdi gönderilmez.")
 A_DEVRAL_NOT = N_("Kontrol sizde: önizlemeye tıklayın, yazın. Bitince «Geri ver»e basın.")
@@ -234,7 +233,7 @@ Y_KISAYOL_NOT = N_("Varsayılan kapalıdır. Açınca kısayol KDE'ye bu uygulam
                    "silinir. Çalışmazsa tepsi simgesindeki DUR yeterlidir.")
 Y_KISAYOL_CAKISMA = N_("Çakışma: {tus} şu an «{eylem}» ({bilesen}) için kullanılıyor.")
 Y_KISAYOL_BOS = N_("{tus} boşta görünüyor.")
-Y_KISAYOL_HATA = N_("Kısayol kaydedilemedi: {hata}")
+Y_KISAYOL_HATA = N_("Kısayol kaydedilemedi. Durdurmak için tepsi simgesini kullanabilirsiniz; ayrıntı aşağıda.")
 Y_KISAYOL_TAMAM = N_("Kısayol etkin: {tus}")
 
 # ---- simgeler
@@ -416,3 +415,7 @@ H_KOPYALA = N_("Kopyala")
 H_KOPYALA_IPUCU = N_("Kurulum komutunu panoya kopyalar: {komut}")
 H_KOPYALANDI = N_("Kopyalandı: {komut}")
 H_TUMU = N_("Tüm bileşenler")
+H_DENETLENIYOR = N_("Denetleniyor…")
+H_SONUC_YOK = N_("Denetim sonucu alınamadı")
+H_KOPYALA_AYRINTI_IPUCU = N_("Tam ayrıntıyı panoya kopyalar")
+H_KOPYALANDI_AYRINTI = N_("Ayrıntı panoya kopyalandı.")

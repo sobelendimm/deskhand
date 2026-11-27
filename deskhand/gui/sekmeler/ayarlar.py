@@ -1215,7 +1215,7 @@ class AyarlarSekmesi(QWidget):
         metin = self.yasak.toPlainText()
         h = A.yasak_dogrula(metin)
         if h:
-            self.l_yasak.setText(_(T.Y_DESEN_HATA).format(no=h[0], hata=h[1]))
+            self.l_yasak.setText(_(T.Y_DESEN_HATA).format(no=h[0], hata=h[1]), h[2])  # ham regex iletisi Ayrıntı'da
             return False
         try:
             A.yasak_kaydet(metin)  # panel: tek yetkili, imzalı kayıt
@@ -1245,7 +1245,7 @@ class AyarlarSekmesi(QWidget):
         metin = self.seviye.toPlainText()
         h = A.seviye_dogrula(metin)
         if h:
-            self.l_seviye.setText(_(T.Y_SEVIYE_HATA).format(no=h[0], hata=h[1]))
+            self.l_seviye.setText(_(T.Y_SEVIYE_HATA).format(no=h[0], hata=h[1]), h[2])  # ham regex iletisi Ayrıntı'da
             return False
         try:
             A.seviye_kaydet(metin)  # panel: tek yetkili, imzalı kayıt
@@ -1305,5 +1305,6 @@ class AyarlarSekmesi(QWidget):
         self._degisti()
         return True
 
-    def kisayol_durumu(self, metin: str):
-        self.l_kisayol.setText(metin)
+    def kisayol_durumu(self, metin: str, ayrinti: str = ""):
+        """Sade cümle; ham hata (varsa) katlı Ayrıntı'da (iki katman, UX-L)."""
+        self.l_kisayol.setText(metin, ayrinti)

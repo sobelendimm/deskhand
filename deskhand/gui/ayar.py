@@ -12,6 +12,7 @@ import os
 import re
 
 from .. import yollar
+from ..i18n import N_
 from .kisayol import VARSAYILAN_TUS
 
 PANEL_VARSAYILAN = {"kisayol_acik": False, "kisayol": VARSAYILAN_TUS, "tema": None}  # tema None = tercih yok
@@ -76,8 +77,19 @@ def yasak_metni() -> str:
         return VARSAYILAN_YASAK
 
 
-def yasak_dogrula(metin: str) -> tuple[int, str] | None:
-    """Her desen satırı derlenebilmeli. → (satır no, hata) ya da None."""
+# bozuk regex: kullanıcıya sade cümle (UX-L O5/O-A); Python'un ham iletisi ("unterminated character set at
+# position 1") yalnız katlı Ayrıntı'da
+REGEX_HATA = N_("düzenli ifade hatalı (kapanmamış parantez ya da köşeli ayraç olabilir; özel karakteri \\ ile "
+                "kaçırın)")
+
+
+def _regex_hata(no: int, e: re.error) -> tuple[int, str, str]:
+    from ..i18n import _
+    return no, _(REGEX_HATA), str(e)
+
+
+def yasak_dogrula(metin: str) -> tuple[int, str, str] | None:
+    """Her desen satırı derlenebilmeli. → (satır no, sade neden, ham ayrıntı) ya da None."""
     for no, satir in enumerate(metin.splitlines(), 1):
         s = satir.strip()
         if not s or s.startswith("#"):
@@ -85,7 +97,7 @@ def yasak_dogrula(metin: str) -> tuple[int, str] | None:
         try:
             re.compile(s, re.I)
         except re.error as e:
-            return no, str(e)
+            return _regex_hata(no, e)
     return None
 
 
@@ -114,9 +126,9 @@ def seviye_metni() -> str:
         return _(VARSAYILAN_SEVIYE)
 
 
-def seviye_dogrula(metin: str) -> tuple[int, str] | None:
+def seviye_dogrula(metin: str) -> tuple[int, str, str] | None:
     """Her kural satırı `DESEN = goruntule|tikla|tam` (ya da view|click|full) olmalı, DESEN derlenebilmeli.
-    → (satır no, hata) ya da None."""
+    → (satır no, sade neden, ham ayrıntı; ayrıntı yalnız regex hatasında) ya da None."""
     from ..guvenlik import SEVIYELER
     from ..i18n import _
     for no, satir in enumerate(metin.splitlines(), 1):
@@ -125,13 +137,13 @@ def seviye_dogrula(metin: str) -> tuple[int, str] | None:
             continue
         desen, ayrac, sev = s.rpartition("=")
         if not ayrac or not desen.strip():
-            return no, _("DESEN = goruntule | tikla | tam biçiminde olmalı")
+            return no, _("DESEN = goruntule | tikla | tam biçiminde olmalı"), ""
         if sev.strip().lower() not in SEVIYELER:
-            return no, _("bilinmeyen seviye {sev}; goruntule, tikla ya da tam olmalı").format(sev=repr(sev.strip()))
+            return no, _("bilinmeyen seviye {sev}; goruntule, tikla ya da tam olmalı").format(sev=repr(sev.strip())), ""
         try:
             re.compile(desen.strip(), re.I)
         except re.error as e:
-            return no, str(e)
+            return _regex_hata(no, e)
     return None
 
 

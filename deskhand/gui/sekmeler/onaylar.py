@@ -14,7 +14,7 @@ from ...i18n import _
 from .. import metinler as T
 from ..dil import Metinler
 from ..gunluk_okur import onay_gecmisi
-from ..insan_metni import ayrinti, insan_metni, komut_parcasi, pencere_metni
+from ..insan_metni import ayrinti, islem_adi, komut_parcasi, pencere_metni
 from ..ortak import (YESIL, KIRMIZI, nokta, baslik_etiketi, _masaustu_adi, _karar_adi)
 
 
@@ -129,13 +129,14 @@ class OnaylarSekmesi(QWidget):
 
     @staticmethod
     def _eylem_metni(g: dict) -> str:
-        """Ham eylem ("tikla (5,5) sol") → insan dili ("Tıklandı"); bilinmeyen → onay satırının insan cümlesi.
-        Gizlilik insan_metni'nindir: gizli yazının içeriği/uzunluğu, yasak pencere başlığı çıkmaz."""
+        """Ham eylem ("tikla (5,5) sol") → insan dili ("Tıklandı"); bilinmeyen → işlem adı ("Pencereyi kapatma").
+        Karar yalnız Durum sütununda (Eylem'de "onay sorusu: izin verildi" yinelenmez, UX-L). Gizlilik
+        insan_metni'nindir: gizli yazının içeriği/uzunluğu, yasak pencere başlığı çıkmaz."""
         d = g.get("satir") or {}
         parca = komut_parcasi(g["eylem"], gizli=bool(d.get("gizli")) or "***" in g["eylem"])
         if parca:
             return parca[:1].upper() + parca[1:]
-        return insan_metni(d) if d else g["eylem"]
+        return islem_adi(g["eylem"])
 
     def _gecmis_yaz(self, satir: int, g: dict) -> None:
         d = g.get("satir")

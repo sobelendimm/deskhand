@@ -345,7 +345,8 @@ class ArkaPlanSekmesi(QWidget):
     def sanal_guncelle(self, s: dict | None) -> None:
         self.sanal = s
         if self.m is None:
-            self.l_durum.setText(_(T.A_YOK).format(hata=self.m_hata))
+            self.l_durum.setText(_(T.A_YOK))  # sade cümle; ham istisna yalnız ipucunda (iki katman, UX-L)
+            self.l_durum.setToolTip(T.hata_ayrinti(self.m_hata) if self.m_hata is not None else "")
         elif s is None:
             self.l_durum.setText(_(T.A_KAPALI))
         else:
@@ -356,7 +357,8 @@ class ArkaPlanSekmesi(QWidget):
         self.b_baslat.setVisible(not acik)
         self.b_baslat.setEnabled(baslatabilir and self._isci is None)
         if not baslatabilir:
-            self.b_baslat.setToolTip(_(T.A_YOK).format(hata=self.m_hata or _(T.A_BASLAT_YOK)))
+            ayr = T.hata_ayrinti(self.m_hata) if self.m_hata is not None else _(T.A_BASLAT_YOK)
+            self.b_baslat.setToolTip(f"{_(T.A_YOK)}\n{ayr}")
         self.b_durdur.setVisible(acik)
         self.b_durdur.setEnabled(self.m is not None and hasattr(self.m, "masaustu_durdur") and self._isci is None)
         serbest = self._devral_serbest()

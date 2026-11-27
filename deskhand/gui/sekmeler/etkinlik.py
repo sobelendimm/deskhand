@@ -13,10 +13,11 @@ from .. import metinler as T
 from ..dil import Metinler, gunluk_eylemi
 from ..durum import RENK
 from ..gunluk_okur import KUYRUK
-from ..insan_metni import ayrinti, pencere_metni
+from ..insan_metni import ayrinti, ayrinti_ozeti, pencere_metni
 from ..ortak import (soluk_etiket)
 
-# Sütunlar (UX-B, Y3/D3): Saat · Ne oldu (insan metni) · Pencere (kimlik/yasak başlık yok) · Ayrıntı (ham satır)
+# Sütunlar (UX-B, Y3/D3): Saat · Ne oldu (insan metni) · Pencere (kimlik/yasak başlık yok) · Ayrıntı (kısa insan
+# metni, ayrinti_ozeti; ham satır ipucunda)
 SUTUNLAR = (N_("Saat"), N_("Ne oldu"), N_("Pencere"), N_("Ayrıntı"))
 ARKA_PENCERE = N_("{pencere} (arka plan)")
 FILTRE_AD = N_("Etkinlikte ara")
@@ -59,7 +60,7 @@ class EtkinlikModel(QAbstractTableModel):
             if i.column() == 2:
                 return pencere_sutunu(d)
             if i.column() == 3:
-                return ayrinti(d)
+                return ayrinti_ozeti(d)  # panel dilinde kısa metin; koordinat/ham günlük yalnız ipucunda (UX-L D-A)
             return d["zaman"]
         if rol == Qt.ItemDataRole.ToolTipRole:
             return ayrinti(d)  # ham satır (yasak başlık / URL sorgusu maskeli)

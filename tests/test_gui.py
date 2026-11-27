@@ -783,7 +783,8 @@ try:
     sira = next((i for i, d in enumerate(m.satirlar) if d["eylem"] == "DUR anahtarı açıldı (panel)"), None)
     kontrol("sabit günlük satırı görüntüde çevrilir, ham satır Türkçe kalır", sira is not None and
             m.data(m.index(sira, 1)) == "STOP switch on (panel)" and "DUR anahtarı" in m.satirlar[sira]["ham"] and
-            "DUR anahtarı" in m.data(m.index(sira, 3)))
+            "DUR anahtarı" in m.data(m.index(sira, 3), Qt.ItemDataRole.ToolTipRole) and  # ham satır ipucunda
+            "DUR anahtarı" not in m.data(m.index(sira, 3)))  # Ayrıntı sütunu panel dilinde (UX-L D-A)
     w.durum_guncelle(D.Durum(bekleyen=2))
     kontrol("İngilizce: Onaylar sekmesi sayılı ad", w.sekmeler.tabText(3) == "Approvals (2)", w.sekmeler.tabText(3))
     w.durum_guncelle(p.izleyici.durum)

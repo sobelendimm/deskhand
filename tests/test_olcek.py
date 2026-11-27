@@ -149,7 +149,7 @@ def kutu_bul(im, renk, tol=6):
 
 
 def murekkep(im, kutu, f):
-    """Test sayfasında eflatun kutunun (CSS 20,20 100x20) 40 CSS px altındaki metin satırının mürekkep yüksekliği."""
+    """Test sayfasında mavi kutunun (kwin_renk.DUGME; olcek.html ile aynı) (CSS 20,20 100x20) 40 CSS px altındaki metin satırının mürekkep yüksekliği."""
     x0, y0 = kutu[0], kutu[1] + round(30 * f)
     a = np.asarray(im.convert("L").crop((x0, y0, x0 + round(320 * f), y0 + round(30 * f)))).astype(int)
     ys = np.nonzero((a < 110).any(axis=1))[0]
@@ -157,16 +157,16 @@ def murekkep(im, kutu, f):
 
 
 def firefox_olc(au, srv, f):
-    """Firefox'u test sayfasıyla aç → (Firefox, pencere, dpr başlığı, tam görüntü, eflatun kutu, mürekkep yüksekliği)."""
+    """Firefox'u test sayfasıyla aç → (Firefox, pencere, dpr başlığı, tam görüntü, mavi kutu, mürekkep yüksekliği)."""
     import web_tarayici as wt
     t = time.monotonic()
     ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url("olcek.html"))
     baslik = bekle(lambda: (lambda b: b if "dpr=" in b else None)(au.baslik(ff.k)), 30, 0.2) or au.baslik(ff.k)
     olcum[f"Firefox açılışı (ölçek {f:g})"] = f"{time.monotonic() - t:.1f} sn"
     with api.hedef("sanal"):
-        im = bekle(lambda: (lambda im_: im_ if kutu_bul(im_, (255, 0, 255), 2) else None)(
+        im = bekle(lambda: (lambda im_: im_ if kutu_bul(im_, KR.DUGME, 2) else None)(
             api.goruntu_al(ff.k, tam=True)[0]), 15, 0.2) or api.goruntu_al(ff.k, tam=True)[0]
-    kutu = kutu_bul(im, (255, 0, 255), 2)
+    kutu = kutu_bul(im, KR.DUGME, 2)
     return ff, baslik, im, kutu, murekkep(im, kutu, f) if kutu else 0
 
 
@@ -354,9 +354,9 @@ if shutil.which("chromium"):
                 au.baslik(kc) if kc else "pencere yok")
         if kc:
             with api.hedef("sanal"):
-                imc = bekle(lambda: (lambda im_: im_ if kutu_bul(im_, (255, 0, 255), 2) else None)(
+                imc = bekle(lambda: (lambda im_: im_ if kutu_bul(im_, KR.DUGME, 2) else None)(
                     api.goruntu_al(kc, tam=True)[0]), 15, 0.2)
-            kc_ = kutu_bul(imc, (255, 0, 255), 2) if imc else None
+            kc_ = kutu_bul(imc, KR.DUGME, 2) if imc else None
             kg = (kc_[2] - kc_[0] + 1, kc_[3] - kc_[1] + 1) if kc_ else None
             kontrol("Chromium: CSS 100x20 kutu tam görüntüde ~200x40 piksel",
                     kg and abs(kg[0] - 200) <= 3 and abs(kg[1] - 40) <= 3, str(kg))

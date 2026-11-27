@@ -13,6 +13,7 @@ from .. import saglik as S
 from ..ortak import (YESIL, KIRMIZI, SARI, Isci, nokta)
 
 _BOSLUK, _HEDEF = 8, 28
+KISA_SINIR = 70  # sorun satırındaki doctor ayrıntısının en çok uzunluğu (karakter)
 
 
 def _pano_yaz(metin: str) -> None:
@@ -97,6 +98,14 @@ class SaglikSekmesi(QWidget):
         self.bosluk = QWidget()  # tablo katlıyken kart üstte kalsın
         kok.addWidget(self.bosluk, 1)
         self._ilk = True
+        self._denetleniyor_yaz()
+
+    def _denetleniyor_yaz(self) -> None:
+        """İlk denetim dönmeden "Her şey hazır ✓ 0/0" değil "Denetleniyor…" (UX-L D-B)."""
+        self.l_kart.setText(_(T.H_DENETLENIYOR))
+        self.l_ozet.setText("")
+        self.l_ozet.setToolTip("")
+        self.l_sorun_not.setVisible(False)
 
     def _tumu(self, acik: bool) -> None:
         self.b_tumu.setArrowType(Qt.ArrowType.DownArrow if acik else Qt.ArrowType.RightArrow)
@@ -113,6 +122,8 @@ class SaglikSekmesi(QWidget):
         if self._isci is not None:
             return
         self.b_yenile.setEnabled(False)
+        if not self.sonuc:  # önceki sonuç varsa denetim sürerken o kalır
+            self._denetleniyor_yaz()
         self._isci = Isci(self.denetle_f, self)
         self._isci.bitti.connect(self._bitti)
         self._isci.start()
@@ -129,10 +140,20 @@ class SaglikSekmesi(QWidget):
     def _durum(d: dict) -> str:
         return d.get("durum", "tamam" if d["ok"] else "eksik")
 
-    def _kopyala(self, komut: str) -> None:
+    def _kopyala(self, komut: str, ayrinti: bool = False) -> None:
         self.pano(komut)
-        self.l_kopyalandi.setText(_(T.H_KOPYALANDI).format(komut=komut))
+        self.l_kopyalandi.setText(_(T.H_KOPYALANDI_AYRINTI) if ayrinti else _(T.H_KOPYALANDI).format(komut=komut))
         self.l_kopyalandi.setVisible(True)
+
+    @staticmethod
+    def kisa(metin: str, sinir: int = KISA_SINIR) -> str:
+        """Uzun ham doctor ayrıntısı → ilk satır/ilk cümle, en çok `sinir` karakter (UX-L D-C); tamamı ipucunda ve
+        Kopyala ile panoda."""
+        m = " ".join(str(metin or "").split("\n", 1)[0].split())
+        for ayrac in ("; ", ". "):
+            if ayrac in m:
+                m = m.split(ayrac, 1)[0]
+        return m if len(m) <= sinir else m[:sinir - 1].rstrip() + "…"
 
     def _sorunlari_temizle(self) -> None:
         while self.sorunlar.count():
@@ -155,7 +176,10 @@ class SaglikSekmesi(QWidget):
             durum.setIcon(nokta(YESIL if d["ok"] else SARI if d_ == "uyari" else KIRMIZI, 6))
             self.tablo.setItem(i, 0, ad)
             self.tablo.setItem(i, 1, durum)
-            self.tablo.setItem(i, 2, QTableWidgetItem(_(d["not"])))  # saglik.py notları msgid
+            tam = _(d["not"]) if d["not"] else ""  # saglik.py notları msgid; doctor ("ek") ayrıntısı uzun olabilir
+            not_ = QTableWidgetItem(self.kisa(tam) if d.get("tur") == "ek" else tam)
+            not_.setToolTip(tam)
+            self.tablo.setItem(i, 2, not_)
         self._sorunlari_temizle()
         sorunlu = [d for d in sonuc if not d["ok"]]
         for r, d in enumerate(sorunlu):
@@ -166,24 +190,36 @@ class SaglikSekmesi(QWidget):
             f.setBold(True)
             ad.setFont(f)
             d_ = self._durum(d)
-            # doctor satırı ("ek"): ayrıntısı zaten insan dilinde; paketli satır: yalnız durum
-            ne = QLabel(str(d.get("not") or "") if d.get("tur") == "ek" and d.get("not")
-                        else _(T.H_UYARI if d_ == "uyari" else T.H_YOK))
+            # doctor satırı ("ek"): ayrıntısı insan dilinde ama uzun olabilir → kısa özet, tamamı ipucunda ve Kopyala
+            # ile panoda (UX-L D-C); paketli satır: yalnız durum
+            ek_not = str(d.get("not") or "") if d.get("tur") == "ek" else ""
+            ne = QLabel(self.kisa(ek_not) if ek_not else _(T.H_UYARI if d_ == "uyari" else T.H_YOK))
             ne.setWordWrap(True)
+            ne.setToolTip(ek_not)
             komut = S.cozum_komutu(d)
-            satir = {"veri": d, "ad": ad, "komut": komut, "kopyala": None}
+            satir = {"veri": d, "ad": ad, "ne": ne, "komut": komut, "kopyala": None}
             self.sorunlar.addWidget(ad, r, 0)
             self.sorunlar.addWidget(ne, r, 1)
-            if komut:
+            if komut or ek_not:
                 b = QPushButton(_(T.H_KOPYALA))
                 b.setMinimumHeight(_HEDEF)
-                b.setToolTip(_(T.H_KOPYALA_IPUCU).format(komut=komut))
+                b.setToolTip(_(T.H_KOPYALA_IPUCU).format(komut=komut) if komut else _(T.H_KOPYALA_AYRINTI_IPUCU))
                 b.setAccessibleName(f"{_(T.H_KOPYALA)}: {ad.text()}")
-                b.clicked.connect(lambda _c=False, k=komut: self._kopyala(k))
+                if komut:
+                    b.clicked.connect(lambda _c=False, k=komut: self._kopyala(k))
+                else:
+                    b.clicked.connect(lambda _c=False, k=ek_not: self._kopyala(k, ayrinti=True))
                 self.sorunlar.addWidget(b, r, 2)
                 satir["kopyala"] = b
             self.sorun_satirlari.append(satir)
         n = len(sorunlu)
+        if not sonuc:  # boş sonuç "Her şey hazır ✓ 0/0" değildir (UX-L D-B)
+            self.l_kart.setText(_(T.H_SONUC_YOK))
+            self.l_sorun_not.setVisible(False)
+            self.l_kopyalandi.setVisible(False)
+            self.l_ozet.setText("")
+            self.l_ozet.setToolTip("")
+            return
         self.l_kart.setText(_(T.H_HEPSI_TAMAM) if not n else _(T.H_SORUN_TEK) if n == 1
                             else _(T.H_SORUN_VAR).format(n=n))
         self.l_sorun_not.setVisible(bool(n))
@@ -196,3 +232,7 @@ class SaglikSekmesi(QWidget):
         self.mt.tazele()
         if self.sonuc:
             self.goster(self.sonuc)
+        elif self._isci is not None or self._ilk:
+            self._denetleniyor_yaz()
+        else:
+            self.goster([])
