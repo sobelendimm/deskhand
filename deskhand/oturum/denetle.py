@@ -143,9 +143,32 @@ def _giris_mi(ad: str, desenler) -> bool:
     return bool(_GIRIS_DESENI.search(ad or ""))
 
 
-def _aktarim_suzgeci():
+def _bilinen_konaklar(profil: str) -> set[str]:
+    """Hosts known from the profile, the same set firefox.hazirla passes to Politika.cerez_reddedildi (cookie hosts,
+    site storage, session cookies, open tabs, places.sqlite). The profile's cookies.sqlite is NOT opened: it is read
+    from a consistent temporary 0700 copy (kopya.sqlite_yedek), like _kalici_oku. Unreadable → empty set."""
+    cookies_db = os.path.join(profil, "cookies.sqlite")
+    rec = firefox._recovery_oku(os.path.join(profil, "sessionstore-backups", "recovery.jsonlz4"))
+    with tempfile.TemporaryDirectory(prefix="deskhand-denetle-") as td:
+        os.chmod(td, 0o700)
+        gecici = os.path.join(td, "c.sqlite")
+        try:
+            if os.path.isfile(cookies_db):
+                kopya.sqlite_yedek(cookies_db, gecici)
+        except (sqlite3.Error, OSError):
+            pass
+        try:
+            # no copy (missing/unreadable source): sqlite opens an empty file inside td, the query error is caught
+            # inside and only the cookie hosts are missing; the other sources still count
+            return firefox._bilinen_konaklar(profil, gecici, rec)
+        except (sqlite3.Error, OSError):
+            return set()
+
+
+def _aktarim_suzgeci(bilinen_konaklar=()):
     """→ f(host) True: bu konağın çerezi kopyaya TAŞINIR (firefox.hazirla ile aynı kurallar: ret listesi, panelin
-    hesap oturumu izni, görev kipinde yalnız görev siteleri). Süresiz çerez için site izni de gerekir."""
+    hesap oturumu izni, görev kipinde yalnız görev siteleri). Süresiz çerez için site izni de gerekir.
+    bilinen_konaklar: see Politika.cerez_reddedildi (a domain cookie sent to a rejected known subdomain is rejected)."""
     pol = politika.coz("firefox")
     from .. import gorev_kipi
     gorev = gorev_kipi.etkin()
@@ -159,7 +182,7 @@ def _aktarim_suzgeci():
 
     def tasinir(host: str, suresiz: bool = False) -> bool:
         a = firefox._alan(host)
-        if not a or pol.cerez_reddedildi(host):
+        if not a or pol.cerez_reddedildi(host, bilinen_konaklar):
             return False
         if suresiz and not pol.site_izinli(a, gorev_siteleri):
             return False
@@ -188,7 +211,7 @@ def denetle(alan: str, desenler=None, kopya_yolu: str | None = None, simdi: floa
         sonuc["neden"] = "profil_yok"
         return sonuc
     sonuc["profil"] = profil
-    tasinir = _aktarim_suzgeci()
+    tasinir = _aktarim_suzgeci(_bilinen_konaklar(profil))
     prof = [c for c in _profil_cerezleri(profil, alan) if _giris_mi(c["ad"], desenler)]
 
     if kopya_yolu is None:

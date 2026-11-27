@@ -25,6 +25,19 @@
 - **Düzeltme: oturum kopyasında süresi geçmiş eski çerez satırı, canlı oturum çerezinin aktarılmasını sessizce
   engelliyordu.**
 - **Testler: sızan test süreçleri** (KWin, dbus) takım öldürülse ya da çökse de temizlenir.
+- **Güvenlik: devir ve onay kanalındaki yarışlar kapatıldı.** Nabız ayrı iş parçacığından gelir; sahibi doğrulanabilir
+  biçimde çalışan istek yalnız dosya zamanına bakılarak düşürülmez; istek dosyası silinince bekleyen taraf beklemeyi
+  bırakır. İptal karar anında denetlenir: iptal edilmiş `request_human` hiçbir zaman "çözüldü" dönmez ve korumayı
+  susturmaz. Devir girdi kilidi ilk yoklamadan önce kurulur; "doğrulama geçti" kararı aynı belgeye bağlıdır (sorgu ve
+  parça dahil; Cloudflare `__cf_chl_*` belirteçleri yok sayılır). Panel kaydı ve soketinin ömrü tek kilit altında;
+  kapanıştan sonra tazeleme hiçbir şeyi yeniden oluşturmaz.
+- **Güvenlik: önizleme maskesi sıkılaştırıldı.** Pencere sınıfı okunamazsa sonuç önbelleğe alınmaz ve kare
+  gösterilmez; pencere listesi görüntü alınmadan önce ve sonra okunur, ikisinin birleşimi maskelenir. KWin'de maske
+  çerçeve geometrisini (başlık çubuğu dahil) kullanır (`api.goruntu_al` dahil); orada denetlenemeyen pencere maskelenir.
+- **Güvenlik: Firefox oturum kopyasında çerez düzeltmeleri.** Kaynakta süresi geçmiş oturum çerezi kopyaya alınmaz;
+  yazılan ömür kaynaktaki bitişi aşmaz. Alan çerezi (`.ornek.com`), profilden bilinen ve ret desenine uyan bir alt
+  alana (`*bank*` → `bank.ornek.com`) da gideceği için taşınmaz; `deskhand sessions check` aynı kuralla karar verir.
+  Kopyanın `cookies.sqlite`'ı `VACUUM INTO` ile yeniden kurulur: silinen değerler dosyada bayt olarak kalmaz.
 
 ## 0.9.0 (22 Kasım 2026)
 

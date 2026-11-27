@@ -96,7 +96,11 @@ def sahte_profil(kok):
         ("eski.test", "PHPSESSID", "BAYAT", _ms(-3600)),
         ("eski.test", "auth_token", "KALICI-GECERLI", _ms(3600)),
         ("www.ornekbank.test", "sessionid", GIZLI[5], _ms(3600)),
+        # domain cookie of a site whose subdomain matches the `*bank*` reject rule; that subdomain is known only from
+        # site storage (no cookie row), as in firefox._bilinen_konaklar
+        (".ortak.test", "sessionid", "ORTAK-ALAN-GIZLI", _ms(3600)),
     ])
+    os.makedirs(os.path.join(pdir, "storage", "default", "https+++bank.ortak.test"), exist_ok=True)
     mozlz4_yaz(os.path.join(pdir, "sessionstore-backups", "recovery.jsonlz4"), {"cookies": [
         {"host": "www.dukkan.test", "name": "PHPSESSID", "value": GIZLI[1], "path": "/", "sameSite": 256,
          "schemeMap": 2, "originAttributes": _oa()},
@@ -130,7 +134,8 @@ def cli_kos(argv):
 
 
 def degersiz(metin):
-    return not any(v in metin for v in GIZLI + ("BAYAT", "KALICI-GECERLI", "SURESIZ-CAKISAN", "BANKA-SURESIZ"))
+    return not any(v in metin for v in GIZLI + ("BAYAT", "KALICI-GECERLI", "SURESIZ-CAKISAN", "BANKA-SURESIZ",
+                                       "ORTAK-ALAN-GIZLI"))
 
 
 def main():
@@ -159,6 +164,12 @@ def main():
         kod, cikti = cli_kos(["check", "ornekbank.test"])
         kontrol("ret listesindeki site → 1 (politika dışı)", kod == 1 and "politika" in cikti, cikti)
         kontrol("ret sitesi çıktısında değer yok", degersiz(cikti), cikti)
+        kod, cikti = cli_kos(["check", "www.ortak.test"])
+        d = denetle.denetle("www.ortak.test")
+        kontrol("alan çerezi reddedilen bilinen alt alana gider (`*bank*`) → politika dışı, 1 (hazirla ile aynı)",
+                kod == 1 and d["profil_durum"] == "politika_disi" and d["cerezler"]
+                and not any(c["tasinir"] for c in d["cerezler"]), str(d))
+        kontrol("alan çerezi çıktısında değer yok", degersiz(cikti), cikti)
         d = denetle.denetle("dukkan.test", desenler=["sec_*"])
         kontrol("--cerez deseni yalnız o çerezi sayar", [c["ad"] for c in d["cerezler"]] == ["sec_session_id"],
                 str(d["cerezler"]))
@@ -190,6 +201,8 @@ def main():
                 g is not None and g[2] == 1 and g[3] and "partitionKey=" in g[4], str(g))
         kontrol("ret listesindeki süresiz çerez kopyaya geçmez", ("www.ornekbank.test", "bank_session") not in satir)
         kontrol("ret listesindeki kalıcı çerez kopyaya geçmez", ("www.ornekbank.test", "sessionid") not in satir)
+        kontrol("reddedilen alt alana giden alan çerezi (.ortak.test) kopyaya geçmez",
+                (".ortak.test", "sessionid") not in satir, str(satir.keys()))
         kontrol("kopya dizini 0700", (os.stat(hedef).st_mode & 0o777) == 0o700)
         kontrol("kopya dosyaları 0600", all((os.stat(os.path.join(k, f)).st_mode & 0o777) == 0o600
                                             for k, _d, fs in os.walk(hedef) for f in fs))

@@ -410,7 +410,10 @@ bakar. Çerez başına: ad, konak, kalıcı/süresiz, kalan süre ya da "süresi
 yalnız bellekte SHA-256 özetiyle karşılaştırılır; değer ve özet yazılmaz. Giriş çerezi ad deseniyle tahmin edilir
 (`session`, `sid`, `auth`, `token`, `login`, `user`, `buyer`…) ya da `--cerez AD` (fnmatch, tekrarlanabilir) ile
 verilir. Süresi geçmiş kalıcı giriş çerezi var, geçerli kalıcı yoksa (yalnız süresiz `PHPSESSID` kalmışsa) oturum YOK
-sayılır: Shopier olayındaki durum budur.
+sayılır: Shopier olayındaki durum budur. "Kopyaya taşınır mı" kararı kopyanın kurallarıyla aynıdır (ret listesi, hesap
+oturumu izni, görev kipi, bilinen konaklarla alan çerezi kuralı; §8 "Site ret listesi"): reddedilen bilinen alt alana
+giden alan çerezi `politika_disi` sayılır. Bilinen konaklar için de profilin `cookies.sqlite`'ına bağlanılmaz
+(geçici 0700 kopyadan okunur).
 
 | Çıkış | Anlamı | Ne yapılır |
 |---|---|---|
@@ -582,7 +585,14 @@ Flatpak örneği yok) normal açılış (`paylas`: kendi verisiyle, kullanıcı 
 kullanıcının ekranına devredebilir.
 
 **Site ret listesi** (`[site].reddet`): bu alan adlarının çerezi/deposu kopyaya ALINMAZ; düz alan adı alt alanlarını
-da kapsar. Kayıtlı parolalar (`logins.json` / `logins.db`) aynı listeyle süzülür. Liste şunları içerir:
+da kapsar. Kayıtlı parolalar (`logins.json` / `logins.db`) aynı listeyle süzülür. **Alan çerezi** (`.ornek.com`,
+baştaki nokta) reddedilen bir alt alana da gönderildiği için ayrıca reddedilir: hem ret listesindeki düz alt alan
+(`accounts.google.com` → `.google.com`) hem de profilden **bilinen** ve bir desene uyan alt alan (`*bank*` →
+`bank.ornek.com` → `.ornek.com`). Bilinen konaklar (`Politika.cerez_reddedildi(host, bilinen_konaklar)`): çerez
+konakları, site deposu klasörleri (`storage/default`), `recovery.jsonlz4`'teki oturum çerezi ve açık sekme konakları,
+`places.sqlite` köken listesi (salt okuma, `immutable`). Kopya (`firefox.hazirla`) ve `sessions check` aynı kümeyi
+kullanır. Kopyanın `cookies.sqlite`'ı süzmeden sonra `VACUUM INTO` ile yeniden kurulur: silinen değerler dosya
+baytlarında kalmaz. Liste şunları içerir:
 - genel desenler: `*bank*`, `*banka*`, `*odeme*`, `*payment*`, `*checkout*`, `*paypal*`, `*stripe*`, `*e-devlet*`, `*edevlet*`;
 - Türk bankaları ve ödeme kuruluşları (ör. İş Bankası, Garanti BBVA, Yapı Kredi, Akbank, Ziraat, Halkbank, Vakıfbank,
   QNB, DenizBank, ING, TEB, Kuveyt Türk, Enpara, Papara, ininal, Param, iyzico, PayTR);
