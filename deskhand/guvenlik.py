@@ -2246,13 +2246,30 @@ def insan_onceligi(ne, azami=8.0):
 
 
 # ---------------------------------------------------------------- DUR anahtarı
+# DUR is a SET of sources (review INC5 O4/O5/P1): the file dur_dosyasi() holds one "<source> <pid>" line per source;
+# DUR is on while the file exists (hata.dur_denetle: one stat). Each source is removed only by its owner:
+#   "kullanici"               the user (panel DUR button / tray / shortcut); the user's Devam lifts EVERY source;
+#   "panel-kapali-basarisiz"  the panel, closed-fail while its signed DUR record cannot be read; removed only by the
+#                             panel (or the user's Devam), never by an agent's dur_kapat("cli");
+#   "cli"                     an agent / the command line; an empty (legacy) file counts as "cli".
+# Any other (unknown) label is kept and protected like the user's. Writers take a flock (dur-kilit) so adding and
+# removing never lose another source; removing the LAST source moves the file away first, then checks what it moved
+# and puts back any source added meanwhile (no check-then-remove race, also against writers outside the lock).
+
+DUR_KULLANICI = "kullanici"
+DUR_CLI = "cli"
+DUR_KAPALI_BASARISIZ = "panel-kapali-basarisiz"
+_DUR_BILINMIYOR = "bilinmiyor"  # the file exists but cannot be read: protected
+_DUR_ONCELIK = (DUR_KULLANICI, DUR_KAPALI_BASARISIZ, DUR_CLI)
+_DUR_YEREL = threading.local()
+
 
 def dur_acik():
     return os.path.exists(dur_dosyasi())
 
 
 def _icerik(kaynak):
-    return f"{kaynak} {os.getpid()}\n"
+    return f"{kaynak} {os.getpid()}"
 
 
 def _gecici_yaz(dizin, icerik):
@@ -2263,45 +2280,173 @@ def _gecici_yaz(dizin, icerik):
     return yol
 
 
-def dur_ac(kaynak="cli"):
-    """DUR anahtarını aç: bundan sonra hiçbir deskhand süreci girdi göndermez (13); basılı tuşlar bırakılır.
-    kaynak: "kullanici" (arayüz/tepsi/kısayol: insanın kararı) ya da "cli" (ajan/komut satırı).
-    Atomik: okuyan hiçbir an yarım/boş dosya görmez. Ajan (cli) var olan DUR'a dokunmaz (os.link: yalnız yoksa
-    oluşturur), böylece kullanıcının DUR'u hiçbir yarışta ajanınkiyle ezilmez; kullanıcınınki her zaman yazılır."""
+def _kaynak_coz(metin):
+    """DUR file content → {source: its line}. One "<source> <pid>" per line; an empty file (legacy / `touch`) is
+    {"cli"}. "panel-kapali-basarisiz" and unknown labels stay what they are (never "cli": review INC5 P1)."""
+    kaynaklar = {}
+    for satir in (metin or "").splitlines():
+        p = satir.split()
+        if p:
+            kaynaklar.setdefault(p[0], satir.strip())
+    return kaynaklar or {DUR_CLI: ""}
+
+
+_DUR_OKU_SINIR = 64 * 1024
+
+
+def _dur_oku(yol=None):
+    """DUR file → {source: line}; {} = no file. A file that exists but cannot be read (I/O error, not a regular file:
+    FIFO, directory, symlink, socket) → {"bilinmiyor": ""}. Never blocks: O_NONBLOCK, the type is checked before
+    reading, at most 64 KiB (review INC6 D4: a FIFO froze the panel's DUR button)."""
+    import stat
+    yol = yol or dur_dosyasi()
+    try:
+        fd = os.open(yol, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return {}
+    except OSError:
+        return {_DUR_BILINMIYOR: ""} if os.path.lexists(yol) else {}
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return {_DUR_BILINMIYOR: ""}
+        parcalar, kalan = [], _DUR_OKU_SINIR
+        while kalan > 0:
+            p = os.read(fd, kalan)
+            if not p:
+                break
+            parcalar.append(p)
+            kalan -= len(p)
+        return _kaynak_coz(b"".join(parcalar).decode("utf-8", "replace"))
+    except OSError:
+        return {_DUR_BILINMIYOR: ""}
+    finally:
+        os.close(fd)
+
+
+def _duzenli_dosya(yol):
+    import stat
+    try:
+        return stat.S_ISREG(os.lstat(yol).st_mode)
+    except OSError:
+        return False
+
+
+def _dur_oku_yazici(yol=None):
+    """_dur_oku for a writer (review INC6 D2): a read error is retried once. Still unreadable: a REGULAR file → None
+    (DUR is on; its sources are unknown and must not be replaced by a placeholder); not a regular file (FIFO,
+    symlink, socket) → {} (nothing readable to keep: it is replaced by a regular file)."""
+    yol = yol or dur_dosyasi()
+    k = _dur_oku(yol)
+    if _DUR_BILINMIYOR in k:
+        k = _dur_oku(yol)
+    if _DUR_BILINMIYOR not in k:
+        return k
+    return None if _duzenli_dosya(yol) else {}
+
+
+class _DurKilidi:
+    """Process-wide exclusive flock on RUNTIME_DIR/dur-kilit, re-entrant in the same thread. The lock cannot be taken
+    within BEKLE_SN (another process holds it: a same-uid process must not be able to block the user's DUR button)
+    or at all (no space, odd directory): go on without it; writes stay atomic (link/replace), only a source written
+    at the same moment by someone else could be lost, and the panel puts its own sources back (_dur_koru)."""
+    BEKLE_SN = 0.5
+
+    def __enter__(self):
+        self.fd = None
+        derin = getattr(_DUR_YEREL, "derin", 0)
+        _DUR_YEREL.derin = derin + 1
+        if derin:
+            return self
+        import fcntl
+        try:
+            dizin = os.path.dirname(dur_dosyasi())
+            os.makedirs(dizin, mode=0o700, exist_ok=True)
+            self.fd = os.open(os.path.join(dizin, "dur-kilit"),
+                              os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+            import time as _t
+            son = _t.monotonic() + self.BEKLE_SN
+            while True:
+                try:
+                    fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if _t.monotonic() >= son:
+                        raise
+                    _t.sleep(0.005)
+        except OSError:
+            if self.fd is not None:
+                os.close(self.fd)
+            self.fd = None
+        return self
+
+    def __exit__(self, *_a):
+        _DUR_YEREL.derin -= 1
+        if self.fd is not None:
+            os.close(self.fd)  # the flock goes with the descriptor
+        return False
+
+
+def _dur_yaz(kaynaklar, birlestir):
+    """Write the source set atomically (readers never see an empty / partial file). The file is missing → created
+    with os.link (a file created meanwhile is not overwritten: merged when `birlestir`)."""
     yol = dur_dosyasi()
     dizin = os.path.dirname(yol)
     os.makedirs(dizin, mode=0o700, exist_ok=True)
-    gecici = _gecici_yaz(dizin, _icerik(kaynak))
+
+    def metin(k):
+        sira = [x for x in _DUR_ONCELIK if x in k] + sorted(x for x in k if x not in _DUR_ONCELIK)
+        return "".join((k[x] or x) + "\n" for x in sira)
+    gecici = _gecici_yaz(dizin, metin(kaynaklar))
     try:
-        if kaynak == "kullanici":
-            os.replace(gecici, yol)
-            gecici = None
-        else:
-            try:
-                os.link(gecici, yol)  # yoksa oluştur; varsa (kimin olursa olsun) olduğu gibi kalsın
-            except FileExistsError:
-                pass
+        try:
+            os.link(gecici, yol)
+            return
+        except FileExistsError:
+            pass
+        if birlestir:
+            simdi = _dur_oku_yazici()
+            if simdi is None:  # a regular DUR file that cannot be read: DUR is on, its sources are kept as they are
+                return
+            if any(k not in kaynaklar for k in simdi):
+                os.remove(gecici)
+                gecici = _gecici_yaz(dizin, metin({**simdi, **kaynaklar}))
+        os.replace(gecici, yol)
+        gecici = None
     finally:
         if gecici:
             try:
                 os.remove(gecici)
             except OSError:
                 pass
-    return yol
 
 
-def _kaynak_coz(metin):
-    ilk = metin.split()
-    return "kullanici" if ilk and ilk[0] == "kullanici" else "cli"
+def dur_ac(kaynak=DUR_CLI):
+    """DUR anahtarını aç: bundan sonra hiçbir deskhand süreci girdi göndermez (13); basılı tuşlar bırakılır.
+    kaynak: "kullanici" (arayüz/tepsi/kısayol: insanın kararı), "cli" (ajan/komut satırı) ya da
+    "panel-kapali-basarisiz" (panel: imzalı kayıt okunamıyor). Kaynak KÜMEYE eklenir: hiçbir kaynak bir başkasını
+    ezmez ya da silmez. Atomik: okuyan hiçbir an yarım/boş dosya görmez."""
+    kaynak = str(kaynak).split()[0] if str(kaynak).split() else DUR_CLI
+    with _DurKilidi():
+        mevcut = _dur_oku_yazici()
+        # None: the file exists but cannot be read now: DUR is already on and its unknown sources are NOT overwritten
+        # with a placeholder (review INC6 D2); the panel puts its own source back once the file can be read (_dur_koru)
+        if mevcut is not None and kaynak not in mevcut:
+            _dur_yaz({**mevcut, kaynak: _icerik(kaynak)}, birlestir=True)
+    return dur_dosyasi()
+
+
+def dur_kaynaklari():
+    """Açık DUR'un kaynakları (frozenset; boş = kapalı)."""
+    return frozenset(_dur_oku())
 
 
 def dur_kaynagi():
-    """Açık DUR'u kim koydu: "kullanici" | "cli" | None (kapalı)."""
-    try:
-        with open(dur_dosyasi()) as f:
-            return _kaynak_coz(f.read())
-    except OSError:
-        return None
+    """Açık DUR'u kim koydu (öncelik: "kullanici" > "panel-kapali-basarisiz" > "cli" > bilinmeyen etiket) | None."""
+    k = _dur_oku()
+    for x in _DUR_ONCELIK:
+        if x in k:
+            return x
+    return sorted(k)[0] if k else None
 
 
 DUR_KALDIRMA_MESAJI = N_("DUR yalnız kullanıcı tarafından kaldırılır: Deskhand panelinden ya da DUR kısayoluyla.")
@@ -2325,39 +2470,57 @@ def dur_kaldir_iste(sure=None):
     return True
 
 
-def dur_kapat(kaynak="cli"):
-    """DUR anahtarını kapat. → önceden açık mıydı. Kullanıcının (arayüzden) koyduğu DUR'u yalnız kullanıcı
-    kaldırır: ajan 'devam' diyerek insanın durdurma kararını geri alamaz → Dur(13).
-    Yarışsız: ajan dosyayı önce geçici ada TAŞIR (atomik), sonra taşıdığı dosyanın içeriğine bakar; o arada
-    kullanıcı DUR koyduysa (içerik 'kullanici') dosyayı geri koyar ve 13 verir."""
+def dur_kapat(kaynak=DUR_CLI):
+    """DUR kaynağını kaldır. → o kaynak açıktı mı ("kullanici": DUR açık mıydı).
+    "kullanici" = kullanıcının kendi kararı (panel Devam'ı, kaldırma isteğine Evet): BÜTÜN kaynaklar kalkar.
+    Başka her kaynak YALNIZ kendini kaldırır. "cli" (ajan): DUR başka bir kaynak yüzünden (kullanıcının, panelin
+    kapalı-başarısız DUR'u, bilinmeyen etiket) açık kalıyorsa Dur(13): ajan koymadığı bir durdurmayı geri alamaz.
+    Yarışsız: son kaynak dosya önce geçici ada TAŞINARAK kaldırılır; taşınan okunur, o arada eklenen kaynak geri konur."""
     yol = dur_dosyasi()
-    if kaynak == "kullanici":
-        try:
-            os.remove(yol)
-            return True
-        except FileNotFoundError:
-            return False
-    if dur_kaynagi() == "kullanici":  # sıradan durum: hiç dokunmadan reddet
+    with _DurKilidi():
+        if kaynak == DUR_KULLANICI:
+            try:
+                os.remove(yol)
+                return True
+            except FileNotFoundError:
+                return False
+        mevcut = _dur_oku_yazici()
+        if mevcut is None:  # unreadable: nothing is removed, DUR stays on
+            mevcut = {_DUR_BILINMIYOR: ""}
+        vardi = kaynak in mevcut
+        kalan = {k: v for k, v in mevcut.items() if k != kaynak}
+        if kalan:
+            if vardi:
+                _dur_yaz(kalan, birlestir=False)
+        elif mevcut:
+            tasinan = f"{yol}.kaldir-{os.getpid()}-{threading.get_ident()}"
+            try:
+                os.rename(yol, tasinan)
+            except FileNotFoundError:
+                return False
+            try:
+                tasinan_k = _dur_oku(tasinan)
+                if _DUR_BILINMIYOR in tasinan_k:  # cannot check what was moved: put it back as it is (DUR stays on)
+                    kalan = {_DUR_BILINMIYOR: ""}
+                    try:
+                        os.link(tasinan, yol)
+                    except FileExistsError:
+                        pass  # a new DUR file appeared meanwhile: DUR is on
+                else:
+                    kalan = {k: v for k, v in tasinan_k.items() if k != kaynak}
+                    if kalan:  # a source added between the read and the move (a writer outside the lock): put back
+                        _dur_yaz(kalan, birlestir=True)
+            finally:
+                try:
+                    os.remove(tasinan)
+                except OSError:
+                    pass
+    if kalan and kaynak == DUR_CLI:
+        if set(kalan) == {DUR_KAPALI_BASARISIZ}:
+            raise Dur(KULLANICI_DUR, _("DUR'u panel koydu (imzalı kayıt okunamıyor); yalnız kullanıcı Deskhand "
+                                       "panelinden kaldırabilir"))
+        if set(kalan) == {_DUR_BILINMIYOR}:
+            raise Dur(KULLANICI_DUR, _("DUR dosyası okunamıyor (kaynağı bilinmiyor); yalnız kullanıcı Deskhand "
+                                       "panelinden kaldırabilir"))
         raise Dur(KULLANICI_DUR, _("DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir"))
-    tasinan = f"{yol}.kaldir-{os.getpid()}-{threading.get_ident()}"
-    try:
-        os.rename(yol, tasinan)
-    except FileNotFoundError:
-        return False
-    try:
-        with open(tasinan) as f:
-            sahip = _kaynak_coz(f.read())
-    except OSError:
-        sahip = "kullanici"  # okunamadı: güvenli taraf (geri koy)
-    if sahip == "kullanici":
-        try:
-            os.link(tasinan, yol)  # yerinde yeni bir DUR yoksa geri koy
-        except FileExistsError:
-            os.replace(tasinan, yol)  # yeni DUR (ajanınki ya da kullanıcınınki) varsa: kullanıcınınki kazanır
-            tasinan = None
-        finally:
-            if tasinan:
-                os.remove(tasinan)
-        raise Dur(KULLANICI_DUR, _("DUR'u kullanıcı koydu; yalnız kullanıcı Deskhand panelinden/tepsiden kaldırabilir"))
-    os.remove(tasinan)
-    return True
+    return vardi

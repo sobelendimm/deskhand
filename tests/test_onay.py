@@ -57,6 +57,27 @@ def gosterip_yanitla(b, karar):
         return onay.yanitla(b["id"], karar)
 
 
+_ISTEYENLER = []
+
+
+def isteyen_bagli(i):
+    """An honest requester on the channel: `bekle <id> <sha256 of the bytes it wrote>` (review INC3 B3), the
+    connection stays open (the decision comes on it)."""
+    import hashlib
+    import socket
+    with open(onay.istek_yolu(i), "rb") as f:
+        iz = hashlib.sha256(f.read()).hexdigest()
+    c = socket.socket(socket.AF_UNIX)
+    c.connect(onay.kanal_yolu())
+    c.sendall(f"bekle {i} {iz}\n".encode())
+    c.settimeout(3)
+    _ISTEYENLER.append(c)
+    son = time.monotonic() + 2
+    while onay._KANAL is not None and onay._KANAL.istek_izi(i) is None and time.monotonic() < son:
+        time.sleep(0.01)
+    return c
+
+
 def gunluk_satirlari():
     yol = os.path.join(yollar.gunluk_dizin(), time.strftime("gunluk-%Y%m%d.log"))
     try:
@@ -242,6 +263,7 @@ for k in (a, b):
 k = "3" * 32
 onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "ekran",
                                     "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getpid()})
+isteyen_bagli(k)
 kontrol("izin yanıtı DOSYAYA yazılmaz (yalnız kanal)", gosterip_yanitla(k, "izin") is True and
         not os.path.exists(onay.yanit_yolu(k)))
 kontrol("kanaldan yanıtlanan istek bekleyenlerde görünmez (diyalog yeniden açılmaz)",
@@ -353,18 +375,16 @@ kontrol("başka süreç başkasının isteğine bağlanınca karar almaz (bağla
         str(alanlar.get("baskasi")))
 kontrol("asıl isteyen izni kanaldan alır", s.izin and s.neden == "izin", str(s))
 
-# panel karar verdiğinde isteyen henüz bağlanmamışsa karar saklanır ve bağlanınca iletilir (sunucu birimi)
+# INC3 B3: a Yes needs the requester's hash; given before it arrives (no requester on the channel) → not approved
 k = "5" * 32
 onay._yaz_atomik(onay.istek_yolu(k), {"id": k, "eylem": "e", "hedef": "h", "ayrinti": "", "masaustu": "ekran",
                                     "zaman": time.time(), "son_zaman": time.time() + 60, "pid": os.getpid()})
-gosterip_yanitla(k, "izin")
-import socket  # noqa: E402
-
-c = socket.socket(socket.AF_UNIX)
-c.connect(onay.kanal_yolu())
-c.sendall(f"bekle {k}\n".encode())
-c.settimeout(3)
-kontrol("önce verilen karar sonradan bağlanan isteyene iletilir", c.recv(100).decode() == f"karar izin {k}\n")
+_eski_bekle, onay.IZ_BEKLE_SN = onay.IZ_BEKLE_SN, 0.2
+kontrol("isteyenin karması gelmeden verilen Evet → izin verilmez", gosterip_yanitla(k, "izin") is False)
+onay.IZ_BEKLE_SN = _eski_bekle
+c = isteyen_bagli(k)  # the requester (hash) arrives: the dialog shows it again, the Yes goes through
+kontrol("karma geldikten sonra Evet → isteyene iletilir", gosterip_yanitla(k, "izin") is True and
+        c.recv(100).decode() == f"karar izin {k}\n")
 c.close()
 onay._sil(onay.istek_yolu(k))
 
@@ -415,6 +435,7 @@ try:
 
     j = "b2" * 16
     istek_yaz(j, tur=onay.TUR_DUR)
+    isteyen_bagli(j)
     onay.istek_oku(onay.istek_yolu(j))               # shown…
     getattr(onay, "_GORULEN", {}).clear()           # …then the panel's memory of it is gone (d78c8d6: >4096 → clear())
     r = onay.yanitla(j, "izin")                      # nothing says what the user saw
@@ -447,6 +468,8 @@ r = subprocess.run([sys.executable, "-c", "import sys, deskhand.onay; print('PyQ
                    capture_output=True, text=True)
 kontrol("deskhand.onay PyQt6 yüklemez", r.stdout.strip() == "False", r.stdout + r.stderr)
 
+for _c in _ISTEYENLER:
+    _c.close()
 onay.panel_sil()
 print(f"\n{gecen}/{toplam} onay testi geçti")
 sys.exit(0 if gecen == toplam else 1)

@@ -93,6 +93,11 @@ _ACILIS_OMUR = 90 * 86400
 
 # ---------------------------------------------------------------- key ring
 
+class KilitAlinamadi(Exception):
+    """forget could not take the store lock (another process holds it, or the store directory is not usable):
+    NOTHING was forgotten. Distinct from "no record" (review INC3 B7): the CLI exits with its own code."""
+
+
 class AnahtarYok(Exception):
     """The store key is not available. `yok`: the key ring answered and there is no key (nothing was ever saved)."""
 
@@ -841,21 +846,22 @@ class Depo:
 
     def unut(self, site: str) -> bool:
         """sessions forget <site>: delete the record and leave a forgotten-at time, so a copy that is open now does
-        not write the site back when it closes (review Y2). → a record was deleted."""
+        not write the site back when it closes (review Y2). → a record was deleted (False: there is no record).
+        KilitAlinamadi: the store lock was not obtained, nothing changed (review INC3 B7)."""
         s = self.unut_site(site)
         if s is None:
             return False
         with self._kilitli() as tamam:
             if not tamam:
-                return False
+                raise KilitAlinamadi(s)
             self._unutma_yaz(s)
             return self.sil(s)
 
     def unut_hepsi(self) -> int:
-        """sessions forget --all (forgotten-at time for every site)."""
+        """sessions forget --all (forgotten-at time for every site). KilitAlinamadi: lock not obtained (B7)."""
         with self._kilitli() as tamam:
             if not tamam:
-                return 0
+                raise KilitAlinamadi("*")
             self._unutma_yaz(None)
             return self.sil_hepsi()
 

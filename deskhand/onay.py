@@ -8,8 +8,10 @@
      /proc/<pid>/exe + birebir aynı /proc/<pid>/cmdline (exe yorumlayıcı olduğundan panelin modül yolu/giriş
      noktası). Doğrulanamazsa → red ("kanal").
   3. RUNTIME_DIR/onay/istek-<uuid>.json yazılır (diyalog ve bekleyen listesi için; dosya 0600), kanala
-     `bekle <uuid>` gönderilir ve karar AYNI bağlantıdan beklenir (`karar izin|red <uuid>`). Süre dolarsa, panel
-     kapanırsa (bağlantı kopar) ya da DUR açılırsa → red.
+     `bekle <uuid> <sha256>` gönderilir (sha256 = the bytes the requester wrote; review INC3 B3) ve karar AYNI
+     bağlantıdan beklenir (`karar izin|red <uuid>`). Süre dolarsa, panel kapanırsa (bağlantı kopar) ya da DUR açılırsa
+     → red. The panel keeps the FIRST hash per uuid: a file that does not match it, or a second different hash for the
+     same uuid, is refused (red + a visible warning); a Yes needs the shown fingerprint == the requester's hash.
   4. İZİN YALNIZ kanaldan gelir. yanit-<uuid>.json dosyası (eski protokol) yalnız RED sayılır: aynı kullanıcıdaki
      herhangi bir sürecin (ör. yalnız dosya yazabilen bir ajanın) sahte "izin" yazması işe yaramaz.
   5. Tek kullanımlık: istek, yanıt ve küçük görüntü kullanılınca silinir.
@@ -134,14 +136,15 @@ def _gecerli_id(istek_id) -> bool:
     return isinstance(istek_id, str) and bool(_ID.fullmatch(istek_id))
 
 
-def _yaz_atomik(yol: str, veri: dict, ozel: bool = False) -> None:
+def _yaz_atomik(yol: str, veri: dict, ozel: bool = False) -> bytes:
     """Geçici gizli dosyaya yaz → yerine koy (okuyan yarım JSON görmez). ozel: hedef zaten varsa yazma
-    (os.link, tek kullanımlık yanıt: ikinci yanıt yazılamaz) → FileExistsError."""
+    (os.link, tek kullanımlık yanıt: ikinci yanıt yazılamaz) → FileExistsError. → the bytes written."""
     gecici = os.path.join(os.path.dirname(yol), f".{os.path.basename(yol)}.{os.getpid()}.{uuid.uuid4().hex[:6]}")
+    ham = json.dumps(veri, ensure_ascii=False).encode("utf-8")
     fd = os.open(gecici, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(veri, f, ensure_ascii=False)
+        with os.fdopen(fd, "wb") as f:
+            f.write(ham)
         if ozel:
             os.link(gecici, yol)
         else:
@@ -151,6 +154,7 @@ def _yaz_atomik(yol: str, veri: dict, ozel: bool = False) -> None:
             os.remove(gecici)
         except FileNotFoundError:
             pass
+    return ham
 
 
 def _sil(*yollar_):
@@ -417,6 +421,8 @@ class _Kanal:
         self._bekleyen: dict[str, socket.socket] = {}
         self._kararlar: dict[str, tuple[str, float]] = {}
         self._yanitlanan: dict[str, float] = {}
+        self._izler: dict[str, tuple[str, float]] = {}  # B3: uuid → (FIRST sha256 the requester sent, time)
+        self._iz_kosul = threading.Condition(self._kilit)
         self._durdu = threading.Event()
         _dizin_hazirla()
         try:
@@ -457,12 +463,21 @@ class _Kanal:
                 # panelin bellekteki yetkili kopyası (liste_koruma; onaylar=kapsam, kimlik=hesap oturumu izni); SALT OKUMA
                 c.sendall(_liste_yaniti(parca[1]))
                 return
-            if len(parca) != 2 or parca[0] != "bekle" or not _gecerli_id(parca[1]):
+            if len(parca) not in (2, 3) or parca[0] != "bekle" or not _gecerli_id(parca[1]):
                 return
+            iz = parca[2] if len(parca) == 3 and re.fullmatch(r"[0-9a-f]{64}", parca[2]) else None
             d = istek_oku(istek_yolu(parca[1]))
             if d is None or d["pid"] != pid:  # yalnız isteğin sahibi kararı alır
                 return
             istek_id = parca[1]
+            if iz is not None and not self._iz_kaydet(istek_id, iz, d["_iz"][1]):
+                # the file is not what the requester wrote, or a second different hash for this uuid: refused
+                _izin_reddi(istek_id, "karma")
+                with self._kilit:
+                    self._yanitlanan[istek_id] = time.monotonic()  # single use: no later Yes for this uuid
+                c.sendall(f"karar red {istek_id}\n".encode())
+                istek_id = None
+                return
             with self._kilit:
                 karar = self._kararlar.pop(istek_id, None)
                 if karar is None:
@@ -487,6 +502,34 @@ class _Kanal:
                 c.close()
             except OSError:
                 pass
+
+    def _iz_kaydet(self, istek_id: str, iz: str, dosyadaki: str) -> bool:
+        """B3: keep the FIRST hash sent for a uuid. → False: the file does not match it, or this is a different
+        second hash (the uuid is then marked inconsistent: every later Yes is refused)."""
+        simdi = time.monotonic()
+        with self._iz_kosul:
+            for k in [k for k, (_i, t) in self._izler.items() if simdi - t > DEVIR_EN_COK + ESKI_PAY]:
+                del self._izler[k]
+            ilk = self._izler.get(istek_id)
+            if ilk is None:
+                self._izler[istek_id] = (iz, simdi)
+                self._iz_kosul.notify_all()
+            elif ilk[0] != iz:
+                self._izler[istek_id] = (IZ_TUTARSIZ, simdi)
+                return False
+            return iz == dosyadaki and self._izler[istek_id][0] == iz
+
+    def istek_izi(self, istek_id: str, bekle: float = 0.0) -> str | None:
+        """B3: the hash the requester sent (IZ_TUTARSIZ: two different ones) or None (none yet; waits up to
+        `bekle` sn: the requester sends it right after writing the file)."""
+        son = time.monotonic() + max(0.0, bekle)
+        with self._iz_kosul:
+            while istek_id not in self._izler:
+                kalan = son - time.monotonic()
+                if kalan <= 0:
+                    return None
+                self._iz_kosul.wait(kalan)
+            return self._izler[istek_id][0]
 
     def yanitlandi(self, istek_id: str) -> bool:
         with self._kilit:
@@ -533,8 +576,15 @@ class _Kanal:
                 pass
 
 
-liste_saglayici = None  # panel: liste_koruma.Koruyucu.metin (tur → metin | None)
+liste_saglayici = None  # panel: liste_koruma.Koruyucu.yanit (tur → metin | None; ListeDogrulanamadi)
 LISTE_SINIRI = 1024 * 1024
+IZ_TUTARSIZ = "tutarsiz"  # B3: two different hashes were sent for one uuid
+IZ_BEKLE_SN = 1.0         # B3: yanitla waits at most this long for the requester's hash (sent right after the file)
+
+
+class ListeDogrulanamadi(Exception):
+    """The panel cannot verify this list (its signed state cannot be read and the user did not approve the file):
+    channel answer `dogrulanamadi`; the client stops (Dur 10, liste_koruma)."""
 
 
 def _liste_yaniti(tur: str) -> bytes:
@@ -543,6 +593,8 @@ def _liste_yaniti(tur: str) -> bytes:
         return b"saglayici-yok\n"
     try:
         metin = f(tur)
+    except ListeDogrulanamadi:
+        return b"dogrulanamadi\n"
     except Exception:  # noqa: BLE001
         return b"saglayici-yok\n"
     if metin is None:
@@ -578,6 +630,8 @@ def liste_iste(tur: str) -> str | None:
         k = baslik.decode("ascii", "replace").split()
         if k == ["yok"]:
             return None
+        if k == ["dogrulanamadi"]:
+            raise ListeDogrulanamadi(tur)
         if len(k) != 2 or k[0] != "icerik" or not k[1].isdigit() or int(k[1]) > LISTE_SINIRI:
             raise _ListeYok(baslik.decode("ascii", "replace")[:40])
         n = int(k[1])
@@ -767,8 +821,9 @@ def iste_sonuc(eylem: str, hedef: str, ayrinti: str = "", masaustu: str = "ekran
             istek["tur"] = TUR_DEVIR
         if dur_kaldirma:
             istek["tur"] = TUR_DUR
-        _yaz_atomik(iy, istek)
-        kanal.sendall(f"bekle {istek_id}\n".encode())
+        import hashlib
+        ham = _yaz_atomik(iy, istek)
+        kanal.sendall(f"bekle {istek_id} {hashlib.sha256(ham).hexdigest()}\n".encode())
     except Exception:  # noqa: BLE001 - görüntü/istek yazılamadı: red (soket açık kalmasın)
         kanal.close()
         _sil(iy, gy)
@@ -979,6 +1034,12 @@ def _izin_reddi(istek_id: str, neden: str) -> None:
     from .gunluk import gunluk
     if neden == "degisti":
         metin = _("Onay isteği gösterildikten sonra değişti; Evet uygulanmadı. İstek yeniden sorulur.")
+    elif neden == "karma-yok":
+        metin = _("İsteyenin yazdığı isteğin karması onay kanalından gelmedi; Evet uygulanmadı. İstek yeniden "
+                  "sorulur.")
+    elif neden == "karma":
+        metin = _("Onay isteği isteyenin yazdığı hâliyle aynı değil (dosya panel okumadan önce değişti ya da aynı "
+                  "istek için farklı bir karma geldi); istek reddedildi.")
     else:
         metin = _("Onay isteğinin panelde gösterilen hâli bilinmiyor; Evet uygulanmadı. İstek yeniden sorulur.")
     metin = f"{metin} [{istek_id[:8]} {neden}]"
@@ -1016,6 +1077,18 @@ def yanitla(istek_id: str, karar: str, simdi: float | None = None, gosterilen=No
             # what the user said Yes to is unknown, or the file is no longer what the dialog showed (e.g. turned into a
             # DUR request, or swapped back after a background read): refused, visibly
             _izin_reddi(istek_id, "bilinmiyor" if gorulen is None else "degisti")
+            return False
+        istenen = k.istek_izi(istek_id, IZ_BEKLE_SN) if k is not None else None
+        if istenen is None:  # the requester's hash never arrived (no channel / old requester): not approved
+            _izin_reddi(istek_id, "karma-yok")
+            return False
+        if istenen != gorulen[1]:
+            # what the dialog showed is not what the requester wrote (swapped before the panel read it, or two
+            # different hashes for this uuid): refused, visibly, and the requester gets red (review INC3 B3)
+            _izin_reddi(istek_id, "karma")
+            _YANITLANAN[istek_id] = d["son_zaman"] + ESKI_PAY
+            if k is not None:
+                k.gonder(istek_id, "red")
             return False
         _YANITLANAN[istek_id] = d["son_zaman"] + ESKI_PAY
         if gorulen[0] == TUR_DUR:

@@ -17,17 +17,20 @@ from PyQt6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFormLayou
                              QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from .. import i18n, onay, yollar
-from ..i18n import _
+from ..i18n import N_, _
 from . import ayar as A
 from . import metinler as T
 from .dil import Metinler, dil_secenekleri, gunluk_eylemi
 from . import saglik as S
-from .durum import RENK, Durum
+from .durum import RENK, Durum, etiket_kacis
 from .gorev import GorevSekmesi
 from .gunluk_okur import KUYRUK, onay_gecmisi
 from .kisayol import VARSAYILAN_TUS, cakismalar
 from .onizleme import MaskeHatasi, Onizleme, maskeli_goruntu, pil_qimage
 from .tepsi import durum_pixmap
+
+# the panel's own closed-fail DUR source (guvenlik.DUR_KAPALI_BASARISIZ; review INC5 O4/O5)
+_DUR_KAYNAK_PANEL = {"panel-kapali-basarisiz": N_("panel durdurdu: cüzdandaki DUR kaydı okunamıyor")}
 
 ONIZLEME_MS = 500  # ~2 fps (Devral açıkken: girdi geri bildirimi)
 IZLEME_MS = 1000  # yalnız izlerken 1 fps (her karede yasak pencere denetimi: pencere listesi okunur)
@@ -846,6 +849,11 @@ class OnaylarSekmesi(QWidget):
 
 # =========================================================================== Ayarlar
 
+Y_DOGRULANMADI = N_("DOĞRULANMADI — dosyadaki onaylanmamış girişler (salt okunur). Cüzdan okununca panel imzalı kaydı "
+                    "geri yükler (imzalı kayıt yoksa girişleri yeniden sorar); o zamana kadar Deskhand durdu (Dur 10).")
+Y_DOSYADA_FARKLI = N_("Ayar dosyasında doğrulanmamış değer var ({deger}); uygulanmıyor. Gösterilen, geçerli değerdir.")
+
+
 class AyarlarSekmesi(QScrollArea):
     kisayol_degisti = pyqtSignal(bool, str)
     dil_degisti = pyqtSignal(str)  # yeni etkin dil kodu (i18n yeniden yüklendikten SONRA)
@@ -854,6 +862,7 @@ class AyarlarSekmesi(QScrollArea):
         super().__init__(parent)
         self.karar = karar if karar is not None else A.KararAyarlari()
         self.cakisma_f = cakisma_f
+        self._liste_kilitli: dict[str, bool] = {}
         self.mt = Metinler()
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -959,6 +968,7 @@ class AyarlarSekmesi(QScrollArea):
         b_kaydet = QPushButton()
         self.mt(b_kaydet.setText, T.Y_KAYDET)
         b_kaydet.clicked.connect(self.yasak_kaydet)
+        self.b_yasak_kaydet = b_kaydet
         sat.addWidget(b_geri)
         sat.addWidget(b_kaydet)
         gl.addLayout(sat)
@@ -986,6 +996,7 @@ class AyarlarSekmesi(QScrollArea):
         b_kaydet = QPushButton()
         self.mt(b_kaydet.setText, T.Y_KAYDET)
         b_kaydet.clicked.connect(self.seviye_kaydet)
+        self.b_seviye_kaydet = b_kaydet
         sat.addWidget(b_geri)
         sat.addWidget(b_kaydet)
         gl.addLayout(sat)
@@ -1117,6 +1128,34 @@ class AyarlarSekmesi(QScrollArea):
         if i >= 0:
             c.setCurrentIndex(i)
 
+    def panel_degerleri_yukle(self) -> None:
+        """Onay kapsamı + hesap oturumları: arka ucun UYGULADIĞI (panelin yetkili) değer, sinyal üretmeden. Sekme
+        panel koruyucusundan (liste_koruma.panel_baslat) ÖNCE kurulur: panel açılışta ve sekme her gösterildiğinde
+        bunu çağırır. Dosyada başka (doğrulanmamış) değer yazıyorsa boş kutuyla gizlenmez, etiketlenir."""
+        from .. import liste_koruma
+        kapsam = A.onay_kapsami_oku()
+        self._sec(self.c_onay, kapsam)
+        self._hesap_kutulari()
+        dosya_kapsam = liste_koruma._kapsam_dosyadan()
+        self._farkli_etiket(self.l_onay, dosya_kapsam != kapsam,
+                            _(T.Y_ONAY_SECENEK.get(dosya_kapsam, dosya_kapsam)))
+        dosya_kimlik = liste_koruma.kimlik_dosyada()
+        self._farkli_etiket(self.l_hesap, dosya_kimlik != A.hesap_oturumlari_oku(),
+                            ", ".join(_(T.Y_HESAP_AD[s]) for s in A.HESAP_SAGLAYICILARI if s in dosya_kimlik) or "—")
+
+    def _farkli_etiket(self, etiket: QLabel, farkli: bool, dosyadaki: str) -> None:
+        if farkli:
+            etiket.setText(_(Y_DOSYADA_FARKLI).format(deger=dosyadaki))
+        elif etiket.property("dosyada_farkli"):
+            etiket.setText("")
+        etiket.setProperty("dosyada_farkli", farkli)
+
+    def showEvent(self, e):  # noqa: N802
+        super().showEvent(e)
+        from .. import liste_koruma
+        if liste_koruma.AKTIF is not None:  # panel sürecinde: bellek okuması (kanal çağrısı yok)
+            self.panel_degerleri_yukle()
+
     def karar_kaydet(self):
         try:
             d = {"mesgulken": self.c_mesgul.currentData(), "sor_sure": self.s_sure.value(),
@@ -1190,11 +1229,42 @@ class AyarlarSekmesi(QScrollArea):
         self.l_hesap.setText(_(T.Y_KAYDEDILDI))
         return True
 
+    def _liste_kilidi(self, tur: str) -> bool:
+        """An unverified list (wallet unreadable, the user said No; liste_koruma) is shown READ-ONLY with a label and
+        cannot be saved: saving would sign the unapproved file content (review EK-2). → locked."""
+        from .. import liste_koruma
+        kilitli = liste_koruma.dogrulanmamis(tur)
+        alan, etiket, dugme = ((self.yasak, self.l_yasak, getattr(self, "b_yasak_kaydet", None)) if tur == "yasak" else
+                               (self.seviye, self.l_seviye, getattr(self, "b_seviye_kaydet", None)))
+        alan.setReadOnly(kilitli)
+        if dugme is not None:
+            dugme.setEnabled(not kilitli)
+        if kilitli:
+            # the same display as the panel's question (review INC4 O3): every applied entry numbered, invisible /
+            # look-alike characters visible; the fixed label (entry count) is outside the content field
+            g = liste_koruma.dogrulanmamis_gosterim(tur, liste_koruma.AKTIF.metin(tur) if liste_koruma.AKTIF else None)
+            b = g.bolumler[0]
+            alan.setPlainText("\n".join(b.satirlar))
+            etiket.setTextFormat(Qt.TextFormat.PlainText)
+            etiket.setText(_(Y_DOGRULANMADI) + " " + b.etiket)
+        self._liste_kilitli[tur] = kilitli
+        return kilitli
+
+    def liste_durumu_tazele(self):
+        """Panel poll: the lock state of yasak/seviye changed (wallet read → verified): reload the page."""
+        from .. import liste_koruma
+        for tur, yukle in (("yasak", self.yasak_yukle), ("seviye", self.seviye_yukle)):
+            if liste_koruma.dogrulanmamis(tur) != self._liste_kilitli.get(tur, False):
+                yukle()
+
     def yasak_yukle(self):
         self.yasak.setPlainText(A.yasak_metni())
         self.l_yasak.setText("")
+        self._liste_kilidi("yasak")
 
     def yasak_kaydet(self) -> bool:
+        if self._liste_kilidi("yasak"):
+            return False
         metin = self.yasak.toPlainText()
         h = A.yasak_dogrula(metin)
         if h:
@@ -1211,8 +1281,11 @@ class AyarlarSekmesi(QScrollArea):
     def seviye_yukle(self):
         self.seviye.setPlainText(A.seviye_metni())
         self.l_seviye.setText("")
+        self._liste_kilidi("seviye")
 
     def seviye_kaydet(self) -> bool:
+        if self._liste_kilidi("seviye"):
+            return False
         metin = self.seviye.toPlainText()
         h = A.seviye_dogrula(metin)
         if h:
@@ -1438,6 +1511,7 @@ class DurumSeridi(QFrame):
         sut = QVBoxLayout()
         sut.setSpacing(2)
         self.l_durum = QLabel()
+        self.l_durum.setTextFormat(Qt.TextFormat.PlainText)  # the DUR source label comes from a file: never HTML
         f = self.l_durum.font()
         f.setBold(True)
         f.setPointSizeF(f.pointSizeF() * 1.2)
@@ -1480,7 +1554,8 @@ class DurumSeridi(QFrame):
         metin = d.metin
         if d.ad == "dur" and d.dur_kaynak:
             k = d.dur_kaynak
-            metin += f" — {_(T.DUR_KAYNAK[k]) if k in T.DUR_KAYNAK else k}"
+            ad = T.DUR_KAYNAK.get(k) or _DUR_KAYNAK_PANEL.get(k)
+            metin += f" — {_(ad) if ad else etiket_kacis(k)}"
         self.l_durum.setText(metin)
         alt = [_(T.SANAL_ACIK).format(ekran=d.sanal_ekran) if d.sanal_acik else _(T.SANAL_KAPALI)]
         if d.devral:

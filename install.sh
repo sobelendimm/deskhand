@@ -349,10 +349,11 @@ fi
 # ---------------------------------------------------------------- command
 say "$(L "Komut: $WRAPPER" "Command: $WRAPPER")"
 # a tiny Python launcher instead of PYTHONPATH: PYTHONPATH would leak into every app that
-# Deskhand starts. The path is embedded as a Python literal (safe for any characters).
+# Deskhand starts. The path is embedded as a Python literal (safe for any characters). -I: no user site-packages and
+# no PYTHON* variables, so a shadow package (e.g. a fake `secretstorage`) cannot be loaded (review INC6 Not-A).
 SRC_LIT="$(printf '%s' "$SRC_DIR" | "$PY" -c 'import sys; print(repr(sys.stdin.read()))')"
 write_file "$WRAPPER" 0755 <<EOF
-#!$PY
+#!$PY -I
 $MARK
 import sys
 sys.path.insert(0, $SRC_LIT)

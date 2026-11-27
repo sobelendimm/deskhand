@@ -1,7 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/python3 -I
 """deskhand komutu: `python3 -m deskhand "$@"`.
 Paketi bu dosyanın gerçek konumuna göre bulur (bin/../deskhand); bağlantıyla (~/.local/bin/ekran → …) çağrılabilir.
-PYTHONPATH kullanılmaz: `ac` ile başlatılan uygulamalara sızmasın."""
+PYTHONPATH kullanılmaz: `ac` ile başlatılan uygulamalara sızmasın. -I: kullanıcı site-packages'ı ve PYTHON* değişkenleri
+yüklenmez (gölge paket, ör. sahte `secretstorage`, yüklenemez; inceleme INC6 Not-A)."""
 import os
 import sys
 

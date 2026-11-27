@@ -436,8 +436,12 @@ open(YASAK, "w").write("")  # the agent empties the list (marks stay)
 ANAHTARLIK.kilitli = True
 getattr(liste_koruma, "_anahtar_unut", lambda: None)()
 k = panel_ac()
-kontrol("tarama-2: işaret var + cüzdan yok → yasak gevşetmesi uygulanmaz, sorulur",
-        k.metin("yasak") == "Kilitli\n" and "yasak" in sorulan_turler(), f"{k.metin('yasak')!r} {SORULAN}")
+try:  # INC3 B1: an unverified list is not served at all (Dur 10) after the No
+    _y = liste_koruma.metin("yasak")
+except Dur as _e:
+    _y = f"Dur {_e.kod}"
+kontrol("tarama-2: işaret var + cüzdan yok → yasak gevşetmesi uygulanmaz (Dur 10), sorulur",
+        _y == "Dur 10" and any("yasak" in t for t in sorulan_turler()), f"{_y!r} {SORULAN}")
 panel_kapat()
 open(YASAK, "w").write("")
 ISTEMCI_KAPALI = ("import json, sys; sys.path.insert(0, sys.argv[1]); from deskhand import liste_koruma\n"
@@ -513,6 +517,13 @@ class SahteKanal:
 
     def gonder(self, i, karar):
         return True
+
+    def istek_izi(self, i, bekle=0.0):
+        """An honest requester: the hash of the bytes it wrote (review INC3 B3)."""
+        try:
+            return hashlib.sha256(open(onay.istek_yolu(i), "rb").read()).hexdigest()
+        except OSError:
+            return None
 
 
 def evet(i, gosterilen=None):
