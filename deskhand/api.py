@@ -629,9 +629,9 @@ def uygulama_ac(argv: list[str], ad: str, yasak_metinleri: list[str], env: dict 
     baslatma_yasak_denetle(*yasak_metinleri, *argv)
     baslatma_komut_engel(shlex.join(argv))  # yıkıcı kalıp: insan onayı (MCP yüzeyinde onaylı bayrağı yok)
     au = arka()
-    if au.ad == "sanal":  # Chromium/Electron ağaca yalnız --force-renderer-accessibility ile girer
-        from .uygulama import erisim_bayragi_ekle
-        argv = erisim_bayragi_ekle(argv)
+    # Chromium/Electron --force-renderer-accessibility, Firefox GNOME_ACCESSIBILITY=1 ile ağaca girer (ön planda da)
+    from .uygulama import erisim_hazirla
+    argv, env = erisim_hazirla(argv, env)
     once = tum_pencereler()
     os.makedirs(yollar.cikti(), exist_ok=True)
     log = os.path.join(yollar.cikti(), f"ac-{time.strftime('%H%M%S')}-{os.getpid()}.log")

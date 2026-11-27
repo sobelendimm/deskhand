@@ -395,6 +395,7 @@ class GozlemSonuc(TypedDict, total=False):
     changed: list[dict[str, Any]]
     removed: list[dict[str, Any]]
     notes: list[str]
+    tree: dict[str, Any]
     shot_id: str
     human_verification: dict[str, Any]
 
@@ -1163,8 +1164,10 @@ def _agac_topla(k: str, genis: bool) -> tuple[list[dict], str | None, dict | Non
     okunamazsa (uygulama ağaçta yok, AT-SPI yok, zaman aşımı) boş liste + not (OCR'a düşülür)."""
     web, erisim = _web(), _erisim()
     notlar: list[str] = []
+    tarayici = False
     try:
-        if web.tarayici_mi(k):
+        tarayici = web.tarayici_mi(k)
+        if tarayici:
             web.hazirla(k)
             roller = sorted(web.ETKILESIMLI | gozlem.WEB_EK_ROLLER) if genis else None
             s = web.oku(k, roller=roller, gorunur=True, en_cok=0, ad_siniri=0, ayrinti=True, yol_ver=True)
@@ -1176,8 +1179,37 @@ def _agac_topla(k: str, genis: bool) -> tuple[list[dict], str | None, dict | Non
     except hata.Dur as e:
         if e.kod in (10, 13):
             raise
-        notlar.append(f"accessibility tree unavailable ([{e.kod}] {e.mesaj[:200]}); visible text read by OCR")
+        # mesaj KESİLMEZ: sonundaki ipucu (nasıl açılır) ajanın tek yol göstericisidir
+        notlar.append(_AgacNotu(f"accessibility tree unavailable ([{e.kod}] {e.mesaj}); visible text read by OCR",
+                                f"[{e.kod}] {e.mesaj}", _agac_cozumu(tarayici)))
         return [], None, None, notlar
+
+
+class _AgacNotu(str):
+    """Ağaç okunamadı notu (metin olarak notes'a girer) + observe `tree` alanı için neden ve çözüm."""
+    neden: str
+    cozum: str
+
+    def __new__(cls, metin: str, neden: str, cozum: str):
+        o = super().__new__(cls, metin)
+        o.neden, o.cozum = neden, cozum
+        return o
+
+
+def _agac_cozumu(tarayici: bool) -> str:
+    if tarayici:
+        return _("Tarayıcıyı kapatıp Deskhand ile yeniden aç (open_app / ac: Firefox GNOME_ACCESSIBILITY=1, Chromium "
+                 "--force-renderer-accessibility ile başlatılır). Ön planda tarayıcı zaten açıksa yeni açılış çalışan "
+                 "sürece katılır: önce onu kapat. Kalıcı çözüm: deskhand doctor")
+    return _("Erişilebilirliği aç (deskhand a11y on) ve uygulamayı yeniden başlat; ayrıntı: deskhand doctor")
+
+
+def agac_durumu(kaynak: str | None, notlar: list[str]) -> dict:
+    """observe `tree` alanı: {"available": bool, "reason": str, "fix": str} (ağaç okunamadıysa neden ve çözüm dolu)."""
+    n = next((x for x in notlar if isinstance(x, _AgacNotu)), None)
+    if kaynak is not None and n is None:
+        return {"available": True, "reason": "", "fix": ""}
+    return {"available": False, "reason": n.neden if n else "", "fix": n.cozum if n else _agac_cozumu(False)}
 
 
 def _ocr_topla(k: str) -> list[dict]:
@@ -1616,7 +1648,9 @@ def observe(
                                if o.get("ad") else ""))
             s["count"] = len(satir_)
         if notlar:
-            s["notes"] = notlar
+            s["notes"] = [str(n) for n in notlar]
+        if k != EKRAN:  # ağaç açık mı, değilse neden ve nasıl açılır (OCR yedeğine sessizce düşülmez)
+            s["tree"] = agac_durumu(kaynak, notlar)
         if sinama and dogrulama_sinamasi.bastirilmis_mi(k, sinama.get("imza")):
             sinama = None  # kullanıcı Bitti dedi: aynı sınama için uyarı yok (ögelerin sinama bayrağı ve girdi kapısı KALIR)
         if sinama:
@@ -1629,6 +1663,8 @@ def observe(
                        ("" if p["position_verified"] else " | positions unverified: element clicks are refused, use "
                                                           "click(text=...)"))
         ust += [f"note: {n}" for n in notlar]
+        if "tree" in s and not s["tree"]["available"] and s["tree"]["fix"]:
+            ust.append(f"tree unavailable; fix: {s['tree']['fix']}")
         if sinama:
             ust.append(f"human_verification: {sinama['kind']} on this page: do not click, type or drag in it; call "
                        f"request_human(reason, window); the rest of the page can still be read")
