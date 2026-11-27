@@ -150,7 +150,7 @@ def basili_bekle(g, k, desen, sure, beklenen_fare=None):
         hedef = _au().aktif() if k == EKRAN else k
         if k != EKRAN and _au().aktif() != k:
             raise Dur(3, _("basılıyken aktif pencere değişti → {baslik}; bırakıldı").format(
-                baslik=repr(_au().baslik(_au().aktif()))))
+                baslik=guvenlik.baslik_goster(_au().baslik(_au().aktif()))))
         if desen and not re.search(desen, _au().baslik(hedef), re.I):
             raise Dur(4, _("basılıyken başlık değişti; bırakıldı"))
         f = _au().fare()[:2]
@@ -401,7 +401,7 @@ def _yapistirarak_yaz(g, k, desen, metin, onayli):
                 raise Dur(e.kod, _("{mesaj} ({yazilan}/{toplam} karakter tamam)").format(
                     mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
             yazilan += len(p)
-            gunluk(f"{g.etiket} | [{au.baslik(k)}] | " + ("yapistir ***" if g.gizli else
+            gunluk(f"{g.etiket} | [{guvenlik.gizli_yer() if g.gizli else au.baslik(k)}] | " + ("yapistir ***" if g.gizli else
                    f"yapistir {p[:200]!r}" if p not in "\n\t" else ("key enter" if p == "\n" else "key tab")))
     finally:
         g.izle_bitir()
@@ -466,8 +466,10 @@ def yaz_ic(g, k, desen, metin, onayli=False):
             metin = yazima_hazirla(metin, gizli=g.gizli)  # pano yok: eski yol (yedekli karakterler değişir, yedeği yoksa DUR)
         _harf_harf_yaz(g, k, desen, metin, onayli)
         tamam = True
-    finally:  # uçbirim tamponu: yarıda kesilen yazıda satırın içeriği bilinmez
-        ucbirim.tampon_isle(_au(), k, yazi=metin if tamam else None, kirli=not tamam, onayli=onay and tamam)
+    finally:  # uçbirim tamponu: yarıda kesilen yazıda satırın içeriği bilinmez. Gizli yazı tampona (diskteki çalışma
+        # dosyasına) HİÇ girmez: sonraki Enter kapısı onu riskli komut nedeni olarak alıntılardı → satır bilinmez (kirli)
+        ucbirim.tampon_isle(_au(), k, yazi=metin if tamam and not g.gizli else None, kirli=not tamam or g.gizli,
+                            onayli=onay and tamam and not g.gizli)
 
 
 def _enter_oncesi(g, k, desen, onayli):
@@ -497,62 +499,101 @@ def _harf_harf_yaz(g, k, desen, metin, onayli):
     au = _au()
     yokla = g.gizli and k != EKRAN  # gizli yazı: her harften hemen önce + sonra etkin pencere kimliği (B1b)
 
-    def kesik(e):
-        """Yazı ortasında durma iletisi. yazilan>0 iken denetimin "girdi gönderilmedi"si yalnız KALAN yazı için doğru:
-        önceki harfler gitti, odak kaçtıysa son 1-2'si yeni pencereye gitmiş olabilir (gözcü ~12 ms aralıkla yoklar).
-        → Dur (sent maybe_partial'ı gönderim sayacı zaten verir)."""
-        if not yazilan:
-            return e
-        if g.gizli:  # gizli yazının harfleri iletiye/günlüğe taşınmaz: yalnız uzunluk
-            return Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
-                                "yeni yere gitmiş olabilir, oraya bak").format(
-                mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
-        return Dur(e.kod, _("{mesaj}; yazma kesildi ({yazilan}/{toplam} karakter tamam). Son 1-2 harf "
-                            "({son}) yeni yere gitmiş olabilir, oraya bak").format(
-            mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin), son=repr(metin[max(0, yazilan - 2):yazilan])))
+    def gozcu_gizle(e):
+        """Gizli yazıda gözcünün (kde/sanal kendi iş parçacığında başlıklı ileti kurar) 3/4 kesintisi başlıksız yeniden
+        kurulur: başlığa yansıyan önizleme sızan gizli harfi gösterebilir (ABM-F2 R2-3). Etkin pencere YENİDEN
+        SORGULANMAZ: gözcünün o anki kararı (kod) kullanılır; odak bu arada geri dönmüş olsa da ileti gözcünün gördüğünü
+        söyler ve sorgu hatası kesintinin yerine geçmez (inceleme-2 nit 2). Yalnız hedefin kapanıp kapanmadığına
+        bakılır (geometri; hatası yutulur): kapandıysa 8."""
+        with guvenlik.baslik_gizle(True):
+            if e.kod == 3:  # etkin pencere sorgulanmaz; yalnız hedef kapandı mı (geometri: 8 ise "kapandı")
+                return guvenlik.hedef_kayip_hatasi(k, None)
+            if e.kod == 4:
+                return Dur(4, _("başlık değişti: {baslik} (beklenen /{desen}/)").format(
+                    baslik=guvenlik.baslik_goster(None), desen=desen))
+        return e
 
-    def odak_yokla():
-        """Gizli yazıda harf öncesi/sonrası: etkin pencere hâlâ hedef mi (tek sorgu; gözcünün 12 ms penceresini kapatır)."""
+    def kesik(e, enter=False):
+        """Yazı ortasında durma iletisi. yazilan>0 iken "girdi gönderilmedi" ASLA denmez (önceki harfler gitti; odak
+        kaçtıysa son 1-2'si yeni pencereye gitmiş olabilir, gözcü ~12 ms aralıkla yoklar): denetimin eksiz nedeni
+        (GonderilmediDur.neden) + "N/M karakter gönderildi; yazma kesildi". yazilan==0 iken hedef kaybı/başlık/kapanış
+        (3/4/8) iletisi "girdi gönderilmedi" ile biter (eki BİR kez); başka kodun iletisi (yasak 10: "hiçbir girdi
+        gönderilmez") olduğu gibi kalır. Kural iletisi (10…) yazı ortasında "bu ret anından önce N/M karakter
+        gönderilmişti" der (çelişki yok). enter: durulan yer bir Enter'dı → "Enter gönderilmedi". → Dur (sent
+        maybe_partial'ı gönderim sayacı zaten verir; typedelay satırı da sayılır)."""
+        if g.gizli and e is g.kesildi:
+            e = gozcu_gizle(e)
+        neden = getattr(e, "neden", e.mesaj)
+        if not yazilan:
+            if isinstance(e, guvenlik.GonderilmediDur) or e.kod not in (3, 4, 8):
+                return e
+            return guvenlik.GonderilmediDur(e.kod, neden, tur=e.tur)
+        ek = ("; " + _("Enter gönderilmedi")) if enter else ""
+        if e.kod not in (3, 4, 8):  # kural reddi (yasak/seviye…): ileti "hiçbir girdi gönderilmez" diyebilir
+            return Dur(e.kod, _("{neden}; bu ret anından önce {yazilan}/{toplam} karakter gönderilmişti; yazma "
+                                "kesildi").format(neden=neden, yazilan=yazilan, toplam=len(metin)) + ek)
+        if g.gizli:  # gizli yazının harfleri iletiye/günlüğe taşınmaz: yalnız uzunluk
+            return Dur(e.kod, _("{neden}; {yazilan}/{toplam} karakter gönderildi; yazma kesildi (son 1-2 harf "
+                                "yeni yere gitmiş olabilir, oraya bak)").format(
+                neden=neden, yazilan=yazilan, toplam=len(metin)) + ek)
+        return Dur(e.kod, _("{neden}; {yazilan}/{toplam} karakter gönderildi; yazma kesildi (son 1-2 harf "
+                            "{son} yeni yere gitmiş olabilir, oraya bak)").format(
+            neden=neden, yazilan=yazilan, toplam=len(metin), son=repr(metin[max(0, yazilan - 2):yazilan])) + ek)
+
+    def odak_yokla(enter=False):
+        """Harf öncesi/sonrası (gizli yazı) ve HER Enter'dan hemen önce: etkin pencere hâlâ hedef mi (tek sorgu;
+        gözcünün 12 ms penceresini kapatır). Değilse girdi (Enter) gönderilmez."""
         a = au.aktif()
         if a != k:
-            raise kesik(guvenlik.hedef_kayip_hatasi(k, a))
+            raise kesik(guvenlik.hedef_kayip_hatasi(k, a), enter=enter)
 
     g.izle(k, desen)
     try:
-        for p in parcalar:
-            if yazilan and k != EKRAN:  # önce odak: gözcünün kaçırdığı geçişte "girdi gönderilmedi" denmesin (B1a)
-                odak_yokla()
-            try:  # kelime başında tam denetim (yasak pencere dahil); harf aralarını gözcü izler
-                denetle(k, desen)
-            except Dur as e:
-                raise kesik(e) from None
-            guvenlik.seviye_denetle(k, "klavye")
-            if yazi_onay_ister_mi(p):  # yazarken sayfa ödeme sayfasına geçtiyse (ilk Enter formu gönderdi): onay
-                _yazi_hassas(g, k, onayli, metin)
-            try:  # kelime başında klavye/fare: kendi yazımızın dışında insan girdisi var mı
-                g.etk_denetle(_("yazma kesildi"))
-            except Dur as e:
-                raise Dur(e.kod, _("{mesaj} ({yazilan}/{toplam} karakter tamam)").format(
-                    mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
-            for c in p:
-                if g.kesildi:
-                    raise kesik(g.kesildi)
-                if c == "\n":
-                    _enter_oncesi(g, k, desen, onayli)
-                if yokla:
+        with guvenlik.baslik_gizle(g.gizli):  # gizli yazı: durma iletileri/günlük başlık taşımaz (önizleme; R2-3)
+            for p in parcalar:
+                if yazilan and k != EKRAN:  # önce odak: gözcünün kaçırdığı geçişte "girdi gönderilmedi" denmesin (B1a)
                     odak_yokla()
-                try:
-                    g.ham({"\n": "key enter", "\t": "key tab", " ": "key space"}.get(c, f"type {c}"))
+                try:  # kelime başında tam denetim (yasak pencere dahil); harf aralarını gözcü izler
+                    denetle(k, desen)
                 except Dur as e:
-                    if e.kod != 13:
-                        raise
+                    raise kesik(e) from None
+                guvenlik.seviye_denetle(k, "klavye")
+                if yazi_onay_ister_mi(p):  # yazarken sayfa ödeme sayfasına geçtiyse (ilk Enter formu gönderdi): onay
+                    _yazi_hassas(g, k, onayli, metin)
+                try:  # kelime başında klavye/fare: kendi yazımızın dışında insan girdisi var mı
+                    g.etk_denetle(_("yazma kesildi"))
+                except Dur as e:
                     raise Dur(e.kod, _("{mesaj} ({yazilan}/{toplam} karakter tamam)").format(
                         mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin)))
-                time.sleep(HARF_SN)  # dotool harfi yazsın (typehold 6 + typedelay 4 ms); kuyruk birikmesin
-                yazilan += 1
-                if yokla:  # harf işlendikten SONRA: bu arada odak kaçtıysa bu harf yeni yere gitmiş olabilir
-                    odak_yokla()
-            gunluk(f"{g.etiket} | [{_au().baslik(k)}] | " + ("type ***" if g.gizli else f"type {p!r}"))
+                for c in p:
+                    if g.kesildi:
+                        raise kesik(g.kesildi)
+                    if c == "\n":
+                        _enter_oncesi(g, k, desen, onayli)
+                        if g.kesildi:  # onay/öne getirme sırasında gözcü kesti: Enter gönderilmez
+                            raise kesik(g.kesildi, enter=True)
+                    if c == "\n" and k != EKRAN:  # Enter'dan HEMEN önce (gizli olsun olmasın): odak hedefte değilse
+                        odak_yokla(enter=True)  # Enter gönderilmez (inceleme-2 düşük 1); Enter'dan SONRA yoklanmaz
+                    elif yokla:
+                        odak_yokla()
+                    try:
+                        g.ham({"\n": "key enter", "\t": "key tab", " ": "key space"}.get(c, f"type {c}"))
+                    except Dur as e:
+                        if e.kod == 13:
+                            raise Dur(e.kod, _("{mesaj} ({yazilan}/{toplam} karakter tamam)").format(
+                                mesaj=e.mesaj, yazilan=yazilan, toplam=len(metin))) from None
+                        if e is g.kesildi:  # gözcü kesintisi ham()'da (yoklama ile tuş arası): aynı dürüst ileti
+                            raise kesik(e, enter=c == "\n") from None
+                        raise
+                    time.sleep(HARF_SN)  # dotool harfi yazsın (typehold 6 + typedelay 4 ms); kuyruk birikmesin
+                    yazilan += 1
+                    # harf işlendikten SONRA: bu arada odak kaçtıysa bu harf yeni yere gitmiş olabilir. Enter'dan sonra
+                    # YOKLANMAZ: gönderme tuşunun diyaloğu kapatması/odağı taşıması beklenen başarıdır (ABM-F2 R2-2);
+                    # ardından harf varsa onun ön yoklaması (kelime başı + harf öncesi) yine durdurur.
+                    if yokla and c != "\n":
+                        odak_yokla()
+                baslik = guvenlik.gizli_yer() if g.gizli else _au().baslik(k)  # günlük = panelin etkinlik akışı
+                gunluk(f"{g.etiket} | [{baslik}] | " + ("type ***" if g.gizli else f"type {p!r}"))
     finally:
         g.izle_bitir()
     print(_("yazıldı: {karakter} karakter, {parca} parça").format(karakter=len(metin), parca=len(parcalar)))
@@ -943,35 +984,47 @@ def _kart_alani_mi(k):
         return False
 
 
+def gizli_karari(k, metin, istenen=False):
+    """ETKİN gizli kararının TEK yeri (ABM-F2 inceleme-2 düşük 4): istenen (secret/--gizli) VEYA odaklı alan parola
+    alanı VEYA (onay kapsamı "kart"ta) kart alanı / metinde ya da pencerenin kart tamponunda kart numarası. Sonuç,
+    günlük, etkinlik akışı, ileti ve MCP sonucu (gonderim notu "gizli") bu değere bakar. Sorgular: AT-SPI (parola/kart
+    alanı) + süreç içi kart tamponu (kart_tampon_denetle metni tampona işler). → (gizli, parola, alan_kart, son4)"""
+    parola = _parola_alani_mi(k)
+    alan_kart, son4, kart_gizli = False, None, False
+    if guvenlik.onay_kapsami() == "kart":  # kart bilgisi: hedef alan kart alanı ya da metinde Luhn'lu numara
+        alan_kart = _kart_alani_mi(k)  # tek sorgu (AT-SPI)
+        son4 = guvenlik.kart_tampon_denetle(k, metin)  # metin + aynı pencereye son 60 sn'de yazılan parçalar
+        kart_gizli = bool(alan_kart or son4 or guvenlik.kart_tampon_dolu(k) or guvenlik.gizli_rakamli_mi(metin))
+    gizli = bool(istenen or parola or kart_gizli)
+    from . import gonderim
+    gonderim.not_yaz("gizli", gizli)  # MCP katmanı (type_text sonucu, batch) aynı kararı okur
+    return gizli, parola, alan_kart, son4
+
+
 def k_yaz(a):
     ham = a.metin.replace("\r\n", "\n").replace("\r", "\n")
     denetim_karakteri_denetle(ham)
-    # yapıştırılacak yazıda klavye düzeninde olmayan karakter (emoji…) sorun değil: yazima_hazirla yalnız harf harf yazılacaksa
-    gizli = getattr(a, "gizli", False)  # gizli yazı yapıştırılmaz: yazılamayan karakterde onay sorulmadan Dur 1
-    metin = ham if (yapistirarak_mi(ham) and not gizli) else yazima_hazirla(ham, gizli=gizli)
     if a.kimlik == EKRAN:  # masaüstü kipi: yazı o an etkin pencereye gider → ona kilitlen (değişirse durur)
         a.kimlik = _au().aktif()
         if not a.kimlik:
             raise Dur(3, _("etkin pencere belirlenemedi; yazı gönderilmedi"))
         yasak_denetle(a.kimlik)
-    g = girdi_al(f"yaz {len(metin)} karakter", gizli=a.gizli)
+    # gizli karar yazıya hazırlıktan ÖNCE: otomatik algılanan parola da değiştirilmez/yapıştırılmaz ve hazırlık
+    # iletisi (yazılamayan karakter, değiştirilen karakter uyarısı) karakteri göstermez
+    gizli, parola, alan_kart, son4 = gizli_karari(a.kimlik, ham, getattr(a, "gizli", False))
+    # yapıştırılacak yazıda klavye düzeninde olmayan karakter (emoji…) sorun değil: yazima_hazirla yalnız harf harf yazılacaksa
+    metin = ham if (yapistirarak_mi(ham) and not gizli) else yazima_hazirla(ham, gizli=gizli)
+    g = girdi_al(f"yaz {len(metin)} karakter", gizli=gizli)
     try:
         onayli = getattr(a, "onayli", False)
         insan_dogrulama_klavye(a.kimlik, dogrulama_sinamasi.metin_dizisi(metin))
         if guvenlik.sistem_istemi_engel(a.kimlik, onayli, _("yazı")):
             _onayli_etiket(g)
-        if _parola_alani_mi(a.kimlik):  # odaklı öge parola alanı: metin kendiliğinden gizli + insan onayı
-            g.gizli = True
-            if guvenlik.parola_alani_engel(a.kimlik, onayli, len(metin), _("yazı")):
-                _onayli_etiket(g)
-                onayli = True
-        if guvenlik.onay_kapsami() == "kart":  # kart bilgisi: hedef alan kart alanı ya da metinde Luhn'lu numara
-            alan_kart = _kart_alani_mi(a.kimlik)  # tek sorgu (AT-SPI)
-            son4 = guvenlik.kart_tampon_denetle(a.kimlik, metin)  # metin + aynı pencereye son 60 sn'de yazılan parçalar
-            if alan_kart or son4 or guvenlik.kart_tampon_dolu(a.kimlik) or guvenlik.gizli_rakamli_mi(metin):
-                g.gizli = True  # tam numara (ve henüz tamamlanmamış parçası) günlüğe/iletiye hiç yazılmaz
-            if alan_kart or son4:
-                guvenlik.kart_bilgisi_engel(a.kimlik, onayli, metin, alan_kart, _("yazı"), son4=son4)
+        if parola and guvenlik.parola_alani_engel(a.kimlik, onayli, len(metin), _("yazı")):  # parola alanı: onay
+            _onayli_etiket(g)
+            onayli = True
+        if alan_kart or son4:
+            guvenlik.kart_bilgisi_engel(a.kimlik, onayli, metin, alan_kart, _("yazı"), son4=son4)
         _au().one_getir(a.kimlik)
         yaz_ic(g, a.kimlik, a.baslik, metin, onayli)
     finally:
@@ -1080,7 +1133,7 @@ def k_surukle(a):
                 time.sleep(a.sure / adim)
                 if a.kimlik != EKRAN and _au().aktif() != a.kimlik:
                     raise Dur(3, _("sürüklerken aktif pencere değişti → {baslik}; bırakıldı").format(
-                        baslik=repr(_au().baslik(_au().aktif()))))
+                        baslik=guvenlik.baslik_goster(_au().baslik(_au().aktif()))))
             time.sleep(0.03)
             g.izle_bitir()
             if g.kesildi:
@@ -1206,7 +1259,8 @@ def k_kapat(a):
     guvenlik.seviye_denetle(a.kimlik, "klavye")  # pencereyi kapatmak fare/klavye ötesi bir eylem: 'tam' ister
     b = _au().baslik(a.kimlik)
     if not re.search(a.baslik, b, re.I):
-        raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); kapatılmadı").format(baslik=repr(b), desen=a.baslik))
+        raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); kapatılmadı").format(baslik=guvenlik.baslik_goster(b),
+                                                                                       desen=a.baslik))
     guvenlik.insan_onceligi(_("pencere kapatma"))  # kullanıcı klavye/fare kullanıyorsa bekle, sonra 12
     dur_denetle()
     hedef_pencere_denetle(a.kimlik)
@@ -1255,7 +1309,7 @@ def pencere_yonet(k, islem, x=None, y=None, g=None, h=None, desen=None):
     b = au.baslik(k)
     if desen and not re.search(desen, b, re.I):
         raise Dur(4, _("başlık uymadı: {baslik} (beklenen /{desen}/); pencere işlemi yapılmadı").format(
-            baslik=repr(b), desen=desen))
+            baslik=guvenlik.baslik_goster(b), desen=desen))
     onceki = tuple(au.geometri(k))
     gx, gy, gg, gh = onceki
     ex0, ey0, ex1, ey1 = au.ekran_alani()

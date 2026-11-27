@@ -351,8 +351,9 @@ class KwinArkaUc(ArkaUc):
                 return
             time.sleep(0.025)
         a = self.aktif()
+        from ..guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
         raise Dur(AKTIF_DEGIL, _("hedef pencere aktif olmadı (aktif: {baslik})").format(
-            baslik=repr(self.baslik(a) if a else "")))
+            baslik=baslik_goster(self.baslik(a) if a else "")))
 
     def etkinlestir(self, k: str) -> None:
         if k and k != EKRAN:
@@ -779,6 +780,8 @@ class KwinGirdi:
         self._izle_dur = threading.Event()
         u = None if k == EKRAN else kimlik_coz(k)
         d = self.arka._d()
+        # gizli yazı: başlık iletiye girmez (önizleme sızan harfi gösterebilir; guvenlik.baslik_gizle ile aynı metin)
+        gizli = bool(getattr(self, "gizli", False))
 
         def dongu():
             try:
@@ -795,13 +798,16 @@ class KwinGirdi:
                             if not any(w["i"] == u for w in self.arka._liste(d)):  # yalnız kesilme yolunda tek liste
                                 neden = (PENCERE_YOK, _("hedef pencere kapandı"))
                             else:
-                                b = self.arka._kd("getwindowname", a, d=d) if UUID.fullmatch(a) else ""
-                                neden = (AKTIF_DEGIL, _("aktif pencere değişti → {baslik}").format(baslik=repr(b)))
+                                if gizli:
+                                    b = _("başka bir pencere (başlık gizlendi)")
+                                else:
+                                    b = repr(self.arka._kd("getwindowname", a, d=d) if UUID.fullmatch(a) else "")
+                                neden = (AKTIF_DEGIL, _("aktif pencere değişti → {baslik}").format(baslik=b))
                         elif desen:
                             b = self.arka._kd("getwindowname", u, d=d)
                             if not re.search(desen, b, re.I):
                                 neden = (BASLIK_SINIF, _("başlık değişti: {baslik} (beklenen /{desen}/)").format(
-                                    baslik=repr(b), desen=desen))
+                                    baslik=_("(başlık gizlendi)") if gizli else repr(b), desen=desen))
                     if neden:
                         self.kesildi = Dur(*neden)
                         if neden[0] == KULLANICI_DUR:
@@ -823,11 +829,11 @@ class KwinGirdi:
     # -------- gönderim
     def _kayit(self, k: str, satirlar) -> None:
         from ..gunluk import gunluk
-        from ..guvenlik import gizli_etiket, gizli_satir
+        from ..guvenlik import gizli_etiket, gizli_satir, gizli_yer
         kayit = [gizli_satir(s) if self.gizli else s for s in satirlar]
         etiket = gizli_etiket(self.etiket) if self.gizli else self.etiket
         try:
-            b = self.arka.baslik(k)
+            b = gizli_yer() if self.gizli else self.arka.baslik(k)  # gizli: başlık önizlemesi günlüğe/akışa girmez
         except Dur:
             b = "?"
         gunluk(f"{etiket} | arka {self.ekran} [{b}] | {' ; '.join(kayit)}")

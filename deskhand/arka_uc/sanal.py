@@ -617,7 +617,9 @@ class SanalArkaUc(ArkaUc):
             time.sleep(0.05)  # öne gelen pencere yeniden çizilsin
             return
         a = self.aktif()
-        raise Dur(AKTIF_DEGIL, _("hedef pencere aktif olmadı (aktif: {baslik})").format(baslik=repr(self.baslik(a))))
+        from ..guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
+        raise Dur(AKTIF_DEGIL, _("hedef pencere aktif olmadı (aktif: {baslik})").format(
+            baslik=baslik_goster(self.baslik(a))))
 
     def kapat(self, k: str) -> None:
         """Kibar kapatma: _NET_CLOSE_WINDOW (pencere yöneticisi) ya da WM_DELETE_WINDOW."""
@@ -1204,6 +1206,8 @@ class SanalGirdi:
         wid = None if k == EKRAN else kimlik_coz(k)
         ekran = self.arka.ekran_adi()
         hazir = threading.Event()
+        # gizli yazı: başlık iletiye girmez (önizleme sızan harfi gösterebilir; guvenlik.baslik_gizle ile aynı metin)
+        gizli = bool(getattr(self, "gizli", False))
 
         def dongu():
             try:
@@ -1223,10 +1227,11 @@ class SanalGirdi:
                     elif wid is not None:
                         a = x.aktif()
                         if a != wid:
-                            neden = (AKTIF_DEGIL, _("aktif pencere değişti → {baslik}").format(baslik=repr(x.baslik(a))))
+                            neden = (AKTIF_DEGIL, _("aktif pencere değişti → {baslik}").format(
+                                baslik=_("başka bir pencere (başlık gizlendi)") if gizli else repr(x.baslik(a))))
                         elif desen and not re.search(desen, x.baslik(wid), re.I):
                             neden = (BASLIK_SINIF, _("başlık değişti: {baslik} (beklenen /{desen}/)").format(
-                                baslik=repr(x.baslik(wid)), desen=desen))
+                                baslik=_("(başlık gizlendi)") if gizli else repr(x.baslik(wid)), desen=desen))
                     if neden:
                         self.kesildi = Dur(*neden)
                         return
@@ -1249,11 +1254,11 @@ class SanalGirdi:
     # -------- gönderim
     def _kayit(self, k: str, satirlar) -> None:
         from ..gunluk import gunluk
-        from ..guvenlik import gizli_etiket, gizli_satir
+        from ..guvenlik import gizli_etiket, gizli_satir, gizli_yer
         kayit = [gizli_satir(s) if self.gizli else s for s in satirlar]
         etiket = gizli_etiket(self.etiket) if self.gizli else self.etiket
         try:
-            b = self.arka.baslik(k)
+            b = gizli_yer() if self.gizli else self.arka.baslik(k)  # gizli: başlık önizlemesi günlüğe/akışa girmez
         except Dur:
             b = "?"
         gunluk(f"{etiket} | arka {self.x.ekran} [{b}] | {' ; '.join(kayit)}")

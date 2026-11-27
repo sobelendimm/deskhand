@@ -272,7 +272,8 @@ def one_getir(k):
             time.sleep(0.15)  # öne gelen pencerenin yeniden çizilmesi için
             return
         time.sleep(0.05)
-    raise Dur(3, _("hedef pencere aktif olmadı (aktif: {baslik})").format(baslik=repr(baslik(aktif()))))
+    from ..guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık (önizleme) iletiye girmez
+    raise Dur(3, _("hedef pencere aktif olmadı (aktif: {baslik})").format(baslik=baslik_goster(baslik(aktif()))))
 
 
 def ekran_goruntusu():
@@ -550,6 +551,8 @@ class Girdi:
         self.kesildi = None
         self._izle_dur = threading.Event()
         f0 = fare()[:2]
+        # gizli yazı: başlık iletiye girmez (önizleme sızan harfi gösterebilir; guvenlik.baslik_gizle ile aynı metin)
+        gizli = bool(getattr(self, "gizli", False))
 
         def dongu():
             # döngü başına en çok 2 kdotool çağrısı, ~10 ms aralık (3 çağrı/4 ms KWin'i aşırı yüklüyor,
@@ -563,9 +566,11 @@ class Girdi:
                     b, f = None, fare()
                 f = f[:2]
                 if a != k:
-                    neden = (3, _("aktif pencere değişti → {baslik}").format(baslik=repr(baslik(a))))
+                    neden = (3, _("aktif pencere değişti → {baslik}").format(
+                        baslik=_("başka bir pencere (başlık gizlendi)") if gizli else repr(baslik(a))))
                 elif desen and not re.search(desen, b or kd("getwindowname", k), re.I):
-                    neden = (4, _("başlık değişti: {baslik} (beklenen /{desen}/)").format(baslik=repr(baslik(k)), desen=desen))
+                    neden = (4, _("başlık değişti: {baslik} (beklenen /{desen}/)").format(
+                        baslik=_("(başlık gizlendi)") if gizli else repr(baslik(k)), desen=desen))
                 elif fare_izle and f[0] is not None and f0[0] is not None and f != f0:
                     neden = (12, _("kullanıcı fareyi oynattı (insan önceliği)"))
                 if neden:
@@ -654,10 +659,11 @@ class Girdi:
                 self._mesgul_bekle(m, bitis)
             except (BrokenPipeError, OSError):
                 raise getattr(self, "kesildi", None) or Dur(9, _("dotool beklenmedik şekilde kapandı"))
-        from ..guvenlik import gizli_etiket, gizli_satir
+        from ..guvenlik import gizli_etiket, gizli_satir, gizli_yer
         kayit = [gizli_satir(s) if self.gizli else s for s in satirlar]
         etiket = gizli_etiket(self.etiket) if self.gizli else self.etiket
-        gunluk(f"{etiket} | [{self.au.baslik(k)}] | {' ; '.join(kayit)}")
+        b = gizli_yer() if self.gizli else self.au.baslik(k)  # gizli: başlık önizlemesi günlüğe/akışa girmez
+        gunluk(f"{etiket} | [{b}] | {' ; '.join(kayit)}")
 
     def kapat(self):
         if self.etk_sahibi and self.etk is not None:
