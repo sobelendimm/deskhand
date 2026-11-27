@@ -2,6 +2,8 @@
 
 *English: [README.md](README.md)*
 
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE) [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sobelendimm%2Fdeskhand-informational)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sobelendimm/deskhand) [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ea4aaa)](https://github.com/sponsors/sobelendimm)
+
 **Deskhand, yapay zekâ ajanlarının (Claude Code ve diğer MCP istemcileri) KDE Plasma
 masaüstünüzü güvenle kullanmasını sağlar: ister sizin ekranınızda, ister siz film izlerken
 görünmez ikinci bir masaüstünde.**
@@ -537,6 +539,13 @@ dokunmaz. `tests/ekranli/` altındaki takımlar **gerçek** ekranınızı kullan
 bilgisayarı kullanmıyorken çalıştırın: `tests/ekranli/hepsi.sh` hepsini koşar (~15 dk; kendi geçici profilli
 Firefox'unu açar, sizinkine dokunmaz; `--insansiz` onay penceresinde sizden tıklama isteyen iki adımı atlar).
 Bkz. [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Sponsor
+
+Deskhand özgür yazılımdır ve tek kişi tarafından yazılıp bakımı yapılır. Size zaman kazandırıyorsa ya da
+ajan araçlarının Linux/KDE tarafının gelişmesini istiyorsanız çalışmayı
+[GitHub Sponsors](https://github.com/sponsors/sobelendimm) üzerinden destekleyebilirsiniz. Hata bildirimleri,
+başka Plasma kurulumlarında deneme ve çekme istekleri de en az o kadar işe yarar.
 
 ## Lisans
 

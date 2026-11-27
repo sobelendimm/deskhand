@@ -2,6 +2,8 @@
 
 *Türkçe: [README.tr.md](README.tr.md)*
 
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE) [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.sobelendimm%2Fdeskhand-informational)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.sobelendimm/deskhand) [![Sponsor](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-ea4aaa)](https://github.com/sponsors/sobelendimm)
+
 **Deskhand lets AI agents (Claude Code and other MCP clients) use your KDE Plasma desktop
 safely — on your screen, or on an invisible second desktop while you watch a movie.**
 
@@ -540,6 +542,13 @@ config. The suites in `tests/ekranli/` drive your **real** screen; run them only
 not using the computer: `tests/ekranli/hepsi.sh` runs them all (~15 min; it opens its own Firefox with a
 temporary profile, never yours; `--insansiz` skips the two steps that ask you to click in the approval dialog).
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Sponsor
+
+Deskhand is free software, written and maintained by one person. If it saves you time or you want
+the Linux/KDE side of agent tooling to keep improving, you can support the work through
+[GitHub Sponsors](https://github.com/sponsors/sobelendimm). Bug reports, tests on other Plasma setups
+and pull requests help just as much.
 
 ## License
 

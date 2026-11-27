@@ -2,7 +2,24 @@
 
 *Asıl dosya İngilizcedir: [CHANGELOG.md](CHANGELOG.md). Bu dosya Türkçe özettir; 0.10.0 ve öncesinin ayrıntısı İngilizce dosyadadır.*
 
-## Unreleased
+## 0.10.0 (yayımlanmadı)
+
+0.5.4'ten sonraki ilk herkese açık sürüm. **0.5.4 ya da daha eskisini kullanıyorsanız lütfen güncelleyin:** orada MCP
+`open_app(args)` onaysız komut çalıştırabiliyordu (0.6.0'da kapatıldı, aşağıya bakın).
+
+### 0.10.0'da yeni
+
+(Sürüm planından yazıldı; ayrıntıyı dallar birleşince bakımcı doldurur.)
+
+- **Yeni: anahtar deposu ("Deskhand kasası").** Kayıtlı gizli bilgiler için iki arka uçlu tek arayüz. `kasa`
+  (yeni kurulumda varsayılan) öğeleri `systemd-creds` ile mühürlü dosyalarda tutar (TPM2 varsa ona, yoksa makine
+  anahtarına bağlı) ve hiç D-Bus ya da cüzdan çağrısı yapmaz; `cuzdan` mevcut KDE Cüzdan (Secret Service) yoludur.
+  Arka ucu değiştirmek onayınızı ister.
+- **Yeni: Ayarlar, "Gizli bilgiler".** Parolaların nerede saklanacağını seçin, adlı kayıtlı parolalar ekleyin ya da
+  silin (değerler asla gösterilmez), isterseniz girişte KDE Cüzdanı'nı otomatik açın (cüzdan parolası TPM'e mühürlenir,
+  giriş yapınca `kwalletd` cüzdanı açar).
+- **Yeni: `deskhand secret set|list|rm <ad>` ve `secret_ref` ile `type_text`.** Ajan kayıtlı parolanın adını verir;
+  değer depodan doğrudan girdi katmanına gider, sonuçta, günlükte ve panel akışında görünmez.
 
 0.9.1'den bu yana değişenler için belge ve yükseltme notları. Aşağıdaki eski bir girdi panelin bir şeyi "kaldırdığını"
 söylüyorsa, bu bölümdeki ve README'deki "Güvenlik modeli"ndeki kurallar geçerlidir.

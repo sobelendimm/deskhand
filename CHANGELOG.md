@@ -6,7 +6,25 @@ Versions 0.6.0 to 0.9.1 were local builds and were never published; 0.10.0 is th
 release after 0.5.4. Every entry between them is listed here so a 0.5.4 user sees the whole change.
 Security fixes are marked **Security**.
 
-## Unreleased
+## 0.10.0 (unreleased)
+
+The first public release after 0.5.4. **If you run 0.5.4 or older, please update:** MCP `open_app(args)` could run
+commands without approval there (closed in 0.6.0, see below).
+
+### New in 0.10.0
+
+(Written from the release plan; the maintainer fills in the details when the branches are merged.)
+
+- **New: key store ("Deskhand vault").** One interface for saved secrets with two backends. `kasa` (default for
+  new installs) keeps items as files sealed with `systemd-creds` (bound to the TPM2 when there is one, otherwise to
+  the host key) and makes no D-Bus or wallet call; `cuzdan` is the existing KDE Wallet (Secret Service) path.
+  Changing the backend asks for your confirmation.
+- **New: Settings, "Secrets".** Choose where passwords are stored, add or delete named saved passwords (values are
+  never shown), and optionally unlock KDE Wallet at login (the wallet password is sealed to the TPM and the wallet is
+  opened by `kwalletd` when you log in).
+- **New: `deskhand secret set|list|rm <name>` and `type_text` with `secret_ref`.** The agent names a saved
+  password; the value goes from the store straight to the input layer and never appears in the result, the
+  log or the panel feed.
 
 Documentation and upgrade notes for the changes since 0.9.1. Where a sentence in an older entry below says the
 panel "removes" or "lifts" something, the rules in this section and in the README's "Security model" apply.
@@ -56,7 +74,7 @@ panel "removes" or "lifts" something, the rules in this section and in the READM
 - Do not update a machine that runs unattended while nobody is at it: both the question and the Resume need you.
 - The memory-watch counters were reset by the new format; the first restart limits start from zero.
 
-### Earlier unreleased changes (planned for the next version)
+### Also in 0.10.0 (changes since 0.9.1)
 
 Changes since 0.9.1:
 
@@ -76,7 +94,7 @@ Changes since 0.9.1:
   panel-authoritative: a site written into the file by hand is used only after you answer Yes in the panel.
   `deskhand sessions forget <domain>` / `--all` deletes records; `deskhand doctor` and `sessions check` show the
   state (never a value). Details: [docs/SESSIONS.md §3.8](docs/SESSIONS.md).
-- **Change: the background desktop memory cap is 6 GB** (was 4 GB; 20 OOM kills in 17–24 hour sessions).
+- **Change: the background desktop memory cap went from 4 GB to 6 GB (20 OOM kills in 17–24 hour sessions) and is now 8 GB, see above.**
 - **Docs: English is the primary documentation language.** `README.md`, `CHANGELOG.md`, `docs/ARCHITECTURE.md`
   and `docs/SESSIONS.md` are English; the Turkish originals are `README.tr.md`, `CHANGELOG.tr.md`,
   `docs/ARCHITECTURE.tr.md` and `docs/SESSIONS.tr.md`. README now has a "Security model" section and the MCP

@@ -5,7 +5,14 @@ Reports about ways around them are very welcome.
 
 ## Supported versions
 
-Only the latest release (and `main`) receives security fixes.
+| Version | Supported |
+| ------- | --------- |
+| 0.10.x  | yes (latest release and `main`) |
+| 0.6.x to 0.9.x | no, update to 0.10.x (these were never published as releases) |
+| 0.5.x and older | no |
+
+Version 0.5.4 and older contain an MCP `open_app(args)` hole that could run commands without approval
+(closed in 0.6.0); do not keep running them.
 
 ## Reporting a vulnerability
 
