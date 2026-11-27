@@ -13,6 +13,8 @@ Kütüphane (testler içe aktarır; Qt/deskhand İÇE AKTARMAZ):
 Komut satırı (alt süreç kipleri):
   python3 -I tests/_gorsel.py cek CIKTI DIL TEMA OLCEK DURUM   panel sekmelerini çeker (DURUM: - | dur)
   python3 -I tests/_gorsel.py diyalog CIKTI DIL                onay diyaloğu 3 tür
+  python3 -I tests/_gorsel.py kart CIKTI                       otomatik giriş cüzdan kartı (ilk/yeniden × açık/koyu)
+  GORSEL_KART=ilk|yeniden                                      panel çekiminde (cek/panel, tasarim_kapi) kart görünür
   python3 -I tests/_gorsel.py panel                            görünmez masaüstünde paneli açar (LOG/KOMUT env)
   python3 -I tests/_gorsel.py atspi-oku BASLIK                 AT_SPI_BUS_ADDRESS'teki pencerenin ağacı → JSON
 
@@ -34,6 +36,8 @@ VARYANTLAR = [
     ("tr-koyu-1.0-dur", "tr", "koyu", "1.0", "dur", True),  # UX-K: varsayılan tema koyu
 ]
 DIYALOGLAR = ("odeme", "tus", "devir")
+KART_VARYANTLAR = ("ilk", "yeniden")
+KART_GENISLIK = 1020  # panel 1040 − kenar boşlukları (gui/pencere.py)
 TOKENS = os.path.join(KOK, "deskhand", "gui", "tema", "tokens.json")
 
 
@@ -76,6 +80,20 @@ def cek(cikti: str, varyant: tuple, ev: str, zaman: int = 90) -> subprocess.Comp
 def diyalog_cek(cikti: str, dil: str, ev: str, zaman: int = 60) -> subprocess.CompletedProcess:
     return subprocess.run([sys.executable, "-I", os.path.abspath(__file__), "diyalog", cikti, dil],
                           env=sabit_ortam(ev, DESKHAND_DIL=dil), capture_output=True, text=True, timeout=zaman, cwd=ev)
+
+
+def kart_cek(cikti: str, ev: str, zaman: int = 60) -> subprocess.CompletedProcess:
+    """Otomatik giriş cüzdan kartının 4 görüntüsü (ilk/yeniden × açık/koyu), ayrı süreçte sabit ortamla."""
+    return subprocess.run([sys.executable, "-I", os.path.abspath(__file__), "kart", cikti], env=sabit_ortam(ev),
+                          capture_output=True, text=True, timeout=zaman, cwd=ev)
+
+
+def kart_ornegi(varyant: str = "ilk") -> dict:
+    """oto_giris.kart_durumu() biçiminde örnek: kart görünür, disk şifresiz + TPM yok (en dolu görünüm)."""
+    return {"goster": True, "varyant": varyant, "neden": "kurulu_degil" if varyant == "ilk" else "anahtar_acmadi",
+            "oto_giris": True, "cuzdan_var": True, "kurulu": varyant == "yeniden",
+            "son_sonuc": "anahtar_acmadi" if varyant == "yeniden" else None, "disk_sifreli": False, "tpm": False,
+            "depo": "cuzdan"}
 
 
 def kiyasla(a, b, fark_yol: str | None = None) -> int:
@@ -198,8 +216,15 @@ def _panel_kur(app):
         @classmethod
         def durum(cls, dogrula=True):
             return {"ekran": ":91", "boyut": [2560, 1440, 24]}
-    return Panel(app, None, tepsi=False, kisayol=Kisayol(), diyalog_kurma_ms=0, arka_f=lambda: None,
-                 masaustu_m=Masaustu, cakisma_f=lambda t: [], simge_sor=lambda b, m: False, saglik_f=lambda: [])
+    # cüzdan kartı: varsayılan GİZLİ (sekme tabanları değişmez; gerçek /etc ve busctl okunmaz); GORSEL_KART=ilk|yeniden
+    # → örnek durumla görünür (tasarım kapısı kartı panelin içinde denetlesin)
+    kart = os.environ.get("GORSEL_KART")
+    ornek = kart_ornegi(kart) if kart in KART_VARYANTLAR else {"goster": False}
+    p = Panel(app, None, tepsi=False, kisayol=Kisayol(), diyalog_kurma_ms=0, arka_f=lambda: None,
+              masaustu_m=Masaustu, cakisma_f=lambda t: [], simge_sor=lambda b, m: False, saglik_f=lambda: [],
+              kart_durum_f=lambda: dict(ornek))
+    p.pencere.cuzdan_karti.goster_durum(dict(ornek))
+    return p
 
 
 def _bekle(app, sn):
@@ -248,6 +273,30 @@ def _kip_diyalog(cikti, dil):
         app.processEvents()
         d.grab().save(os.path.join(cikti, f"diyalog-{dil}-{ad}.png"))
         print("CEKILDI", f"diyalog-{dil}-{ad}.png", flush=True)
+    os._exit(0)
+
+
+def _kip_kart(cikti):
+    sys.path.insert(0, TESTLER)
+    import _yalitim  # noqa: F401
+    os.makedirs(cikti, exist_ok=True)
+    app = _app("acik")
+    from deskhand.gui.cuzdan_karti import CuzdanGirisKarti
+    from deskhand.gui.dil import Metinler
+    from deskhand.gui.tema import tema_uygula
+    for tema in ("acik", "koyu"):
+        tema_uygula(app, tema)
+        for varyant in KART_VARYANTLAR:
+            k = CuzdanGirisKarti(Metinler(), arka_uc=object(), durum_f=lambda: {"goster": False})
+            k.goster_durum(kart_ornegi(varyant))
+            y = k.heightForWidth(KART_GENISLIK) if k.hasHeightForWidth() else k.sizeHint().height()
+            k.resize(KART_GENISLIK, max(y, k.minimumSizeHint().height()))
+            app.processEvents()
+            ad = f"kart-tr-{tema}-{varyant}.png"
+            k.grab().save(os.path.join(cikti, ad))
+            print("CEKILDI", ad, flush=True)
+            k.hide()
+            k.deleteLater()
     os._exit(0)
 
 
@@ -334,6 +383,8 @@ if __name__ == "__main__":
         _kip_cek(*arg)
     elif k == "diyalog":
         _kip_diyalog(*arg)
+    elif k == "kart":
+        _kip_kart(*arg)
     elif k == "panel":
         _kip_panel()
     elif k == "atspi-oku":

@@ -159,6 +159,26 @@ for kok, _dizinler, dosyalar in os.walk(os.path.join(_yalitim.KOK, "deskhand")):
                     disarida.append(f"{goreli}:{no}")
 kontrol("kaynak taraması: Unlock/changePassword/kcm_users yalnız cuzdan_ac.py + gui/ (MCP/CLI/arka planda yok)",
         not disarida, disarida)
+# A2: panelin otomatik giriş kartı (gui/cuzdan_karti.py) ve "bir daha gösterme" işareti yalnız panelden: kart sınıfı ve
+# kart_kapat yalnız oto_giris.py (tanım) + gui/ (çağrı); arka plan / MCP / CLI kartın düğmelerine ulaşmaz
+KART_DESEN = re.compile(r"CuzdanGirisKarti|cuzdan_karti|kart_kapat\(")
+kart_disarida = []
+for kok, _dizinler, dosyalar in os.walk(os.path.join(_yalitim.KOK, "deskhand")):
+    for d in dosyalar:
+        if not d.endswith(".py"):
+            continue
+        yol = os.path.join(kok, d)
+        goreli = os.path.relpath(yol, _yalitim.KOK)
+        if goreli == os.path.join("deskhand", "oto_giris.py") or goreli.startswith(os.path.join("deskhand", "gui") + "/"):
+            continue
+        with open(yol, encoding="utf-8", errors="replace") as f:
+            for no, satir in enumerate(f, 1):
+                if KART_DESEN.search(satir):
+                    kart_disarida.append(f"{goreli}:{no}")
+kontrol("kaynak taraması: cüzdan kartı ve kart_kapat yalnız oto_giris.py + gui/ (MCP/CLI/arka planda yok)",
+        not kart_disarida, kart_disarida)
+kontrol("kaynak taraması: gui/cuzdan_karti.py var (tarama boşa koşmuyor)",
+        os.path.isfile(os.path.join(_yalitim.KOK, "deskhand", "gui", "cuzdan_karti.py")))
 with open(os.path.join(_yalitim.KOK, "deskhand", "cuzdan_ac.py"), encoding="utf-8") as f:
     kaynak = f.read()
 govde_main = kaynak[kaynak.index("def main("):]

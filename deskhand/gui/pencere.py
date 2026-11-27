@@ -1,4 +1,4 @@
-"""Panel penceresi: durum şeridi (DUR/Devam) + sekmeler (Görev, Etkinlik, Arka plan ekranı, Onaylar, Ayarlar, Sağlık;
+"""Panel penceresi: durum şeridi (DUR/Devam) + otomatik giriş cüzdan kartı (yalnız gerektiğinde) + sekmeler (Görev, Etkinlik, Arka plan ekranı, Onaylar, Ayarlar, Sağlık;
 kayıtlı simgeler Ayarlar › Gelişmiş altında). Görünüm sistem paletinden (Breeze açık/koyu); sabit renk yalnız durum renklerinde."""
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from .sekmeler.ayarlar import (Y_DOGRULANMADI, Y_DOSYADA_FARKLI, AyarlarSekmesi)
 from .sekmeler.simgeler import (SimgelerSekmesi)  # noqa: F401
 from .sekmeler.saglik import (SaglikSekmesi)  # noqa: F401
 from .durum_seridi import DurumSeridi  # noqa: F401
+from .cuzdan_karti import CuzdanGirisKarti
 
 
 # =========================================================================== Ana pencere
@@ -33,7 +34,7 @@ class AnaPencere(QMainWindow):
 
     def __init__(self, ilk_satirlar: list[dict] | None = None, parent=None, arka_f=_varsayilan_arka,
                  masaustu_m=None, karar=None, cakisma_f=cakismalar, simge_sor=None, saglik_f=S.tam_denetim,
-                 gorev_f=None):
+                 gorev_f=None, kart_durum_f=None):
         super().__init__(parent)
         self.setWindowTitle(onay.PANEL_BASLIK)
         self.setObjectName("deskhandPanel")
@@ -50,6 +51,9 @@ class AnaPencere(QMainWindow):
         self.serit.dur_istendi.connect(self.dur_istendi.emit)
         self.serit.devam_istendi.connect(self.devam_istendi.emit)
         kok.addWidget(self.serit)
+        # otomatik giriş + KDE Cüzdanı kartı (A2): başta gizli; durum ayrı iş parçacığında okunur (açılış beklemez)
+        self.cuzdan_karti = CuzdanGirisKarti(self.mt, durum_f=kart_durum_f)
+        kok.addWidget(self.cuzdan_karti)
         self.sekmeler = QTabWidget()
         self.sekmeler.setDocumentMode(True)
         ilk = ilk_satirlar or []
@@ -78,6 +82,7 @@ class AnaPencere(QMainWindow):
         self.arka.devral_degisti.connect(self.gorev.devral_durumu)
         kok.addWidget(self.sekmeler, 1)
         self.setCentralWidget(merkez)
+        self.cuzdan_karti.yukle()
 
     def durum_guncelle(self, d: Durum):
         self._durum = d
