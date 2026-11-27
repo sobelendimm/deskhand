@@ -39,14 +39,37 @@ kontrol("server.json üç sürüm alanı __version__",
         alanlar["version"] == S and alanlar["packages[0].version"] == S
         and f"/v{S}/" in alanlar["packages[0].identifier"], str(alanlar))
 
+def ilk_surum_basligi(satirlar):
+    """First "## " heading that is a release, skipping a leading "## Unreleased" / "## [Unreleased]" section."""
+    for satir in satirlar:
+        if satir.startswith("## "):
+            b = satir[3:].strip()
+            if b.strip("[]").split("]")[0].strip().lower() == "unreleased":
+                continue
+            return b
+    return None
+
+
+_ORNEK = ["# Changelog\n", "## [Unreleased]\n", "- x\n", "## Unreleased\n", "## [1.2.3] - 2026-11-27\n", "## 1.2.2\n"]
+kontrol("ilk_surum_basligi Unreleased başlıklarını atlar", ilk_surum_basligi(_ORNEK) == "[1.2.3] - 2026-11-27",
+        str(ilk_surum_basligi(_ORNEK)))
+kontrol("ilk_surum_basligi düz başlık / başlıksız", ilk_surum_basligi(["## 0.9.1 (24 Kasım 2026)\n"]) == "0.9.1 (24 Kasım 2026)"
+        and ilk_surum_basligi(["# x\n", "## Unreleased\n"]) is None)
+
+
+def surum_no(baslik):
+    """'[1.2.3] - date' or '1.2.3 (date)' -> '1.2.3'."""
+    return baslik.split()[0].strip("[]") if baslik else ""
+
+
+kontrol("surum_no köşeli ve düz biçim", surum_no("[1.2.3] - 2026-11-27") == "1.2.3" and surum_no("0.9.1 (x)") == "0.9.1")
+
 basliklar = {}
 for dosya in sorted(glob.glob(os.path.join(KOK, "CHANGELOG*.md"))):
-    for satir in open(dosya, encoding="utf-8"):
-        if satir.startswith("## "):
-            basliklar[os.path.basename(dosya)] = satir[3:].strip()
-            break
+    with open(dosya, encoding="utf-8") as f:
+        basliklar[os.path.basename(dosya)] = ilk_surum_basligi(f)
 kontrol("CHANGELOG ilk başlık __version__",
-        bool(basliklar) and all(b.split()[0] == S for b in basliklar.values()), f"{S} vs {basliklar}")
+        bool(basliklar) and all(surum_no(b) == S for b in basliklar.values()), f"{S} vs {basliklar}")
 
 print(f"\n{gecen}/{toplam} geçti")
 sys.exit(0 if gecen == toplam else 1)
