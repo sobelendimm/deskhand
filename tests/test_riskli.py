@@ -391,9 +391,10 @@ for ad_ in ("kde", "sanal"):
                 "sudo rm -rf /home/x" in ISTEKLER[0]["eylem"] and isinstance(ISTEKLER[0]["goruntu"], Image.Image),
                 str(ISTEKLER[:1])[:300])
         ISTEKLER.clear()
-        kod_al(eylem.k_yaz, ns(metin="sudo rm -rf " + "x" * 300))
-        kontrol(f"[{ad_}] uzun komut onay isteğinde KISALTILIR (≤ ~120 karakter + …)",
-                ISTEKLER and "…" in ISTEKLER[0]["ayrinti"] and len(ISTEKLER[0]["ayrinti"]) < 400)
+        kod_al(eylem.k_yaz, ns(metin="sudo echo " + "x" * 300 + "; rm -rf ~"))
+        kontrol(f"[{ad_}] uzun komut onay isteğinde KESİLMEZ (tehlikeli son kısım isteğe gider; UX-C-R1b)",
+                ISTEKLER and "; rm -rf ~'" in ISTEKLER[0]["eylem"] and "; rm -rf ~'" in ISTEKLER[0]["ayrinti"]
+                and "…" not in ISTEKLER[0]["eylem"])
         ISTEKLER.clear()
         kod_al(eylem.k_yaz, ns(metin="sudo gizli-parola-komutu", gizli=True))
         kontrol(f"[{ad_}] --gizli komutun içeriği onay isteğinde görünmez (yalnız uzunluk)",
