@@ -66,7 +66,7 @@ def kontrol(ad, kosul, ek=""):
 def _sahte(au, okunan, yasak=None):
     """Real Deskhand code on the fake desktop: the RAW grab (wherever a module imported it by name) returns the fake
     frame; OCR (ocr.oku and the name imported into eylem) only records the image it was given."""
-    def ham(k_, bolge=None, kararli=False, tam=False):
+    def ham(k_, bolge=None, kararli=False, tam=False, son_tarih=None):
         return au.kare(), (0, 0, 200, 100), (0, 0)
 
     def oku(im, *a, **kw):
@@ -95,6 +95,12 @@ def _yamali(yamalar):
     finally:
         for m, ad, d in eski:
             setattr(m, ad, d)
+
+
+def _yamali_cagir(yamalar, f):
+    """f() with extra patches applied INSIDE _kos (after _sahte's own raw-grab patch)."""
+    with _yamali(yamalar):
+        return f()
 
 
 class SiraliAu(SahteAu):
@@ -197,6 +203,25 @@ def test_davranis():
             isinstance(sonuc, Dur) and sonuc.tur == "maske-yarisi" and not okunan, f"{sonuc!r} {len(okunan)}")
     kontrol("M9 sürekli yarış: deneme sınırlı ve yeniden denendi (tam 3 kare)", kare_sayisi(au) == 3, str(olay))
 
+    # review round 2 (low): a REAL total time limit, also with kararli=True (each stability wait up to 1.5 s; here
+    # scaled: 0.5 s per frame, limit 0.6 s). Old: the limit was only checked before sleeping (≈ 3 × wait).
+    import time
+    au = SiraliAu([ACIK, []] * 10)
+
+    def yavas(k_, bolge=None, kararli=False, tam=False, son_tarih=None):
+        bitis = time.monotonic() + 0.5
+        if son_tarih is not None:
+            bitis = min(bitis, son_tarih)
+        time.sleep(max(0.0, bitis - time.monotonic()))  # the stability wait of the real raw grab
+        return au.kare(), (0, 0, 200, 100), (0, 0)
+    with _yamali([(gorsel, "MASKE_SURE", 0.6)]):
+        t0 = time.monotonic()
+        sonuc, olay, okunan = _kos(au, lambda: _yamali_cagir([(gorsel, "pencere_goruntusu", yavas)], nokta))
+        gecen_sn = time.monotonic() - t0
+    kontrol("M10 sürekli yarış + kararlılık beklemesi: toplam süre son tarihte kalır (≤ sınır + 0,15 sn)",
+            isinstance(sonuc, Dur) and sonuc.tur == "maske-yarisi" and gecen_sn <= 0.75 and not okunan,
+            f"{gecen_sn:.2f} sn, {kare_sayisi(au)} kare, {sonuc!r}")
+
     # review DÜŞÜK: behaviour tests for renge-tikla and akis
     tiklanan = []
     a = argparse.Namespace(kimlik=EKRAN, renk="kirmizi", en_az=50, sira=None, bolge=None, onayli=False, baslik=None,
@@ -248,15 +273,16 @@ def test_davranis():
         def sinif(self, k):
             return "org.kde.konsole"
 
-    def kapi(okunan_satir, ek=""):
+    def kapi(okunan_satir, ek="", panel_yamasi=None):
         panel.clear()
+        panel_yamasi = panel_yamasi or [
+            (guvenlik, "_panelden_onay", lambda *a_, **k_: (panel.append(a_), (False, "ret"))[1])]
         with _yamali([(ucbirim, "sec", UcAu), (ucbirim, "ucbirim_hedefi", lambda au_, k_: True),
                       (ucbirim, "satir_oku", lambda k_: okunan_satir),
                       (ucbirim, "tampon_oku", lambda au_, k_: {"metin": "", "kirli": True}),
                       (ucbirim, "_on_plan_notu", lambda au_, k_: ""),
                       (guvenlik, "onay_kapsami", lambda *a_, **k_: "hepsi"),
-                      (guvenlik, "onayli_gecerli", lambda o: False),
-                      (guvenlik, "_panelden_onay", lambda *a_, **k_: (panel.append(a_), (False, "ret"))[1])]):
+                      (guvenlik, "onayli_gecerli", lambda o: False), *panel_yamasi]):
             try:
                 ucbirim.enter_kapisi("w1", False, ek=ek, goruntu_al=False)
             except Dur as e:
@@ -270,6 +296,19 @@ def test_davranis():
     e = kapi([], ek="./ajan_betigi.sh")
     kontrol("U2 uçbirim kapısı: ajanın kendi yazdığı metnin uyarısı iletide kalır",
             isinstance(e, Dur) and "ajan_betigi" in e.mesaj, repr(e))
+
+    # review round 2 (low): the REAL _panelden_onay; the approval module refuses with the real-screen lock (17).
+    # Its Dur went to the agent with the whole OCR'd line ("onay gerekçesi: Uçbirimde komut çalıştır: '<line>'")
+    from deskhand import onay
+    istenen = []
+
+    def kilit(eylem_, hedef_, ayrinti_, **k_):
+        istenen.append(eylem_)
+        raise Dur(17, "gerçek ekran kilitli (sınama)")
+    e = kapi(["$ echo s3cr3t-parola-satiri"], panel_yamasi=[(onay, "iste_sonuc", kilit), (guvenlik, "sec", UcAu)])
+    kontrol("U3 ekran kilidi Dur(17): ajana dönen iletide okunan satır YOK, genel eylem metni var",
+            isinstance(e, Dur) and e.kod == 17 and "s3cr3t" not in e.mesaj and "Enter" in e.mesaj, repr(e))
+    kontrol("U3 okunan satır onay isteğine (insan paneli) gider", any("s3cr3t" in x for x in istenen), str(istenen))
 
 
 # ------------------------------------------------------------------ static guard (the class must not come back)

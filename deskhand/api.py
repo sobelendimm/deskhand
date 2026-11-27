@@ -285,11 +285,11 @@ def _maske_okunamadi(e: BaseException) -> Dur:
                tur="maske-okunamadi")
 
 
-def goruntu_al(k: str, bolge=None, tam: bool = False, kararli: bool = False):
+def goruntu_al(k: str, bolge=None, tam: bool = False, kararli: bool = False, son_tarih: float | None = None):
     """→ (görüntü, geo, kök, maskeler). Görüntü pikseli + kök = pencere koordinatı. Hedef yasaksa Dur(10);
     görüntüye düşen diğer yasak pencereler siyah kutuyla örtülür (maskeler: görüntü pikseli). CLI okuma komutları
     (foto, metin, bekle, simge-bul, simge-kaydet, renk-bul) da bu yoldan okur (gorsel.korumali_goruntu).
-    kararli=True: içerik durana dek bekle (gorsel.pencere_goruntusu).
+    kararli=True: içerik durana dek bekle (gorsel.pencere_goruntusu); son_tarih (monotonic): bekleme burada biter.
     tam=True: fiziksel çözünürlük (ölçek 2 masaüstü: iki kat piksel); görüntü pikseli = (pencere koordinatı − kök)
     × gorsel.piksel_olcegi(im), maskeler de görüntü pikselinde.
     Yarış (Z3 O2): yasak pencere listesi karenin ÖNÜNDE ve ARKASINDA okunur (maske_kare.iki_okumali_kare, panel
@@ -309,7 +309,8 @@ def goruntu_al(k: str, bolge=None, tam: bool = False, kararli: bool = False):
         return okumalar[-1]
     try:
         (im, geo, kok), geolar, kapanan = iki_okumali_kare(
-            oku, lambda: pencere_goruntusu(k, bolge_coz(bolge_s), kararli=kararli, tam=tam))
+            oku, lambda: pencere_goruntusu(k, bolge_coz(bolge_s), kararli=kararli, tam=tam,
+                                           **({"son_tarih": son_tarih} if son_tarih is not None else {})))
     except ListeOkunamadi as e:
         raise _maske_okunamadi(e) from e
     if kapanan:  # where it was at grab time is unknown (it may have moved before closing): drop the frame

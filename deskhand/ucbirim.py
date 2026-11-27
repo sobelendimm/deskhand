@@ -376,7 +376,8 @@ def enter_kapisi(k, onayli, ek="", gizli=False, goruntu_al=True, olabilir=False,
     guvenlik._EYLEM.onaylandi = False  # bir Enter = bir onay: bu eylemdeki önceki onay bu Enter'ı kapsamaz
     goruntu = guvenlik.hedef_goruntusu(k) if goruntu_al else None
     izin, onay_neden = guvenlik._panelden_onay(_("Uçbirimde komut çalıştır: {satir}").format(satir=goster), b,
-                                               "\n".join(ayrinti), goruntu)
+                                               "\n".join(ayrinti), goruntu,
+                                               ajan_eylem=_("Uçbirimde komut çalıştır (Enter)"))
     if not izin:
         # Ajana dönen iletiye EKRANDAN OKUNAN (OCR) satırdan türeyen neden konmaz: ham uçbirim kırpımına binen yasak
         # pencerenin sözcükleri (dosya/komut adı) taşınabilir (SINIF-MASKE). Ayrıntı yalnız insan panelinde. Ajanın

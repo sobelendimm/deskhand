@@ -825,7 +825,10 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
   ARKASINDA okur (`maske_kare.iki_okumali_kare`). İki konumun birleşimi karartılır; kareden sonra yasaklanan pencerenin
   kareden önceki konumu da birleşime girer (`Geometriler.tum`). Kare sırasında kapanan ya da yasaktan çıkan pencere ve
   okunamayan liste `Dur(8, tur=maske-yarisi|maske-okunamadi)` verir; kare gönderilmez. `korumali_goruntu` bu durumda
-  kısa beklemeyle en çok 3 kare dener (toplam ≤ 2 sn), uzun akış ve `bekle` tek yarışta düşmez. Ham kare
+  kısa beklemeyle en çok 3 kare dener; yeniden deneme yalnız 2 sn son tarihinden önce başlar ve kararlılık beklemesi
+  (`son_tarih`) o tarihte biter (toplam ≈ 2 sn + bir kare/liste okuması); uzun akış ve `bekle` tek yarışta düşmez.
+  Uçbirim Enter kapısında ajana dönen Dur iletileri (10 ve gerçek ekran kilidi 17) genel eylem metni taşır, okunan
+  satır yalnız panelde kalır. Ham kare
   (`gorsel.pencere_goruntusu`, `_pencere_goruntusu`, arka uç `.goruntu`) yalnız pikseli süreçten çıkmayan iç işlerde
   kullanılır. Bunlar: onay hedefi parmak izi (`onay_hedef._goruntu`), insan onay panelinin görüntüsü
   (`guvenlik.hedef_goruntusu`), uçbirim Enter kapısının satır okuması (`ucbirim._ocr_satirlar`; ajana giden Dur iletisi

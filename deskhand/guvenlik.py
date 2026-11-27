@@ -1292,10 +1292,12 @@ def eylem_basladi():
     _EYLEM.sistem_onay = set()  # bu eylemde onaylanan sistem istemi pencereleri
 
 
-def _panelden_onay(eylem, hedef, ayrinti, goruntu=None):
+def _panelden_onay(eylem, hedef, ayrinti, goruntu=None, ajan_eylem=None):
     """Paneldeki insandan bir kez izin (CONTRACT §8). → (izin, neden). Panel/onay modülü yoksa (False, neden).
     Aynı eylemde ikinci hassas denetim (sayfa + düğme) yeniden sormaz: bir eylem = bir onay.
-    goruntu: hedefin küçük görüntüsü (PIL) — kullanıcı NEYİ onayladığını görür."""
+    goruntu: hedefin küçük görüntüsü (PIL) — kullanıcı NEYİ onayladığını görür.
+    ajan_eylem: ajana dönen Dur iletisindeki eylem metni. eylem EKRANDAN OKUNAN metin taşıyorsa (uçbirim satırı)
+    çağıran genel metin verir: ham OCR yalnız insan paneline gider (SINIF-MASKE)."""
     if getattr(_EYLEM, "onaylandi", False):
         return True, _("bu eylem için zaten onaylandı")
     try:
@@ -1307,7 +1309,7 @@ def _panelden_onay(eylem, hedef, ayrinti, goruntu=None):
     except Dur as e:  # gerçek ekran kilidi (17): onayı NEYİN tetiklediği iletide görünsün
         neden_satiri = (ayrinti or "").splitlines()[0] if ayrinti else ""
         raise Dur(e.kod, e.mesaj + "; " + _("onay gerekçesi: {eylem} — {neden}").format(
-            eylem=eylem, neden=neden_satiri or hedef), tur=e.tur) from None
+            eylem=ajan_eylem or eylem, neden=neden_satiri or hedef), tur=e.tur) from None
     if s.izin:
         _EYLEM.onaylandi = True
     return s.izin, s.mesaj
