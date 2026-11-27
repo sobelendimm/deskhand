@@ -154,6 +154,7 @@ class Panel(QObject):
         self.tepsi = Tepsi(self) if tepsi else None
         self.kisayol = kisayol or GenelKisayol(self)
         self.diyaloglar: dict[str, OnayDiyalog] = {}
+        self._sir_istekleri: set[str] = set()  # açılmış "parola kaydet" istekleri (aynısı ikinci kez açılmaz)
         self.diyalog_kurma_ms = diyalog_kurma_ms
         self.sunucu = sunucu
         if sunucu is not None:
@@ -487,6 +488,12 @@ class Panel(QObject):
 
     # -------- onaylar
     def _onaylar(self, bekleyen: list[dict]):
+        # "Parola kayıtlı değil" isteği (değersiz; B1): onay diyaloğu değil, Ayarlar › Gizli bilgiler'de Ekle formu
+        for b in [b for b in bekleyen if b.get("tur") == "sir_kaydet"]:
+            if b["id"] not in self._sir_istekleri:
+                self._sir_istekleri.add(b["id"])
+                QTimer.singleShot(0, lambda b=b: self._sir_kaydet_ac(b))
+        bekleyen = [b for b in bekleyen if b.get("tur") != "sir_kaydet"]
         kimlikler = {b["id"] for b in bekleyen}
         for k, dlg in list(self.diyaloglar.items()):
             if k not in kimlikler:
@@ -559,6 +566,25 @@ class Panel(QObject):
         self.pencere.showNormal() if self.pencere.isMinimized() else None
         self.pencere.raise_()
         self.pencere.activateWindow()
+
+    def _sir_kaydet_ac(self, istek: dict) -> None:
+        """Ajan kayıtlı olmayan bir parola istedi (istek DEĞER taşımaz): paneli öne getir, Ayarlar > Gelişmiş >
+        Gizli bilgiler içinde Ekle formunu ad/site ön dolu aç. Vazgeçilirse istek kendi süresiyle düşer."""
+        try:
+            if self.tepsi is not None:
+                from PyQt6.QtWidgets import QSystemTrayIcon
+
+                from ..i18n import _
+                from .sekmeler.gizli import H_SIR_ISTEGI
+                self.tepsi.ikon.showMessage("Deskhand", _(H_SIR_ISTEGI).format(ad=str(istek.get("ad") or "")),
+                                            QSystemTrayIcon.MessageIcon.Information, 8000)
+        except Exception:  # noqa: BLE001 - bildirim isteğe bağlı
+            pass
+        self.goster()
+        ay = self.pencere.ayarlar
+        self.pencere.sekmeler.setCurrentWidget(ay)
+        ay.bolumler.setCurrentIndex(1)
+        ay.gizli.sir_kaydet_istegi(istek)
 
     def ac_kapat(self):
         if self.pencere.isVisible() and not self.pencere.isMinimized():

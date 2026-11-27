@@ -283,6 +283,20 @@ kontrol("ilk günlük satırları Etkinlik'te", w.etkinlik.model.rowCount() == 2
 w.show()
 bekle(lambda: w.isVisible())
 
+# ---- G1: "parola kayıtlı değil" isteği (sir_kaydet, değersiz) onay diyaloğu açmaz; Gizli bilgiler'e yönlenir, bir kez
+_sir_acilan: list = []
+_eski_sir = p._sir_kaydet_ac
+p._sir_kaydet_ac = lambda b: _sir_acilan.append(b["id"])
+_eski_guncelle = p.pencere.onaylar.guncelle
+p.pencere.onaylar.guncelle = lambda bek: None
+_sk = {"id": "sk000001", "tur": "sir_kaydet", "ad": "penpot", "site": "penpot.example"}
+p._onaylar([_sk])
+p._onaylar([_sk])
+app.processEvents()
+kontrol("sir_kaydet isteği: onay diyaloğu açılmaz, Gizli bilgiler formu bir kez istenir",
+        "sk000001" not in p.diyaloglar and _sir_acilan == ["sk000001"], str(_sir_acilan))
+p._sir_kaydet_ac, p.pencere.onaylar.guncelle = _eski_sir, _eski_guncelle
+
 # ---- çoklu masaüstü: onay devrindeki Devral, Arka plan sekmesini isteğin masaüstüne çevirir; karar → varsayılan
 from deskhand import masalar as _ml  # noqa: E402
 
