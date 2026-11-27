@@ -8,9 +8,11 @@ Kazara izne karşı:
   Qt tıklamayı yalnız basma + bırakma ikisi de etkin düğmedeyse sayar (devre dışıyken başlayan basış izin olmaz).
 - Diyalog etkinleştirilmeden gösterilir (WA_ShowWithoutActivating): kullanıcının klavyesini çalmaz.
 - Süre dolunca otomatik red; istek geri çekilirse (isteyen vazgeçti) diyalog kendiliğinden kapanır.
-Sunum (UX-C): üstte tek cümle "ne olacak" + tek satır risk (guvenlik.onay_iletisi, eylem türüne göre); ham eylem,
-ham ayrıntı ve PID yalnız katlanır "Ayrıntılar"da (varsayılan kapalı); geri sayım Reddet düğmesinde; izin düğmesinin
-güvenlik beklemesi düğme metninde görünür; not normal renkte.
+Sunum (UX-C, R1): üstte türün sabit cümlesi + NEYE izin verildiği (düğme/komut/tuş; tek satır, temiz, tırnaklı)
++ tek satır risk (guvenlik.onay_iletisi; tür isteğin yapısal "konu" alanından); isteyen süreç (ad + PID), pencere ve
+masaüstü görünür satırlarda; ham eylem ve ham ayrıntı katlanır "Ayrıntılar"da (varsayılan kapalı; tür bilinmiyorsa
+açık); tüm etiketler düz metin; geri sayım Reddet düğmesinde; izin düğmesinin güvenlik beklemesi düğme metninde
+görünür; not normal renkte.
 Pencere başlığı sabit: onay.ONAY_BASLIK; uygulama sınıfı onay.PANEL_SINIF (yasak pencere listesine eklenir).
 """
 from __future__ import annotations
@@ -36,6 +38,7 @@ DUGME_EN = 150
 EN_AZ_EN = 460
 
 D_PENCERE = N_("Pencere")
+D_ISTEYEN = N_("İsteyen")
 D_AYRINTILAR = N_("Ayrıntılar")
 D_DUGME_SURE = N_("{dugme} ({sure})")                      # Reddet (1:58): geri sayım düğmede
 D_IZIN_BEKLE = N_("{dugme} ({sn} sn…)")                     # güvenlik beklemesi görünür (kazara izne karşı)
@@ -103,9 +106,12 @@ class OnayDiyalog(QDialog):
         f = self.l_baslik.font()
         f.setPointSizeF(f.pointSizeF() * 1.25)
         self.l_baslik.setFont(f)
+        self.l_icerik = deger(kalin=True)  # NEYE izin verildiği: düğme / komut / tuş (katlı değil; YÜKSEK 1)
+        self.l_icerik.setObjectName("icerik")
         self.l_risk = deger()
         self.l_risk.setObjectName("risk")
         metin_kutu.addWidget(self.l_baslik)
+        metin_kutu.addWidget(self.l_icerik)
         metin_kutu.addWidget(self.l_risk)
         ust.addLayout(metin_kutu, 1)
         kok.addLayout(ust)
@@ -123,12 +129,15 @@ class OnayDiyalog(QDialog):
 
         def satir(msgid: str, alan: QLabel):
             e = QLabel()
+            e.setTextFormat(Qt.TextFormat.PlainText)
             self.mt(e.setText, msgid)
             form.addRow(e, alan)
             return e
 
+        self.l_isteyen = deger()
         self._hedef_satiri = satir(D_PENCERE, self.l_hedef)
         satir(T.D_MASAUSTU, self.l_masaustu)
+        self._isteyen_satiri = satir(D_ISTEYEN, self.l_isteyen)
         kok.addLayout(form)
 
         # Ayrıntılar (ham eylem dizgisi, pencere, ham ayrıntı, PID): katlanır, varsayılan KAPALI
@@ -150,6 +159,8 @@ class OnayDiyalog(QDialog):
         self.w_ayrinti.setVisible(False)
         kok.addWidget(self.w_ayrinti)
         self.mt.fn(self._iletiyi_yaz)
+        if self.ileti["tur"] == "bilinmeyen":  # türü doğrulanamayan istek: ham eylem ve ayrıntı baştan görünür
+            self.ayrinti_ac(True)
 
         self.l_goruntu = None
         g = istek.get("goruntu")
@@ -177,9 +188,11 @@ class OnayDiyalog(QDialog):
         self.cubuk.setRange(0, 1000)
         kok.addWidget(self.cubuk)
         self.l_kalan = QLabel()
+        self.l_kalan.setTextFormat(Qt.TextFormat.PlainText)
         self.l_kalan.setWordWrap(True)
         kok.addWidget(self.l_kalan)
         self.l_not = QLabel()
+        self.l_not.setTextFormat(Qt.TextFormat.PlainText)
         self.mt(self.l_not.setText, T.D_DEVIR_NOT if self.devir else T.D_NOT)
         self.l_not.setWordWrap(True)  # normal metin rengi (soluk değil): kontrast ≥ tokens kontrast_min
         kok.addWidget(self.l_not)
@@ -240,7 +253,12 @@ class OnayDiyalog(QDialog):
         ileti = guvenlik.onay_iletisi(self.istek)
         self.ileti = ileti
         self.l_baslik.setText(ileti["baslik"])
+        self.l_icerik.setText(ileti["icerik"])
+        self.l_icerik.setVisible(bool(ileti["icerik"]))
         self.l_risk.setText(ileti["risk"])
+        self.l_isteyen.setText(ileti["isteyen"])
+        self.l_isteyen.setVisible(bool(ileti["isteyen"]))
+        self._isteyen_satiri.setVisible(bool(ileti["isteyen"]))
         self.l_hedef.setText(ileti["hedef"])
         self.l_hedef.setVisible(bool(ileti["hedef"].strip()))
         self._hedef_satiri.setVisible(bool(ileti["hedef"].strip()))
