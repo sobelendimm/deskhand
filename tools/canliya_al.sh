@@ -8,7 +8,8 @@ HEDEF_DAL="${1:?kullanım: canliya_al.sh HEDEF_DAL [--kuru]}"
 KURU=0; [[ "${2:-}" == "--kuru" ]] && KURU=1
 DH="$HOME/.local/bin/deskhand"
 HELPER="$DEPO/deskhand/yardimci"
-PANEL_RE="^/usr/bin/python3 ($HOME/.local/bin|$HOME/.local/src/deskhand/bin)/deskhand panel"
+# install.sh sarmalayıcısı `#!/usr/bin/python3 -I` (H3-R9) → -I isteğe bağlı; yoksa yeni panel "bulunamadı" sanılır
+PANEL_RE="^/usr/bin/python3( -I)? ($HOME/.local/bin|$HOME/.local/src/deskhand/bin)/deskhand panel"
 ESKI_SURUM="?"; ESKI_UC="?"; YEDEK_TAR=""
 
 adim() { echo; echo "=== [$(date +%H:%M:%S)] $* $( ((KURU)) && echo '(KURU)')==="; }
@@ -38,7 +39,8 @@ echo "ileri sarılabilir: main $(git rev-parse --short main) -> $HEDEF_DAL $(git
 MESGUL="$("$DH" busy 2>/dev/null | sed -n 1p)"; echo "$MESGUL"
 # panel yeniden başlatma kullanıcının ekranına dokunur (tepsi, bildirim): oyun/film/tam ekranda KURMA
 if [[ $MESGUL == *"meşgul: evet"* && ${ZORLA:-0} != 1 ]]; then
-    ((KURU)) && echo "UYARI: kullanıcı meşgul — gerçek kurulum duracak (ZORLA=1 ile geçilebilir)" || dur "kullanıcı meşgul ($MESGUL): kurulum ertelendi"
+    if ((KURU)); then echo "UYARI: kullanıcı meşgul — gerçek kurulum duracak (ZORLA=1 ile geçilebilir)"
+    else dur "kullanıcı meşgul ($MESGUL): kurulum ertelendi"; fi
 fi
 pkg-config --exists libei-1.0 xkbcommon libsystemd || dur "deskhand-eis için libei/xkbcommon/libsystemd geliştirme dosyaları eksik"
 ESKI_SURUM="$(git show main:deskhand/__init__.py | sed -n 's/^__version__ = "\(.*\)"/\1/p')"
@@ -54,18 +56,27 @@ DEG="$(git diff --name-only main "$HEDEF_DAL" -- install.sh bin/ deskhand/data/ 
 
 adim "2) Yedek"
 YEDEK_TAR="$HOME/.local/share/deskhand/yedek-$(date +%Y%m%d-%H%M%S).tar.gz"
-yap git branch -f "yedek-$ESKI_SURUM" main
-if ((KURU)); then echo "[kuru] tar -czf $YEDEK_TAR .config/deskhand .local/state/deskhand"
-else mkdir -p "$(dirname "$YEDEK_TAR")"; tar -czf "$YEDEK_TAR" -C "$HOME" .config/deskhand .local/state/deskhand 2>/dev/null; ls -la "$YEDEK_TAR"; fi
+# Her adımın çıkış kodu denetlenir (D-2): biri başarısızsa betik DURUR, geri alma yönergesini basar, çıkış 1
+# (panel yeniden başlatılmaz, "Bitti" yazılmaz: eski/karışık kod yedeksiz çalışmaya bırakılmaz).
+yap git branch -f "yedek-$ESKI_SURUM" main || dur "yedek dalı oluşturulamadı (yedek-$ESKI_SURUM)"
+YEDEK_DIZ=()
+for d in .config/deskhand .local/state/deskhand; do [[ -e "$HOME/$d" ]] && YEDEK_DIZ+=("$d"); done
+if ((KURU)); then echo "[kuru] tar -czf $YEDEK_TAR ${YEDEK_DIZ[*]:-<dizin yok>}"
+elif ((${#YEDEK_DIZ[@]})); then
+    mkdir -p "$(dirname "$YEDEK_TAR")" || dur "yedek dizini oluşturulamadı: $(dirname "$YEDEK_TAR")"
+    tar -czf "$YEDEK_TAR" -C "$HOME" "${YEDEK_DIZ[@]}" || dur "ayar/durum yedeği alınamadı: $YEDEK_TAR"
+    ls -la "$YEDEK_TAR"
+else YEDEK_TAR=""; echo "yedeklenecek ayar/durum dizini yok (ilk kurulum)"; fi
 
 adim "3) İleri sarma"
-yap git merge --ff-only -q "$HEDEF_DAL"
+yap git merge --ff-only -q "$HEDEF_DAL" || dur "ileri sarma başarısız (git merge --ff-only $HEDEF_DAL); main değişmedi mi denetle"
 
 adim "4) C yardımcıları"
-yap make -s -C "$HELPER"
+yap make -s -C "$HELPER" || dur "C yardımcıları derlenemedi (make -C $HELPER); kod ileri sarıldı, panel ESKİ"
 
 adim "5) install.sh gerekli mi?"
-if [[ -n "$DEG" ]]; then echo "değişen kurulum dosyaları:"; echo "$DEG" | sed 's/^/  /'; yap bash "$DEPO/install.sh"
+if [[ -n "$DEG" ]]; then echo "değişen kurulum dosyaları:"; while IFS= read -r f; do echo "  $f"; done <<<"$DEG"
+    yap bash "$DEPO/install.sh" || dur "install.sh başarısız; kod ileri sarıldı, panel ESKİ"
 else echo "gerekmiyor"; fi
 
 adim "6) Panel yeniden başlatma"

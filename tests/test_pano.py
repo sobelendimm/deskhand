@@ -982,12 +982,26 @@ au.pano_yaz("eski içerik ğüşİ 😀")
 temizle_kutu()
 GIZLI_EMOJI = "gizli parola 😀" * 3
 g0 = gunluk_metni()
-api_yaz(GIZLI_EMOJI, gizli=True)  # Xvfb XTEST emojiyi doğrudan yazabiliyor (yazilabilir_mi): pano GEREKMEZ
-bekle(lambda: kutu_metni() == GIZLI_EMOJI, 4)
-gl = gunluk_metni()[len(g0):]
-kontrol("sanal: gizli + emoji (düzende yazılabilir) → klavyeyle birebir, pano hiç değişmedi, günlükte 'yapistir' yok",
-        kutu_metni() == GIZLI_EMOJI and au.pano_oku() == "eski içerik ğüşİ 😀" and "yapistir" not in gl
-        and "gizli parola" not in gl, repr(kutu_metni())[:120])
+if au.yazilabilir_mi("😀"):  # Xvfb XTEST emojiyi doğrudan yazabiliyor (yazilabilir_mi): pano GEREKMEZ
+    api_yaz(GIZLI_EMOJI, gizli=True)
+    bekle(lambda: kutu_metni() == GIZLI_EMOJI, 4)
+    gl = gunluk_metni()[len(g0):]
+    kontrol("sanal: gizli + emoji (düzende yazılabilir) → klavyeyle birebir, pano hiç değişmedi, günlükte 'yapistir' yok",
+            kutu_metni() == GIZLI_EMOJI and au.pano_oku() == "eski içerik ğüşİ 😀" and "yapistir" not in gl
+            and "gizli parola" not in gl, repr(kutu_metni())[:120])
+else:  # KWin/EIS: emoji düzende yok → gizli yazı panoya düşmez (bad0e14), hiçbir şey yazmadan Dur 1
+    try:
+        api_yaz(GIZLI_EMOJI, gizli=True)
+        hata_ = None
+    except Dur as e:
+        hata_ = e
+    time.sleep(0.3)
+    gl = gunluk_metni()[len(g0):]
+    kontrol("sanal (kwin): gizli + düzende olmayan emoji → Dur 1, hiçbir şey yazılmadı, pano hiç değişmedi, "
+            "ileti/günlükte metin yok",
+            hata_ is not None and hata_.kod == 1 and kutu_metni() == "" and au.pano_oku() == "eski içerik ğüşİ 😀"
+            and "yapistir" not in gl and "gizli parola" not in gl and "gizli parola" not in str(hata_)
+            and "😀" not in str(hata_), f"{hata_!r:.200} {kutu_metni()!r:.60}")
 temizle_kutu()
 GIZLI_UZUN = "gizli parola " * 18  # 234 karakter: eşik üstü, harf harf
 g0 = gunluk_metni()

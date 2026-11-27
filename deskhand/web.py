@@ -17,7 +17,6 @@ org.a11y.Status.IsEnabled), Chromium/Electron için --force-renderer-accessibili
 from __future__ import annotations
 
 import contextlib
-import difflib
 import threading
 import time
 
@@ -183,6 +182,7 @@ def _oturum_atspi_adresi() -> str | None:
         return None
 
 
+_KARDES_YOK = object()  # _cerceve_bul: kardeş listesi verilmedi (erisim.KARDES_VERILMEDI'ye çevrilir)
 KONUM_TOLERANS = 1  # px: çerçeve sınırı ile pencerenin bilinen geometrisi arasındaki en çok fark
 KONUM_HATA_TURU = "konum"  # Dur.tur: öge konumu doğrulanamadı (tık yolu bunu yutmaz; fail-closed)
 
@@ -237,9 +237,11 @@ def _baglam(k, islem="tara"):
     except (TypeError, ValueError):
         pid = 0
     baslik = au.baslik(k) or ""
+    from .erisim import kardes_basliklari
+    kardes = kardes_basliklari(au, k, pid)  # bağımsız kanal: aynı süreçteki öbür pencereler (pencere yöneticisi)
     yol = _Yol(adres)
     try:
-        bus, cerceve, app_pid, app_ad, cerceve_ad = _cerceve_bul(yol, pid, baslik)
+        bus, cerceve, app_pid, app_ad, cerceve_ad = _cerceve_bul(yol, pid, baslik, kardes)
         from .erisim import _cerceve_denetle
         _cerceve_denetle(app_pid, app_ad, cerceve_ad, islem)
         geo = tuple(au.geometri(k))
@@ -261,18 +263,20 @@ def _baglam(k, islem="tara"):
         raise
 
 
-def _cerceve_bul(yol: _Yol, pid: int, baslik: str) -> tuple[str, str, int, str, str]:
+def _cerceve_bul(yol: _Yol, pid: int, baslik: str, kardes=_KARDES_YOK) -> tuple[str, str, int, str, str]:
     """Pencerenin üst düzey erişilebilirlik çerçevesi: YALNIZ pencerenin süreç ağacındaki (pencerenin süreci ya da onun
-    torunları: çok süreçli tarayıcı) bağlantılardan, aynı süreç önce, sonra başlık benzerliğiyle. Atalar (pencereyi
+    torunları: çok süreçli tarayıcı) bağlantılardan; seçim erisim.cerceve_karari (kardes: aynı süreçteki öbür
+    pencerelerin başlıkları, pencere yöneticisinden; SOAK-FIX-R1). Atalar (pencereyi
     başlatan uçbirim/başlatıcı, bu süreç) ve bu sürecin kendi bağlantısı sayılmaz. PID bilinmiyorsa ya da ağaçta yoksa
     Dur 6: başka bir uygulamanın çerçevesine başlık benzerliğiyle düşülmez (denetimler pencerede yapılır, eylem BAŞKA
     uygulamada olurdu). → (veri yolu adı, çerçeve yolu, uygulama pid, uygulama adı, çerçeve adı)."""
     import os
 
     from . import kendi
+    from .guvenlik import baslik_goster  # gizli yazı (baslik_gizle) altında başlık iletiye girmez
     if not pid:
         raise Dur(BULUNAMADI, _("pencerenin süreç kimliği (PID) bilinmiyor: web çerçevesi güvenle eşlenemez ({baslik})"
-                                ).format(baslik=repr(baslik)))
+                                ).format(baslik=baslik_goster(baslik)))
     dbus = ("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus")
     adlar = [a for a in (_deg(yol.toplu([_m(*dbus, "ListNames")])[0], []) or []) if a.startswith(":")]
     pidler = yol.toplu([_m(*dbus, "GetConnectionUnixProcessID", "s", (a,)) for a in adlar])
@@ -296,19 +300,11 @@ def _cerceve_bul(yol: _Yol, pid: int, baslik: str) -> tuple[str, str, int, str, 
                                 "GNOME_ACCESSIBILITY=1 ile, Chromium --force-renderer-accessibility ile "
                                 "başlatılmalı").format(pid=pid))
     adlar_ = yol.toplu([_ozellik(a, y, "Name") for a, y, _p, _n in adaylar])
-    durum = yol.toplu([_m(a, y, ERISIM, "GetState") for a, y, _p, _n in adaylar])
-
-    def puan(i):
-        ad = _ozd(adlar_[i], "") or ""
-        benz = 1.0 if ad and baslik and (ad == baslik or ad in baslik or baslik in ad) else \
-            difflib.SequenceMatcher(None, ad, baslik).ratio()
-        d = _durumlar(durum[i])
-        return (adaylar[i][2] == pid, benz, "active" in d, "showing" in d)
-    en_iyi = max(range(len(adaylar)), key=puan)
-    if len(adaylar) > 1 and puan(en_iyi)[1] < 0.6:
-        raise Dur(BULUNAMADI, _("pencere erişilebilirlik ağacında bulunamadı ({baslik})").format(baslik=repr(baslik)))
-    b_, y, ap, an = adaylar[en_iyi]
-    return b_, y, ap, an, _ozd(adlar_[en_iyi], "") or ""
+    from .erisim import KARDES_VERILMEDI, cerceve_karari
+    i = cerceve_karari([_ozd(n, "") or "" for n in adlar_], baslik,
+                       KARDES_VERILMEDI if kardes is _KARDES_YOK else kardes, [ap == pid for _b, _y, ap, _n in adaylar])
+    b_, y, ap, an = adaylar[i]
+    return b_, y, ap, an, _ozd(adlar_[i], "") or ""
 
 
 # ---------------------------------------------------------------- ağaç yürüyüşü
@@ -532,8 +528,22 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
     gorunur: True = yalnız görünür (kaydırma alanı içinde, gizli değil); False = görünmeyenler de (gorunur: false)
     en_cok / atla: sayfalama (en_cok=0: hepsi); ad_siniri: ad kırpma (0 = kırpma); ayrinti: href / değer / seçili seçenek
     yol_ver: ögelere erişilebilirlik kimliği (_bus + _yol: İKİSİ BİRLİKTE; yalnız yol başka uygulamaya gidebilir) ekle
-    cerceve_metni: iç belgelerde (iframe) rolden bağımsız metin ögeleri de gelsin (insan doğrulaması: "Success!" işareti)"""
+    cerceve_metni: iç belgelerde (iframe) rolden bağımsız metin ögeleri de gelsin (insan doğrulaması: "Success!" işareti)
+
+    Sayfa belirsizse (çerçeve ↔ pencere kanıtlanamadı ya da belge adı pencere başlığının gerisinde: tıklama/gezinme
+    sonrası) kısa yeniden deneme, KESİN üst sınır erisim.BELIRSIZ_SURE (≤ 1 sn); sonra Dur 6, içerik yok."""
+    from .erisim import BELIRSIZ_ARA, BELIRSIZ_SURE, SAYFA_BELIRSIZ
     t0 = time.monotonic()
+    while True:
+        try:
+            return _oku_bir(t0, k, sorgu, roller, gorunur, en_cok, atla, ad_siniri, ayrinti, yol_ver, cerceve_metni)
+        except Dur as e:
+            if e.tur != SAYFA_BELIRSIZ or time.monotonic() + BELIRSIZ_ARA >= t0 + BELIRSIZ_SURE:
+                raise
+            time.sleep(BELIRSIZ_ARA)
+
+
+def _oku_bir(t0, k, sorgu, roller, gorunur, en_cok, atla, ad_siniri, ayrinti, yol_ver, cerceve_metni) -> dict:
     au, yol, bus, cerceve, koord, koken, konum = _baglam(k)
     try:
         ham, belgeler, dugum = _yuru(yol, bus, cerceve, koord, koken, _rol_kumesi(roller), gorunur,
@@ -556,7 +566,9 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
         for i, o in enumerate(ogeler):
             o["no"] = atla + i + 1
         ust = min(belgeler, key=lambda b: b["derinlik"]) if belgeler else None
-        sayfa = _sayfa_ozeti(ust, au.baslik(k), len(belgeler))
+        pencere_basligi = au.baslik(k)
+        _belge_pencereye_ait(ust, pencere_basligi)
+        sayfa = _sayfa_ozeti(ust, pencere_basligi, len(belgeler))
         sayfa["konum"] = konum  # hangi koordinat çerçevesinde geldiği (None = doğrulanamadı)
         ic = [{"ad": b["ad"], "adres": b["adres"], "kutu": list(b["kutu"]) if b.get("kutu") else None}
               for b in belgeler if b["derinlik"] > 1][:12]
@@ -568,6 +580,30 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
                 "sayfa": sayfa, "sure": round(time.monotonic() - t0, 3), "dugum": dugum}
     finally:
         yol.kapat()
+
+
+_AYRAC = ("—", "–", "-", "|", "·", ":")  # tarayıcı pencere başlığında sayfa başlığından sonraki ayraç
+
+
+def _belge_pencereye_ait(belge, pencere_basligi) -> None:
+    """SOAK-FIX ikinci kilit (savunma derinliği; kimlik kanıtı çerçeve seçimindedir, erisim.cerceve_karari): pencere
+    başlığı okunan üst belgenin başlığıyla AYNI ya da onunla BAŞLAYIP ayraçla sürmeli ("<sayfa> — Mozilla Firefox",
+    "<sayfa> - Chromium"). Alt dizge yetmez (SOAK-FIX-R1 DÜŞÜK 4: "a", "Firefox", "Banka" her başlıkta geçer). Boş
+    belge adı (yükleniyor) karşılaştırılamaz; kimlik yine çerçeve seçiminden. Tutmazsa Dur 6 (tur SAYFA_BELIRSIZ); ileti
+    OKUNAN belgenin başlığını İÇERMEZ (başka pencereye ait olabilir: ORTA 3), yalnız bu pencerenin başlığı."""
+    import unicodedata
+
+    from .erisim import SAYFA_BELIRSIZ
+    from .guvenlik import baslik_goster
+
+    def norm(s):
+        return " ".join(unicodedata.normalize("NFC", s or "").split())
+    ad, pb = norm(belge["ad"]) if belge else "", norm(pencere_basligi)
+    if not ad or pb == ad or (pb.startswith(ad) and pb[len(ad):].lstrip().startswith(_AYRAC)):
+        return
+    raise Dur(BULUNAMADI, _("sayfa belirsiz: okunan sayfa bu pencerenin başlığıyla ({pencere}) uyuşmuyor; sayfa geçişi "
+                            "sürüyor ya da sayfa başka pencereye ait; içerik verilmedi, kısa süre sonra yeniden dene"
+                            ).format(pencere=baslik_goster(pencere_basligi)), tur=SAYFA_BELIRSIZ)
 
 
 def _sayfa_ozeti(belge, pencere_basligi, belge_sayisi) -> dict:

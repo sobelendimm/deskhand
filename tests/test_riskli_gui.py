@@ -15,12 +15,36 @@ os.environ.setdefault("DESKHAND_DIL", "tr")
 
 from PyQt6.QtWidgets import QApplication, QPlainTextEdit  # noqa: E402
 
-from deskhand import guvenlik, yollar  # noqa: E402
+from deskhand import guvenlik, liste_koruma, yollar  # noqa: E402
 from deskhand.gui import ayar as A  # noqa: E402
 from deskhand.gui import metinler as T  # noqa: E402
 from deskhand.gui.pencere import AyarlarSekmesi  # noqa: E402
+from deskhand.hata import Dur  # noqa: E402
 from deskhand.i18n import _  # noqa: E402
+from deskhand.oturum.kalici import AnahtarYok  # noqa: E402
 
+
+class SahteKasa:
+    """Açık cüzdan yerine bellekteki panel kaydı (Secret Service sahtesi; gerçek cüzdana dokunulmaz). Panel kaydı
+    imzalar → otomasyon dosyayı panelin onaylı değeriyle doğrular (H3: imzasız işaretli dosyada kapalı-başarısız)."""
+    veri = None
+
+    def oku(self):
+        return self.veri
+
+    def yaz(self, v):
+        self.veri = bytes(v)
+
+
+class KilitliKasa:
+    def oku(self):
+        raise AnahtarYok("cüzdan kilitli")
+
+    def yaz(self, v):
+        raise AnahtarYok("cüzdan kilitli")
+
+
+liste_koruma.isaret_anahtarlik_ayarla(SahteKasa())
 app = QApplication([])
 gecen = toplam = 0
 
@@ -70,11 +94,15 @@ for metin, satir in (("# a\nDefter = bilinmeyen", 2), ("Defter", 1), ("= tikla",
             y.l_seviye.text())
 # geçerli kurallar kaydedilir (eş adlar dahil) ve hemen geçerli olur
 y.seviye.setPlainText("# not\nKeePassXC = goruntule\nkonsole = click\n^Belge = view\nkwrite = full\n")
-kontrol("geçerli kurallar geçici CONFIG'e kaydedildi", y.seviye_kaydet() and os.path.exists(yollar.seviye_dosya())
+# tek kaydetme modeli (UX-A, f792c6a): kullanıcı Uygula'ya basar; başarı ortak durum satırında "Kaydedildi ✓"
+kontrol("bekleyen değişiklik: seviye", y.degisenler() == ["seviye"], str(y.degisenler()))
+kontrol("geçerli kurallar geçici CONFIG'e kaydedildi (Uygula)", y.uygula() and os.path.exists(yollar.seviye_dosya())
         and yollar.seviye_dosya().startswith(_yalitim.GECICI))
 kontrol("kaydedilen kurallar okunuyor (eş adlar dahil)", guvenlik.seviye_kurallari() ==
         [("KeePassXC", 0), ("konsole", 1), ("^Belge", 0), ("kwrite", 2)], str(guvenlik.seviye_kurallari()))
-kontrol("'Kaydedildi.' iletisi", y.l_seviye.text() == _(T.Y_KAYDEDILDI))
+kontrol("kullanıcı 'Kaydedildi ✓' görür, bölümde hata iletisi kalmaz, bekleyen değişiklik yok",
+        y.durum_metni() == _(T.Y_KAYDEDILDI_TIK) and y.l_seviye.text() == "" and not y.kaydedilmemis_var(),
+        f"{y.durum_metni()!r} {y.l_seviye.text()!r}")
 kontrol("seviye kaydı yasak-pencereler dosyasını OLUŞTURMAZ/DEĞİŞTİRMEZ", not os.path.exists(yollar.yasak_dosya()))
 y.seviye.setPlainText("başka bir şey")
 y.seviye_yukle()
@@ -85,6 +113,15 @@ y.seviye.setPlainText("# yalnız yorum\n")
 kontrol("tüm kuralları silip kaydetmek kısıtı kaldırır", y.seviye_kaydet() and guvenlik.seviye_kurallari() == [])
 y.tazele()
 kontrol("dil/tazele: durum etiketi temizlenir", y.l_seviye.text() == "")
+# bilinçli güvenlik davranışı (H3): panelin imzalı kaydı okunamıyorsa (kilitli/yok cüzdan) işaretli dosya kullanılmaz
+liste_koruma.isaret_anahtarlik_ayarla(KilitliKasa())
+try:
+    guvenlik.seviye_kurallari()
+    kod = None
+except Dur as e:
+    kod = e.kod
+kontrol("cüzdan kilitliyken kayıtlı seviye dosyası doğrulanamaz → Dur 10 (kapalı-başarısız)", kod == 10, str(kod))
+liste_koruma.isaret_anahtarlik_ayarla(SahteKasa())
 os.remove(yollar.seviye_dosya())
 kontrol("gerçek ~/.config/deskhand DEĞİŞMEDİ (sha1)", ozet("~/.config/deskhand") == gercek0)
 print(f"\n{gecen}/{toplam} panel seviye testi geçti")

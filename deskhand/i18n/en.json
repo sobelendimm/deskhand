@@ -1519,7 +1519,6 @@
  "pencere başlığı değişti ({once} → {sonra})": "window title changed ({once} → {sonra})",
  "pencere boyutlandırma": "window resizing",
  "pencere büyütme": "window maximize",
- "pencere erişilebilirlik ağacında bulunamadı ({baslik})": "the window was not found in the accessibility tree ({baslik})",
  "pencere erişilebilirlik ağacında yok ({baslik}, pid {pid}): {ipucu}": "the window is not in the accessibility tree ({baslik}, pid {pid}): {ipucu}",
  "pencere geri yükleme": "window restore",
  "pencere işlemi": "window operation",
@@ -1731,7 +1730,6 @@
  "tarayıcı penceresi": "browser window",
  "{sn} sn içinde yeni pencere görünmedi": "no new window appeared within {sn} s",
  "yeni pencereyle aynı başlıklı başka tarayıcı penceresi var: erişilebilirlik ağacı bu pencereye güvenle eşlenemez (adres çubuğu doğrulanamaz); adres yazılmadı": "another browser window has the same title as the new window: the accessibility tree cannot be mapped to this window safely (the address bar cannot be verified); the address was not typed",
- "aynı süreçte bu başlığı taşıyan {n} erişilebilirlik çerçevesi var (pid {pid}): hangisinin bu pencere olduğu belirlenemiyor; okuma/eylem başka pencereye gitmesin diye durduruldu": "the same process has {n} accessibility frames with this title (pid {pid}): it cannot tell which one is this window; stopped so that reading/actions do not go to another window",
  "başlık uymadı: {baslik} (beklenen /{desen}/)": "title did not match: {baslik} (expected /{desen}/)",
  "etkin pencere belirlenemedi": "active window could not be determined",
  "pencere sınıfı uymadı: {sinif} (beklenen /{desen}/)": "window class did not match: {sinif} (expected /{desen}/)",
@@ -2019,5 +2017,11 @@
  "Görünüm": "Appearance",
  "Koyu tema": "Dark theme",
  "Açık tema": "Light theme",
- "Sistem teması": "System theme"
+ "Sistem teması": "System theme",
+ "sayfa belirsiz: bu pencerenin süreç ağacında {n} erişilebilirlik çerçevesi var ve pencere başlığıyla ({baslik}) birebir eşleşen tek çerçeve yok (sayfa geçişi ya da aynı başlıklı pencereler); başka pencerenin sayfası okunmasın diye durduruldu, kısa süre sonra yeniden dene": "page ambiguous: this window's process tree has {n} accessibility frames and no single frame exactly matches the window title ({baslik}) (page transition or windows with the same title); stopped so that another window's page is not read, retry shortly",
+ "sayfa belirsiz: okunan sayfa bu pencerenin başlığıyla ({pencere}) uyuşmuyor; sayfa geçişi sürüyor ya da sayfa başka pencereye ait; içerik verilmedi, kısa süre sonra yeniden dene": "page ambiguous: the page read does not match this window's title ({pencere}); a page transition is in progress or the page belongs to another window; no content returned, retry shortly",
+ "sayfa belirsiz: pencere başlığı ({baslik}) bu uygulamanın öbür pencerelerinden güvenle ayırt edilemiyor (boş/genel başlık ya da aynı başlıklı başka pencere); başka pencerenin sayfası okunmasın diye durduruldu, kısa süre sonra yeniden dene": "page ambiguous: the window title ({baslik}) cannot be told apart safely from this application's other windows (empty/generic title or another window with the same title); stopped so that another window's page is not read, retry shortly",
+ "Türü belirlenemeyen alana yaz": "Type into a field of unknown type",
+ "Ajan odaklı alana {n} karakter yazmak istiyor ({ne}); alan türü belirlenemedi (parola alanı olabilir: sayfa belirsiz).": "The agent wants to type {n} characters into the focused field ({ne}); the field type could not be determined (it may be a password field: page ambiguous).",
+ "HASSAS: alan türü belirlenemedi (parola alanı olabilir); {ne} kullanıcının onayını ister ({neden}); kullanıcı sohbette açıkça onayladıysa --onayli ile tekrarla": "SENSITIVE: the field type could not be determined (it may be a password field); {ne} needs the user's approval ({neden}); if the user approved it explicitly in the chat, retry with --approved"
 }
