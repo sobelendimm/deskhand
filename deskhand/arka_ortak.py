@@ -25,7 +25,23 @@ VARSAYILAN_BELLEK = "8G"
 VARSAYILAN_TAKAS = "0"  # kafes takasa taşmasın (DESKHAND_SANAL_TAKAS): sınırda kafes içinde OOM, sistem yavaşlamaz
 # Özel veri yolunda etkinleştirilebilecek servisler (gerisi kapalı: kwalletd, kded, kdeconnect, plasma
 # bildirimleri… ikinci örnekleri kullanıcının dosyalarını/oturumunu bozabilir).
-IZINLI_SERVISLER = {"org.a11y.Bus": "/usr/lib/at-spi-bus-launcher"}
+# Değer: at-spi2-core yardımcısının adı; yolu dağıtıma göre değişir (atspi_yardimci).
+IZINLI_SERVISLER = {"org.a11y.Bus": "at-spi-bus-launcher"}
+# at-spi2-core yardımcılarının (at-spi-bus-launcher, at-spi2-registryd) dizinleri: Arch /usr/lib, Debian/Ubuntu/Fedora
+# /usr/libexec, eski Debian /usr/lib/at-spi2-core. Yalnız sabit root dizinleri (PATH'e bakılmaz).
+ATSPI_DIZINLERI = ("/usr/lib", "/usr/libexec", "/usr/lib/at-spi2-core")
+
+
+def atspi_yardimci(ad: str) -> str | None:
+    """at-spi2-core yardımcısının bu dağıtımdaki mutlak yolu (ATSPI_DIZINLERI'nde ilk var olan) | None."""
+    return next((y for y in (os.path.join(d, ad) for d in ATSPI_DIZINLERI) if os.path.exists(y)), None)
+
+
+def servis_yolu(ad: str) -> str | None:
+    """İzinli servisin (IZINLI_SERVISLER) bu dağıtımdaki çalıştırılabilir yolu | None."""
+    return atspi_yardimci(IZINLI_SERVISLER[ad]) if ad in IZINLI_SERVISLER else None
+
+
 # Kullanıcının Wayland oturumuna ait, arka plan uygulamasına geçmemesi gereken değişkenler
 SILINECEK_ORTAM = ("WAYLAND_DISPLAY", "WAYLAND_SOCKET", "XAUTHORITY", "DESKTOP_STARTUP_ID",
                    "XDG_ACTIVATION_TOKEN", "SESSION_MANAGER", "DBUS_SESSION_BUS_PID", "DBUS_STARTER_ADDRESS",
@@ -46,8 +62,10 @@ CIKARILACAK_ONEKLER = ("PULSE_", "PIPEWIRE_", "IBUS_")
 KULLANICI_A11Y = ("AT_SPI_BUS_ADDRESS",)
 # Kafes kapısı: süreç kafese alınana dek bekler (borudan bir satır), sonra programı çalıştırır. Böylece
 # erken çatallanan uygulamaların (tarayıcı içerik süreçleri) çocukları da kafesin içinde doğar.
-# {fd}: kapı borusunun okuma ucu (pass_fds numarayı korur)
-KAPI = 'read -r _ <&{fd} && exec {fd}<&- && exec "$@"'
+# {fd}: kapı borusunun okuma ucu (pass_fds numarayı korur). Kabuk KAPI_KABUK (bash): numara çoğu zaman >9 olur ve
+# POSIX sh (Debian/Ubuntu'da dash) `<&12` yönlendirmesini "Bad fd number" ile reddedip hemen çıkar (kapı yazımı BrokenPipe).
+KAPI_KABUK = "bash"
+KAPI ='read -r _ <&{fd} && exec {fd}<&- && exec "$@"'
 
 
 # ---------------------------------------------------------------- süreçler
@@ -1191,7 +1209,7 @@ def kafeste_baslat(d: dict, argv: list[str], env: dict, pass_fds=(), **popen) ->
         return subprocess.Popen(tam, env=env, pass_fds=tuple(pass_fds), start_new_session=True, **popen)
     r, w = os.pipe()
     try:
-        p = subprocess.Popen([arac("sh"), "-c", KAPI.format(fd=r), "deskhand-kapi", *tam], env=env,
+        p = subprocess.Popen([arac(KAPI_KABUK), "-c", KAPI.format(fd=r), "deskhand-kapi", *tam], env=env,
                              pass_fds=(r, *pass_fds), start_new_session=True, **popen)
     finally:
         os.close(r)
@@ -1385,8 +1403,9 @@ def _dbus_yapilandir(cdir: str) -> tuple[str, str]:
     """Özel veri yolu: kendi soketi, yalnız izinli servis dosyaları (standart servis dizinleri YOK)."""
     sd = os.path.join(cdir, "dbus-servisler")
     os.makedirs(sd, exist_ok=True)
-    for ad, exe in IZINLI_SERVISLER.items():
-        if os.path.exists(exe):
+    for ad in IZINLI_SERVISLER:
+        exe = servis_yolu(ad)
+        if exe:
             with open(os.path.join(sd, f"{ad}.service"), "w") as f:
                 f.write(f"[D-BUS Service]\nName={ad}\nExec={exe}\n")
     soket = os.path.join(cdir, "bus")
