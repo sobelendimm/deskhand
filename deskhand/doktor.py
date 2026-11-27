@@ -58,8 +58,8 @@ def bagimlilik_satirlari() -> list[dict]:
         if d["ok"]:
             sonuc.append(_satir(ad, "tamam", ayrinti, zorunlu=zorunlu))
             continue
-        oneri = (_("AUR paketini kur: {paket}") if aur else _("paketi kur: {paket}")).format(paket=paket) if paket \
-            else _("./install.sh eksikleri listeler")
+        oneri = (_("AUR paketini kur: {paket}") if aur else _("paketi kur: {paket}")).format(paket=paket) \
+            + _dagitim_eki(paket) if paket else _("./install.sh eksikleri listeler")
         sonuc.append(_satir(ad, "eksik" if zorunlu else "uyari",
                             (_("eksik") if zorunlu else _("eksik (isteğe bağlı)")) + f": {ayrinti}", oneri, zorunlu))
     return sonuc
@@ -304,7 +304,7 @@ def satir_yardimcilar():
     if not eksik:
         return _satir(_("C yardımcıları"), "tamam", _("derli (etkinlik, ekran görüntüsü, girdi/EIS)"))
     return _satir(_("C yardımcıları"), "uyari", _("derli değil: {liste}").format(liste="; ".join(eksik)),
-                  _("./install.sh derler (make -C deskhand/yardimci; kitaplıklar kurulunca yeniden çalıştır)"))
+                  _yardimci_onerisi(_("./install.sh derler (make -C deskhand/yardimci; kitaplıklar kurulunca yeniden çalıştır)")))
 
 
 def satir_erisim():
@@ -555,3 +555,81 @@ def k_doktor(a):
         print(metin(satirlar))
     if o["eksik"]:
         raise SystemExit(hata.ARAC_EKSIK)
+
+
+# ---------------------------------------------------------------- pip / pipx kurulumu (dosya sonunda: i18n kataloğundaki
+# satır numaraları kaymasın, tools/i18n_cikar.py)
+
+# pipx/pip yalnız Python modüllerini getirir; sistem araçları dağıtımdan gelir. Arch adı (sağlık notundaki parantez,
+# install.sh ile aynı) → Debian/Ubuntu, Fedora karşılığı. "-" = o dağıtımda paket yok ya da sürümü yetmez (öneride
+# anılmaz; uydurma ad yok). Doğrulama 28 Kas 2026: Debian 13 trixie (qa.debian.org madison), Fedora 43 (mdapi).
+# Tek dize: ham araç taraması (tests/test_mantik.py) tırnaklı araç adına izin vermez.
+_DAGITIM_TABLOSU = """
+kdotool-bin          -                      kdotool
+dotool               -                      dotool
+spectacle            kde-spectacle          spectacle
+tesseract            tesseract-ocr          tesseract
+tesseract-data-tur   tesseract-ocr-tur      tesseract-langpack-tur
+tesseract-data-eng   tesseract-ocr-eng      tesseract-langpack-eng
+xorg-server-xvfb     xvfb                   xorg-x11-server-Xvfb
+xdotool              xdotool                xdotool
+openbox              openbox                openbox
+bubblewrap           bubblewrap             bubblewrap
+kwin                 kwin-wayland           kwin
+libei                libei-dev              libei-devel
+python-pyqt6         python3-pyqt6          python3-pyqt6
+python-xlib          python3-xlib           python3-xlib
+python-numpy         python3-numpy          python3-numpy
+python-scipy         python3-scipy          python3-scipy
+python-pillow        python3-pil            python3-pillow
+python-jeepney       python3-jeepney        python3-jeepney
+python-secretstorage python3-secretstorage  python3-secretstorage
+python-cryptography  python3-cryptography   python3-cryptography
+python-mcp           -                      -
+"""
+DAGITIM_PAKETLERI = {s[0]: (s[1], s[2]) for s in (x.split() for x in _DAGITIM_TABLOSU.strip().splitlines())}
+
+
+def _dagitim_eki(paket: str) -> str:
+    """" · Debian/Ubuntu: x · Fedora: y" (bilinen karşılıklar; yoksa "")."""
+    deb, fed = DAGITIM_PAKETLERI.get(paket, ("-", "-"))
+    return "".join(f" · {d}: {p}" for d, p in (("Debian/Ubuntu", deb), ("Fedora", fed)) if p != "-")
+
+
+def _kaynak_kurulumu() -> bool:
+    """Git klonundan mı çalışıyor (paketin yanında install.sh var) yoksa pip/pipx kurulumundan mı."""
+    return os.path.isfile(os.path.join(os.path.dirname(yollar.PAKET_DIZIN), "install.sh"))
+
+
+def _surum_demeti(s: str) -> tuple[int, ...]:
+    return tuple(int(p) for p in re.findall(r"\d+", s))
+
+
+def libei_en_az() -> str:
+    """deskhand-eis'in istediği en düşük libei sürümü: tek kaynak yardimci/Makefile (LIBEI_EN_AZ); okunamazsa ""."""
+    try:
+        with open(os.path.join(yollar.PAKET_DIZIN, "yardimci", "Makefile"), encoding="utf-8") as f:
+            m = re.search(r"^LIBEI_EN_AZ\s*=\s*(\S+)", f.read(), re.M)
+    except OSError:
+        return ""
+    return m.group(1) if m else ""
+
+
+def libei_eski() -> tuple[str, str] | None:
+    """Kurulu libei (pkg-config) deskhand-eis için eskiyse (kurulu, gereken); değilse ya da bilinmiyorsa None."""
+    kurulu, gereken = _komut_ciktisi("pkg-config", "--modversion", "libei-1.0"), libei_en_az()
+    if kurulu and gereken and _surum_demeti(kurulu) < _surum_demeti(gereken):
+        return kurulu, gereken
+    return None
+
+
+def _yardimci_onerisi(kaynak_onerisi: str) -> str:
+    """C yardımcısı derli değilken öneri. pip/pipx C derlemez: kaynaklar paketle gelir (yardimci/*.c + Makefile) ve
+    yollar.*_bin() aynı dizinde arar → kaynak ağacı dışında `make -C <paket>/yardimci`. deskhand-eis eksik ve libei
+    eskiyse nedeni + paket adı eklenir (Makefile bu durumda hedefi atlar)."""
+    import shlex
+    oneri = kaynak_onerisi if _kaynak_kurulumu() else shlex.join(["make", "-C", os.path.join(yollar.PAKET_DIZIN, "yardimci")])
+    eski = None if _calistirilabilir(yollar.eis_bin()) else libei_eski()
+    if eski:
+        oneri += f" · libei {eski[0]} < {eski[1]} (ei_ping): libei{_dagitim_eki('libei')}"
+    return oneri
