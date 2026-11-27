@@ -6,6 +6,17 @@ Versions 0.6.0 to 0.9.1 were local builds and were never published; 0.10.0 is th
 release after 0.5.4. Every entry between them is listed here so a 0.5.4 user sees the whole change.
 Security fixes are marked **Security**.
 
+## Unreleased
+
+### Added
+- `deskhand install-desktop` (`masaustu-kur`): the application menu entry, icon and panel-at-login for pip/pipx
+  installs (install.sh installs do not need it). `--remove` deletes only the files it wrote; `--no-autostart` is
+  remembered (later runs keep it); `--autostart` turns the panel at login back on.
+
+### Fixed
+- The GPU OCR model download command (`deskhand doctor`) and the GPU OCR server no longer put the package folder
+  (site-packages in a pip/pipx install) on `sys.path`; only the deskhand package itself is loaded from its folder.
+
 ## 0.10.0 (2026-11-28)
 
 The first public release after 0.5.4. **If you run 0.5.4 or older, please update:** MCP `open_app(args)` could run

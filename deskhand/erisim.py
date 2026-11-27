@@ -1170,8 +1170,10 @@ def _yardimci_ana():
 def _yardimci_calistir(istek):
     from . import masalar
     istek = {**istek, "masa": masalar.secili()}
+    from . import ocr_gpu
     kok = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    kod = "import sys; sys.path.insert(0, sys.argv[1]); from deskhand import erisim; erisim._yardimci_ana()"
+    ekle = "sys.path.insert(0, sys.argv[1]); " if ocr_gpu.kok_eklenmeli(kok) else ""  # pip/pipx: already on -I's path
+    kod = f"import sys; {ekle}from deskhand import erisim; erisim._yardimci_ana()"
     try:
         r = subprocess.run([sys.executable, "-I", "-c", kod, kok], input=json.dumps(istek), capture_output=True,
                            text=True, timeout=60)

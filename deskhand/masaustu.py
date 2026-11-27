@@ -1011,11 +1011,11 @@ def oto_temizleyici_baslat(ad: str, bekle: float | None = None) -> None:
         except ValueError:
             bekle = 120.0
     ad = masalar.dogrula(ad, ayrilmis_serbest=True)
-    kok = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    kod = ("import sys, time; sys.path.insert(0, sys.argv[1]); time.sleep(float(sys.argv[3])); "
-           "from deskhand import masaustu; masaustu.oto_temizle_tek(sys.argv[2])")
+    from .ocr_gpu import paket_yukleme_kodu  # python_yolu() may be the system python3: no site-packages on sys.path
+    kod = (f"{paket_yukleme_kodu()}; import time; time.sleep(float(_s.argv[2])); "
+           "from deskhand import masaustu; masaustu.oto_temizle_tek(_s.argv[1])")
     env = {k: v for k, v in os.environ.items() if k != masalar.ORTAM}
-    subprocess.Popen([python_yolu(), "-I", "-c", kod, kok, ad, str(bekle)], stdin=subprocess.DEVNULL,
+    subprocess.Popen([python_yolu(), "-I", "-c", kod, ad, str(bekle)], stdin=subprocess.DEVNULL,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, env=env,
                      cwd="/")
 
