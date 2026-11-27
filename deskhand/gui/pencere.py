@@ -82,7 +82,31 @@ class AnaPencere(QMainWindow):
         self.arka.devral_degisti.connect(self.gorev.devral_durumu)
         kok.addWidget(self.sekmeler, 1)
         self.setCentralWidget(merkez)
+        self.cuzdan_karti.bitti.connect(self._cuzdan_karti_bitti)
         self.cuzdan_karti.yukle()
+
+    def _cuzdan_karti_bitti(self, sinyal: str) -> None:
+        """Kart kurulum ya da depo değişikliği yaptı (A3 B4): Ayarlar › Gizli bilgiler okunduysa arka uçtan yeniden okunur
+        (okunmadıysa ilk görünüşte zaten okur). Kullanıcının Uygula'ya basmadığı değişiklik ezilmez: kartın değiştirmediği
+        değer bekleyen haliyle geri konur (yazılmış 'girişte aç' parolası dahil)."""
+        if sinyal not in ("kuruldu", "kasa"):
+            return
+        g = getattr(self.ayarlar, "gizli", None)
+        if g is None or not getattr(g, "_okundu", False):
+            return
+        eski, bekleyen = g.kayitli(), g.anlik()
+        parola = g.e_oto.text()
+        try:
+            g.yukle()
+            yeni = g.kayitli()
+            deger = tuple(b if b != e else y for b, e, y in zip(bekleyen, eski, yeni, strict=False))
+            if deger != yeni:
+                g.goster(deger)
+                if parola:
+                    g.e_oto.setText(parola)
+                g.degisti.emit()
+        finally:
+            del parola
 
     def durum_guncelle(self, d: Durum):
         self._durum = d

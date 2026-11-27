@@ -829,13 +829,13 @@
   "gui/metinler.py:249"
  ],
  "Bilgisayarınız parolasız açılıyor, bu yüzden KDE Cüzdanı her girişte parolasını soruyor. Bu soru KDE'den gelir ve yalnız aşağıdaki ilk seçenekle kalkar.": [
-  "gui/cuzdan_karti.py:32"
+  "gui/cuzdan_karti.py:37"
  ],
  "Bilinmeyen istek: Claude'un ne yapmak istediği doğrulanamadı.": [
   "guvenlik.py:1519"
  ],
  "Bir daha gösterme": [
-  "gui/cuzdan_karti.py:39"
+  "gui/cuzdan_karti.py:44"
  ],
  "Bir daha sorma": [
   "gui/gorev.py:37"
@@ -917,7 +917,7 @@
   "guvenlik.py:2158"
  ],
  "Bu seçim kaydedilemedi; kart bir sonraki açılışta yeniden görünebilir.": [
-  "gui/cuzdan_karti.py:43"
+  "gui/cuzdan_karti.py:48"
  ],
  "Bu siteyi kullan": [
   "gui/sekmeler/gizli.py:136"
@@ -1071,7 +1071,7 @@
   "gui/sekmeler/gizli.py:97"
  ],
  "Cüzdanı Deskhand için kullanma": [
-  "gui/cuzdan_karti.py:37"
+  "gui/cuzdan_karti.py:42"
  ],
  "Cüzdanı aç": [
   "gui/sekmeler/gizli.py:72"
@@ -1250,7 +1250,7 @@
   "liste_koruma.py:87"
  ],
  "Deskhand parolalarını kendi kasasında tutar; KDE'nin açılış sorusu sürer.": [
-  "gui/cuzdan_karti.py:38"
+  "gui/cuzdan_karti.py:43"
  ],
  "Deskhand sizi bekliyor": [
   "mcp_sunucu.py:2956"
@@ -1313,7 +1313,7 @@
   "gui/metinler.py:361"
  ],
  "Disk şifreli değil: diski söken biri de kayıtlı anahtarı okuyabilir.": [
-  "gui/cuzdan_karti.py:40"
+  "gui/cuzdan_karti.py:45"
  ],
  "Diyaloğu aç": [
   "gui/metinler.py:101"
@@ -1529,7 +1529,7 @@
   "gui/metinler.py:196"
  ],
  "Girişte KDE Cüzdanı parola soruyor": [
-  "gui/cuzdan_karti.py:30"
+  "gui/cuzdan_karti.py:35"
  ],
  "Girişte açmak için cüzdan parolasını yazın.": [
   "gui/sekmeler/gizli.py:130"
@@ -1960,7 +1960,7 @@
   "gui/sekmeler/gizli.py:93"
  ],
  "Kasaya geçilemedi.": [
-  "gui/cuzdan_karti.py:42"
+  "gui/cuzdan_karti.py:47"
  ],
  "Kaydedildi ✓": [
   "gui/metinler.py:166"
@@ -1969,13 +1969,13 @@
   "gui/metinler.py:186"
  ],
  "Kaydedilemedi.": [
-  "gui/cuzdan_karti.py:41"
+  "gui/cuzdan_karti.py:46"
  ],
  "Kaydedilemedi. Ayrıntıdaki nedene bakıp yeniden deneyin.": [
   "gui/sekmeler/gizli.py:131"
  ],
  "Kaydedilen parola cüzdanı açmadı": [
-  "gui/cuzdan_karti.py:31"
+  "gui/cuzdan_karti.py:36"
  ],
  "Kaydedilmemiş değişiklikler": [
   "gui/metinler.py:170"
@@ -1987,7 +1987,7 @@
   "gui/metinler.py:184"
  ],
  "Kaydet, bir daha sorulmasın": [
-  "gui/cuzdan_karti.py:36"
+  "gui/cuzdan_karti.py:41"
  ],
  "Kayıtlı akış çalıştırılıyor": [
   "gui/metinler.py:309"
@@ -2327,6 +2327,9 @@
  "Parolalar ve ayar koruma anahtarı {yeni} konumuna taşınacak. {eski} artık kullanılmayacak.\n\nDevam edilsin mi?": [
   "gui/sekmeler/gizli.py:123"
  ],
+ "Parolaları kasaya taşımak için önce cüzdanı açın: Ayarlar › Gizli bilgiler.": [
+  "gui/cuzdan_karti.py:49"
+ ],
  "Parolaları nerede sakla": [
   "gui/sekmeler/gizli.py:46"
  ],
@@ -2448,7 +2451,7 @@
   "gui/metinler.py:339"
  ],
  "Son girişte kayıtlı parola cüzdanı açmadı; cüzdan parolası değişmiş olabilir. Güncel parolayı yazıp yeniden kaydedin.": [
-  "gui/cuzdan_karti.py:34"
+  "gui/cuzdan_karti.py:39"
  ],
  "Son kısım: {metin}": [
   "gui/onay_diyalog.py:50"

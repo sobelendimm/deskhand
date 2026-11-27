@@ -6,7 +6,8 @@ secrets in its own kasa. This module only DECIDES whether that card is shown; th
 
 Rules (review focus 1, 2, 5):
   - pure detection: it reads files only (the login manager's configuration, /proc/self/mountinfo, /sys) and starts no
-    process; kart_durumu() also asks cuzdan_ac (busctl --auto-start=no, never starting a service) and anahtar_deposu.
+    process; kart_durumu() also asks cuzdan_ac (busctl --auto-start=no, never starting a service) and anahtar_deposu
+    (the selected store's type and TPM presence only: never a secretstorage / Secret Service call).
   - closed-fail: anything unknown (unreadable configuration, no session bus, a back-end error) hides the card.
   - the login manager's files are read the way it does (KConfig cascade, the last file read wins, an empty `User=`
     clears): plasmalogin usr/lib/plasmalogin/plasmalogin.conf.d/*.conf → etc/plasmalogin.conf.d/*.conf →
@@ -19,7 +20,6 @@ kart_kapat() · kart_kapali().  `kok` is the file-system root (tests give a fake
 """
 from __future__ import annotations
 
-import configparser
 import os
 import pwd
 import re
@@ -76,24 +76,29 @@ def _oku(yol: str) -> str | None:
         return None
 
 
-class _KConfig(configparser.ConfigParser):
-    def optionxform(self, optionstr: str) -> str:
-        return optionstr  # KConfig keys are case-sensitive
-
-
 def _user_degeri(metin: str) -> tuple[bool, str | None]:
-    """[Autologin] User of one file → (the key is present, its value stripped; "" = present and empty). A file that
-    configparser cannot parse counts as not read (False, None)."""
-    c = _KConfig(strict=False, interpolation=None, delimiters=("=",), comment_prefixes=("#",),
-                 default_section="\x00deskhand-varsayilan")
-    try:
-        # KConfig allows keys before the first group ([DEFAULT] is an ordinary group there, hence default_section)
-        c.read_string("[\x00deskhand-ust]\n" + metin.removeprefix("﻿"))
-    except configparser.Error:
-        return False, None
-    if not c.has_section(_BOLUM) or not c.has_option(_BOLUM, "User"):
-        return False, None
-    return True, (c.get(_BOLUM, "User", raw=True) or "").strip()
+    """[Autologin] User of one file → (the key is present, its value stripped; "" = present and empty), read line by
+    line the way KConfig is lenient: a broken line (a group header without "]", a line without "=") is skipped and the
+    rest of the file is still read (A3 B3: one bad line must not hide an empty `User=` that clears a lower file).
+    Keys are case-sensitive; "#" starts a comment line; keys before the first group belong to no group; within a file
+    the last `User=` of [Autologin] wins."""
+    grup: str | None = None
+    var, deger = False, None
+    for satir in metin.removeprefix("﻿").splitlines():
+        s = satir.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("["):
+            if "]" not in s:
+                continue  # invalid group header: skipped, the current group stays (KConfig)
+            grup = s[1:s.rindex("]")]  # "[a][b]" (a nested group) is not [Autologin]
+            continue
+        if "=" not in s:
+            continue  # not a key line: skipped
+        anahtar, _ayrac, sag = s.partition("=")
+        if grup == _BOLUM and anahtar.strip() == "User":
+            var, deger = True, sag.strip()
+    return var, deger
 
 
 def _yonetici_kullanicisi(kok: str, desenler: tuple[str, ...]) -> str | None:
@@ -257,14 +262,27 @@ def kart_kapali() -> bool:
 
 def _depo_bilgisi() -> tuple[bool, str | None]:
     """(TPM2 present, selected store "kasa" | "cuzdan" | None). None when the selection is not verified or the store is
-    off (DESKHAND_ANAHTARLIK=kapali in tests: no real TPM call)."""
+    off (DESKHAND_ANAHTARLIK=kapali in tests: no real TPM call).
+
+    A3 B1: only the SELECTION (anahtar_deposu.secili_tur: the kasa seal + the settings file, systemd-creds, no D-Bus)
+    and TPM presence (`systemd-creds has-tpm2`) are read. Never the store object's durum(): the wallet store opens a
+    secretstorage connection, which would start the Secret Service and make KDE ask for the wallet password while the
+    panel opens."""
     try:
         from . import anahtar_deposu as AD
-        d = AD.secili_depo().durum()
+        if AD._kapali():
+            return False, None
     except Exception:  # noqa: BLE001 - display only; closed-fail
         return False, None
-    tur = d.get("tur")
-    return bool(d.get("tpm")), tur if tur in ("kasa", "cuzdan") else None
+    try:
+        tur = AD.secili_tur()
+    except Exception:  # noqa: BLE001 - SecimHatasi (selection not verified) or a kasa error: unknown
+        tur = None
+    try:
+        tpm = bool(AD.tpm_var())
+    except Exception:  # noqa: BLE001
+        tpm = False
+    return tpm, tur if tur in ("kasa", "cuzdan") else None
 
 
 def kart_durumu(kok: str = "/") -> dict:
@@ -272,7 +290,7 @@ def kart_durumu(kok: str = "/") -> dict:
 
     → {"goster": bool, "varyant": "ilk" | "yeniden" | None, "neden": str, "oto_giris": bool, "cuzdan_var": bool | None,
        "kurulu": bool | None, "son_sonuc": str | None, "disk_sifreli": bool | None, "tpm": bool,
-       "depo": "kasa" | "cuzdan" | None}
+       "depo": "kasa" | "cuzdan" | None, "cuzdan_kilitli": bool | None}
 
     Decision (first match wins; `neden`):
       no automatic login for this user → hide "giris_parolali" · no Secret Service answer (busctl / session bus
@@ -281,10 +299,12 @@ def kart_durumu(kok: str = "/") -> dict:
       result is not "anahtar_acmadi" → hide "kurulu" · installed and "anahtar_acmadi" → show "yeniden"
       ("anahtar_acmadi") · otherwise show "ilk" ("kurulu_degil").
     Fields after the deciding one are not evaluated (None); disk_sifreli, tpm and depo are read only when the card is
-    shown (tpm False and depo None otherwise)."""
+    shown (tpm False and depo None otherwise). cuzdan_kilitli comes from the same cuzdan_durumu() call as cuzdan_var
+    (a busctl property read, --auto-start=no; None: unknown); the card's "do not use the wallet" option moves nothing
+    unless it is False (A3 B2)."""
     from . import cuzdan_ac as CA
     d = {"goster": False, "varyant": None, "neden": "", "oto_giris": False, "cuzdan_var": None, "kurulu": None,
-         "son_sonuc": None, "disk_sifreli": None, "tpm": False, "depo": None}
+         "son_sonuc": None, "disk_sifreli": None, "tpm": False, "depo": None, "cuzdan_kilitli": None}
 
     def gizle(neden: str) -> dict:
         d["neden"] = neden
@@ -303,8 +323,10 @@ def kart_durumu(kok: str = "/") -> dict:
     if servis is None:
         return gizle("veri_yolu_yok")
     try:
-        var = CA.cuzdan_durumu().get("var")
+        bilgi = CA.cuzdan_durumu()
+        var, kilit = bilgi.get("var"), bilgi.get("kilitli")
         d["cuzdan_var"] = var if isinstance(var, bool) else None
+        d["cuzdan_kilitli"] = kilit if isinstance(kilit, bool) else None
     except Exception:  # noqa: BLE001
         d["cuzdan_var"] = None
     if d["cuzdan_var"] is not True:

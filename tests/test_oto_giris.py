@@ -154,6 +154,24 @@ def test_okunamaz_dosya_atlanir():
             sonuc == (BEN, "plasmalogin") or okunabilir, sonuc)
 
 
+def test_bozuk_satir_atlanir_dosya_okunur():
+    """A3 B3: KConfig gibi hoşgörülü — bozuk satır atlanır, dosyanın geri kalanı okunur."""
+    kok = yeni_kok()
+    yaz(kok, "etc/plasmalogin.conf.d/oto.conf", f"[General]\nbu satır bozuk\n[Eksik grup\n[Autologin]\n"
+        f"çöp satır yine\nUser={BEN}\nSession=plasma\n")
+    kontrol("bozuk satırlar + User= içeren dosya okunur", OG.otomatik_giris_kullanicisi(kok) == (BEN, "plasmalogin"),
+            OG.otomatik_giris_kullanicisi(kok))
+    yaz(kok, "etc/plasmalogin.conf", "[Autologin]\nbozuk satır\n[Kapanmayan\nUser=\n")
+    kontrol("ana dosyadaki boş User= bozuk satırlara rağmen conf.d'yi ezer",
+            OG.otomatik_giris_kullanicisi(kok) == (None, None), OG.otomatik_giris_kullanicisi(kok))
+    yaz(kok, "etc/plasmalogin.conf", f"[Autologin]\n[Autologin][Alt]\nUser={BASKA}\n")
+    kontrol("iç içe grup [Autologin][Alt] User'ı [Autologin] sayılmaz",
+            OG.otomatik_giris_kullanicisi(kok) == (BEN, "plasmalogin"), OG.otomatik_giris_kullanicisi(kok))
+    yaz(kok, "etc/plasmalogin.conf", f"[Autologin]\nUser={BASKA}\n  User = {BEN}  \n")
+    kontrol("aynı dosyada son User= kazanır, boşluklar kırpılır",
+            OG.otomatik_giris_kullanicisi(kok) == (BEN, "plasmalogin"), OG.otomatik_giris_kullanicisi(kok))
+
+
 # ---------------------------------------------------------------- disk şifreleme
 
 def _sys_blok(kok, ad, majmin, uuid=None, alt=()):
@@ -224,9 +242,10 @@ def _mountinfo_kok(satir):
 class sahte_cuzdan:
     """cuzdan_ac'ın kart_durumu'nun çağırdığı işlevlerini süreç içinde değiştirir (busctl / kasa / ksecretd yok)."""
 
-    def __init__(self, var=True, kurulu=False, son=None, servis=True, durum_hatasi=False, bilgi_hatasi=False):
+    def __init__(self, var=True, kurulu=False, son=None, servis=True, durum_hatasi=False, bilgi_hatasi=False,
+                 kilitli=None):
         self.d = dict(var=var, kurulu=kurulu, son=son, servis=servis, durum_hatasi=durum_hatasi,
-                      bilgi_hatasi=bilgi_hatasi)
+                      bilgi_hatasi=bilgi_hatasi, kilitli=kilitli)
         self.eski = {}
 
     def __enter__(self):
@@ -242,7 +261,7 @@ class sahte_cuzdan:
         def cuzdan_durumu():
             if d["bilgi_hatasi"]:
                 raise RuntimeError("arka uç")
-            return {"var": d["var"], "kilitli": None, "giris_parolasi_olasi": True}
+            return {"var": d["var"], "kilitli": d["kilitli"], "giris_parolasi_olasi": True}
 
         def son_sonuc():
             return None if d["son"] is None else {"zaman": "2026-11-28T08:00:00+03:00", "sonuc": d["son"]}
@@ -293,7 +312,7 @@ def test_kart_karar_tablosu():
          "kurulu_degil"),
     ]
     anahtarlar = {"goster", "varyant", "neden", "oto_giris", "cuzdan_var", "kurulu", "son_sonuc", "disk_sifreli",
-                  "tpm", "depo"}
+                  "tpm", "depo", "cuzdan_kilitli"}
     for ad, kok, sc, kapali, goster, varyant, neden in dallar:
         if kapali:
             OG.kart_kapat()
@@ -310,6 +329,82 @@ def test_kart_karar_tablosu():
             d)
     # DESKHAND_ANAHTARLIK=kapali (_yalitim): depo okunamaz → None, tpm False (gerçek TPM'e dokunulmaz)
     kontrol("anahtarlık kapalı → depo None, tpm False", d["depo"] is None and d["tpm"] is False, d)
+    for kilit in (True, False, None):
+        with sahte_cuzdan(kilitli=kilit):
+            d = OG.kart_durumu(kok=oto_kok)
+        kontrol(f"cuzdan_kilitli cuzdan_durumu()'ndan gelir ({kilit})", d["goster"] and d["cuzdan_kilitli"] is kilit, d)
+    with sahte_cuzdan(kilitli="evet"):
+        d = OG.kart_durumu(kok=oto_kok)
+    kontrol("cuzdan_kilitli bool değilse None", d["cuzdan_kilitli"] is None, d)
+
+
+class _Yasak:
+    """Dokunulursa kaydeden + patlayan nesne (secretstorage / jeepney / cüzdan deposu yerine)."""
+
+    def __init__(self, ad, kayit):
+        object.__setattr__(self, "_ad", ad)
+        object.__setattr__(self, "_kayit", kayit)
+
+    def __getattr__(self, ad):
+        if ad.startswith("__"):  # sys.modules taraması (__spec__, __file__ …) çağrı değildir
+            raise AttributeError(ad)
+        self._kayit.append(f"{self._ad}.{ad}")
+        raise AssertionError(f"yasak çağrı: {self._ad}.{ad}")
+
+    def __call__(self, *a, **k):
+        self._kayit.append(f"{self._ad}()")
+        raise AssertionError(f"yasak çağrı: {self._ad}()")
+
+
+def test_depo_cuzdan_secret_service_baslatmaz():
+    """A3 B1: depo "cuzdan" iken kart_durumu Secret Service'i başlatabilecek hiçbir çağrı yapmaz (secretstorage,
+    jeepney, CuzdanDepo, secili_depo().durum()); yalnız seçim (secili_tur) ve TPM varlığı okunur."""
+    from deskhand import anahtar_deposu as AD
+    _isaret_sil()
+    kayit: list = []
+    eski_mod = {m: sys.modules.get(m) for m in ("secretstorage", "jeepney")}
+    eski_ad = {a: getattr(AD, a) for a in ("secili_tur", "tpm_var", "secili_depo", "ornek")}
+    eski_durum = AD.CuzdanDepo.durum
+    eski_env = os.environ.pop("DESKHAND_ANAHTARLIK", None)
+    try:
+        for m in eski_mod:
+            sys.modules[m] = _Yasak(m, kayit)
+        AD.secili_tur = lambda: "cuzdan"
+        AD.tpm_var = lambda: True
+        AD.secili_depo = _Yasak("secili_depo", kayit)
+        AD.ornek = _Yasak("ornek", kayit)
+        AD.CuzdanDepo.durum = _Yasak("CuzdanDepo.durum", kayit)
+        with sahte_cuzdan(kilitli=True):
+            d = OG.kart_durumu(kok=_oto_kok())
+    finally:
+        for m, v in eski_mod.items():
+            if v is None:
+                sys.modules.pop(m, None)
+            else:
+                sys.modules[m] = v
+        for a, v in eski_ad.items():
+            setattr(AD, a, v)
+        AD.CuzdanDepo.durum = eski_durum
+        if eski_env is not None:
+            os.environ["DESKHAND_ANAHTARLIK"] = eski_env
+    kontrol("depo cuzdan: kart gösterilir, depo/tpm/kilitli dolu", d["goster"] is True and d["depo"] == "cuzdan" and
+            d["tpm"] is True and d["cuzdan_kilitli"] is True, d)
+    kontrol("depo cuzdan: secretstorage / jeepney / CuzdanDepo / secili_depo çağrısı YOK", not kayit, kayit)
+    # seçim doğrulanamazsa (SecimHatasi) depo None, kart yine kapalı-başarısız değil (yalnız gösterge)
+    eski_ad = {a: getattr(AD, a) for a in ("secili_tur", "tpm_var")}
+    eski_env = os.environ.pop("DESKHAND_ANAHTARLIK", None)
+    try:
+        def bozuk():
+            raise AD.SecimHatasi("bozuk")
+        AD.secili_tur, AD.tpm_var = bozuk, lambda: False
+        with sahte_cuzdan():
+            d = OG.kart_durumu(kok=_oto_kok())
+    finally:
+        for a, v in eski_ad.items():
+            setattr(AD, a, v)
+        if eski_env is not None:
+            os.environ["DESKHAND_ANAHTARLIK"] = eski_env
+    kontrol("seçim doğrulanamadı → depo None", d["goster"] is True and d["depo"] is None and d["tpm"] is False, d)
 
 
 def test_kapat_isareti_kalici():
@@ -350,8 +445,9 @@ def test_kapat_isareti_kalici():
 
 
 for _t in (test_ana_dosya_confd_ezer, test_bos_user_siler, test_baska_kullanici_kart_yok,
-           test_sddm_etkin_plasmalogin_yok_sayilir, test_okunamaz_dosya_atlanir, test_disk_crypt_zinciri,
-           test_kart_karar_tablosu, test_kapat_isareti_kalici):
+           test_sddm_etkin_plasmalogin_yok_sayilir, test_okunamaz_dosya_atlanir, test_bozuk_satir_atlanir_dosya_okunur,
+           test_disk_crypt_zinciri, test_kart_karar_tablosu, test_depo_cuzdan_secret_service_baslatmaz,
+           test_kapat_isareti_kalici):
     print(f"--- {_t.__name__}", flush=True)
     try:
         _t()

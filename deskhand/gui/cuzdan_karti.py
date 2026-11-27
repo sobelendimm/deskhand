@@ -4,12 +4,17 @@ Ne zaman görünür: deskhand.oto_giris.kart_durumu() karar verir (otomatik giri
 değil ya da kayıtlı parola son girişte cüzdanı açmadı; bilinmeyen her durumda GİZLİ). Durum ayrı iş parçacığında okunur
 (birkaç busctl çağrısı sürebilir): panelin açılışı beklemez; sonuç Qt sinyaliyle gelir.
 
-Seçenekler (kartın düğmesine tıklamak onaydır; ikinci Evet/Hayır sorusu yok, uyarı düğmenin üstünde yazılı):
+Seçenekler (Kaydet'e tıklamak onaydır; ikinci Evet/Hayır sorusu yok, uyarı düğmenin üstünde yazılı; depo taşıması
+Ayarlar'daki soruyu sorar):
   1. cüzdan parolası + "Kaydet, bir daha sorulmasın" → gizli.ArkaUc.oto_kur(parola) iş parçacığında; iş sürerken düğme
      gri (çift tık tek çağrı); parola alanı iş başlarken temizlenir; hata iletisi yalnız sade cümle (T.hata_ozeti),
      parola ASLA metinde/ipucunda/günlükte yok. Başarı → "Kuruldu · sonraki girişte denenecek", kart birkaç saniye sonra
      gizlenir.
-  2. "Cüzdanı Deskhand için kullanma" → seçili depo KDE Cüzdanı ise depo_degistir("kasa"), sonra oto_giris.kart_kapat().
+  2. "Cüzdanı Deskhand için kullanma" (A3 B2): seçili depo kasa / bilinmiyor → yalnız oto_giris.kart_kapat(). Seçili
+     depo KDE Cüzdanı ve cüzdan AÇIK → Ayarlar'daki depo sorusunun aynısı (S_DEPO, Evet/Hayır; Hayır → hiçbir şey
+     değişmez), Evet → depo_degistir("kasa") (taşıma) + kart_kapat(). Cüzdan kilitli ya da durumu bilinmiyor → taşıma
+     DENENMEZ: kart bu çalışmada kapanır (işaret yazılmaz) ve tek satır "önce cüzdanı açın: Ayarlar › Gizli bilgiler"
+     der; Ayarlar'daki onayın yerine geçmez, onu atlatmaz.
   "Bir daha gösterme" → kart_kapat(); "×" → yalnız bu panel çalışmasında gizler (işaret yazmaz).
 Kart panel penceresinde (YERLESIK_YASAK: ajan tıklayamaz); düğmeleri arka plan / MCP / CLI'dan çağrılmaz
 (tests/test_cuzdan_yardim.py kaynak taraması)."""
@@ -18,14 +23,14 @@ from __future__ import annotations
 import threading
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QToolButton, QVBoxLayout
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QToolButton, QVBoxLayout
 
 from .. import oto_giris
 from ..i18n import N_, _
 from . import metinler as T
 from .dil import Metinler
-from .sekmeler.gizli import (_BOSLUK, _HEDEF, _KENAR, B_KAPAT, D_OTO_SONRAKI, G_OTO_PAROLA, G_OTO_UYARI,
-                             H_PAROLA_GEREKLI, ArkaUc, Rozet, _dugme, _kalin, _not)
+from .sekmeler.gizli import (_BOSLUK, _HEDEF, _KENAR, B_KAPAT, D_OTO_SONRAKI, G_CUZDAN, G_KASA, G_OTO_PAROLA,
+                             G_OTO_UYARI, H_PAROLA_GEREKLI, S_DEPO, S_DEPO_BASLIK, ArkaUc, Rozet, _dugme, _kalin, _not)
 
 K_BASLIK_ILK = N_("Girişte KDE Cüzdanı parola soruyor")
 K_BASLIK_YENIDEN = N_("Kaydedilen parola cüzdanı açmadı")
@@ -41,7 +46,20 @@ K_DISK_UYARI = N_("Disk şifreli değil: diski söken biri de kayıtlı anahtar�
 K_KAYDEDILEMEDI = N_("Kaydedilemedi.")
 K_KASA_HATA = N_("Kasaya geçilemedi.")
 K_ISARET_HATA = N_("Bu seçim kaydedilemedi; kart bir sonraki açılışta yeniden görünebilir.")
+K_KASA_KILITLI = N_("Parolaları kasaya taşımak için önce cüzdanı açın: Ayarlar › Gizli bilgiler.")
 VARYANTLAR = ("ilk", "yeniden")
+
+
+def _izsiz(e: BaseException) -> BaseException:
+    """İstisnanın ve zincirinin (__cause__ / __context__) yığın izlerini bırak: izdeki çerçeveler parolayı yerel
+    değişken olarak tutabilir (A3 B6). Metin hiçbir yerde gösterilmez (yalnız T.hata_ozeti)."""
+    gorulen: set[int] = set()
+    x: BaseException | None = e
+    while x is not None and id(x) not in gorulen:
+        gorulen.add(id(x))
+        x.__traceback__ = None
+        x = x.__cause__ or x.__context__
+    return e
 
 
 class CuzdanGirisKarti(QFrame):
@@ -203,22 +221,39 @@ class CuzdanGirisKarti(QFrame):
     def kaydet(self) -> None:
         if self._is is not None:
             return
+        # A3 B6: alan okunur okunmaz temizlenir; parola iş parçacığına yalnız bu yerel değişkenle (argüman) gider,
+        # kapanışta (lambda) tutulmaz
         parola = self.e_parola.text()
         self.e_parola.clear()
         if not parola:
             self._ileti(_(H_PAROLA_GEREKLI))
             return
-        au = self.au
-        self._is_baslat("kur", lambda: au.oto_kur(parola))
+        self._is_baslat("kur", self.au.oto_kur, parola)
+        del parola
 
     def kasa(self) -> None:
         if self._is is not None:
             return
-        if (self._durum or {}).get("depo") == "cuzdan":
-            au = self.au
-            self._is_baslat("kasa", lambda: au.depo_degistir("kasa"))
-        else:
+        d = self._durum or {}
+        if d.get("depo") != "cuzdan":
             self._isaretle("kasa")
+            return
+        if d.get("cuzdan_kilitli") is not False:
+            self._kilitli_kapat()   # kilitli / bilinmiyor: taşıma denenmez
+            return
+        if not self.onay_sor(_(S_DEPO_BASLIK), _(S_DEPO).format(yeni=_(G_KASA), eski=_(G_CUZDAN))):
+            return  # Hayır: hiçbir şey değişmez
+        self._is_baslat("kasa", self.au.depo_degistir, "kasa")
+
+    def onay_sor(self, baslik: str, metin: str) -> bool:
+        """Evet/Hayır (varsayılan Hayır) — Ayarlar › Gizli bilgiler'deki soruyla aynı. Testler değiştirir."""
+        k = QMessageBox(QMessageBox.Icon.Warning, baslik, metin, QMessageBox.StandardButton.NoButton, self)
+        evet = k.addButton(_(T.EVET), QMessageBox.ButtonRole.YesRole)
+        hayir = k.addButton(_(T.HAYIR), QMessageBox.ButtonRole.NoRole)
+        k.setDefaultButton(hayir)
+        k.setEscapeButton(hayir)
+        k.exec()
+        return k.clickedButton() is evet
 
     def bir_daha_gosterme(self) -> None:
         if self._is is None:
@@ -229,23 +264,38 @@ class CuzdanGirisKarti(QFrame):
         self._kapat("gizlendi")
 
     # ------------------------------------------------------------ iç
-    def _is_baslat(self, ad: str, fn) -> None:
+    def _is_baslat(self, ad: str, fn, *arg) -> None:
+        """fn(*arg) ayrı iş parçacığında. `arg` (parola olabilir) yalnız Thread argümanıyla gider: Thread.run bittiğinde
+        kendi referansını bırakır, _is_calis da kendi yerelini siler."""
         self._is = ad
         self._ileti("")
         for w in (self.e_parola, self.b_kaydet, self.b_kasa, self.b_gosterme):
             w.setEnabled(False)
+        threading.Thread(target=self._is_calis, args=(ad, fn, arg), name=f"deskhand-cuzdan-karti-{ad}",
+                         daemon=True).start()
 
-        def is_():
-            try:
-                fn()
-                e = None
-            except BaseException as x:  # noqa: BLE001 - nedeni sade cümleyle gösterilir
-                e = x
-            try:
-                self._is_bitti.emit(ad, e)
-            except RuntimeError:
-                pass
-        threading.Thread(target=is_, name=f"deskhand-cuzdan-karti-{ad}", daemon=True).start()
+    def _is_calis(self, ad: str, fn, arg: tuple) -> None:
+        e = None
+        try:
+            fn(*arg)
+        except BaseException as x:  # noqa: BLE001 - nedeni sade cümleyle gösterilir
+            e = _izsiz(x)
+        finally:
+            del arg  # A3 B6: istisna yolunda da parola referansı kalmaz
+        try:
+            self._is_bitti.emit(ad, e)
+        except RuntimeError:
+            pass
+
+    def _kilitli_kapat(self) -> None:
+        """Depo KDE Cüzdanı ama cüzdan kilitli / durumu bilinmiyor: taşıma denenmez (Ayarlar'daki onayı atlatmaz). Kart
+        bu çalışmada kapanır (işaret YAZILMAZ: taşıma olmadı), kısa süre tek satır yol gösterir."""
+        self._kapatildi = True
+        for w in self._icerik:
+            w.setVisible(False)
+        self._ileti(_(K_KASA_KILITLI))
+        self._zaman_sinyal = "gizlendi"
+        self._zaman.start(self.gizle_ms)
 
     def _is_sonu(self, ad: str, e) -> None:
         self._is = None

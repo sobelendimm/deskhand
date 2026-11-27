@@ -2219,5 +2219,6 @@
  "Disk şifreli değil: diski söken biri de kayıtlı anahtarı okuyabilir.": "The disk isn't encrypted: someone who removes it could read the saved key too.",
  "Kaydedilemedi.": "Couldn't save.",
  "Kasaya geçilemedi.": "Couldn't switch to the vault.",
- "Bu seçim kaydedilemedi; kart bir sonraki açılışta yeniden görünebilir.": "This choice couldn't be saved; the card may show up again next time."
+ "Bu seçim kaydedilemedi; kart bir sonraki açılışta yeniden görünebilir.": "This choice couldn't be saved; the card may show up again next time.",
+ "Parolaları kasaya taşımak için önce cüzdanı açın: Ayarlar › Gizli bilgiler.": "To move the passwords to the vault, unlock the wallet first: Settings › Secrets."
 }

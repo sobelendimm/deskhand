@@ -78,11 +78,18 @@ class SahteArkaUc:
         self.degistir.append(tur)
 
 
-def durum(varyant="ilk", disk=True, tpm=False, depo="kasa"):
+def durum(varyant="ilk", disk=True, tpm=False, depo="kasa", kilitli=False):
     return {"goster": True, "varyant": varyant, "neden": "kurulu_degil" if varyant == "ilk" else "anahtar_acmadi",
             "oto_giris": True, "cuzdan_var": True, "kurulu": varyant == "yeniden",
             "son_sonuc": "anahtar_acmadi" if varyant == "yeniden" else None, "disk_sifreli": disk, "tpm": tpm,
-            "depo": depo}
+            "depo": depo, "cuzdan_kilitli": kilitli}
+
+
+def soru_cevabi(k, cevap):
+    """k.onay_sor → kaydeder, `cevap` döner (gerçek QMessageBox açılmaz)."""
+    sorular = []
+    k.onay_sor = lambda baslik, metin: (sorular.append((baslik, metin)), cevap)[1]
+    return sorular
 
 
 def isaret_sil():
@@ -208,16 +215,31 @@ def test_hata_metninde_parola_yok_alan_temiz():
 
 def test_kasa_secenegi_depo_degistirir_ve_kapatir():
     au = SahteArkaUc()
-    k, sinyal = kart(durum("ilk", depo="cuzdan"), au=au)
+    k, sinyal = kart(durum("ilk", depo="cuzdan", kilitli=False), au=au)
+    sorular = soru_cevabi(k, True)
     k.b_kasa.click()
-    kontrol("depo cüzdan → depo_degistir('kasa') bir kez", bekle(lambda: sinyal == ["kasa"]) and
+    kontrol("depo cüzdan + açık → Ayarlar'daki depo sorusu (S_DEPO) bir kez",
+            len(sorular) == 1 and sorular[0][0] == "Parola deposu değişsin mi?" and
+            sorular[0][1].startswith("Parolalar ve ayar koruma anahtarı Deskhand kasası konumuna taşınacak. "
+                                     "KDE Cüzdanı artık kullanılmayacak."), sorular)
+    kontrol("Evet → depo_degistir('kasa') bir kez", bekle(lambda: sinyal == ["kasa"]) and
             au.degistir == ["kasa"], f"{au.degistir} {sinyal}")
     kontrol("kasa → işaret yazıldı, kart gizli", OG.kart_kapali() is True and not gorunur(k))
+    # Hayır → hiçbir şey değişmez
+    au3 = SahteArkaUc()
+    k3, s3 = kart(durum("ilk", depo="cuzdan", kilitli=False), au=au3)
+    sorular3 = soru_cevabi(k3, False)
+    k3.b_kasa.click()
+    app.processEvents()
+    kontrol("Hayır → depo_degistir yok, işaret yok, kart görünür, sinyal yok",
+            len(sorular3) == 1 and au3.degistir == [] and OG.kart_kapali() is False and gorunur(k3) and
+            not s3 and k3._is is None and k3.b_kasa.isEnabled(), f"{au3.degistir} {s3}")
     au2 = SahteArkaUc(hata=None)
     def tasinamadi(tur):
         raise RuntimeError("taşınamadı")
     au2.depo_degistir = tasinamadi
-    k2, s2 = kart(durum("ilk", depo="cuzdan"), au=au2)
+    k2, s2 = kart(durum("ilk", depo="cuzdan", kilitli=False), au=au2)
+    soru_cevabi(k2, True)
     k2.b_kasa.click()
     kontrol("depo_degistir hatası → kart görünür, ileti, işaret YOK", bekle(lambda: k2.b_kasa.isEnabled() and
             k2.l_durum.text() != "") and gorunur(k2) and OG.kart_kapali() is False and not s2, k2.l_durum.text())
@@ -230,6 +252,157 @@ def test_kasa_zaten_secili_yalniz_kapatir():
         k.b_kasa.click()
         kontrol(f"depo {depo} → depo_degistir yok, yalnız işaret", bekle(lambda s=sinyal: s == ["kasa"]) and
                 au.degistir == [] and OG.kart_kapali() is True and not gorunur(k), f"{au.degistir} {sinyal}")
+
+
+def test_kasa_cuzdan_kilitli_tasima_denenmez():
+    """A3 B2: depo cüzdan ve cüzdan kilitli / durumu bilinmiyor → soru yok, taşıma yok, işaret yok; kart kapanır ve tek
+    satır yol gösterir."""
+    for kilit in (True, None):
+        au = SahteArkaUc()
+        k, sinyal = kart(durum("ilk", depo="cuzdan", kilitli=kilit), au=au, gizle_ms=300)
+        sorular = soru_cevabi(k, True)
+        k.b_kasa.click()
+        app.processEvents()
+        kontrol(f"kilitli={kilit}: tek satır 'önce cüzdanı açın', seçenekler gizli",
+                k.l_durum.text() == "Parolaları kasaya taşımak için önce cüzdanı açın: Ayarlar › Gizli bilgiler." and
+                gorunur(k.l_durum) and not gorunur(k.b_kaydet) and not gorunur(k.b_kasa), k.l_durum.text())
+        kontrol(f"kilitli={kilit}: soru yok, depo_degistir yok, iş yok", sorular == [] and au.degistir == [] and
+                k._is is None, f"{sorular} {au.degistir}")
+        kontrol(f"kilitli={kilit}: kart kısa süre sonra gizlenir, işaret YAZILMAZ, bitti('gizlendi')",
+                bekle(lambda k=k: not gorunur(k)) and sinyal == ["gizlendi"] and OG.kart_kapali() is False, sinyal)
+        k.goster_durum(durum("ilk", depo="cuzdan", kilitli=False))
+        kontrol(f"kilitli={kilit}: bu çalışmada yeniden açılmaz", not gorunur(k))
+    # en
+    from deskhand import i18n
+    os.environ["DESKHAND_DIL"] = "en"
+    i18n.yeniden_yukle()
+    try:
+        k, _s = kart(durum("ilk", depo="cuzdan", kilitli=True), gizle_ms=300)
+        k.b_kasa.click()
+        app.processEvents()
+        kontrol("en: kilitli iletisi çevrildi", k.l_durum.text() == "To move the passwords to the vault, unlock the "
+                "wallet first: Settings › Secrets.", k.l_durum.text())
+    finally:
+        os.environ["DESKHAND_DIL"] = "tr"
+        i18n.yeniden_yukle()
+
+
+def test_is_hatasi_iz_tutmaz():
+    """A3 B6: istisna yolunda parola referansı kalmaz — GUI'ye gelen istisnanın (ve zincirinin) yığın izi yok."""
+    def ic():
+        raise ValueError("iç")
+
+    class Patlayan(SahteArkaUc):
+        def oto_kur(self, parola):
+            yerel = parola  # noqa: F841 - çerçevede parola tutan yerel
+            try:
+                ic()
+            except ValueError as x:
+                raise CuzdanHatasi("dış") from x
+    k, _s = kart(durum("ilk"), au=Patlayan())
+    alinan = []
+    k._is_bitti.connect(lambda ad, e: alinan.append(e))
+    k.e_parola.setText(PAROLA)
+    k.b_kaydet.click()
+    kontrol("hata geldi", bekle(lambda: bool(alinan) and k.b_kaydet.isEnabled()), alinan)
+    e = alinan[0] if alinan else None
+    kontrol("istisnada ve __cause__'da yığın izi yok", e is not None and e.__traceback__ is None and
+            e.__cause__ is not None and e.__cause__.__traceback__ is None, repr(e))
+    kontrol("alan temiz, iletide parola yok", k.e_parola.text() == "" and PAROLA not in tum_metin(k))
+
+
+def test_pencere_kart_bitince_gizli_yeniden_okunur():
+    """A3 B4: kart 'kuruldu' / 'kasa' → Ayarlar › Gizli bilgiler okunduysa yeniden okunur; bekleyen değişiklik ezilmez;
+    okunmadıysa okunmaz; 'kapatildi' / 'gizlendi' okutmaz."""
+    from deskhand.gui.pencere import AnaPencere
+    from deskhand.gui.sekmeler import gizli as G
+
+    class SahteDepoMod:   # gizli.ArkaUc'un yukle() için kullandığı anahtar_deposu yüzü
+        def __init__(self):
+            self.tur, self.cagri = "kasa", []
+
+        def secili_depo(self):
+            mod = self
+
+            class D:
+                def durum(self):
+                    mod.cagri.append("durum")
+                    return {"tur": mod.tur, "hazir": True, "neden": None, "tpm": False}
+
+                def listele(self):
+                    return []
+            return D()
+
+        def sir_listesi(self):
+            return []
+
+        def yardimci_arac(self, ad, zorunlu=True):
+            return None
+
+    class SahteCuzdanMod:  # cuzdan_ac yüzü
+        def __init__(self):
+            self.kurulu = False
+
+        def durum(self):
+            return {"kurulu": self.kurulu, "acik": True, "neden": None}
+
+        def cuzdan_durumu(self):
+            return {"var": True, "kilitli": False, "giris_parolasi_olasi": True}
+
+    class SahteArka:
+        def goruntu(self):
+            return Image.new("RGB", (64, 36), (30, 90, 150))
+
+    class SahteMasaustu:
+        @staticmethod
+        def durum(dogrula=True):
+            return None
+
+    def pencere():
+        w = AnaPencere([], arka_f=SahteArka, masaustu_m=SahteMasaustu, kart_durum_f=lambda: {"goster": False})
+        depo, cuzdan = SahteDepoMod(), SahteCuzdanMod()
+        depo.tur = "cuzdan"
+        w.ayarlar.gizli.au = G.ArkaUc(depo=depo, cuzdan=cuzdan)
+        return w, w.ayarlar.gizli, depo, cuzdan
+
+    w, g, depo, cuzdan = pencere()
+    w.cuzdan_karti.bitti.emit("kasa")
+    kontrol("gizli okunmadıysa kart sinyali okutmaz", "durum" not in depo.cagri and not g._okundu, depo.cagri)
+    g.yukle()
+    kontrol("başta kayıtlı (cuzdan, False)", g.kayitli() == ("cuzdan", False), g.kayitli())
+    depo.tur = "kasa"
+    for s in ("kapatildi", "gizlendi"):
+        w.cuzdan_karti.bitti.emit(s)
+    kontrol("kapatildi/gizlendi → yeniden okunmaz", g.kayitli() == ("cuzdan", False), g.kayitli())
+    w.cuzdan_karti.bitti.emit("kasa")
+    kontrol("kasa → yeniden okundu: (kasa, False), bekleyen değişiklik yok",
+            g.kayitli() == ("kasa", False) and g.anlik() == ("kasa", False) and not w.ayarlar.kaydedilmemis_var(),
+            f"{g.kayitli()} {g.anlik()}")
+    cuzdan.kurulu = True
+    w.cuzdan_karti.bitti.emit("kuruldu")
+    kontrol("kuruldu → yeniden okundu: oto True", g.kayitli() == ("kasa", True) and g.s_oto.anahtar.isChecked(),
+            g.kayitli())
+    # bekleyen kullanıcı değişikliği ezilmez: kullanıcı depoyu cüzdana çevirdi (Uygula'ya basmadı); kart kurulum yaptı
+    w, g, depo, cuzdan = pencere()
+    g.yukle()
+    g.s_kasa.anahtar.setChecked(True)   # bekleyen: kasa
+    kontrol("bekleyen değişiklik var", g.anlik() == ("kasa", False) and w.ayarlar.kaydedilmemis_var(), g.anlik())
+    cuzdan.kurulu = True
+    w.cuzdan_karti.bitti.emit("kuruldu")
+    kontrol("kuruldu → kayıtlı (cuzdan, True), bekleyen kasa seçimi korunur",
+            g.kayitli() == ("cuzdan", True) and g.anlik() == ("kasa", True) and w.ayarlar.kaydedilmemis_var(),
+            f"{g.kayitli()} {g.anlik()}")
+    # bekleyen 'girişte aç' + yazılmış parola: kart depoyu kasaya çevirdi → işaret ve parola alanı korunur
+    w, g, depo, cuzdan = pencere()
+    g.yukle()
+    g.s_oto.anahtar.setChecked(True)
+    g.e_oto.setText(PAROLA)
+    depo.tur = "kasa"
+    w.cuzdan_karti.bitti.emit("kasa")
+    kontrol("kasa → kayıtlı (kasa, False); bekleyen oto True ve yazılmış parola korunur",
+            g.kayitli() == ("kasa", False) and g.anlik() == ("kasa", True) and g.e_oto.text() == PAROLA and
+            w.ayarlar.kaydedilmemis_var(), f"{g.kayitli()} {g.anlik()}")
+    g.e_oto.clear()
 
 
 def test_bir_daha_gosterme_isaret():
@@ -365,7 +538,8 @@ def test_tasarim_kapisi_ve_taban():
 
 for _t in (test_ilk_varyant_metinleri, test_yeniden_varyant, test_cift_tik_tek_cagri,
            test_hata_metninde_parola_yok_alan_temiz, test_kasa_secenegi_depo_degistirir_ve_kapatir,
-           test_kasa_zaten_secili_yalniz_kapatir, test_bir_daha_gosterme_isaret, test_carpi_isaret_yazmaz,
+           test_kasa_zaten_secili_yalniz_kapatir, test_kasa_cuzdan_kilitli_tasima_denenmez, test_is_hatasi_iz_tutmaz,
+           test_pencere_kart_bitince_gizli_yeniden_okunur, test_bir_daha_gosterme_isaret, test_carpi_isaret_yazmaz,
            test_disk_uyarisi_yalniz_sifresiz_tpmsiz, test_durum_hatasinda_kart_gizli, test_pencere_acilisi_bloklanmaz,
            test_tasarim_kapisi_ve_taban):
     print(f"--- {_t.__name__}", flush=True)
