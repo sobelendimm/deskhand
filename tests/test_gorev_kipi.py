@@ -563,9 +563,11 @@ for cevap, beklenen in ((False, [False]), (True, [False, True])):
     sek._masaustu_kapat_onayla = lambda c=cevap: c
     sek.kutu.setPlainText("bir görev")
     sek.baslat()
+    # UX-F O5: başlatma hatası üstteki görünür hata satırında (sade cümle + ne yapılacak), sonuç alanı boş kalır
     kontrol(f"panel: masaüstü açık → soru; '{'Kapat ve başlat' if cevap else 'İptal'}' → baslat çağrıları {beklenen}",
-            cagrilar == beklenen and (cevap or "kapatıp başlatılsın mı" in sek.sonuc.toPlainText()),
-            f"{cagrilar} {sek.sonuc.toPlainText()[:120]}")
+            cagrilar == beklenen and (cevap or (not sek.l_hata.isHidden() and
+                                                "kapatıp başlatılsın mı" in sek.l_hata.text())),
+            f"{cagrilar} {sek.l_hata.text()[:160]}")
     sek.calisiyor = False
 cagrilar.clear()
 sek = GorevSekmesi(gorev_f=SahteGorev, gecmis_f=lambda: [], olaylar_f=lambda d: [])

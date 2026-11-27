@@ -312,12 +312,17 @@ kontrol("Ayarlar: Hesap oturumları: ana anahtar + üç kutu var, hepsi kapalı"
         not any(x.isChecked() for x in w.k_hesap.values()))
 sorulan = []
 w.hesap_onay_sor = lambda sag: (sorulan.append(sag), False)[1]  # kullanıcı onay diyaloğunda "Hayır"
+# Ayarlar tek kaydetme modeli (UX-A): kutu yalnız işaretler; yazma (ve onay sorusu) Uygula'da
 w.k_hesap["microsoft"].setChecked(True)
-kontrol("Ayarlar: kutu işaretlenince onay sorulur; 'Hayır' → kutu geri döner, izin kapalı",
-        sorulan == ["microsoft"] and not w.k_hesap["microsoft"].isChecked() and
+uygulanmadan = (sorulan == [] and liste_koruma.kimlik_izinleri() == frozenset() and dosyada() == "")
+w.uygula()
+kontrol("Ayarlar: kutu işaretlenip Uygula'ya basılınca onay sorulur (öncesinde hiçbir şey yazılmaz); 'Hayır' → kutu "
+        "geri döner, izin kapalı",
+        uygulanmadan and sorulan == ["microsoft"] and not w.k_hesap["microsoft"].isChecked() and
         liste_koruma.kimlik_izinleri() == frozenset() and dosyada() == "")
 w.hesap_onay_sor = lambda sag: (sorulan.append(sag), True)[1]  # "Evet"
 w.k_hesap["microsoft"].setChecked(True)
+w.uygula()
 kontrol("Ayarlar: 'Evet' → yalnız Microsoft açık (bellek + dosya + işaret)",
         w.k_hesap["microsoft"].isChecked() and liste_koruma.kimlik_izinleri() == {"microsoft"} and
         dosyada() == "microsoft" and liste_koruma.isaret_oku(liste_koruma.KIMLIK).get("icerik") == "microsoft")
@@ -353,6 +358,7 @@ kontrol("oturum.hazirla açıklaması (CLI `open` çıktısı) kimlik özetini t
         h.karar != "kopya" or "kimlik oturumları: Microsoft aktarıldı" in (h.aciklama or ""), str(h.aciklama))
 
 w.k_hesap["google"].setChecked(True)
+w.uygula()
 cerez, giris = hazirla_burada()
 kontrol("panelden Google da açık → .google.com SID / accounts / securetoken VAR, MS VAR",
         GOOGLE <= cerez and MS <= cerez, str(GOOGLE - cerez))
@@ -364,13 +370,16 @@ kontrol("ana anahtar: üçü açık değilken işaretsiz", not w.k_hesap_hepsi.i
 
 w.k_hesap["microsoft"].setChecked(False)
 w.k_hesap["google"].setChecked(False)
+w.uygula()
 sorulan.clear()
 w.hesap_onay_sor = lambda sag: (sorulan.append(sag), False)[1]
 w.k_hesap_hepsi.setChecked(True)
+w.uygula()
 kontrol("ana anahtar 'Hayır' → hiçbiri açılmaz, anahtar geri döner",
         sorulan == ["hepsi"] and not w.k_hesap_hepsi.isChecked() and liste_koruma.kimlik_izinleri() == frozenset())
 w.hesap_onay_sor = lambda sag: (sorulan.append(sag), True)[1]
 w.k_hesap_hepsi.setChecked(True)
+w.uygula()
 kontrol("ana anahtar 'Evet' (tek soru) → Microsoft + Google + e-Devlet açık, üç kutu işaretli",
         sorulan == ["hepsi", "hepsi"] and liste_koruma.kimlik_izinleri() == {"microsoft", "google", "edevlet"} and
         all(x.isChecked() for x in w.k_hesap.values()) and dosyada() == "microsoft,google,edevlet")
@@ -383,6 +392,7 @@ kontrol("ana anahtar açık → login.live.com, accounts.google.com, giris.turki
         giris == {"https://login.live.com", "https://accounts.google.com", "https://giris.turkiye.gov.tr",
                   "https://example.com"}, str(giris))
 w.k_hesap["edevlet"].setChecked(False)
+w.uygula()
 kontrol("tek kutu kapatılınca ana anahtar işaretsiz, e-Devlet kapalı",
         not w.k_hesap_hepsi.isChecked() and liste_koruma.kimlik_izinleri() == {"microsoft", "google"})
 cerez, _g = hazirla_burada()
@@ -391,6 +401,7 @@ kontrol("e-Devlet izni kapalı → turkiye.gov.tr / *.gov.tr çerezleri YOK", no
 # ================================================================ görev kipi: izin HİÇ uygulanmaz
 w.hesap_onay_sor = lambda sag: True
 w.k_hesap_hepsi.setChecked(True)  # görev kipi testi: üç izin de açık
+w.uygula()
 c2, g2, d2 = istemci({gorev_kipi.ORTAM: "1", gorev_kipi.SITE_ORTAM: "live.com,microsoftonline.com,google.com,"
                                                                       "googleapis.com,turkiye.gov.tr,example.com"})
 kontrol("görev kipi (üç izin açık, siteler live.com/google.com/turkiye.gov.tr izinli) → kimlik/devlet çerezleri YOK",
@@ -413,18 +424,20 @@ finally:
 n_soru = len(sorulan)
 w.k_hesap["google"].setChecked(False)
 w.k_hesap["edevlet"].setChecked(False)
+w.uygula()
 kontrol("Ayarlar: kapatmak soru sormaz; yalnız Microsoft kalır",
         len(sorulan) == n_soru and liste_koruma.kimlik_izinleri() == {"microsoft"} and dosyada() == "microsoft")
 ajan_yazar("")
 k.denetle()
 kontrol("panel açık + dosyada izin elle kapatıldı → kabul (sıkı taraf), CLI/MCP izin görmez",
         k.metin(liste_koruma.KIMLIK) == "" and not (istemci()[0] & MS))
-w._hesap_kutulari()
+w.panel_degerleri_yukle()  # UX-A: sekme gösterilince yetkili değer + kayıtlı taban yeniden okunur
 kontrol("Ayarlar kutuları panelin değerine döner", not w.k_hesap["microsoft"].isChecked())
 
 # ================================================================ panel kapanır / yeniden açılır
 w.hesap_onay_sor = lambda sag: True
 w.k_hesap["microsoft"].setChecked(True)
+w.uygula()
 liste_koruma.panel_durdur()
 onay.panel_sil()
 kontrol("panel kapandı (dosya + işaret 'microsoft') → CLI/MCP izin görmez", not (istemci()[0] & MS))
