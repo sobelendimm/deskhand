@@ -58,6 +58,28 @@ _PAKET = os.path.dirname(os.path.abspath(__file__))
 _KOK = os.path.dirname(_PAKET)
 
 
+def paket_yukleme_kodu(paket: str = _PAKET) -> str:
+    """`python -c` code that imports THIS deskhand package from its folder WITHOUT touching sys.path. For a child run
+    by another interpreter (the OCR venv, the system python3): in a pip/pipx install the package's parent is
+    site-packages, and putting it on sys.path would let every package of that environment shadow the child's own."""
+    return ("import importlib.util as _u, sys as _s; "
+            f"_p = _u.spec_from_file_location('deskhand', {os.path.join(paket, '__init__.py')!r}, "
+            f"submodule_search_locations=[{paket!r}]); "
+            "_m = _u.module_from_spec(_p); _s.modules['deskhand'] = _m; _p.loader.exec_module(_m)")
+
+
+def kok_eklenmeli(kok: str = _KOK) -> bool:
+    """A child run by THIS interpreter with -I: must the package root go on sys.path? Not when it is inside sys.prefix
+    or sys.base_prefix (venv or system site-packages: already there; inserting it first would put that whole
+    site-packages before the standard library). Yes for a source checkout or the user site (pip --user; -I hides it)."""
+    gercek = os.path.realpath(kok)
+    for onek in {sys.prefix, sys.base_prefix}:
+        o = os.path.realpath(onek)
+        if gercek == o or gercek.startswith(o.rstrip(os.sep) + os.sep):
+            return False
+    return True
+
+
 # ---------------------------------------------------------------- yollar / kurulum denetimi (istemci)
 
 def _yollar():
@@ -233,9 +255,9 @@ def calisiyor() -> bool:
 
 def _baslat_komutu(py: str) -> list[str]:
     """Bellek kafesi: gpu-is (yerel GPU iş sarmalayıcısı: kafes + çekirdek bağlama) > systemd-run --scope > düz."""
-    kod = (f"import sys; sys.path.insert(0, {_KOK!r}); from deskhand import ocr_gpu; "
+    kod = (f"{paket_yukleme_kodu()}; from deskhand import ocr_gpu; "
            f"ocr_gpu.sunucu({soket_yolu()!r}, {kilit_yolu()!r}, {model_dizin()!r}, {float(BOSTA_KAPAN_SN)!r})")
-    temel = [py, "-s", "-c", kod]
+    temel = [py, "-s", "-P", "-c", kod]  # -P: the caller's current directory is not on sys.path
     if shutil.which("gpu-is"):  # no genisleme_kapali(): gpu-is calls systemd-run --expand-environment=no itself
         return ["gpu-is", "-m", BELLEK] + temel
     if shutil.which("systemd-run"):

@@ -374,6 +374,17 @@ suggests doing the work in the background, otherwise in the foreground.
   no input goes to the user's screen (15, "session locked"; fail-closed; `--ekranimda` does not override): text that accidentally
   goes to the lock screen counts as a password attempt and can lock the account. The state is cached for 0.5 s; absent on the
   virtual desktop.
+- **Editable-field content is not a button label** (`eylem.duzenleme_icerigi_suz` → `guvenlik.duzenleme_icerigini_ayikla`):
+  an OCR line next to the click point is dropped from the sensitive-button check only when the accessibility tree proves it is
+  text inside an editable field: the line lies inside a field whose own actions are not clicks, nothing else touches it (any
+  element with its own `click` or an ancestor's `click ancestor`/`clickAncestor` action is never a harmless container, at any
+  size), the tree read was complete, and the line is part of the field's value (whole value line, or every sensitive word
+  together with a neighbouring word). Lines with the same text but different boxes stay separate (`ocr.nokta_metni`).
+  Known limits (the page's own script can take over a click on a proven field, and the tree cannot show it): `onclick`/`onfocus`
+  on the textarea itself (Firefox exposes only `activate`); listeners on `window`/`document` (no trace in the tree); text that
+  matches the field's real value painted over the field together with a neighbouring word. Fail-safe cost: pages with a click
+  listener at their root (React `#root` container, `body onclick`) give every element `click ancestor`, so field content there
+  is not dropped and the approval is asked as before.
 - **The approved target must not change**: if a sensitive click was approved from the panel, right before the click the text at
   the point is OCR'd again and fuzzily compared with the text in the approval request (similarity < 0.85 → the click is not made,
   10 "approved target changed"). On a click on a tree element (`click-element`, web elements included) the element is additionally

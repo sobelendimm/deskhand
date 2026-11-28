@@ -904,6 +904,14 @@ def ac(sayfa):
     ff = wt.Firefox(au, _yalitim.PAYLASIM, srv.url(sayfa))
     acik.append(ff)
     bekle(lambda: sayfa and (lambda b: b and "Firefox" in b)(ff.baslik()), 15)
+
+    def sayfa_hazir():  # yavaş makinede (CI) belge erişilebilirlik ağacına geç gelir: sabit beklemeye güvenilmez
+        try:
+            b = _web.sayfa_bilgisi(ff.k)
+        except hata.Dur:
+            return False
+        return bool(b.get("baslik")) and b.get("yukleniyor") is False
+    bekle(sayfa_hazir, 20, 0.25)
     time.sleep(1.5)  # erişilebilirlik ağacı otursun
     return ff
 

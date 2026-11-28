@@ -137,8 +137,10 @@ def deskhand_komutu() -> list[str]:
     for a in (os.path.expanduser("~/.local/bin/deskhand"), shutil.which("deskhand") or ""):
         if a and os.path.isfile(a) and os.access(a, os.X_OK):
             return [a, "mcp", "--desktop", "background"]
+    from .ocr_gpu import kok_eklenmeli
     kok = os.path.dirname(yollar.PAKET_DIZIN)
-    kod = f"import sys; sys.path.insert(0, {kok!r}); from deskhand.cli import main; main()"
+    ekle = f"sys.path.insert(0, {kok!r}); " if kok_eklenmeli(kok) else ""  # pip/pipx: already on -I's path
+    kod = f"import sys; {ekle}from deskhand.cli import main; main()"
     return [sys.executable, "-I", "-c", kod, "mcp", "--desktop", "background"]  # -I: no user site-packages (INC6)
 
 

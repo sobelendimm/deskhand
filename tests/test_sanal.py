@@ -217,8 +217,12 @@ kontrol("masaüstü: ekran sunucusu ionice idle", bekle(lambda: "idle" in subpro
 kontrol("masaüstü: öncelik bekçisi kafeste çalışıyor", masaustu._canli(d["pid"].get("oncelik_bekcisi")) and
         masaustu._cgroup(d["pid"]["oncelik_bekcisi"]) == d["cgroup"])
 kontrol("masaüstü: boş ses çıkışı KURULMADI", d.get("ses") is None)
-r = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True)
-kontrol("masaüstü: varsayılan ses çıkışı DEĞİŞMEDİ (deskhand-sessiz değil)", not r.stdout.strip().startswith("deskhand-sessiz"))
+if shutil.which("pactl"):
+    r = subprocess.run(["pactl", "get-default-sink"], capture_output=True, text=True)
+    kontrol("masaüstü: varsayılan ses çıkışı DEĞİŞMEDİ (deskhand-sessiz değil)",
+            not r.stdout.strip().startswith("deskhand-sessiz"))
+else:
+    print("ATLANDI  masaüstü: varsayılan ses çıkışı denetimi (pactl yok: ses sunucusu istemcisi kurulu değil)")
 
 # ---- Wayland sızıntısı: WAYLAND_DISPLAY yoksa libwayland $XDG_RUNTIME_DIR/wayland-0'a bağlanır (= çoğu KDE'de
 # kullanıcının GERÇEK compositor'ı). Sahte bir runtime klasöründe dinleyen sahte wayland-0 kurulur; arka plan

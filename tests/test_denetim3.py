@@ -267,7 +267,10 @@ for g_ in ({"kimlik": "org.godotengine.Godot", "exec": "godot4 %f"}, {"kimlik": 
     kontrol(f"YN2: {g_['kimlik']} / {g_['exec']} kod barındıran sayılır", uygulama.kod_barindiran_mi(g_) is not None)
 for kimlik in ("firefox", "org.kde.kate", "org.kde.dolphin", "org.kde.gwenview", "mpv"):
     x = sistem.get(kimlik)
-    if x is not None:
+    if x is not None and not uygulama._root_yazilamaz(x["yol"]):  # dosya güveni ayrı denetim; kod sınıfı yine sınanır
+        kontrol(f"YN2: '{kimlik}' kod barındıran DEĞİL", uygulama.kod_barindiran_mi(x) is None)
+        print(f"ATLANDI  YN2: '{kimlik}' onaysız kalır (girdi dosyası root sahipli/yazılamaz değil: {x['yol']})")
+    elif x is not None:
         kontrol(f"YN2: '{kimlik}' kod barındıran DEĞİL (onaysız kalır)", uygulama.girdi_guvenilir(x) is None,
                 str(uygulama.girdi_guvenilir(x)))
 for uzanti in (".bat", ".exe", ".msi", ".ps1", ".py", ".sh", ".lua", ".pl", ".rb", ".js", ".jar", ".AppImage",

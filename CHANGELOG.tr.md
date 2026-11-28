@@ -2,6 +2,17 @@
 
 *Asıl dosya İngilizcedir: [CHANGELOG.md](CHANGELOG.md). Bu dosya Türkçe özettir; 0.10.0 ve öncesinin ayrıntısı İngilizce dosyadadır.*
 
+## Unreleased
+
+### Eklendi
+- `deskhand install-desktop` (`masaustu-kur`): pip/pipx kurulumları için uygulama menüsü girdisi, simge ve oturum
+  açılışında panel (install.sh kurulumunda gerekmez). `--remove` yalnız kendi yazdığı dosyaları siler;
+  `--no-autostart` kalıcıdır (sonraki çalıştırmalar korur); `--autostart` oturum açılışında paneli yeniden açar.
+
+### Düzeltildi
+- GPU OCR model indirme komutu (`deskhand doctor`) ve GPU OCR sunucusu artık paket klasörünü (pip/pipx kurulumunda
+  site-packages) `sys.path`e eklemiyor; yalnız deskhand paketi kendi klasöründen yüklenir.
+
 ## 0.10.0 (2026-11-28)
 
 0.5.4'ten sonraki ilk herkese açık sürüm. **0.5.4 ya da daha eskisini kullanıyorsanız lütfen güncelleyin:** orada MCP

@@ -58,8 +58,8 @@ def bagimlilik_satirlari() -> list[dict]:
         if d["ok"]:
             sonuc.append(_satir(ad, "tamam", ayrinti, zorunlu=zorunlu))
             continue
-        oneri = (_("AUR paketini kur: {paket}") if aur else _("paketi kur: {paket}")).format(paket=paket) if paket \
-            else _("./install.sh eksikleri listeler")
+        oneri = _modul_onerisi(d, (_("AUR paketini kur: {paket}") if aur else _("paketi kur: {paket}")).format(paket=paket) \
+            + _dagitim_eki(paket) if paket else _("./install.sh eksikleri listeler"))
         sonuc.append(_satir(ad, "eksik" if zorunlu else "uyari",
                             (_("eksik") if zorunlu else _("eksik (isteğe bağlı)")) + f": {ayrinti}", oneri, zorunlu))
     return sonuc
@@ -303,8 +303,8 @@ def satir_yardimcilar():
                        "planı kullanılamaz, Xvfb kullanılacak"))
     if not eksik:
         return _satir(_("C yardımcıları"), "tamam", _("derli (etkinlik, ekran görüntüsü, girdi/EIS)"))
-    return _satir(_("C yardımcıları"), "uyari", _("derli değil: {liste}").format(liste="; ".join(eksik)),
-                  _("./install.sh derler (make -C deskhand/yardimci; kitaplıklar kurulunca yeniden çalıştır)"))
+    return _yardimci_satiri(_satir(_("C yardımcıları"), "uyari", _("derli değil: {liste}").format(liste="; ".join(eksik)),
+                  _("./install.sh derler (make -C deskhand/yardimci; kitaplıklar kurulunca yeniden çalıştır)")))
 
 
 def satir_erisim():
@@ -484,9 +484,9 @@ def satir_gpu_ocr():
         return _satir(ad, "tamam", _("ekran kartı yok: yalnız tesseract kullanılır"))
     neden = {"python": _("EasyOCR/torch yok"), "model": _("modeller indirilmemiş"),
              "hata": _("son açılış başarısız")}
-    return _satir(ad, "uyari", _("kurulu değil: {liste}").format(liste=", ".join(neden.get(e, e) for e in eksik
+    return _gpu_ocr_satiri(_satir(ad, "uyari", _("kurulu değil: {liste}").format(liste=", ".join(neden.get(e, e) for e in eksik
                                                                              if e != "gpu")),
-                  _("./install.sh eksikleri ve kurulum komutlarını listeler"))
+                  _("./install.sh eksikleri ve kurulum komutlarını listeler")), eksik)
 
 
 def satir_dinleme():
@@ -555,3 +555,231 @@ def k_doktor(a):
         print(metin(satirlar))
     if o["eksik"]:
         raise SystemExit(hata.ARAC_EKSIK)
+
+
+# ---------------------------------------------------------------- pip / pipx kurulumu (dosya sonunda: i18n kataloğundaki
+# satır numaraları kaymasın, tools/i18n_cikar.py)
+
+# pipx/pip yalnız Python modüllerini getirir; sistem araçları dağıtımdan gelir. Arch adı (sağlık notundaki parantez,
+# install.sh ile aynı) → Debian/Ubuntu, Fedora karşılığı. "-" = o dağıtımda paket yok ya da sürümü yetmez (öneride
+# anılmaz; uydurma ad yok). Doğrulama 28 Kas 2026: Debian 13 trixie (qa.debian.org madison), Fedora 43 (mdapi).
+# Tek dize: ham araç taraması (tests/test_mantik.py) tırnaklı araç adına izin vermez.
+_DAGITIM_TABLOSU = """
+kdotool-bin          -                      kdotool
+dotool               -                      dotool
+spectacle            kde-spectacle          spectacle
+tesseract            tesseract-ocr          tesseract
+tesseract-data-tur   tesseract-ocr-tur      tesseract-langpack-tur
+tesseract-data-eng   tesseract-ocr-eng      tesseract-langpack-eng
+xorg-server-xvfb     xvfb                   xorg-x11-server-Xvfb
+xdotool              xdotool                xdotool
+openbox              openbox                openbox
+bubblewrap           bubblewrap             bubblewrap
+kwin                 kwin-wayland           kwin
+libei                libei-dev              libei-devel
+python-pyqt6         python3-pyqt6          python3-pyqt6
+python-xlib          python3-xlib           python3-xlib
+python-numpy         python3-numpy          python3-numpy
+python-scipy         python3-scipy          python3-scipy
+python-pillow        python3-pil            python3-pillow
+python-jeepney       python3-jeepney        python3-jeepney
+python-secretstorage python3-secretstorage  python3-secretstorage
+python-cryptography  python3-cryptography   python3-cryptography
+python-mcp           -                      -
+"""
+DAGITIM_PAKETLERI = {s[0]: (s[1], s[2]) for s in (x.split() for x in _DAGITIM_TABLOSU.strip().splitlines())}
+
+
+def _dagitim_eki(paket: str) -> str:
+    """" · Debian/Ubuntu: x · Fedora: y" (bilinen karşılıklar; yoksa "")."""
+    deb, fed = DAGITIM_PAKETLERI.get(paket, ("-", "-"))
+    return "".join(f" · {d}: {p}" for d, p in (("Debian/Ubuntu", deb), ("Fedora", fed)) if p != "-")
+
+
+def _kaynak_kurulumu() -> bool:
+    """Git klonundan mı çalışıyor (paketin yanında install.sh var) yoksa pip/pipx kurulumundan mı."""
+    return os.path.isfile(os.path.join(os.path.dirname(yollar.PAKET_DIZIN), "install.sh"))
+
+
+def _surum_demeti(s: str) -> tuple[int, ...]:
+    return tuple(int(p) for p in re.findall(r"\d+", s))
+
+
+def libei_en_az() -> str:
+    """deskhand-eis'in istediği en düşük libei sürümü: tek kaynak yardimci/Makefile (LIBEI_EN_AZ); okunamazsa ""."""
+    try:
+        with open(os.path.join(yollar.PAKET_DIZIN, "yardimci", "Makefile"), encoding="utf-8") as f:
+            m = re.search(r"^LIBEI_EN_AZ\s*=\s*(\S+)", f.read(), re.M)
+    except OSError:
+        return ""
+    return m.group(1) if m else ""
+
+
+def libei_eski() -> tuple[str, str] | None:
+    """Kurulu libei (pkg-config) deskhand-eis için eskiyse (kurulu, gereken); değilse ya da bilinmiyorsa None."""
+    kurulu, gereken = _komut_ciktisi("pkg-config", "--modversion", "libei-1.0"), libei_en_az()
+    if kurulu and gereken and _surum_demeti(kurulu) < _surum_demeti(gereken):
+        return kurulu, gereken
+    return None
+
+
+def _yardimci_satiri(satir: dict) -> dict:
+    """C yardımcıları derli değilken satırı kurulum türüne göre tamamlar. pip/pipx C derlemez: kaynaklar paketle gelir
+    (yardimci/*.c + Makefile), yollar.*_bin() aynı dizinde arar → kaynak ağacı dışında öneri YALNIZ çalıştırılabilir
+    `make -C <paket>/yardimci` komutudur (kopyalanıp yapıştırılabilir); açıklamalar ayrıntıya eklenir: yükseltme
+    derlenmiş yardımcıları siler, deskhand-eis eksik ve libei eskiyse nedeni + paket adı (Makefile hedefi atlar)."""
+    import shlex
+    if not _kaynak_kurulumu():
+        satir["oneri"] = shlex.join(["make", "-C", os.path.join(yollar.PAKET_DIZIN, "yardimci")])
+        satir["ayrinti"] += " — " + _("pip/pipx ile yükseltme derlenmiş yardımcıları siler: yükseltmeden sonra komutu "
+                                      "yeniden çalıştırın")
+    eski = None if _calistirilabilir(yollar.eis_bin()) else libei_eski()
+    if eski:
+        satir["ayrinti"] += f" — libei {eski[0]} < {eski[1]} (ei_ping): libei{_dagitim_eki('libei')}"
+    return satir
+
+
+def _sanal_ortam() -> bool:
+    """Sanal ortamda mı: pyvenv.cfg (venv/virtualenv ≥ 20, uv), eski virtualenv'in sys.real_prefix'i ya da gerçek yolu
+    farklı base_prefix. Yalnız metin karşılaştırması yanılır: pyenv/uv sürüm bağı prefix ile base_prefix'i aynı Python
+    için farklı yazabilir."""
+    import sys
+    if os.path.isfile(os.path.join(sys.prefix, "pyvenv.cfg")) or hasattr(sys, "real_prefix"):
+        return True
+    return os.path.realpath(sys.prefix) != os.path.realpath(sys.base_prefix)
+
+
+def _sistem_python() -> str:
+    """GPU OCR venv'inin tabanı: dağıtımın python3'ü (install.sh'nin PY'si gibi; dağıtımın torch'unu yalnız o görür).
+    Arama kullanıcının PATH'i değil sistemin öntanımlı yolu (os.defpath): pyenv/uv kabukları ve base_prefix
+    (pyenv/uv Python'u) dağıtım paketlerini görmez. Bulunamazsa base_prefix'in python3'ü, o da yoksa python3."""
+    import shutil
+    import sys
+    bulunan = shutil.which("python3", path=os.defpath)
+    if bulunan:
+        return bulunan
+    py = os.path.join(sys.base_prefix, "bin", "python3")
+    return py if os.path.isfile(py) else "python3"
+
+
+def _pipx_venv() -> bool:
+    """pipx kurulumu mu: pipx her uygulamayı <PIPX_HOME>/venvs/<ad> sanal ortamına kurar."""
+    import sys
+    return _sanal_ortam() and os.path.basename(os.path.dirname(sys.prefix)) == "venvs"
+
+
+def _modul_onerisi(d: dict, dagitim_onerisi: str) -> str:
+    """Eksik Python modülü: git klonunda (install.sh) ya da sistem Python'unda dağıtım paketi; sanal ortamda (pip/pipx
+    kurulumu) modül deskhand'in pip bağımlılığıdır, sistem paketi venv'e görünmez → bağımlılıkları geri getiren komut."""
+    import shlex
+    import sys
+    if d.get("tur") != "modul" or _kaynak_kurulumu() or not _sanal_ortam():
+        return dagitim_onerisi
+    if _pipx_venv():
+        return shlex.join(["pipx", "reinstall", os.path.basename(sys.prefix)])
+    return shlex.join([sys.executable, "-m", "pip", "install", "deskhand"])
+
+
+def _gpu_ocr_satiri(satir: dict, eksik: list[str]) -> dict:
+    """GPU OCR outside a source checkout (pip/pipx): install.sh's ocr-venv steps as commands (there is no
+    ./install.sh): a venv on the system Python that sees the distribution's torch, EasyOCR into it, then the models.
+    The download runs the venv interpreter with -I (no current directory, PYTHON* or user site on sys.path) and loads
+    only THIS deskhand package from its folder: putting the pipx site-packages on sys.path (install.sh's `cd` into
+    the source folder) would let that venv's packages shadow the system ones the OCR venv must use."""
+    import shlex
+
+    from . import ocr_gpu
+    if _kaynak_kurulumu():
+        return satir
+    py = _sistem_python()
+    venv_py = os.path.join(ocr_gpu.venv_dizin(), "bin", "python")
+    adimlar = []
+    if "python" in eksik:
+        adimlar += [shlex.join([py, "-m", "venv", "--system-site-packages", ocr_gpu.venv_dizin()]),
+                    shlex.join([venv_py, "-m", "pip", "install", "--no-deps", "easyocr", "python-bidi"])]
+        satir["ayrinti"] += " — " + _("önce dağıtım paketleri: torch (ROCm ya da CUDA), torchvision, opencv, scikit-image, "
+                                      "shapely, pyclipper, scipy (Arch: python-pytorch-opt-rocm | python-pytorch-opt-cuda, "
+                                      "python-torchvision, python-opencv, python-scikit-image, python-shapely, "
+                                      "python-pyclipper, python-scipy)")
+    if "model" in eksik:
+        kod = (ocr_gpu.paket_yukleme_kodu(yollar.PAKET_DIZIN) +
+               "\nimport sys\nfrom deskhand import ocr_gpu\nocr_gpu.indir(sys.argv[1])")
+        adimlar.append(shlex.join([venv_py, "-I", "-c", kod, ocr_gpu.model_dizin()]))
+    satir["oneri"] = " && ".join(adimlar) if adimlar else _("günlüğe bakın: {yol}").format(yol=ocr_gpu.gunluk_yolu())
+    return satir
+
+
+def satir_masaustu():
+    """pip/pipx: menu entry and panel-at-login written by `deskhand install-desktop` (masaustu_kur)? In a source
+    checkout install.sh writes them: no row."""
+    if _kaynak_kurulumu():
+        return None
+    from . import masaustu_kur
+    ad = _("Masaüstü girdileri")
+    h = masaustu_kur.hedefler()
+    menu, acilis = os.path.isfile(h["menu"]), os.path.isfile(h["acilis"])
+    if menu and acilis and masaustu_kur.acilis_kapali(h["acilis"]):
+        return _satir(ad, "tamam", _("menü girdisi var; oturum açılışında panel kapalı (tercih; açmak için: "
+                                     "deskhand install-desktop --autostart)"))
+    if menu and acilis:
+        return _satir(ad, "tamam", _("menü girdisi ve oturum açılışında panel var"))
+    if not menu:
+        return _satir(ad, "uyari", _("uygulama menüsünde Deskhand yok ({yol})").format(yol=h["menu"]),
+                      "deskhand install-desktop")
+    return _satir(ad, "uyari", _("panel oturum açılışında başlamıyor: onaylar için panel açık olmalı ({yol} yok)").format(
+        yol=h["acilis"]), _("deskhand install-desktop (ya da her oturumda: deskhand panel --tepsi)"))
+
+
+def _yardimci_python() -> str:
+    """The interpreter Deskhand's helper scripts really run under (notification catcher, clipboard owner, guards):
+    arka_ortak.python_yolu() — in a pipx/venv install the system python3, not this one."""
+    from . import arka_ortak
+    return arka_ortak.python_yolu()
+
+
+def _yardimci_eksikleri(py: str, moduller: list[str]) -> list[str] | None:
+    """Which of `moduller` `py` cannot find (find_spec: nothing is imported or run); None: `py` did not run."""
+    import subprocess
+    kod = "import importlib.util as u, sys; print(' '.join(m for m in sys.argv[1:] if u.find_spec(m) is None))"
+    try:
+        r = subprocess.run([py, "-I", "-c", kod, *moduller], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           timeout=15, cwd="/")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.split() if r.returncode == 0 else None
+
+
+def satir_yardimci_modulleri():
+    """pip/pipx: the helper scripts run under the system python3 (arka_ortak.python_yolu), which does not see this
+    environment's packages: without the distribution's jeepney / python-xlib notifications and the clipboard silently
+    do nothing. No row in a source checkout (install.sh checks) or when the helpers run under this interpreter (the
+    module rows above cover it)."""
+    import sys
+    if _kaynak_kurulumu():
+        return None
+    try:
+        py = _yardimci_python()
+    except Exception:  # noqa: BLE001 - Dur(9): no safe python3
+        py = None
+    if py and os.path.realpath(py) == os.path.realpath(sys.executable or ""):
+        return None
+    ad = _("Yardımcı Python modülleri")
+    moduller = (("jeepney", "python-jeepney", _("bildirim yakalama")), ("Xlib", "python-xlib", _("pano")))
+    eksik = _yardimci_eksikleri(py, [m for m, _p, _n in moduller]) if py else None
+    if eksik is None:
+        return _satir(ad, "uyari", _("yardımcı betiklerin yorumlayıcısı çalıştırılamadı: {py}").format(py=py or "python3"),
+                      _("paketi kur: {paket}").format(paket="python"))
+    if not eksik:
+        return _satir(ad, "tamam", _("{py}: jeepney, Xlib var").format(py=py))
+    secilen = [(m, p, n) for m, p, n in moduller if m in eksik]
+    arch = [p for _m, p, _n in secilen]
+    oneri = _("paketi kur: {paket}").format(paket=" ".join(arch))
+    for i, dagitim in ((0, "Debian/Ubuntu"), (1, "Fedora")):
+        adlar = [DAGITIM_PAKETLERI.get(p, ("-", "-"))[i] for p in arch]
+        if "-" not in adlar:
+            oneri += f" · {dagitim}: {' '.join(adlar)}"
+    return _satir(ad, "uyari", _("{py} ile çalışan yardımcılarda eksik: {liste} (sessizce çalışmaz)").format(
+        py=py, liste=", ".join(f"{m} ({n})" for m, _p, n in secilen)), oneri)
+
+
+SATIRLAR = (*SATIRLAR, satir_masaustu, satir_yardimci_modulleri)

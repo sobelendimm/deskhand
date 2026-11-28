@@ -186,6 +186,59 @@ a.buyuk.close()
 app.processEvents()
 arka.yasak = False
 
+# ---- büyük görünümden çıkış (kullanıcı 28 Kas: "küçültüp çıkamıyorum")
+from PyQt6.QtCore import Qt  # noqa: E402
+from PyQt6.QtTest import QTest  # noqa: E402
+
+b = a.buyuk
+assert b is not None
+a._son_imza = None
+a.kare()
+kontrol("kapatılan büyük görünüm kare() ile kendiliğinden yeniden açılmaz", not b.isVisible())
+a.b_buyut.click()
+kontrol("şerit: başlık ve Küçült düğmesi görünür",
+        bekle(b.isVisible) and b.l_baslik.text() == "Arka plan masaüstü — büyük görünüm" and
+        b.b_kucult.text() == "Küçült" and b.b_kucult.isVisible(), f"{b.l_baslik.text()!r} {b.b_kucult.text()!r}")
+kontrol("Devral kapalı: şerit uyarısı gizli", b.l_devral.isHidden())
+b.onizleme.setFocus()
+QTest.keyClick(b.onizleme, Qt.Key.Key_Escape)
+kontrol("Devral kapalı: Esc büyük görünümü kapatır", bekle(lambda: not b.isVisible(), 1))
+a.b_buyut.click()
+bekle(b.isVisible)
+QTest.mouseClick(b.b_kucult, Qt.MouseButton.LeftButton)
+kontrol("Küçült büyük görünümü kapatır", bekle(lambda: not b.isVisible(), 1))
+arka.renk = (40, 160, 40)
+a.kare()
+kontrol("Küçült sonrası sekmedeki küçük önizleme sürer",
+        on.resim is not None and on.resim.pixelColor(5, 5).green() > 120 and a.zaman.isActive(),
+        str(on.resim.pixelColor(5, 5).getRgb() if on.resim is not None else None))
+for _ in range(3):
+    a._son_imza = None
+    a.kare()
+    a._zamanlayici()
+    app.processEvents()
+kontrol("Küçült sonrası kareler büyük görünümü yeniden açmaz", not b.isVisible())
+a.b_buyut.click()
+bekle(b.isVisible)
+a.b_devral.setChecked(True)
+app.processEvents()
+kontrol("Devral açık: şerit Esc'in arka plana gittiğini ve Küçült'ü söyler",
+        not b.l_devral.isHidden() and b.l_devral.text() == "Devral açık: Esc arka plana gider; çıkmak için Küçült",
+        b.l_devral.text())
+gelen = []
+b.onizleme.satirlar.connect(gelen.append)
+b.onizleme.setFocus()
+QTest.keyClick(b.onizleme, Qt.Key.Key_Escape)
+app.processEvents()
+kontrol("Devral açık: Esc arka plana gider, pencere açık kalır", gelen == [["key esc"]] and b.isVisible(), str(gelen))
+b.onizleme.satirlar.disconnect(gelen.append)
+QTest.mouseClick(b.b_kucult, Qt.MouseButton.LeftButton)
+kontrol("Devral açık: Küçült yine kapatır", bekle(lambda: not b.isVisible(), 1))
+a.b_devral.setChecked(False)
+app.processEvents()
+kontrol("Devral kapanınca şerit uyarısı gizlenir", b.l_devral.isHidden())
+a.zaman.stop()
+
 # ---- O1: Kontrolü al / Geri ver + bant
 kontrol("düğme adı: Kontrolü al", a.b_devral.text() == "Kontrolü al", a.b_devral.text())
 kontrol("kontrol ajandayken bant gizli", a.bant.isHidden())

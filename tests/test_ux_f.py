@@ -82,7 +82,7 @@ SAGLIK = [{"ad": "kdotool", "tur": "arac", "ok": True, "not": "pencere bulma (AU
           {"ad": "PyQt6", "tur": "modul", "ok": True, "not": "arayüz (python-pyqt6)", "durum": "tamam"},
           {"ad": "dotool", "tur": "arac", "ok": False, "not": "fare/klavye (AUR: dotool)", "durum": "eksik"}]
 pano: list[str] = []
-w = AnaPencere([], arka_f=SahteArka, masaustu_m=SahteMasaustu, cakisma_f=lambda t: [], simge_sor=lambda b, m: True,
+w = AnaPencere([], arka_f=SahteArka, masaustu_m=SahteMasaustu, kart_durum_f=lambda: {"goster": False}, cakisma_f=lambda t: [], simge_sor=lambda b, m: True,
                saglik_f=lambda: SAGLIK, gorev_f=SahteGorev)
 w.saglik.pano = pano.append
 w.resize(1040, 700)

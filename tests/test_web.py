@@ -100,10 +100,11 @@ kapsama = {}  # sayfa → (bulunan, beklenen)
 
 
 def eslestir(ogeler, beklenen):
-    """Beklenen (rol, ad) → öge (birebir ad + rol)."""
+    """Beklenen (rol, ad) → öge (birebir ad + rol). at-spi2-core sürümüne göre düğme "push button" (eski, ör. Ubuntu
+    24.04) ya da "button" (2.5x) adını taşır: ikisi aynı roldür (deskhand/web.py ROL_TAKMA)."""
     sozluk = {}
     for o in ogeler:
-        sozluk.setdefault((o["rol"], o["ad"]), o)
+        sozluk.setdefault(("button" if o["rol"] == "push button" else o["rol"], o["ad"]), o)
     return {b: sozluk.get(b) for b in beklenen}
 
 
@@ -193,8 +194,9 @@ try:
     kontrol("sayfalama: en_cok/atla/sonraki/toplam", len(sayfa1["ogeler"]) == 5 and sayfa1["sonraki"] == 5 and
             [o["no"] for o in sayfa2["ogeler"]] == [6, 7, 8, 9, 10] and sayfa1["toplam"] == len(FORM) - 1)
     kontrol("ad kırpma: ad_siniri", web.sayfa_ogeleri(k, sorgu="Koşulları", ad_siniri=10)[0]["ad"] == "Koşulları…")
-    kontrol("roller: 'düğme' takma adı yalnız düğmeler", {o["rol"] for o in web.sayfa_ogeleri(k, roller=["düğme"])}
-            == {"button"})
+    _dugme_rolleri = {o["rol"] for o in web.sayfa_ogeleri(k, roller=["düğme"])}
+    kontrol("roller: 'düğme' takma adı yalnız düğmeler",
+            _dugme_rolleri and _dugme_rolleri <= {"button", "push button"}, str(_dugme_rolleri))
     kontrol("roller: 'başlık' → h1 + otomasyon başlığı", any(o["ad"] == "Üyelik formu" for o in
                                                              web.sayfa_ogeleri(k, roller=["başlık"], gorunur=False)))
     otom = web.sayfa_ogeleri(k, roller=["başlık"], sorgu="webdriver", gorunur=False)
@@ -264,8 +266,8 @@ try:
     kontrol("oge_bul: birden çok eşleşme → Dur 5", dur_kodu(web.oge_bul, k, "Bağlantı 09", gorunur=False) == 5)
     kontrol("oge_bul: sira ile seçim", web.oge_bul(k, "Bağlantı 09", gorunur=False, sira=2)["ad"] == "Bağlantı 0901")
     kontrol("oge_bul: yok → Dur 6", dur_kodu(web.oge_bul, k, "Böyle bir öge yok") == 6)
-    kontrol("oge_bul: rol süzgeci (düğme)", web.oge_bul(k, "Listeyi yenile", rol="düğme", gorunur=False)["rol"] ==
-            "button")
+    kontrol("oge_bul: rol süzgeci (düğme)", web.oge_bul(k, "Listeyi yenile", rol="düğme", gorunur=False)["rol"] in
+            ("button", "push button"))
     t.kapat()
     ff.kapat()
     acik_firefoxlar.remove(ff)

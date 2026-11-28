@@ -476,10 +476,26 @@ def dogrula(im, kok, metin, cx, cy):
     return []
 
 
+class NoktaYazisi(str):
+    """nokta_metni satırı: düz yazı (str gibi davranır) + OCR satırının kutusu `kutu` = (x, y, x2, y2) PENCERE pikseli.
+    Hassas düğme denetimi (eylem.hassas_nokta) satırın bir düzenlenebilir alanın İÇİNDE olduğunu bu kutuyla kanıtlar;
+    kutusuz yazı (düz str) hiçbir zaman ayıklanmaz."""
+    kutu: tuple
+
+    def __new__(cls, t, kutu):
+        o = super().__new__(cls, t)
+        o.kutu = tuple(kutu)
+        return o
+
+    def __reduce__(self):
+        return (NoktaYazisi, (str(self), self.kutu))
+
+
 def nokta_metni(k, x, y):
     """Tıklanacak noktanın üstündeki/yakınındaki yazı (hassas düğme denetimi için; ~0,4 sn, dotool
     kurulumuyla örtüşür). Yazı ajana yazdırılır ("noktadaki yazı", Dur iletileri): görüntü yasak pencere listesine
-    uyar (korumali_goruntu; masaüstü kipinde noktadaki parola yöneticisi okunmaz — SINIF-MASKE)."""
+    uyar (korumali_goruntu; masaüstü kipinde noktadaki parola yöneticisi okunmaz — SINIF-MASKE).
+    → [NoktaYazisi] (satır yazısı + pencere pikseli kutusu)."""
     im, geo, kok = korumali_goruntu(k, (round(x) - 220, round(y) - 35, 440, 70), kararli=True)
     sonuc = {}
 
@@ -497,12 +513,16 @@ def nokta_metni(k, x, y):
         t.start()
     for t in ipler:
         t.join()
-    yakin = []
+    yakin, gorulen = [], set()
     for ws in sonuc.values():
         for s in satirla(ws):
             s = kok_ekle(s, kok)
-            if s["x"] - 15 <= x <= s["x2"] + 15 and s["y"] - 15 <= y <= s["y2"] + 15 and s["t"] not in yakin:
-                yakin.append(s["t"])
+            # tekilleştirme (yazı, kutu) çiftiyle: aynı yazılı İKİ satır (alandaki "Pay now" + altındaki gerçek
+            # "Pay now" düğmesi) iki ayrı ekran ögesidir; yazıya göre tekilleştirmek düğmeyi yutardı (SONKAPI-A B1)
+            anahtar = (s["t"], (s["x"], s["y"], s["x2"], s["y2"]))
+            if s["x"] - 15 <= x <= s["x2"] + 15 and s["y"] - 15 <= y <= s["y2"] + 15 and anahtar not in gorulen:
+                gorulen.add(anahtar)
+                yakin.append(NoktaYazisi(*anahtar))
     return yakin
 
 

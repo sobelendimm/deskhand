@@ -134,6 +134,10 @@ if ff:
 from deskhand import mcp_sunucu  # noqa: E402
 with api.hedef("sanal"):
     for ad_ in ("konsole", "org.kde.dolphin"):
+        _neden = _yalitim.masaustu_girdisi_eksigi({"konsole": "org.kde.konsole"}.get(ad_, ad_))
+        if _neden:  # uygulama kurulu değilse open_app 6 (bulunamadı) döner; görev kipi reddi (10) sınanamaz
+            _yalitim.atla(f"MCP open_app({ad_}) RET", _neden)
+            continue
         try:
             mcp_sunucu.open_app(ad_, desktop="background")
             kontrol(f"MCP open_app({ad_}) RET", False)

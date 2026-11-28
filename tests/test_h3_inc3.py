@@ -1041,8 +1041,20 @@ golge_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": os.environ
 r_ac = subprocess.run([sys.executable, "-c", PROBE], capture_output=True, text=True, timeout=30, env=golge_env)
 argv_ = cli.panel_argv_yalitik(["--tepsi"])
 r_yal = subprocess.run([argv_[0], argv_[1], "-c", PROBE], capture_output=True, text=True, timeout=30, env=golge_env)
-kontrol("R9 (1): gölge secretstorage yalıtımsız yorumlayıcıda etkili (sınamanın kendisi doğru)",
-        "SS golge" in r_ac.stdout, r_ac.stdout + r_ac.stderr)
+# the self-check needs an interpreter where the user site-packages come BEFORE the real secretstorage on sys.path
+# (a venv puts its own site-packages first: with secretstorage installed there, no shadow can win even without -I)
+ONCE = ("import os, site, sys\nfrom importlib.machinery import PathFinder\nus = site.USER_SITE\n"
+        "s = PathFinder.find_spec('secretstorage', [p for p in sys.path if p != us])\n"
+        "kok = os.path.dirname(list(s.submodule_search_locations)[0]) if s and s.submodule_search_locations else None\n"
+        "print(us in sys.path and (kok not in sys.path or sys.path.index(us) < sys.path.index(kok)), us, kok)\n")
+r_once = subprocess.run([sys.executable, "-c", ONCE], capture_output=True, text=True, timeout=30, env=golge_env)
+if not r_once.stdout.startswith("True"):
+    _yalitim.atla("R9 (1): gölge secretstorage yalıtımsız yorumlayıcıda etkili (sınamanın kendisi doğru)",
+                  "bu yorumlayıcıda gerçek secretstorage kullanıcı site-packages'ından önce geliyor (sanal ortam?): "
+                  + (r_once.stdout + r_once.stderr).strip())
+else:
+    kontrol("R9 (1): gölge secretstorage yalıtımsız yorumlayıcıda etkili (sınamanın kendisi doğru)",
+            "SS golge" in r_ac.stdout, r_ac.stdout + r_ac.stderr)
 kontrol("R9 (1): panel argv'si -I ile bin/deskhand panel",
         argv_[1] == "-I" and argv_[2] == os.path.join(_yalitim.KOK, "bin", "deskhand") and
         argv_[3:] == ["panel", "--tepsi"], str(argv_))

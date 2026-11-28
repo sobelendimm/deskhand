@@ -2,7 +2,8 @@ name: test
 
 on:
   push:
-    branches: [main]
+    branches: [main, "ci-**"]
+  workflow_dispatch:
   pull_request:
     branches: [main]
 
@@ -41,27 +42,32 @@ jobs:
 
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       # python3-gi / gir1.2-atspi-2.0 are packages of the SYSTEM Python (/usr/bin/python3, 3.12 on 24.04):
       # actions/setup-python would install a different interpreter where `import gi` fails. All steps
       # therefore use the system Python through a venv that sees the system site-packages.
+      # python3-jeepney / python3-xlib: Deskhand's helper scripts (notification catcher, clipboard owner) run under
+      # /usr/bin/python3 -I whenever the running interpreter is not root-owned (the venv below), so they need the
+      # distribution modules, as on a user's machine.
       - name: System packages
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            python3 python3-venv python3-pip python3-gi gir1.2-atspi-2.0 \
+            python3 python3-venv python3-pip python3-gi gir1.2-atspi-2.0 python3-lz4 \
+            python3-jeepney python3-xlib \
             tesseract-ocr tesseract-ocr-tur tesseract-ocr-eng \
             xvfb openbox xdotool x11-utils \
             gcc make pkg-config libsystemd-dev libwayland-dev wayland-protocols libxkbcommon-dev \
             at-spi2-core bubblewrap dbus dbus-x11 \
             libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
-            libxcb-image0 libxcb-render-util0 libxcb-xinerama0 libgl1 fonts-dejavu-core
+            libxcb-image0 libxcb-render-util0 libxcb-xinerama0 libgl1 fonts-dejavu-core fonts-noto-core
 
       # libei (deskhand-eis, the KWin background desktop's input helper) is optional: the Makefile skips
-      # that target when it is missing, and the KWin suites print "ATLANDI" without KWin >= 6.8.
+      # that target when it is missing or older than LIBEI_EN_AZ (ei_ping; Ubuntu 24.04 ships an older libei),
+      # and the KWin suites print "ATLANDI" without KWin >= 6.8.
       - name: Optional libei headers
         continue-on-error: true
         run: sudo apt-get install -y --no-install-recommends libei-dev
@@ -75,15 +81,22 @@ jobs:
           /usr/bin/python3 -m venv --system-site-packages .venv
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install .
+          # test-only Python tools: pytest (test_ux_birlestir), build + setuptools>=77 for `python -m build
+          # --no-isolation` (test_paket; Ubuntu's system setuptools is older than pyproject's requirement)
+          .venv/bin/python -m pip install pytest build "setuptools>=77" "packaging>=24.2"
           .venv/bin/python -c "import gi; gi.require_version('Atspi', '2.0'); from gi.repository import Atspi; print('gi ok')"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Build native helpers
         run: make -C deskhand/yardimci deskhand-etkinlik deskhand-goruntu deskhand-eis
 
-      - name: Test suites (one by one)
+      # DESKHAND_CI=1: suites that need a real KDE Plasma session, browser end-to-end or OCR timing print "ATLANDI"
+      # and exit 0 here (list: tests/_yalitim.py MASAUSTU_TAKIMLARI); the full local run stays the real gate.
+      - name: Test suites (4 in parallel)
+        timeout-minutes: 12
         env:
           QT_QPA_PLATFORM: offscreen
+          DESKHAND_CI: "1"
         run: |
           # Virtual X display + window manager; session D-Bus for the tests that need one (CI runner only).
           Xvfb :99 -screen 0 1920x1080x24 >/tmp/xvfb.log 2>&1 &
@@ -94,7 +107,9 @@ jobs:
           # KWin suites (test_kwin_oturum, test_arka_kwin) exit 0 with "ATLANDI" when KWin >= 6.8 is absent
           # (Ubuntu 24.04 ships Plasma 5); the other suites use the Xvfb background desktop there.
           # test_ocr_gpu skips its GPU case without the OCR venv/GPU. tests/ekranli/ is never run (real screen).
-          dbus-run-session -- tests/ci_kos.sh
+          # 4 parallel workers (4 vCPU runner): each suite has its own temp dir and background desktop
+          # (tests/_yalitim.py); suites marked `test_kos: tek-basina` run alone after the pool.
+          dbus-run-session -- python3 tools/test_kos.py -j 4 --zaman 120 --tam-cikti
 
       - name: i18n source audit
         run: python3 tools/i18n_cikar.py --denetle

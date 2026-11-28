@@ -51,7 +51,9 @@ G_KASA_UYARI = N_("Kasa bu bilgisayardaki bir dosyadır: dosyalarınızı silebi
                   "dayanıklıdır.")
 G_CUZDAN = N_("KDE Cüzdanı")
 G_CUZDAN_NOT = N_("Parolalar KDE Cüzdanı'nda durur. Cüzdan kilitliyse Deskhand onu açmaz; siz açana kadar bekler.")
-G_OTO = N_("Girişte KDE Cüzdanı'nı aç")
+G_OTO = N_("Girişte cüzdanı otomatik aç (soru çıkmaz)")
+# otomatik giriş açıkken (oto_giris.otomatik_giris_acik): Girişte aç sorusunda ve panelin cüzdan kartında aynı satır
+G_OTO_UYARI = N_("Otomatik giriş açık: bu bilgisayarı açan herkes cüzdandaki parolalara ulaşır.")
 G_OTO_NOT = N_("Oturum açılınca cüzdan parola sormadan açılır. Cüzdan parolası bu bilgisayara kilitli olarak saklanır.")
 G_OTO_PAROLA = N_("Cüzdan parolası")
 G_LISTE = N_("Kayıtlı parolalar")
@@ -1090,6 +1092,14 @@ class GizliBilgiler(QGroupBox):
         self.l_ileti.setVisible(bool(metin))
 
     # ------------------------------------------------------------ sorular (testler değiştirir)
+    def _oto_giris_acik(self) -> bool:
+        """Bu kullanıcı otomatik girişle mi açılıyor (giriş yöneticisinin dosyaları; süreç başlatmaz). Bilinmiyor → False."""
+        try:
+            from ... import oto_giris
+            return oto_giris.otomatik_giris_acik()
+        except Exception:  # noqa: BLE001 - yalnız uyarı satırı; panel çökmesin
+            return False
+
     def onay_sor(self, baslik: str, metin: str) -> bool:
         """Evet/Hayır (varsayılan Hayır)."""
         k = QMessageBox(QMessageBox.Icon.Warning, baslik, metin, QMessageBox.StandardButton.NoButton, self)
@@ -1280,7 +1290,10 @@ class GizliBilgiler(QGroupBox):
                         self.ileti(_(H_PAROLA_GEREKLI))
                         self._yeniden_oku(koru_oto=True)
                         return "gecersiz", _(H_PAROLA_GEREKLI)
-                    if self.onay_sor(_(S_OTO_BASLIK), _(S_OTO)):
+                    soru = _(S_OTO)
+                    if self._oto_giris_acik():
+                        soru = _(G_OTO_UYARI) + "\n\n" + soru
+                    if self.onay_sor(_(S_OTO_BASLIK), soru):
                         self.au.oto_kur(self.e_oto.text())
                     else:
                         red = True

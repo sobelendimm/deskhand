@@ -471,7 +471,8 @@ async def stdio_testleri():
         kontrol("stdio: click sonrası doğrulama (after.title)", "title" in (yapi(r).get("after") or {}))
 
         ep = next((o for o in ogeler if o["text"].startswith("E-posta")), None)
-        ip = next((o for o in ogeler if o["text"] == "İptal"), None)  # 2. sütun (alan) ortası
+        # 2. sütun (alan) ortası; konum çapası: OCR büyük İ'yi kimi tesseract/yazı tipinde 'i' okur ('iptal')
+        ip = next((o for o in ogeler if o["text"].lower().replace("i\u0307", "i") == "iptal"), None)
         n0 = len(log_satirlari())
         if ep and ip:
             r = await c.call_tool("click", {"x": ip["center"][0], "y": ep["center"][1],

@@ -180,6 +180,164 @@ kontrol("kaldır: birim ve anahtar silindi", not os.path.exists(CA.birim_yolu())
 kontrol("kaldır: systemctl disable", any("--user disable " + CA.BIRIM in s for s in argv_satirlari("systemctl")))
 kontrol("kaldır sonrası durum", CA.durum()["kurulu"] is False)
 
+
+# ---------------------------------------------------------------- 9. son sonuç dosyası (A1: kart "yeniden" varyantı)
+import json  # noqa: E402
+
+from deskhand import yollar  # noqa: E402
+
+SON = os.path.join(yollar.state_dir(), "cuzdan-son.json")
+
+
+def son_oku():
+    with open(SON, encoding="utf-8") as f:
+        return f.read()
+
+
+def test_son_sonuc_her_yol():
+    kontrol("SON_SONUCLAR sabit", CA.SON_SONUCLAR == ("acildi", "zaten_acik", "erken_kilitli", "anahtar_yok",
+                                                       "anahtar_acmadi", "hata"))
+    os.environ["SAHTE_BEKLENEN"] = beklenen.hex()
+    CA.kaldir()
+    gorulen = set()
+
+    def dene(ad, beklenen_kod, beklenen_sonuc):
+        try:
+            os.unlink(SON)
+        except FileNotFoundError:
+            pass
+        kod = CA.cuzdan_ac()
+        ham = son_oku() if os.path.exists(SON) else ""
+        s = CA.son_sonuc()
+        gorulen.add((s or {}).get("sonuc"))
+        kontrol(f"son sonuç: {ad} → {beklenen_sonuc}", kod == beklenen_kod and s is not None and
+                s.get("sonuc") == beklenen_sonuc and isinstance(s.get("zaman"), str), (kod, s, ham))
+        kontrol(f"son sonuç: {ad}: dosya 0600, yalnız zaman + sonuç, anahtar baytı yok",
+                stat.S_IMODE(os.stat(SON).st_mode) == 0o600 and set(json.loads(ham)) == {"zaman", "sonuc"} and
+                beklenen.hex() not in ham and beklenen.hex().upper() not in ham and PAROLA not in ham, ham)
+
+    # oturum veri yolu sorgulanamıyor (busctl yok) → hata
+    eski_busctl = AD.SINAMA_ARACLARI["busctl"]
+    AD.SINAMA_ARACLARI["busctl"] = None
+    try:
+        dene("veri yolu yok", 1, "hata")
+    finally:
+        AD.SINAMA_ARACLARI["busctl"] = eski_busctl
+    durum_yaz(0, 1)
+    dene("kayıtlı anahtar yok", 1, "anahtar_yok")
+    os.environ["DESKHAND_ANAHTARLIK"] = "kapali"
+    try:
+        dene("kasa okunamıyor", 1, "hata")
+    finally:
+        os.environ.pop("DESKHAND_ANAHTARLIK")
+    CA.cuzdan_otomatik_kur(PAROLA)
+    durum_yaz(0, 1)
+    dene("doğru anahtar", 0, "acildi")
+    dene("zaten açık", 0, "zaten_acik")
+    durum_yaz(1, 1)
+    dene("başka biri başlatmış, kilitli", 1, "erken_kilitli")
+    durum_yaz(0, 1)
+    os.environ["SAHTE_BEKLENEN"] = "00" * 56
+    dene("yanlış anahtar", 1, "anahtar_acmadi")
+    kontrol("6 sonucun hepsi görüldü", gorulen == set(CA.SON_SONUCLAR), gorulen)
+    # beklenmeyen istisna da "hata" yazar (dosya her dönüş yolunda)
+    eski = CA.servis_var
+
+    def patla():
+        raise RuntimeError("beklenmeyen")
+    CA.servis_var = patla
+    try:
+        os.unlink(SON)
+        try:
+            CA.cuzdan_ac()
+            kontrol("beklenmeyen istisna yayılır", False)
+        except RuntimeError:
+            pass
+        kontrol("beklenmeyen istisna → son sonuç hata", (CA.son_sonuc() or {}).get("sonuc") == "hata")
+    finally:
+        CA.servis_var = eski
+    # bozuk / bilinmeyen / sembolik bağ son sonuç dosyası → None
+    for ad, icerik in (("bozuk JSON", "{"), ("bilinmeyen sonuç", '{"zaman": "x", "sonuc": "baska"}'),
+                       ("liste", "[]"), ("zaman yok", '{"sonuc": "acildi"}')):
+        with open(SON, "w") as f:
+            f.write(icerik)
+        kontrol(f"son_sonuc: {ad} → None", CA.son_sonuc() is None)
+    os.unlink(SON)
+    kontrol("son_sonuc: dosya yok → None", CA.son_sonuc() is None)
+    hedef = os.path.join(S, "son-hedef.json")
+    with open(hedef, "w") as f:
+        f.write('{"zaman": "x", "sonuc": "anahtar_acmadi"}')
+    os.symlink(hedef, SON)
+    kontrol("son_sonuc: sembolik bağ okunmaz → None", CA.son_sonuc() is None)
+    durum_yaz(0, 1)
+    CA.cuzdan_ac()
+    kontrol("cuzdan_ac sembolik bağı izlemez (hedef değişmedi)",
+            open(hedef).read() == '{"zaman": "x", "sonuc": "anahtar_acmadi"}' and not os.path.islink(SON))
+
+
+def test_kur_son_sonucu_siler():
+    os.environ["SAHTE_BEKLENEN"] = "00" * 56
+    durum_yaz(0, 1)
+    CA.cuzdan_ac()
+    kontrol("hazırlık: anahtar_acmadi kaydı var", (CA.son_sonuc() or {}).get("sonuc") == "anahtar_acmadi")
+    CA.cuzdan_otomatik_kur(PAROLA)
+    kontrol("cuzdan_otomatik_kur son sonucu siler", not os.path.lexists(SON) and CA.son_sonuc() is None)
+    CA.cuzdan_ac()
+    kontrol("hazırlık: yeniden kayıt var", os.path.exists(SON))
+    CA.kaldir()
+    kontrol("kaldir son sonucu siler", not os.path.lexists(SON))
+    try:
+        CA.cuzdan_otomatik_kur("")
+    except CA.CuzdanHatasi:
+        pass
+    CA.cuzdan_ac()
+    os.environ["DESKHAND_ANAHTARLIK"] = "kapali"
+    try:
+        CA.cuzdan_otomatik_kur(PAROLA)
+        kontrol("başarısız kurulum hata verir", False)
+    except CA.CuzdanHatasi:
+        kontrol("başarısız kurulum (kasa yazılamadı) son sonucu silmez", os.path.exists(SON))
+    finally:
+        os.environ.pop("DESKHAND_ANAHTARLIK")
+
+
+def test_gunluk_kilitli_zaman_asimi_ayrimi():
+    """A3 D7: ksecretd başlatıldıktan sonra "kilitli kaldı" (yanlış anahtar) ile "zaman aşımı" (yanıt yok) günlükte
+    ayrı; ilki anahtar_acmadi, ikincisi hata."""
+    satirlar: list = []
+    eski = {a: getattr(CA, a) for a in ("_gunluk", "_baslat", "kilitli", "servis_var", "_BEKLE_SN")}
+    try:
+        CA.cuzdan_otomatik_kur(PAROLA)
+        CA._gunluk = satirlar.append
+        CA.servis_var = lambda: False
+        CA._baslat = lambda anahtar: None
+        CA._BEKLE_SN = 0.3
+        CA.kilitli = lambda: True
+        kod = CA.cuzdan_ac()
+        son = satirlar[-1] if satirlar else ""
+        kontrol("kilitli kaldı → anahtar_acmadi, günlükte 'kilitli kaldı' (zaman aşımı değil)",
+                kod == 1 and (CA.son_sonuc() or {}).get("sonuc") == "anahtar_acmadi" and "kilitli kaldı" in son and
+                "zaman aşımı" not in son, son)
+        CA.kilitli = lambda: None
+        kod = CA.cuzdan_ac()
+        son = satirlar[-1] if satirlar else ""
+        kontrol("yanıt yok → hata, günlükte 'zaman aşımı' (kilitli kaldı değil)",
+                kod == 1 and (CA.son_sonuc() or {}).get("sonuc") == "hata" and "zaman aşımı" in son and
+                "kilitli kaldı" not in son, son)
+    finally:
+        for a, v in eski.items():
+            setattr(CA, a, v)
+
+
+for _t in (test_son_sonuc_her_yol, test_kur_son_sonucu_siler, test_gunluk_kilitli_zaman_asimi_ayrimi):
+    print(f"--- {_t.__name__}", flush=True)
+    try:
+        _t()
+    except Exception as e:  # noqa: BLE001 - bir testin istisnası KALDI sayılır
+        import traceback
+        traceback.print_exc()
+        kontrol(f"{_t.__name__}: istisna yok", False, f"{type(e).__name__}: {e}")
+
 os.environ["DESKHAND_ANAHTARLIK"] = "kapali"
 print(f"\n{gecen}/{toplam} geçti")
 sys.exit(0 if gecen == toplam else 1)

@@ -358,6 +358,16 @@ ekranı meşgulse işi arka planda, olmazsa ön planda yapmayı önerir.
 - **Oturum kilidi** (kde): `org.freedesktop.ScreenSaver.GetActive` (yoksa logind `LockedHint`) kilitli ya da okunamıyorsa
   kullanıcının ekranına hiçbir girdi gitmez (15, "oturum kilitli"; kapalı-başarısız; `--ekranimda` aşmaz): kilit ekranına
   yanlışlıkla giden yazı parola denemesi sayılır ve hesabı kilitleyebilir. Durum 0,5 sn önbellekte; sanal masaüstünde yok.
+- **Düzenleme alanı içeriği düğme yazısı değildir** (`eylem.duzenleme_icerigi_suz` → `guvenlik.duzenleme_icerigini_ayikla`):
+  tıklanan noktanın yanındaki OCR satırı hassas düğme denetiminden yalnız erişilebilirlik ağacı onun bir düzenleme alanının
+  içindeki yazı olduğunu KANITLARSA çıkar: satır, kendi eylemi tıklama olmayan bir alanın içinde; ona başka hiçbir öge değmiyor
+  (kendi `click` ya da atasının `click ancestor`/`clickAncestor` eylemi olan öge hiçbir boyutta zararsız kap sayılmaz); ağaç
+  eksiksiz okundu; satır alanın değerinin parçası (değerin tam satırı ya da her hassas sözcük komşu sözcüğüyle birlikte).
+  Aynı yazılı ama kutusu farklı satırlar ayrı kalır (`ocr.nokta_metni`). Bilinen sınırlar (sayfanın kendi betiği kanıtlı
+  alana tıklamayı ele geçirebilir, ağaç bunu gösteremez): textarea'nın kendi `onclick`/`onfocus`'u (Firefox yalnız `activate`
+  verir); `window`/`document` dinleyicileri (ağaçta iz yok); alanın gerçek değerine uyan yazının komşu sözcüğüyle alanın
+  üstüne boyanması. Güvenli taraf bedeli: kökünde tıklama dinleyicisi olan sayfalarda (React `#root` kabı, `body onclick`)
+  her öge `click ancestor` taşır; oradaki alan içeriği ayıklanmaz, onay eskisi gibi sorulur.
 - **Onay verilen hedef değişmesin**: hassas tık panelden onaylandıysa tıklamadan HEMEN önce noktadaki yazı yeniden OCR'lanıp
   onay isteğindeki yazıyla bulanık karşılaştırılır (benzerlik < 0,85 → tık yapılmaz, 10 "onay verilen hedef değişti").
   Ağaç ögesine tıkta (`click-element`, web ögesi dahil) öge ayrıca ağaçtan yeniden bulunur (`erisim._onay_sonrasi_oge`):

@@ -1869,6 +1869,150 @@ def hassas_mi(*metinler):
     return None
 
 
+DUZENLEME_PAYI = 2  # px: OCR satır kutusu ↔ erişilebilirlik kutusu karşılaştırmasında yuvarlama payı
+
+
+def _kapsar(dis, ic, pay=DUZENLEME_PAYI) -> bool:
+    """dis (x, y, w, h) kutusu ic (x, y, w, h) kutusunu (pay ile) tamamen içeriyor mu?"""
+    return (dis[0] - pay <= ic[0] and dis[1] - pay <= ic[1] and ic[0] + ic[2] <= dis[0] + dis[2] + pay
+            and ic[1] + ic[3] <= dis[1] + dis[3] + pay)
+
+
+def _kesisir(a, b) -> bool:
+    """İki (x, y, w, h) kutusu pozitif alanla kesişiyor mu?"""
+    return min(a[0] + a[2], b[0] + b[2]) > max(a[0], b[0]) and min(a[1] + a[3], b[1] + b[3]) > max(a[1], b[1])
+
+
+def _eylem_adi(a) -> str:
+    return re.sub(r"[^a-z]", "", str(a or "").lower())
+
+
+# Tıklama SAYILMAYAN eylemler: odak, bağlam menüsü, kaydırma. ÜST ögenin tıklaması ("click ancestor" / Firefox
+# "clickAncestor") TIKLAMA SAYILIR: Firefox onclick'li atanın position:absolute çocuğuna da verir, çocuk atanın
+# kutusundan taşıp alanı örtebilir (gerçek Firefox 161, SONKAPI-B B4). Bedeli: kökünde tıklama dinleyicisi olan
+# sayfalarda (React #root, body onclick) alan içeriği ayıklanmaz, onay sorulur (güvenli taraf; ARCHITECTURE bilinen sınır).
+_ZARARSIZ_EYLEM = re.compile(r"^(?:setfocus|focus|grabfocus|showmenu|scroll\w*)$")
+_ALAN_EYLEMI = frozenset({"activate"})  # metin alanının olağan eylemi (Firefox/Chromium textarea, GTK entry)
+
+
+def tiklanir_mi(eylemler, alan=False) -> bool:
+    """Ögenin KENDİ tıklama eylemi var mı? eylemler None (okunamadı / bilinmiyor) → True (kanıt yok = tıklanır say);
+    adı boş eylem → True. alan=True: metin alanının olağan "activate" eylemi tıklama sayılmaz."""
+    if eylemler is None:
+        return True
+    for a in eylemler:
+        n = _eylem_adi(a)
+        if n and (_ZARARSIZ_EYLEM.search(n) or (alan and n in _ALAN_EYLEMI)):
+            continue
+        return True
+    return False
+
+
+def alan_kanitli_mi(ad, eylemler) -> bool:
+    """Düzenlenebilir alan (rol/durum sağlayıcıda denetlendi) hassas düğme bağlamında ALAN sayılabilir mi: erişilebilir
+    adı hassas/para kalıbına uymuyor (role=textbox + aria-label="Pay now" → sayfa rolü/durumu belirler;
+    INCELEME-HASSAS D1) VE kendi tıklama eylemi yok (contenteditable + onclick); eylemler okunamadıysa alan değil."""
+    ad = ad or ""
+    return not (hassas_mi(ad) or para_mi(ad) or tiklanir_mi(eylemler, alan=True))
+
+
+def duzenleme_kabi_mi(kutu, eylemler, alanlar) -> bool:
+    """Etkileşimsiz öge bir düzenlenebilir alanın zararsız KABI mı (alana değen satırı geçersiz kılmaz): kutusu bir alanı
+    tamamen kapsıyor VE tıklanmadığı kanıtlı (eylemleri okundu; kendi ya da atasının tıklaması yok). Alanı saran/örten
+    tıklanır öge (onclick'li div, şeffaf örtü) HİÇBİR BOYUTTA kap sayılmaz: görüş alanını (ya da bir iframe'i) dolduran
+    onclick'li sarmalayıcı ile sayfa düzeyi dinleyici (React kökü) ağaçtan ayırt edilemez (INCELEME-HASSAS O2,
+    SONKAPI-A B2 P1/P1b)."""
+    if not alani_kapsar_mi(kutu, alanlar):
+        return False
+    return not tiklanir_mi(eylemler)
+
+
+def alani_kapsar_mi(kutu, alanlar) -> bool:
+    """(x, y, w, h) kutusu alanlardan birini (ilk dört öge: kutu) tamamen kapsıyor mu?"""
+    return any(_kapsar(kutu, a) for a in alanlar)
+
+
+def _hassas_terimler(metin) -> set:
+    """Satırdaki hassas düğme / para / yapıştırma kalıbı eşleşmeleri (katlanmış metin parçaları; 📋 olduğu gibi)."""
+    s = str(metin or "")
+    k = katla(s)
+    terimler = {m.group(0) for kalip in (HASSAS, PARA_DUGMESI) for m in kalip.finditer(k)}
+    terimler.update(m.group(0) for m in _YAPISTIR_METIN.finditer(katla(s.replace("&", ""))))
+    if "\U0001f4cb" in s:
+        terimler.add("\U0001f4cb")
+    return terimler
+
+
+def _sozcukle(metin: str, parca: str) -> bool:
+    """parca katlanmış metinde kelime sınırlı geçiyor mu?"""
+    return re.search(r"(?<!\w)" + re.escape(parca) + r"(?!\w)", metin) is not None
+
+
+def _degerde_mi(satir, deger: str) -> bool:
+    """OCR satırı alanın DEĞERİNİN ekrandaki parçası olarak kanıtlanıyor mu? Terimsiz satır (hassas/para/yapıştırma
+    eşleşmesi yok) hiçbir zaman (boş küme tuzağı: SONKAPI-A B3). Kanıt (katlanmış metinde): satır değerin bir mantıksal
+    satırına TAM eşit, YA DA satırdaki her terim satırdaki komşu sözcüğüyle (sol ya da sağ) değerde de BİTİŞİK geçiyor
+    (yumuşak kaydırma satırı keser, OCR uçları bozabilir: biri yeter). Değerin başka bir yerinde geçen terim yetmez:
+    alana boyanmış tek "Pay" + değer "I will pay later" → kanıt yok (P6)."""
+    terimler = _hassas_terimler(satir)
+    if not terimler:
+        return False
+    ks, kd = katla(str(satir).replace("&", "")), katla(deger.replace("&", ""))
+    if "\U0001f4cb" in terimler and "\U0001f4cb" not in deger:
+        return False
+    if ks and any(ks == katla(s.replace("&", "")) for s in deger.splitlines()):
+        return True
+    yazili = terimler - {"\U0001f4cb"}
+    if not yazili:
+        return False  # yalnız 📋: bağlamı yazıyla doğrulanamaz (tam satır eşleşmesi yukarıda)
+    for t in yazili:
+        kanit = False
+        for m in re.finditer(r"(?<!\w)" + re.escape(t) + r"(?!\w)", ks):
+            sol, sag = ks[:m.start()].split()[-1:], ks[m.end():].split()[:1]
+            if (sol and _sozcukle(kd, f"{sol[0]} {t}")) or (sag and _sozcukle(kd, f"{t} {sag[0]}")):
+                kanit = True
+                break
+        if not kanit:
+            return False
+    return True
+
+
+def duzenleme_icerigini_ayikla(yakin, alanlar, digerleri=(), dugmeler=(), kaplar=()):
+    """Hassas düğme bağlamı: tıklanan noktanın OCR komşu satırlarından (ocr.NoktaYazisi, kutu = x, y, x2, y2 pencere
+    pikseli) bir DÜZENLENEBİLİR ALANIN İÇERİĞİ olduğu KANITLANANLARI ayıkla (textarea'daki "Buy/Pay buttons…" yazısı
+    düğme değildir). Kutular (x, y, w, h) pencere pikseli, erişilebilirlik ağacından:
+      alanlar   — kanıtlı düzenlenebilir alanlar (x, y, w, h, değer): değer alanın metni (okunamadı → None / yok);
+      dugmeler  — etkileşimli ögeler (düğme, bağlantı, salt okunur ya da kanıtsız alan…);
+      digerleri — etkileşimsiz ögeler (metin, bölüm, tıklanır ya da eylemi bilinmeyen kap…);
+      kaplar    — alanı kapsayan, tıklanmadığı kanıtlı kaplar (duzenleme_kabi_mi).
+    Kanıt: satır kutusu bir alanın içinde VE satıra hiçbir düğme ya da etkileşimsiz öge değmiyor (alanı saran/örten
+    tıklanır öge dahil) VE satıra değen her kap o alanı kapsıyor VE satır alanın DEĞERİNİN parçası (_degerde_mi: tam
+    satır ya da her terim komşu sözcüğüyle; terimsiz satır hiç; değer bilinmiyorsa kanıt yok).
+    Kutusuz yazı (düz str: hedefin kendi adı, ajanın aradığı metin, eski çağıranlar) HİÇBİR ZAMAN ayıklanmaz.
+    → (kalan, ayıklanan)."""
+    kalan, ayiklanan = [], []
+    for t in yakin:
+        k = getattr(t, "kutu", None)
+        satir = (k[0], k[1], k[2] - k[0], k[3] - k[1]) if k and len(k) == 4 else None
+        icerik = False
+        if (satir is not None and satir[2] > 0 and satir[3] > 0
+                and not any(_kesisir(d, satir) for d in (*dugmeler, *digerleri))):
+            for a in alanlar:
+                if not _kapsar(a, satir):
+                    continue
+                if any(_kesisir(o, satir) and not _kapsar(o, a) for o in kaplar):
+                    continue  # alanın içinde/üstünde başka bir öge satıra değiyor: içerik olduğu kanıtlanamadı
+                deger = a[4] if len(a) > 4 else None
+                if not isinstance(deger, str):
+                    continue  # alanın değeri bilinmiyor: satırın alanın yazısı olduğu kanıtlanamadı
+                if not _degerde_mi(t, deger):
+                    continue  # terimsiz satır ya da hassas sözcük değerde bağlamıyla yok: boyanmış/bindirilmiş yazı
+                icerik = True
+                break
+        (ayiklanan if icerik else kalan).append(t)
+    return kalan, ayiklanan
+
+
 # Menüden yapıştırma (Yapıştır / Paste / Einfügen … ya da "Ctrl+V" kısayol ipucu): kısayolla yapıştırma ile aynı kural.
 _YAPISTIR_METIN = re.compile(r"^\W{0,2}(?:yapistir|paste|einfugen|coller|pegar|incolla|plakken|wklej|vlozit|"
                              r"beillesztes|klistra in|lim inn|indsaet|liita)\b|\b(?:ctrl|strg)[\s+]*(?:shift[\s+]*)?v\b|"

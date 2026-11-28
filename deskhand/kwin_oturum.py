@@ -380,7 +380,7 @@ def kullanilabilir() -> tuple[bool, str]:
         return False, _("KWin {surum} < 6.8 (EIS/ScreenShot2 yetkisi için 6.8 gerekir)").format(
             surum=".".join(map(str, s)))
     from .arka_uc.kwin import pencere_araci
-    for arac in ("bwrap", "dbus-daemon", "nice", "ionice", "sh", "busctl", "env", "systemd-run", pencere_araci()):
+    for arac in ("bwrap", "dbus-daemon", "nice", "ionice", ao.KAPI_KABUK, "busctl", "env", "systemd-run", pencere_araci()):
         if not ao.arac(arac, zorunlu=False):
             return False, _("{arac} yok (ya da güvenli dizinde değil: /usr/bin, /bin)").format(arac=arac)
     if not any(a["erisim"] for a in render_aygitlari()):
@@ -1199,7 +1199,7 @@ def atspi_adresi(d: dict) -> str | None:
     return m.group(1) if r.returncode == 0 and m else None
 
 
-ATSPI_REGISTRYD = "/usr/lib/at-spi2-registryd"
+ATSPI_REGISTRYD = ao.atspi_yardimci("at-spi2-registryd") or "/usr/lib/at-spi2-registryd"
 
 
 def atspi_baslat(d: dict) -> str | None:

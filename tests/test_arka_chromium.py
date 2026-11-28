@@ -592,6 +592,18 @@ def ayakta_mi(p, onceki, sure=12.0):
     return p.poll() is None and pencere is not None, pencere, p.poll()
 
 
+def gunluk_sonu(log, n=12):
+    """KALDI iletisine günlüğün son satırları (CI'da geçici dizin silinir; tanı ancak çıktıda kalır)."""
+    try:
+        log.flush()
+        with open(log.name, errors="replace") as f:
+            satirlar = f.read().splitlines()
+        onemli = [x for x in satirlar if "FATAL" in x or "Check failed" in x or ":ERROR:" in x][:6]
+        return " | önemli: " + " ⏎ ".join(onemli) + " | son satırlar: " + " ⏎ ".join(satirlar[-n:])
+    except OSError as e:
+        return f" | günlük okunamadı: {e}"
+
+
 def kapat(p):
     if p.poll() is None:
         p.terminate()
@@ -610,7 +622,7 @@ try:
                   (["--ozone-platform=x11"] if masaustu.tur(d) == "kwin" else []), cikti=log)
     ok, w, kod = ayakta_mi(p, once)
     kontrol("(1) ham chromium (profilsiz) ayakta, pencere arka:, çıkış 133 değil", ok and kod != 133,
-            f"çıkış {kod}, pencere {w}, günlük {log.name}")
+            f"çıkış {kod}, pencere {w}, günlük {log.name}" + ("" if ok and kod != 133 else gunluk_sonu(log)))
     kapat(p)
     log.close()
 
@@ -685,7 +697,7 @@ try:
                 (os.path.exists(hedef) and os.path.getsize(hedef) == len(GOVDE)):
             time.sleep(0.4)
         kontrol("(4) sahte ev + psd benzeri sembolik bağ: Chromium ayakta (çıkış 133 değil)",
-                p.poll() is None and p.poll() != 133, f"çıkış {p.poll()}, günlük {log.name}")
+                p.poll() is None and p.poll() != 133, f"çıkış {p.poll()}, günlük {log.name}" + gunluk_sonu(log))
         kontrol("(4) indirilen dosya XDG indirme klasörüne (sahte ev İndirilenler) düştü, içerik eksiksiz",
                 os.path.exists(hedef) and open(hedef, "rb").read() == GOVDE,
                 str(sorted(os.listdir(ind))) + f" günlük {log.name}")

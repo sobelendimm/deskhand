@@ -73,7 +73,13 @@ kontrol(f"çekim: {beklenen} ekran (6 sekme × 3 varyant + DUR + 3 diyalog)", le
 
 os.makedirs(TABAN, exist_ok=True)
 yazilan, farkli = [], []
-for f in pngler:
+ortam_farki = None if guncelle else _yalitim.yazi_ortami_farki()
+if ortam_farki:  # aynı kod başka yazı tipiyle başka pikseller verir: birebir kıyas bu makinede anlamsız
+    _yalitim.atla(f"taban: {len(pngler)} ekran birebir kıyası", ortam_farki)
+elif guncelle or not os.path.exists(_yalitim.REFERANS_ORTAM):
+    with open(_yalitim.REFERANS_ORTAM, "w", encoding="utf-8") as f_:
+        f_.write(_yalitim.yazi_ortami() + "\n")
+for f in ([] if ortam_farki else pngler):
     t, y = os.path.join(TABAN, f), os.path.join(cikti, f)
     if guncelle or not os.path.exists(t):
         shutil.copyfile(y, t)

@@ -57,42 +57,47 @@ def bekle(kosul, sure=5.0, aralik=0.02):
 
 # ================================================================ A) kde arka ucu: kd() taklidi
 
-cagrilar = []
-asil_kd = kde.kd
-kde.kd = lambda *a: cagrilar.append(a) or ""
-asil_koruma, asil_karar = mesgul.ekran_korumasi, mesgul.karar_bekliyor
-koruma = {"neden": None, "karar": False}
-mesgul.ekran_korumasi = lambda p=None, oynaticilar=None: koruma["neden"]
-mesgul.karar_bekliyor = lambda: koruma["karar"]
+# ön plan eylemleri her seferinde GERÇEK oturum kilidini okur (kapalı-başarısız): okunamıyorsa A) sınanamaz
+_kilit_neden = _yalitim.kilit_eksigi()
+if _kilit_neden:
+    _yalitim.atla("A) kde arka ucu (kd taklidi)", _kilit_neden)
+else:
+    cagrilar = []
+    asil_kd = kde.kd
+    kde.kd = lambda *a: cagrilar.append(a) or ""
+    asil_koruma, asil_karar = mesgul.ekran_korumasi, mesgul.karar_bekliyor
+    koruma = {"neden": None, "karar": False}
+    mesgul.ekran_korumasi = lambda p=None, oynaticilar=None: koruma["neden"]
+    mesgul.karar_bekliyor = lambda: koruma["karar"]
 
-kau = kde.KdeArkaUc()
-W = "{11111111-2222-3333-4444-555555555555}"
-kau.tasi(W, 120, 340)
-kau.boyutlandir(W, 800, 600)
-kau.kucult(W)
-kau.buyut(W)
-kau.geri_yukle(W)
-kontrol("kde: tasi → kdotool windowmove X Y", cagrilar[0] == ("windowmove", W, "120", "340"), str(cagrilar[:1]))
-kontrol("kde: boyutlandir → kdotool windowsize G Y", cagrilar[1] == ("windowsize", W, "800", "600"), str(cagrilar[1:2]))
-kontrol("kde: kucult → kdotool windowminimize", cagrilar[2] == ("windowminimize", W), str(cagrilar[2:3]))
-kontrol("kde: buyut → windowstate --add MAXIMIZED", cagrilar[3] == ("windowstate", "--add", "MAXIMIZED", W),
-        str(cagrilar[3:4]))
-kontrol("kde: geri_yukle → windowstate --remove MINIMIZED --remove MAXIMIZED",
-        cagrilar[4] == ("windowstate", "--remove", "MINIMIZED", "--remove", "MAXIMIZED", W), str(cagrilar[4:5]))
-kontrol("kde: 5 işlem = 5 kdotool çağrısı, eylemler yeniden DENENMEZ", len(cagrilar) == 5)
-cagrilar.clear()
+    kau = kde.KdeArkaUc()
+    W = "{11111111-2222-3333-4444-555555555555}"
+    kau.tasi(W, 120, 340)
+    kau.boyutlandir(W, 800, 600)
+    kau.kucult(W)
+    kau.buyut(W)
+    kau.geri_yukle(W)
+    kontrol("kde: tasi → kdotool windowmove X Y", cagrilar[0] == ("windowmove", W, "120", "340"), str(cagrilar[:1]))
+    kontrol("kde: boyutlandir → kdotool windowsize G Y", cagrilar[1] == ("windowsize", W, "800", "600"), str(cagrilar[1:2]))
+    kontrol("kde: kucult → kdotool windowminimize", cagrilar[2] == ("windowminimize", W), str(cagrilar[2:3]))
+    kontrol("kde: buyut → windowstate --add MAXIMIZED", cagrilar[3] == ("windowstate", "--add", "MAXIMIZED", W),
+            str(cagrilar[3:4]))
+    kontrol("kde: geri_yukle → windowstate --remove MINIMIZED --remove MAXIMIZED",
+            cagrilar[4] == ("windowstate", "--remove", "MINIMIZED", "--remove", "MAXIMIZED", W), str(cagrilar[4:5]))
+    kontrol("kde: 5 işlem = 5 kdotool çağrısı, eylemler yeniden DENENMEZ", len(cagrilar) == 5)
+    cagrilar.clear()
 
-koruma["neden"] = "tam ekranda (oyun/film)"
-kodlar = [dur_kodu(f, *a) for f, a in ((kau.tasi, (W, 1, 1)), (kau.boyutlandir, (W, 9, 9)), (kau.kucult, (W,)),
-                                       (kau.buyut, (W,)), (kau.geri_yukle, (W,)))]
-kontrol("kde: kullanıcı oyunda/film izlerken 5 işlem de Dur 15", kodlar == [15] * 5, str(kodlar))
-kontrol("kde: Dur 15'te kdotool HİÇ çağrılmadı", cagrilar == [], str(cagrilar))
-koruma["neden"], koruma["karar"] = None, True
-kontrol("kde: karar bildirimi açıkken Dur 12 (one_getir ile aynı koruma)", dur_kodu(kau.tasi, W, 1, 1) == 12 and cagrilar == [])
-koruma["karar"] = False
-kontrol("kde: masaüstü kipi (EKRAN) taşınamaz → Dur 1", dur_kodu(kau.tasi, arka_uc.EKRAN, 1, 1) == 1 and cagrilar == [])
-kde.kd = asil_kd
-mesgul.ekran_korumasi, mesgul.karar_bekliyor = asil_koruma, asil_karar
+    koruma["neden"] = "tam ekranda (oyun/film)"
+    kodlar = [dur_kodu(f, *a) for f, a in ((kau.tasi, (W, 1, 1)), (kau.boyutlandir, (W, 9, 9)), (kau.kucult, (W,)),
+                                           (kau.buyut, (W,)), (kau.geri_yukle, (W,)))]
+    kontrol("kde: kullanıcı oyunda/film izlerken 5 işlem de Dur 15", kodlar == [15] * 5, str(kodlar))
+    kontrol("kde: Dur 15'te kdotool HİÇ çağrılmadı", cagrilar == [], str(cagrilar))
+    koruma["neden"], koruma["karar"] = None, True
+    kontrol("kde: karar bildirimi açıkken Dur 12 (one_getir ile aynı koruma)", dur_kodu(kau.tasi, W, 1, 1) == 12 and cagrilar == [])
+    koruma["karar"] = False
+    kontrol("kde: masaüstü kipi (EKRAN) taşınamaz → Dur 1", dur_kodu(kau.tasi, arka_uc.EKRAN, 1, 1) == 1 and cagrilar == [])
+    kde.kd = asil_kd
+    mesgul.ekran_korumasi, mesgul.karar_bekliyor = asil_koruma, asil_karar
 
 
 # ================================================================ B) çekirdek + CLI + MCP: sahte arka uç

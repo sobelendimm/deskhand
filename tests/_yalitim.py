@@ -16,6 +16,20 @@ import sys
 import tempfile
 
 KOK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# ---------------------------------------------------------------- CI KAPSAMI (tek yer)
+# GitHub'ın Ubuntu makinesinde gerçek KDE Plasma oturumu (kdotool/dotool/KWin), gerçek tarayıcı uçtan ucu ve OCR
+# zamanlaması yok: bu takımlar orada anlamlı sonuç vermez (ya da süre sınırına takılır). DESKHAND_CI=1 VE kdotool
+# PATH'te yoksa takım "ATLANDI" yazıp 0 ile çıkar. Yerelde (DESKHAND_CI yok) hiçbir şey değişmez: tam koşu gerçek kapı.
+MASAUSTU_TAKIMLARI = frozenset({
+    "test_arka_chromium", "test_belirsiz_kapali", "test_denetim_girdi", "test_dinleme", "test_dogrulama",
+    "test_dogrulama_devri", "test_girdi_merkezi", "test_gozlem", "test_hassas_sonkapi", "test_mcp", "test_ocr", "test_ocr_gpu",
+    "test_onay_kapsami", "test_pano", "test_sanal", "test_web", "test_web_bag"})
+_TAKIM = os.path.splitext(os.path.basename(sys.argv[0] if sys.argv else ""))[0]
+if os.environ.get("DESKHAND_CI") == "1" and _TAKIM in MASAUSTU_TAKIMLARI and not shutil.which("kdotool"):
+    print(f"ATLANDI: {_TAKIM} gerçek KDE masaüstü / tarayıcı / OCR ister (DESKHAND_CI=1, kdotool yok); "
+          "yerel tam koşu: python3 tools/test_kos.py", flush=True)
+    sys.exit(0)
 GECICI = tempfile.mkdtemp(prefix="deskhand-test-")
 DIZINLER = {ad: os.path.join(GECICI, ad.split("_")[1].lower())
             for ad in ("DESKHAND_CONFIG_DIR", "DESKHAND_STATE_DIR", "DESKHAND_CACHE_DIR", "DESKHAND_DATA_DIR", "DESKHAND_RUNTIME_DIR")}
@@ -38,6 +52,37 @@ os.environ["DESKHAND_DIL"] = "tr"  # testler Türkçe metin bekler (kaynak dil);
 os.environ["PYTHONPATH"] = KOK + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else "")
 if KOK not in sys.path:
     sys.path.insert(0, KOK)
+
+# ---------------------------------------------------------------- "GERÇEK" ÇALIŞMA DİZİNİ (28 Kas 2026)
+# Kod "kullanıcının gerçek paneli" dalını DESKHAND_RUNTIME_DIR'in YOKLUĞUYLA seçer (onay.iste_sonuc). Bunu sınamak için
+# değişkeni yalnız silmek yetmez: hata.calisma_dizini() $XDG_RUNTIME_DIR/deskhand'e (gerçek /run/user/UID/deskhand) düşer
+# ve test kullanıcının canlı onay/devir isteklerini (eylem._bekleyen_onay_kapisi → Dur 7), DUR anahtarını, panel kaydını
+# görür. Olay: tam takım koşarken gerçek oturumda request_human bekliyordu → test_odeme_kilit 2 kontrolde düştü.
+GERCEK_XDG = os.path.join(GECICI, "gercek-xdg-runtime")
+
+
+def gercek_calisma_dizini():
+    """Bağlam: DESKHAND_RUNTIME_DIR YOK (gerçek oturum dalı) ama XDG_RUNTIME_DIR GECICI altında sahte bir kök → çalışma
+    dizini GERCEK_XDG/deskhand; kullanıcının gerçek runtime dizini ne okunur ne yazılır. Çıkışta ikisi de geri gelir.
+    DESKHAND_RUNTIME_DIR'i silen her test bunu kullanır (os.environ.pop("DESKHAND_RUNTIME_DIR") tek başına YASAK)."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def _baglam():
+        os.makedirs(GERCEK_XDG, mode=0o700, exist_ok=True)
+        rt, xdg = os.environ.pop("DESKHAND_RUNTIME_DIR", None), os.environ.get("XDG_RUNTIME_DIR")
+        os.environ["XDG_RUNTIME_DIR"] = GERCEK_XDG
+        try:
+            yield GERCEK_XDG
+        finally:
+            if rt is not None:
+                os.environ["DESKHAND_RUNTIME_DIR"] = rt
+            if xdg is None:
+                os.environ.pop("XDG_RUNTIME_DIR", None)
+            else:
+                os.environ["XDG_RUNTIME_DIR"] = xdg
+    return _baglam()
+
 
 # ---------------------------------------------------------------- SÜREÇ SIZINTISI (0.9.1)
 # Kök neden: görünmez masaüstü süreçleri (kwin_wayland --virtual, özel dbus-daemon, oncelik_bekcisi, bildirim_yakalayici,
@@ -187,3 +232,119 @@ def tuzak_cagrilari():
             return [s.rstrip("\n") for s in f if s.strip()]
     except OSError:
         return []
+
+
+# ---------------------------------------------------------------- ÖNKOŞUL YOKLAMALARI (CI / KDE'siz ortam)
+# Gerçek KDE Plasma oturumu isteyen bölümler, önkoşul GERÇEKTEN yoksa (ortam yoklanır; "CI mi" değişkenine bakılmaz)
+# "ATLANDI  <ne> (<neden>)" yazıp atlanır; bölüm sayılmaz, takım çıkış kodu değişmez. Her yoklama → None (önkoşul var)
+# ya da insan okunur neden.
+
+def atla(ne: str, neden: str) -> None:
+    print(f"ATLANDI  {ne} ({neden})", flush=True)
+
+
+def arac_eksigi(*adlar: str) -> str | None:
+    """PATH'te olmayan araçlar → "x, y yok" | None."""
+    eksik = [a for a in adlar if not shutil.which(a)]
+    return (", ".join(eksik) + " yok") if eksik else None
+
+
+def wayland_eksigi() -> str | None:
+    """Wayland bileşimcisi (WAYLAND_DISPLAY soketi) yoksa neden."""
+    ad = os.environ.get("WAYLAND_DISPLAY")
+    if not ad:
+        return "WAYLAND_DISPLAY yok (Wayland oturumu değil)"
+    yol = ad if os.path.isabs(ad) else os.path.join(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}", ad)
+    return None if os.path.exists(yol) else f"Wayland soketi yok: {yol}"
+
+
+def kilit_eksigi() -> str | None:
+    """Ön plan girdisi kapısı oturum kilidini okur (ScreenSaver / logind); okunamıyor ya da kilitliyse neden."""
+    from deskhand.arka_uc import kde
+    d = kde.oturum_kilidi_oku()
+    if d is None:
+        return "oturum kilidi durumu okunamıyor: ScreenSaver servisi / logind oturumu yok"
+    return "oturum kilitli" if d else None
+
+
+def bellek_kafesi_eksigi() -> str | None:
+    """Görünmez masaüstü Xvfb'yi `systemd-run --user --scope` kafesine koyar ve kafeste değilse Dur verir (ürün kuralı,
+    gevşetilmez). YALNIZ DESKHAND_CI=1 iken yoklanır: kullanıcı systemd'si cgroup devretmiyorsa (GitHub runner: süreç
+    '/system.slice/hosted-compute-agent.service' altında kalır) neden döner. Yerelde hep None: kural gerçek kapı."""
+    if os.environ.get("DESKHAND_CI") != "1":
+        return None
+    import subprocess
+    if not shutil.which("systemd-run"):
+        return "systemd-run yok: kullanıcı bellek kafesi kurulamaz"
+    from deskhand import sistemd
+    from deskhand.arka_ortak import _kullanici_bus_ortami, _oncelik
+    birim = f"deskhand-test-kafes-{os.getpid()}.scope"
+    # ürünün Xvfb komutunun aynısı (masaustu._baslat_ic), Xvfb yerine cat: aynı özellikler, aynı öncelik zinciri
+    komut = ["systemd-run", "--user", "--scope", "--quiet", *sistemd.genisleme_kapali(), f"--unit={birim}",
+             "-p", "MemoryMax=64M", "-p", "MemorySwapMax=0", "-p", "Delegate=yes", "-p", "TimeoutStopSec=5",
+             "--", *_oncelik(), "cat", "/proc/self/cgroup"]
+    try:
+        r = subprocess.run(komut, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15,
+                           env=_kullanici_bus_ortami(), start_new_session=True)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"systemd-run --user --scope çalışmadı: {e}"
+    cg = next((s[3:].strip() for s in r.stdout.splitlines() if s.startswith("0::")), "")
+    if r.returncode == 0 and cg.endswith("/" + birim):
+        return None
+    return (f"kullanıcı bellek kafesi yok (systemd-run --user --scope rc {r.returncode}, cgroup {cg!r}"
+            f"{', ' + r.stderr.strip()[-160:] if r.stderr.strip() else ''})")
+
+
+def kafes_durdu_mu(hata: Exception) -> bool:
+    """masaustu_baslat'ın Dur'u ürünün "Xvfb bellek kafesinde değil" kuralından mı (ürünün kendi çevrilmiş kalıbıyla
+    karşılaştırılır; dil bağımsız)? Yalnız DESKHAND_CI=1 iken True olabilir: yerelde bu Dur her zaman KALDI'dır."""
+    if os.environ.get("DESKHAND_CI") != "1":
+        return False
+    from deskhand.i18n import _
+    onek = _("Xvfb bellek kafesinde değil: {cgroup}").split("{", 1)[0]
+    return bool(onek) and str(hata).startswith(onek)
+
+
+def masaustu_girdisi_eksigi(*kimlikler: str) -> str | None:
+    """XDG uygulama dizinlerinde <kimlik>.desktop dosyası olmayanlar → neden | None."""
+    veri = [os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"),
+            *(os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")]
+    eksik = [k for k in kimlikler
+             if not any(os.path.exists(os.path.join(d, "applications", k + ".desktop")) for d in veri if d)]
+    return (", ".join(k + ".desktop" for k in eksik) + " kurulu değil") if eksik else None
+
+
+# Görsel referanslar (tests/gorsel_taban/*.png, tests/tasarim_bilinen.json) piksel/ölçü düzeyinde yazı tipine bağlı:
+# çekildikleri ortamın yazı tipi parmak izi REFERANS_ORTAM'da. Bu makinede Qt başka yazı tipi çözüyorsa birebir kıyas
+# anlamsızdır (aynı kod, başka glif ölçüleri).
+REFERANS_ORTAM = os.path.join(KOK, "tests", "gorsel_taban", "ORTAM.txt")
+_YAZI_KOD = ("import sys\nfrom PyQt6.QtCore import QT_VERSION_STR\n"
+             "from PyQt6.QtGui import QFontDatabase, QFontInfo, QFontMetrics\n"
+             "from PyQt6.QtWidgets import QApplication, QPushButton\napp = QApplication(sys.argv[:1])\n"
+             "app.setStyle('Fusion')\nf = QFontInfo(app.font())\n"
+             "m = QFontInfo(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))\n"
+             "o = QFontMetrics(app.font())\nd = QPushButton('Görevi durdur').sizeHint()\n"
+             "print(f'qt={QT_VERSION_STR} yazi={f.family()}/{f.styleName()}/{f.pointSizeF()}pt "
+             "sabit={m.family()}/{m.styleName()} olcu={o.height()}/{o.horizontalAdvance(\"Görevi durdur 0123456789\")} "
+             "dugme={d.width()}x{d.height()}')\n")
+
+
+def yazi_ortami() -> str:
+    """Sabit görsel ortamda (offscreen, C.UTF-8, boş HOME) Qt'nin çözdüğü yazı tipleri + Qt sürümü (tek satır)."""
+    import subprocess
+    ev = tempfile.mkdtemp(prefix="yazi-ortami-", dir=GECICI)
+    e = {"PATH": "/usr/bin:/bin", "HOME": ev, "LANG": "C.UTF-8", "XDG_CONFIG_HOME": ev, "XDG_CACHE_HOME": ev,
+         "XDG_DATA_HOME": ev, "XDG_RUNTIME_DIR": ev, "QT_QPA_PLATFORM": "offscreen", "QT_NO_GLIB": "1"}
+    r = subprocess.run([sys.executable, "-I", "-c", _YAZI_KOD], env=e, capture_output=True, text=True, timeout=60)
+    return r.stdout.strip() or f"okunamadı: {r.stderr.strip()[-200:]}"
+
+
+def yazi_ortami_farki() -> str | None:
+    """Bu makinenin yazı tipi ortamı görsel referanslarınkinden farklıysa neden; aynıysa (ya da kayıt yoksa) None."""
+    try:
+        with open(REFERANS_ORTAM, encoding="utf-8") as f:
+            ref = f.read().strip()
+    except OSError:
+        return None
+    simdi = yazi_ortami()
+    return None if simdi == ref else f"yazı tipi ortamı referanstan farklı: burada '{simdi}', referans '{ref}'"
