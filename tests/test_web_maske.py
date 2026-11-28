@@ -298,6 +298,51 @@ kontrol("maske (sahte): 4+4+4+4 bölünmüş Luhn'lu kart numarası → dört al
         all(d11[f"Kart {i}"] == "***" for i in range(1, 5)) and d11["Ad"] == "Ayşe"
         and d11["Tel 1"] == "1234" and d11["Tel 2"] == "5678", repr(d11))
 
+
+# poc2 L (INCELEME-maske-R2-A bulgu 3): bölünmüş kart denetimi DÖNDÜRÜLEN ögelerle sınırlı kalmamalı — sorgu/en_cok/
+# görünürlük/rol süzgecinden ÖNCE sayfanın bütün değerli alanlarında. 3+3+3+3+4 parça (id'li, 3 hane kısa kod değil).
+class OkuYol(SahteYol):
+    def kapat(self):
+        pass
+
+
+def oku_sahnesi(parcalar, gizli=(), spin=()):
+    """[(ad, değer)] → web.oku için sahte _baglam/_yuru (rol süzgecine uyar); gizli: görünmeyen sıra, spin: spin button."""
+    v, hm = {}, []
+    for i, (ad, deger) in enumerate(parcalar):
+        y = f"/l/{i}"
+        v[(y, "GetText")] = (deger,)
+        v[(y, "Description")] = (("s", ""),)
+        v[(y, "GetAttributes")] = ({"id": f"parca{i}", "tag": "input"},)
+        kutu = (10 + 60 * i, 100, 50, 20)
+        hm.append({"_yol": y, "_anahtar": (i,), "_alan": None, "_kutu": kutu, "_hkutu": kutu, "_derin": 1,
+                   "_adres": "", "_d": {"enabled", "sensitive"} | (set() if i in gizli else {"showing", "visible"}),
+                   "rol": "spin button" if i in spin else "entry", "ad": ad})
+
+    def yuru(yol, bus, cerceve, koord, koken, roller, gorunur, **_k):
+        return [dict(o) for o in hm if roller is None or o["rol"] in roller], [], len(hm)
+    au = type("AU", (), {"baslik": lambda self, k: "Ödeme — Mozilla Firefox"})()
+    return v, (lambda k: (au, OkuYol(v), ":1.5", "/c", 0, (0, 0), "pencere")), yuru
+
+
+L_KART = [("Parça 1", "411"), ("Parça 2", "111"), ("Parça 3", "111"), ("Parça 4", "111"), ("Parça 5", "1111")]
+eski_baglam, eski_yuru = web._baglam, web._yuru
+try:
+    for ad, kw, gizli, spin in (("en_cok=4 (5. parça dönmez)", {"en_cok": 4}, (), ()),
+                                ("sorgu tek parça", {"sorgu": "Parça 2"}, (), ()),
+                                ("bir parça görünmez", {}, (4,), ()),
+                                ("roller=entry, bir parça spin button", {"roller": ["entry"]}, (), (4,))):
+        _v, web._baglam, web._yuru = oku_sahnesi(L_KART, gizli, spin)
+        r = web.oku("{L}", **kw)
+        dl = [o.get("deger") for o in r["ogeler"]]
+        kontrol(f"maske (poc2 L, {ad}): dönen parçalar *** (süzmeden önce bütün alanlarda bölünmüş kart)",
+                dl and all(d == "***" for d in dl), repr(dl))
+    _v, web._baglam, web._yuru = oku_sahnesi([("A", "123"), ("B", "456"), ("C", "789"), ("D", "012")])
+    dl = [o.get("deger") for o in web.oku("{L}", en_cok=3)["ogeler"]]
+    kontrol("maske (poc2 L kontrol): Luhn'suz bölünmüş birleşim korunur", dl == ["123", "456", "789"], repr(dl))
+finally:
+    web._baglam, web._yuru = eski_baglam, eski_yuru
+
 # ---------------------------------------------------------------- 2) tarayıcı sınıf deseni (tablo)
 class SahteAU:
     def __init__(self, sinif):

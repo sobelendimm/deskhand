@@ -478,14 +478,15 @@ _NITELIK_TUR, _NITELIK_ARA = 4, 0.05  # nitelik önbelleği durulma: en çok tur
 # doğrulanamaz. Kısa kod / kart / bölünmüş kart kuralları maske.py'de (masaüstüyle ortak çekirdek).
 
 
-def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> None:
+def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict], bolunmus: set | None = None) -> None:
     """Yalnız döndürülecek ögeler için: bağlantıların adresi (href), giriş alanlarının değeri, seçim kutusunun seçili
     seçeneği. Parola alanının değeri OKUNMAZ. Giriş alanı değeri erisim._deger_temizle ile süzülür (masaüstü yoluyla
     AYNI): ad, açıklama ve autocomplete/id/placeholder/text-input-type nitelikleri kart/parola/PIN/OTP/CVC alanı
     gösteriyorsa değer "***"; nitelikleri doğrulanamayan alan (tanıtıcı nitelik yok ya da durulmadı), ipucusuz (id/
     placeholder/autocomplete yok) 3–9 haneli rakam değeri, her alanda 4–9 rakam/6–8 harf+rakam kod
     (zararsız ipucu yoksa), Luhn'lu kart numarası (tek alanda ya da alanlara bölünmüş; maske.py) değeri de "***"; yalnız maske karakterlerinden oluşan değer atlanır; denetim karakterleri
-    ayıklanır."""
+    ayıklanır. bolunmus: sayfanın bütün alanları üzerinde (süzmeden önce) bölünmüş kart parçası bulunan nesne yolları
+    (_bolunmus_parcalar) → değerleri "***"; döndürülen ögeler arasındaki denetim de ayrıca koşar."""
     m, hedef = [], []
     yol_of = {id(o): h["_yol"] for o, h in zip(ogeler, ham)}
     for o, h in zip(ogeler, ham):
@@ -569,6 +570,9 @@ def _ayrinti_ekle(yol: _Yol, bus: str, ogeler: list[dict], ham: list[dict]) -> N
         ogesi = {id(t[0]): t[0] for t in degerler}
         for k in maske.bolunmus_kart(sirali):
             ogesi[k]["deger"] = "***"
+        for o, _v, _a, _n in degerler:
+            if bolunmus and yol_of[id(o)] in bolunmus:
+                o["deger"] = "***"
     if not secenek_m:
         return
     listeler = yol.toplu(secenek_m)
@@ -610,11 +614,34 @@ def oku(k, sorgu=None, roller=None, gorunur=True, en_cok=60, atla=0, ad_siniri=_
             time.sleep(BELIRSIZ_ARA)
 
 
+_DEGERLI = frozenset({"entry", "spin button"})  # değeri okunan roller (_ayrinti_ekle; bölünmüş kart denetimi)
+
+
+def _bolunmus_parcalar(yol: _Yol, bus: str, ham: list[dict]) -> set:
+    """Sayfanın (sorgu/en_cok/atla/görünürlük süzgecinden ÖNCEKİ) bütün değerli alanları üzerinde bölünmüş kart numarası
+    (maske.bolunmus_kart; belge sırası + ham kutu sırası + pencere içi permütasyon) → gizlenecek nesne yolları. Ajan
+    parçaları ayrı sorgu/sayfa ile tek tek okuyup birleştiremesin (INCELEME-maske-R2-A bulgu 3, poc2 L)."""
+    from . import maske
+    alanlar = sorted((o for o in ham if o["rol"] in _DEGERLI), key=lambda o: o["_anahtar"])
+    if len(alanlar) < 2:
+        return set()
+    r = yol.toplu([_m(bus, o["_yol"], "org.a11y.atspi.Text", "GetText", "ii", (0, -1)) for o in alanlar])
+    return set(maske.bolunmus_kart([(o["_yol"], _deg(v), o.get("_hkutu") or o.get("_kutu"))
+                                    for o, v in zip(alanlar, r, strict=True)]))
+
+
 def _oku_bir(t0, k, sorgu, roller, gorunur, en_cok, atla, ad_siniri, ayrinti, yol_ver, cerceve_metni) -> dict:
     au, yol, bus, cerceve, koord, koken, konum = _baglam(k)
     try:
-        ham, belgeler, dugum = _yuru(yol, bus, cerceve, koord, koken, _rol_kumesi(roller), gorunur,
+        istenen = _rol_kumesi(roller)
+        # rol süzgeci değerli rollerden birini istiyorsa öbürü de yürünür (parçanın biri spin button olabilir); bölünmüş
+        # kart denetiminden sonra istenmeyen rol ayıklanır
+        yurunen = istenen | _DEGERLI if istenen is not None and istenen & _DEGERLI else istenen
+        ham, belgeler, dugum = _yuru(yol, bus, cerceve, koord, koken, yurunen, gorunur,
                                      cerceve_metni=cerceve_metni)
+        bolunmus = _bolunmus_parcalar(yol, bus, ham) if ayrinti else set()  # süzmeden ÖNCE (poc2 L)
+        if istenen is not None and yurunen is not istenen:
+            ham = [o for o in ham if o["rol"] in istenen]
         for o in ham:
             o["_gorunur"] = ("showing" in o["_d"] and "visible" in o["_d"] and _icinde(o["_kutu"], o["_alan"]))
         ham = [o for o in ham if o["_kutu"] or not gorunur]
@@ -629,7 +656,7 @@ def _oku_bir(t0, k, sorgu, roller, gorunur, en_cok, atla, ad_siniri, ayrinti, yo
         secili = ham[atla:atla + en_cok] if en_cok else ham[atla:]
         ogeler = [_bicimle(o, ad_siniri, bus if yol_ver else None) for o in secili]
         if ayrinti and ogeler:
-            _ayrinti_ekle(yol, bus, ogeler, secili)
+            _ayrinti_ekle(yol, bus, ogeler, secili, bolunmus)
         for i, o in enumerate(ogeler):
             o["no"] = atla + i + 1
         ust = min(belgeler, key=lambda b: b["derinlik"]) if belgeler else None
